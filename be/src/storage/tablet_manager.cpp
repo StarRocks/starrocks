@@ -895,8 +895,8 @@ Status TabletManager::start_trash_sweep() {
                 continue;
             }
             // move data to trash
-            const std::string& tablet_path = tablet->tablet_path();
-            st = Env::Default()->path_exists(tablet_path);
+            auto tablet_id_path = tablet->tablet_id_path();
+            st = Env::Default()->path_exists(tablet_id_path);
             if (st.ok() && config::trash_file_expire_time_sec > 0) {
                 // take snapshot of tablet meta for recovery
                 if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
@@ -906,23 +906,22 @@ Status TabletManager::start_trash_sweep() {
                         continue;
                     }
                 } else {
-                    std::string meta_file_path =
-                            path_util::join_path_segments(tablet_path, std::to_string(tablet->tablet_id()) + ".hdr");
+                    auto meta_file_path = fmt::format("{}/{}.hdr", tablet->tablet_path(), tablet->tablet_id());
                     tablet->tablet_meta()->save(meta_file_path);
                 }
-                if (move_to_trash(tablet_path, tablet_path) == OLAP_SUCCESS) {
-                    LOG(INFO) << "Moved " << tablet_path << " to trash";
+                if (st = move_to_trash(tablet_id_path); st.ok()) {
+                    LOG(INFO) << "Moved " << tablet_id_path << " to trash";
                 } else {
-                    LOG(WARNING) << "Fail to move " << tablet_path << " to trash";
+                    LOG(WARNING) << "Fail to move " << tablet_id_path << " to trash";
                     continue;
                 }
             } else if (st.ok()) {
                 // Ignore the result.
-                (void)FileUtils::remove_all(tablet_path);
+                (void)FileUtils::remove_all(tablet_id_path);
             } else if (st.is_not_found()) {
                 st = Status::OK();
             } else {
-                LOG(WARNING) << "Fail to check " << tablet_path << ": " << st;
+                LOG(WARNING) << "Fail to check " << tablet_id_path << ": " << st;
                 continue;
             }
             DCHECK(st.ok()) << st;
@@ -973,7 +972,7 @@ void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
 }
 
 void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                                  const std::string& schema_hash_path) {
+                                                  const std::string& tablet_id_path) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
@@ -986,20 +985,17 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
     TabletMeta tablet_meta;
     Status st = TabletMetaManager::get_tablet_meta(data_dir, tablet_id, schema_hash, &tablet_meta);
     if (st.ok()) {
-        LOG(INFO) << "Cannot remove tablet_path=" << schema_hash_path << ", tablet meta exist in meta store";
+        LOG(INFO) << "Cannot remove tablet_path=" << tablet_id_path << ", tablet meta exist in meta store";
     } else if (st.is_not_found()) {
         if (shard.tablets_under_clone.count(tablet_id) > 0) {
-            LOG(INFO) << "Cannot move tablet_path=" << schema_hash_path << " to trash, tablet is under clone";
+            LOG(INFO) << "Cannot move tablet_path=" << tablet_id_path << " to trash, tablet is under clone";
             return;
         }
 
-        // TODO(ygl): may do other checks in the future
-        if (Env::Default()->path_exists(schema_hash_path).ok()) {
-            if (move_to_trash(schema_hash_path, schema_hash_path) != OLAP_SUCCESS) {
-                LOG(WARNING) << "Fail to move tablet_path=" << schema_hash_path << " to trash";
-            } else {
-                LOG(INFO) << "Moved tablet_path=" << schema_hash_path << " to trash";
-            }
+        if (st = move_to_trash(tablet_id_path); st.ok()) {
+            LOG(INFO) << "Moved " << tablet_id_path << " to trash";
+        } else {
+            LOG(WARNING) << "Fail to move " << tablet_id_path << " to trash: " << st;
         }
     } else {
         LOG(WARNING) << "Fail to get tablet meta: " << st;

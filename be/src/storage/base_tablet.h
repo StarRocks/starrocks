@@ -42,7 +42,11 @@ public:
     virtual ~BaseTablet() = default;
 
     inline DataDir* data_dir() const;
+
+    // TODO: may be schema_hash_path() is a more accurate name?
     const std::string& tablet_path() const;
+
+    std::string tablet_id_path() const;
 
     TabletState tablet_state() const { return _state; }
     OLAPStatus set_tablet_state(TabletState state);

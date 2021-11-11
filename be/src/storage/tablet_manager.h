@@ -121,7 +121,7 @@ public:
     bool try_schema_change_lock(TTabletId tablet_id);
 
     void try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                       const string& schema_hash_path);
+                                       const string& tablet_id_path);
 
     void update_root_path_info(std::map<std::string, DataDirInfo>* path_map, size_t* tablet_counter);
 

@@ -51,33 +51,10 @@ Status FileUtils::create_dir(const std::string& path, Env* env) {
 
     std::string partial_path;
     for (const auto& it : p) {
-        partial_path = partial_path + it.string() + "/";
-        bool is_dir = false;
-
-        Status s = env->is_directory(partial_path, &is_dir);
-
-        if (s.ok()) {
-            if (is_dir) {
-                // It's a normal directory.
-                continue;
-            }
-
-            // Maybe a file or a symlink. Let's try to follow the symlink.
-            std::string real_partial_path;
-            RETURN_IF_ERROR(env->canonicalize(partial_path, &real_partial_path));
-
-            RETURN_IF_ERROR(env->is_directory(real_partial_path, &is_dir));
-            if (is_dir) {
-                // It's a symlink to a directory.
-                continue;
-            } else {
-                return Status::IOError(partial_path + " exists but is not a directory");
-            }
-        }
-
+        partial_path.append(it.string());
+        partial_path.append("/");
         RETURN_IF_ERROR(env->create_dir_if_missing(partial_path));
     }
-
     return Status::OK();
 }
 

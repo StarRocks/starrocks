@@ -574,15 +574,16 @@ void DataDir::perform_path_gc_by_tablet() {
             // could find the tablet, then skip check it
             continue;
         }
-        std::filesystem::path tablet_path(path);
-        std::filesystem::path data_dir_path = tablet_path.parent_path().parent_path().parent_path().parent_path();
+        std::filesystem::path schema_hash_path(path);
+        std::filesystem::path tablet_id_path = schema_hash_path.parent_path();
+        std::filesystem::path data_dir_path = tablet_id_path.parent_path().parent_path().parent_path();
         std::string data_dir_string = data_dir_path.string();
         DataDir* data_dir = StorageEngine::instance()->get_store(data_dir_string);
         if (data_dir == nullptr) {
             LOG(WARNING) << "could not find data dir for tablet path " << path;
             continue;
         }
-        _tablet_manager->try_delete_unused_tablet_path(data_dir, tablet_id, schema_hash, path);
+        _tablet_manager->try_delete_unused_tablet_path(data_dir, tablet_id, schema_hash, tablet_id_path.string());
     }
     _all_tablet_schemahash_paths.clear();
     LOG(INFO) << "finished one time path gc by tablet.";
