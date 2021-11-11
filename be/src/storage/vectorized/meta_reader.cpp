@@ -128,8 +128,7 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
     std::vector<RowsetSharedPtr> rowsets;
     Status acquire_rowset_st;
     {
-        tablet->obtain_header_rdlock();
-        DeferOp deferop([&] { tablet->release_header_lock(); });
+        std::shared_lock l(tablet->get_header_lock());
         acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
     }
 

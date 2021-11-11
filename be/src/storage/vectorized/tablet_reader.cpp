@@ -36,8 +36,7 @@ void TabletReader::close() {
 }
 
 Status TabletReader::prepare() {
-    _tablet->obtain_header_rdlock();
-    DeferOp release_lock([&] { _tablet->release_header_lock(); });
+    std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
     return st;
 }
@@ -209,9 +208,7 @@ Status TabletReader::_init_predicates(const TabletReaderParams& params) {
 Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
     PredicateParser pred_parser(_tablet->tablet_schema());
 
-    _tablet->obtain_header_rdlock();
-    DeferOp release_lock([&] { _tablet->release_header_lock(); });
-
+    std::shared_lock header_lock(_tablet->get_header_lock());
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
         if (pred_pb.version() > _delete_predicates_version.second) {
             continue;
