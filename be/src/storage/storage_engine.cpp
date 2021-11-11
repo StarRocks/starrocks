@@ -470,9 +470,31 @@ void StorageEngine::stop() {
     }
     _bg_worker_stopped = true;
 
-#ifndef BE_TEST
-    sleep(30); // wait five seconds to exit all threads gracefully
-#endif
+    _update_cache_expire_thread.join();
+    _unused_rowset_monitor_thread.join();
+    _garbage_sweeper_thread.join();
+    _disk_stat_monitor_thread.join();
+    for (auto& thread : _base_compaction_threads) {
+        thread.join();
+    }
+    for (auto& thread : _cumulative_compaction_threads) {
+        thread.join();
+    }
+    for (auto& thread : _update_compaction_threads) {
+        thread.join();
+    }
+    for (auto& thread : _tablet_checkpoint_threads) {
+        thread.join();
+    }
+    _fd_cache_clean_thread.join();
+    if (config::path_gc_check) {
+        for (auto& thread : _path_scan_threads) {
+            thread.join();
+        }
+        for (auto& thread : _path_gc_threads) {
+            thread.join();
+        }
+    }
 
     SAFE_DELETE(_index_stream_lru_cache);
     _file_cache.reset();

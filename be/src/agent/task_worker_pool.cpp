@@ -21,7 +21,6 @@
 
 #include "agent/task_worker_pool.h"
 
-#include <pthread.h>
 #include <sys/stat.h>
 
 #include <boost/lexical_cast.hpp>
@@ -175,7 +174,9 @@ void TaskWorkerPool::stop() {
     _stopped = true;
     std::lock_guard l(_worker_thread_lock);
     _worker_thread_condition_variable->notify_all();
-    sleep(1); // wait thread to exit
+    for (uint32_t i = 0; i < _worker_count; ++i) {
+        _worker_threads[i].join();
+    }
 }
 
 void TaskWorkerPool::submit_task(const TAgentTaskRequest& task) {
@@ -215,30 +216,8 @@ void TaskWorkerPool::_remove_task_info(const TTaskType::type task_type, int64_t 
 }
 
 void TaskWorkerPool::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func) {
-    pthread_t thread;
-    sigset_t mask;
-    sigset_t omask;
-    int err = 0;
-
-    // TODO: why need to catch these signals, should leave a comment
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGCHLD);
-    sigaddset(&mask, SIGHUP);
-    sigaddset(&mask, SIGPIPE);
-    pthread_sigmask(SIG_SETMASK, &mask, &omask);
-
-    while (true) {
-        err = pthread_create(&thread, nullptr, callback_func, this);
-        if (err != 0) {
-            LOG(WARNING) << "failed to spawn a thread. error: " << err;
-#ifndef BE_TEST
-            sleep(config::sleep_one_second);
-#endif
-        } else {
-            pthread_detach(thread);
-            break;
-        }
-    }
+    std::thread worker_thread(callback_func, this);
+    _worker_threads.emplace_back(std::move(worker_thread));
 }
 
 void TaskWorkerPool::_finish_task(const TFinishTaskRequest& finish_task_request) {

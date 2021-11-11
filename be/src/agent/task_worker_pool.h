@@ -144,6 +144,7 @@ private:
     static std::map<TTaskType::type, std::set<int64_t>> _s_task_signatures;
 
     std::atomic<bool> _stopped{false};
+    std::vector<std::thread> _worker_threads;
 
     TaskWorkerPool(const TaskWorkerPool&) = delete;
     const TaskWorkerPool& operator=(const TaskWorkerPool&) = delete;
