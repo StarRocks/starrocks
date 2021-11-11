@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -19,27 +21,23 @@ import java.util.Map;
 import java.util.Objects;
 
 public class LogicalWindowOperator extends LogicalOperator {
-    private final Map<ColumnRefOperator, CallOperator> windowCall;
-    private final List<ScalarOperator> partitionExpressions;
-    private final List<Ordering> orderByElements;
+    private final ImmutableMap<ColumnRefOperator, CallOperator> windowCall;
+    private final ImmutableList<ScalarOperator> partitionExpressions;
+    private final ImmutableList<Ordering> orderByElements;
     private final AnalyticWindow analyticWindow;
-
-    public LogicalWindowOperator(Map<ColumnRefOperator, CallOperator> windowCall,
-                                 List<ScalarOperator> partitionExpressions,
-                                 List<Ordering> orderByElements, AnalyticWindow analyticWindow) {
-        super(OperatorType.LOGICAL_WINDOW);
-        this.windowCall = windowCall;
-        this.partitionExpressions = partitionExpressions;
-        this.orderByElements = orderByElements;
-        this.analyticWindow = analyticWindow;
-    }
+    /**
+     * Each LogicalWindowOperator will belong to a SortGroup,
+     * so we need to record sortProperty to ensure that only one SortNode is enforced
+     */
+    private final ImmutableList<Ordering> enforceSortColumns;
 
     private LogicalWindowOperator(Builder builder) {
         super(OperatorType.LOGICAL_WINDOW, builder.getLimit(), builder.getPredicate(), builder.getProjection());
-        this.windowCall = builder.windowCall;
-        this.partitionExpressions = builder.partitionExpressions;
-        this.orderByElements = builder.orderByElements;
+        this.windowCall = ImmutableMap.copyOf(builder.windowCall);
+        this.partitionExpressions = ImmutableList.copyOf(builder.partitionExpressions);
+        this.orderByElements = ImmutableList.copyOf(builder.orderByElements);
         this.analyticWindow = builder.analyticWindow;
+        this.enforceSortColumns = ImmutableList.copyOf(builder.enforceSortColumns);
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -56,6 +54,10 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public AnalyticWindow getAnalyticWindow() {
         return analyticWindow;
+    }
+
+    public List<Ordering> getEnforceSortColumns() {
+        return enforceSortColumns;
     }
 
     @Override
@@ -108,6 +110,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         private List<ScalarOperator> partitionExpressions;
         private List<Ordering> orderByElements;
         private AnalyticWindow analyticWindow;
+        private List<Ordering> enforceSortColumns;
 
         @Override
         public LogicalWindowOperator build() {
@@ -122,6 +125,33 @@ public class LogicalWindowOperator extends LogicalOperator {
             this.partitionExpressions = windowOperator.partitionExpressions;
             this.orderByElements = windowOperator.orderByElements;
             this.analyticWindow = windowOperator.analyticWindow;
+            this.enforceSortColumns = windowOperator.enforceSortColumns;
+            return this;
+        }
+
+        public Builder setWindowCall(Map<ColumnRefOperator, CallOperator> windowCall) {
+            this.windowCall = windowCall;
+            return this;
+        }
+
+        public Builder setPartitionExpressions(
+                List<ScalarOperator> partitionExpressions) {
+            this.partitionExpressions = partitionExpressions;
+            return this;
+        }
+
+        public Builder setOrderByElements(List<Ordering> orderByElements) {
+            this.orderByElements = orderByElements;
+            return this;
+        }
+
+        public Builder setAnalyticWindow(AnalyticWindow analyticWindow) {
+            this.analyticWindow = analyticWindow;
+            return this;
+        }
+
+        public Builder setEnforceSortColumns(List<Ordering> enforceSortColumns) {
+            this.enforceSortColumns = enforceSortColumns;
             return this;
         }
     }

@@ -55,11 +55,8 @@ public class PruneWindowColumnsRule extends TransformationRule {
             requiredOutputColumns.union(requiredInputColumns);
         }
 
-        return Lists.newArrayList(OptExpression.create(new LogicalWindowOperator(
-                newWindowCall,
-                windowOperator.getPartitionExpressions(),
-                windowOperator.getOrderByElements(),
-                windowOperator.getAnalyticWindow()
-        ), input.getInputs()));
+        return Lists.newArrayList(OptExpression.create(
+                new LogicalWindowOperator.Builder().withOperator(windowOperator).setWindowCall(newWindowCall).build(),
+                input.getInputs()));
     }
 }
