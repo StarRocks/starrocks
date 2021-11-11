@@ -64,7 +64,7 @@ class PartitionExchanger final : public LocalExchanger {
         LocalExchangeSourceOperatorFactory* _source;
         const bool _is_shuffle;
         // Compute per-row partition values.
-        const std::vector<ExprContext*>& _partition_expr_ctxs;
+        const std::vector<ExprContext*> _partition_expr_ctxs;
 
         vectorized::Columns _partitions_columns;
         std::vector<uint32_t> _hash_values;
