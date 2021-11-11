@@ -67,11 +67,11 @@ public:
               _first_value(0),
               _last_value(0) {
         _bit_width = (Type == OLAP_FIELD_TYPE_BOOL) ? 1 : SIZE_OF_TYPE * 8;
-        _rle_encoder = new RleEncoder<CppType>(&_buf, _bit_width);
+        _rle_encoder = std::make_unique<RleEncoder<CppType>>(&_buf, _bit_width);
         reset();
     }
 
-    ~RlePageBuilder() override { delete _rle_encoder; }
+    ~RlePageBuilder() override {}
 
     bool is_page_full() override { return _rle_encoder->len() >= _options.data_page_size; }
 
@@ -140,7 +140,7 @@ private:
     size_t _count;
     bool _finished;
     int _bit_width;
-    RleEncoder<CppType>* _rle_encoder;
+    std::unique_ptr<RleEncoder<CppType>> _rle_encoder;
     faststring _buf;
     CppType _first_value;
     CppType _last_value;
