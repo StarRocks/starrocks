@@ -264,6 +264,7 @@ Status FileUtils::md5sum(const std::string& file, std::string* md5sum) {
     size_t file_len = statbuf.st_size;
     void* buf = mmap(nullptr, file_len, PROT_READ, MAP_SHARED, fd, 0);
     if (buf == MAP_FAILED) {
+        close(fd);
         PLOG(WARNING) << "mmap failed";
         return Status::InternalError("mmap failed");
     }
@@ -271,6 +272,7 @@ Status FileUtils::md5sum(const std::string& file, std::string* md5sum) {
     unsigned char result[MD5_DIGEST_LENGTH];
     MD5((unsigned char*)buf, file_len, result);
     if (munmap(buf, file_len) != 0) {
+        close(fd);
         PLOG(WARNING) << "munmap failed";
         return Status::InternalError("munmap failed");
     }
