@@ -523,7 +523,7 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     newversion->creation_time = creation_time;
     newversion->rowsets.swap(nrs);
     newversion->deltas.push_back(rowsetid);
-    _versions.emplace_back(std::move(newversion));
+    _versions.emplace_back(newversion);
     free_guard.cancel();
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
@@ -1042,7 +1042,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     newversion->creation_time = creation_time;
     newversion->rowsets.swap(nrs);
     newversion->compaction.swap(*pinfo);
-    _versions.emplace_back(std::move(newversion));
+    _versions.emplace_back(newversion);
     free_guard.cancel();
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);

@@ -676,12 +676,9 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
     TabletMetaLogPB log;
     auto op = log.add_ops();
     op->set_type(TabletMetaOpType::OP_ROWSET_COMMIT);
-    std::string logv;
-    {
-        op->set_allocated_commit(edit);
-        DeferOp release_commit([&]() { op->release_commit(); });
-        logv = log.SerializeAsString();
-    }
+    op->set_allocated_commit(edit);
+    auto logv = log.SerializeAsString();
+    op->release_commit();
     rocksdb::Status st = batch.Put(handle, logkey, logv);
     if (!st.ok()) {
         LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
