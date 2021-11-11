@@ -54,8 +54,6 @@ using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 // Component used to process aggregation including bloking aggregate and streaming aggregate
 // it contains common data struct and algorithm of aggregation
-// TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
-// TODO(hcf) all the data should be protected by lightweight lock
 class Aggregator {
 public:
     Aggregator(const TPlanNode& tnode);
