@@ -182,23 +182,30 @@ Status StorageEngine::_open() {
 }
 
 Status StorageEngine::_init_store_map() {
-    std::vector<std::unique_ptr<DataDir>> tmp_stores;
+    std::vector<std::pair<bool, DataDir*>> tmp_stores;
+    ScopedCleanup release_guard([&] {
+        for (const auto& item : tmp_stores) {
+            if (item.first) {
+                delete item.second;
+            }
+        }
+    });
     std::vector<std::thread> threads;
     SpinLock error_msg_lock;
     std::string error_msg;
     for (auto& path : _options.store_paths) {
-        auto store =
-                std::make_unique<DataDir>(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
-        DataDir* store_ptr = store.get();
-        tmp_stores.emplace_back(std::move(store));
-        threads.emplace_back([store_ptr, &error_msg_lock, &error_msg]() {
-            auto st = store_ptr->init();
+        DataDir* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
+        ScopedCleanup store_release_guard([&]() { delete store; });
+        tmp_stores.emplace_back(true, store);
+        store_release_guard.cancel();
+        threads.emplace_back([store, &error_msg_lock, &error_msg]() {
+            auto st = store->init();
             if (!st.ok()) {
                 {
                     std::lock_guard<SpinLock> l(error_msg_lock);
                     error_msg.append(st.to_string() + ";");
                 }
-                LOG(WARNING) << "Store load failed, status=" << st.to_string() << ", path=" << store_ptr->path();
+                LOG(WARNING) << "Store load failed, status=" << st.to_string() << ", path=" << store->path();
             }
         });
     }
@@ -211,10 +218,8 @@ Status StorageEngine::_init_store_map() {
     }
 
     for (auto& store : tmp_stores) {
-        // when call emplace(), store.release() will call first, store->path() will invalid
-        // so need to make a copy of store->path first
-        std::string path = store->path();
-        _store_map.emplace(path, store.release());
+        _store_map.emplace(store.second->path(), store.second);
+        store.first = false;
     }
     return Status::OK();
 }
@@ -929,8 +934,10 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         for (TabletInfo& tablet_info : tablet_infos) {
             TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
             if (tablet != nullptr) {
-                related_tablets.push_back(tablet);
                 tablet->obtain_header_wrlock();
+                ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
+                related_tablets.push_back(tablet);
+                release_guard.cancel();
             } else {
                 LOG(WARNING) << "could not get tablet before prepare tabletid: " << tablet_info.tablet_id;
             }
@@ -965,8 +972,10 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         for (TabletInfo& tablet_info : tablet_infos) {
             TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
             if (tablet != nullptr) {
-                related_tablets.push_back(tablet);
                 tablet->obtain_header_wrlock();
+                ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
+                related_tablets.push_back(tablet);
+                release_guard.cancel();
             } else {
                 LOG(WARNING) << "Fail to get tablet before finish tablet_id=" << tablet_info.tablet_id;
             }
