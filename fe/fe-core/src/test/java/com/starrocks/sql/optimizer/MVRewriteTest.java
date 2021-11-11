@@ -81,7 +81,7 @@ public class MVRewriteTest {
                 + " (partition p1 values less than MAXVALUE) "
                 + "distributed by hash(time) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTableSQL);
-        createTableSQL = " CREATE TABLE `duplicate_table_with_null` ( `k1`  date, `k2`  datetime, `k3`  char(20), " +
+        createTableSQL = " CREATE TABLE `all_type_table` ( `k1`  date, `k2`  datetime, `k3`  char(20), " +
                 "`k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, " +
                 "`k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9) ) " +
                 "ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
@@ -94,7 +94,7 @@ public class MVRewriteTest {
         starRocksAssert.dropTable(EMPS_TABLE_NAME);
         starRocksAssert.dropTable(DEPTS_TABLE_NAME);
         starRocksAssert.dropTable(USER_TAG_TABLE_NAME);
-        starRocksAssert.dropTable("duplicate_table_with_null");
+        starRocksAssert.dropTable("all_type_table");
     }
 
     @AfterClass
@@ -1158,11 +1158,11 @@ public class MVRewriteTest {
                 "                             percentile_union(percentile_hash(k10)),\n" +
                 "                             percentile_union(percentile_hash(k11)),\n" +
                 "                             percentile_union(percentile_hash(k12)),     \n" +
-                "                             percentile_union(percentile_hash(k13)) from duplicate_table_with_null group by k1 \n";
+                "                             percentile_union(percentile_hash(k13)) from all_type_table group by k1 \n";
         String query = "select round(percentile_approx(k8, 0.99),0),round(percentile_approx(k9, 0.99),0)," +
                 "round(percentile_approx(k10, 0.99),0),round(percentile_approx(k11, 0.99),0)," +
                 "round(percentile_approx(k12, 0.99),0),round(percentile_approx(k13, 0.99),0) " +
-                "from duplicate_table_with_null";
+                "from all_type_table";
         starRocksAssert.withMaterializedView(mvSQL).query(query).explainContains("rollup: percentile_mv");
     }
 }
