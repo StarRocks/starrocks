@@ -8,6 +8,8 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "util/random.h"
+#include "util/time.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -64,11 +66,10 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
 
     // test uuid
     {
-        auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
+        int column_size = static_cast<int>(Random(GetCurrentTimeNanos()).Uniform(10) + 1);
+        auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(column_size, column_size);
 
         Columns columns;
-        columns.emplace_back(var1_col);
-        columns.emplace_back(var1_col);
         columns.emplace_back(var1_col);
 
         ColumnPtr result = UtilityFunctions::uuid(ctx, columns);
@@ -79,10 +80,12 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         std::set<std::string> deduplication;
         ColumnViewer<TYPE_VARCHAR> column_viewer(result);
 
+        ASSERT_EQ(column_viewer.size(), column_size);
+
         for (int column_idx = 0; column_idx < column_viewer.size(); column_idx++) {
             auto& column = column_viewer.value(column_idx);
             ASSERT_EQ(36, column.get_size());
-            deduplication.insert(column.get_data());
+            deduplication.insert(column.to_string());
 
             for (int i = 0; i < column.get_size(); i++) {
                 if (hyphens_position.count(i)) {
@@ -94,7 +97,7 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
             }
         }
 
-        ASSERT_EQ(deduplication.size(), columns.size());
+        ASSERT_EQ(deduplication.size(), column_size);
     }
 }
 

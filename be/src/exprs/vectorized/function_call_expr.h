@@ -31,8 +31,13 @@ protected:
 private:
     const FunctionDescriptor* _fn_desc;
 
-    // is rand/random function.
-    bool _is_rand_function = false;
+    bool returns_random_value() const {
+        if (_fn.name.function_name == "rand" || _fn.name.function_name == "random" ||
+            _fn.name.function_name == "uuid") {
+            return true;
+        }
+        return false;
+    }
 };
 
 } // namespace vectorized

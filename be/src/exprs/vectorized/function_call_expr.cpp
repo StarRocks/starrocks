@@ -82,13 +82,6 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         }
     }
 
-    // is function rand/random?
-    if (_fn.name.function_name == "rand" || _fn.name.function_name == "random") {
-        _is_rand_function = true;
-    } else {
-        _is_rand_function = false;
-    }
-
     return Status::OK();
 }
 
@@ -107,7 +100,7 @@ void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks
 }
 
 bool VectorizedFunctionCallExpr::is_constant() const {
-    if (_is_rand_function) {
+    if (returns_random_value()) {
         return false;
     }
 
@@ -124,7 +117,7 @@ ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, 
         args.emplace_back(column);
     }
 
-    if (_is_rand_function) {
+    if (returns_random_value()) {
         if (ptr != nullptr) {
             args.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(ptr->num_rows(), ptr->num_rows()));
         } else {
