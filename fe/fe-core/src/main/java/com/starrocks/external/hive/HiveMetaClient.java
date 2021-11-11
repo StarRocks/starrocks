@@ -468,9 +468,9 @@ public class HiveMetaClient {
                 }
                 String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
-                List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations, isSplittable);
+                List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
-                        ImmutableList.copyOf(fileBlockDescs)));
+                        ImmutableList.copyOf(fileBlockDescs), isSplittable));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory
@@ -488,15 +488,13 @@ public class HiveMetaClient {
                 lcFileName.endsWith(".copying") || lcFileName.endsWith(".tmp"));
     }
 
-    private List<HdfsFileBlockDesc> getHdfsFileBlockDescs(BlockLocation[] blockLocations,
-                                                          boolean splittable) throws IOException {
+    private List<HdfsFileBlockDesc> getHdfsFileBlockDescs(BlockLocation[] blockLocations) throws IOException {
         List<HdfsFileBlockDesc> fileBlockDescs = Lists.newArrayList();
         for (BlockLocation blockLocation : blockLocations) {
             fileBlockDescs.add(buildHdfsFileBlockDesc(
                     blockLocation.getOffset(),
                     blockLocation.getLength(),
-                    getReplicaHostIds(blockLocation.getNames()),
-                    splittable)
+                    getReplicaHostIds(blockLocation.getNames()))
             );
         }
         return fileBlockDescs;
@@ -511,8 +509,7 @@ public class HiveMetaClient {
         return replicaHostIds;
     }
 
-    private HdfsFileBlockDesc buildHdfsFileBlockDesc(long offset, long length,
-                                                     long[] replicaHostIds, boolean splittable) {
+    private HdfsFileBlockDesc buildHdfsFileBlockDesc(long offset, long length, long[] replicaHostIds) {
         return new HdfsFileBlockDesc(offset,
                 length,
                 replicaHostIds,
@@ -520,8 +517,7 @@ public class HiveMetaClient {
                 // because this function is a rpc call, we give a fake value now.
                 // Set it to real value, when planner needs this param.
                 new long[] {UNKNOWN_STORAGE_ID},
-                this,
-                splittable);
+                this);
     }
 
     private FileSystem getFileSystem(URI uri) throws IOException {

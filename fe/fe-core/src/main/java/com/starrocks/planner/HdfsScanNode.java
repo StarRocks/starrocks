@@ -381,7 +381,7 @@ public class HdfsScanNode extends ScanNode {
         // because it may be changed before calling 'splitScanRangeLocations'
         // and after needSplit has been calculated.
         long splitSize = Config.hive_max_split_size;
-        boolean needSplit = blockDesc.isSplittable() && blockDesc.getLength() > splitSize;
+        boolean needSplit = fileDesc.isSplittable() && blockDesc.getLength() > splitSize;
         if (needSplit) {
             splitScanRangeLocations(partitionId, fileDesc, blockDesc, fileFormat, splitSize);
         } else {
@@ -391,10 +391,10 @@ public class HdfsScanNode extends ScanNode {
     }
 
     private void splitScanRangeLocations(long partitionId,
-                                               HdfsFileDesc fileDesc,
-                                               HdfsFileBlockDesc blockDesc,
-                                               HdfsFileFormat fileFormat,
-                                               long splitSize) {
+                                         HdfsFileDesc fileDesc,
+                                         HdfsFileBlockDesc blockDesc,
+                                         HdfsFileFormat fileFormat,
+                                         long splitSize) {
         long remainingBytes = blockDesc.getLength();
         long length = blockDesc.getLength();
         long offset = blockDesc.getOffset();
