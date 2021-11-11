@@ -57,5 +57,37 @@ TEST_F(UtilityFunctionsTest, sleepTest) {
     }
 }
 
+TEST_F(UtilityFunctionsTest, uuidTest) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    // test version
+    {
+        auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
+
+        Columns columns;
+        columns.emplace_back(var1_col);
+
+        ColumnPtr result = UtilityFunctions::uuid(ctx, columns);
+
+        ASSERT_TRUE(result->is_constant());
+
+        auto v = ColumnHelper::get_const_value<TYPE_VARCHAR>(result);
+
+        ASSERT_EQ(36, v.get_size());
+
+        std::set<int> hyphens_position = {8, 13, 18, 23};
+
+        for (int i = 0; i < v.get_size(); i++) {
+            if (hyphens_position.count(i)) {
+                ASSERT_EQ(v.get_data()[i], '-');
+            } else {
+                ASSERT_GE(v.get_data()[i], '0');
+                ASSERT_LE(v.get_data()[i], 'f');
+            }
+        }
+    }
+}
+
 } // namespace vectorized
 } // namespace starrocks

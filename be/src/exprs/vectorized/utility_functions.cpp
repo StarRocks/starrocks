@@ -50,4 +50,8 @@ ColumnPtr UtilityFunctions::last_query_id(FunctionContext* context, const Column
     }
 }
 
+ColumnPtr UtilityFunctions::uuid(FunctionContext*, const Columns& columns) {
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(generate_uuid_string(), 1);
+}
+
 } // namespace starrocks::vectorized
