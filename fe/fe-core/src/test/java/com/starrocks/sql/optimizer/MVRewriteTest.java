@@ -94,6 +94,7 @@ public class MVRewriteTest {
         starRocksAssert.dropTable(EMPS_TABLE_NAME);
         starRocksAssert.dropTable(DEPTS_TABLE_NAME);
         starRocksAssert.dropTable(USER_TAG_TABLE_NAME);
+        starRocksAssert.dropTable("duplicate_table_with_null");
     }
 
     @AfterClass
