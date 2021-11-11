@@ -17,6 +17,7 @@ protected:
     void SetUp() override {
         fs::path tmp = fs::temp_directory_path();
         fs::path dir = tmp / "tablet_meta_manager_test";
+        fs::remove_all(dir);
         CHECK(fs::create_directory(dir));
         _data_dir = std::make_unique<DataDir>(dir.string());
         Status st = _data_dir->init();
