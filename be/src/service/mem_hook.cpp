@@ -6,10 +6,13 @@
 #include <iostream>
 #include <new>
 
+#ifndef BE_TEST
 #include "runtime/current_thread.h"
+#endif
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))
 
+/*
 //// void* ptr = new AAA();
 void* operator new(size_t size) {
     void* ptr = tc_new(size);
@@ -164,54 +167,84 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 
     return tc_deletearray(p);
 }
+*/
 
 extern "C" {
 // malloc
 void* my_alloc(size_t size) __THROW {
     void* ptr = tc_malloc(size);
 
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+#ifndef BE_TEST
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
+#endif
 
     return ptr;
 }
 
 // free
 void my_free(void* p) __THROW {
+#ifndef BE_TEST
     size_t size = tc_malloc_size(p);
     starrocks::tls_thread_status.mem_release(size);
+#endif
 
     tc_free(p);
 }
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
-    int64_t old_size = 0;
-    if (p != 0) {
-        old_size = tc_malloc_size(p);
-    }
-    int64_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size - old_size);
+    void* ptr = tc_realloc(p, size);
 
-    return tc_realloc(p, size);
+#ifndef BE_TEST
+    if (LIKELY(ptr != nullptr)) {
+        int64_t old_size = 0;
+        if (p != nullptr) {
+            old_size = tc_malloc_size(p);
+        }
+        int64_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size - old_size);
+    }
+#endif
+
+    return ptr;
 }
 
 // calloc
 void* my_calloc(size_t n, size_t size) __THROW {
     void* ptr = tc_calloc(n, size);
 
-    size_t actual_size = tc_nallocx(n * size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+#ifndef BE_TEST
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(n * size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
+#endif
 
     return ptr;
+}
+
+void my_cfree(void* ptr) __THROW {
+#ifndef BE_TEST
+    size_t size = tc_malloc_size(ptr);
+    starrocks::tls_thread_status.mem_release(size);
+#endif
+
+    tc_cfree(ptr);
 }
 
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
     void* ptr = tc_memalign(align, size);
 
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+#ifndef BE_TEST
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
+#endif
 
     return ptr;
 }
@@ -220,8 +253,12 @@ void* my_memalign(size_t align, size_t size) __THROW {
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
     void* ptr = tc_memalign(align, size);
 
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+#ifndef BE_TEST
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
+#endif
 
     return ptr;
 }
@@ -230,8 +267,12 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 void* my_valloc(size_t size) __THROW {
     void* ptr = tc_valloc(size);
 
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+#ifndef BE_TEST
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
+#endif
 
     return ptr;
 }
@@ -240,8 +281,12 @@ void* my_valloc(size_t size) __THROW {
 void* my_pvalloc(size_t size) __THROW {
     void* ptr = tc_pvalloc(size);
 
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+#ifndef BE_TEST
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
+#endif
 
     return ptr;
 }
@@ -250,8 +295,12 @@ void* my_pvalloc(size_t size) __THROW {
 int my_posix_memalign(void** r, size_t a, size_t s) __THROW {
     int ret = tc_posix_memalign(r, a, s);
 
-    size_t actual_size = tc_nallocx(s, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+#ifndef BE_TEST
+    if (LIKELY(ret == 0)) {
+        size_t actual_size = tc_nallocx(s, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
+#endif
 
     return ret;
 }
@@ -260,6 +309,7 @@ void* malloc(size_t size) __THROW ALIAS(my_alloc);
 void free(void* p) __THROW ALIAS(my_free);
 void* realloc(void* p, size_t size) __THROW ALIAS(my_realloc);
 void* calloc(size_t n, size_t size) __THROW ALIAS(my_calloc);
+void cfree(void* ptr) __THROW ALIAS(my_cfree);
 void* memalign(size_t align, size_t size) __THROW ALIAS(my_memalign);
 void* aligned_alloc(size_t align, size_t size) __THROW ALIAS(my_aligned_alloc);
 void* valloc(size_t size) __THROW ALIAS(my_valloc);

@@ -241,6 +241,11 @@ public class ScalarOperatorFunctionsTest {
         Assert.assertEquals("2001-01-09 13:04:05",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("yyyy-MM-dd HH:mm:ss"))
                         .getVarchar());
+
+        Assert.assertEquals("2001-01-09",
+                ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2001, 1, 9, 13, 4, 5)),
+                        ConstantOperator.createVarchar("%Y-%m-%d"))
+                        .getVarchar());
     }
 
     @Test
@@ -606,15 +611,6 @@ public class ScalarOperatorFunctionsTest {
 
         assertEquals(Type.VARCHAR, result.getType());
         assertEquals("1,2,3", result.getVarchar());
-    }
-
-    @Test
-    public void ifNull() {
-        ConstantOperator date = ConstantOperator.createDatetime(LocalDateTime.of(2000, 10, 21, 12, 0));
-        ConstantOperator value = ConstantOperator.createNull(Type.DATE);
-        ConstantOperator result = ScalarOperatorFunctions.ifNull(value, date);
-
-        assertEquals(date, result);
     }
 
     @Test

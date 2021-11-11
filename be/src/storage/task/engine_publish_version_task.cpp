@@ -78,8 +78,8 @@ OLAPStatus EnginePublishVersionTask::finish() {
                 res = OLAP_ERR_PUSH_ROWSET_NOT_FOUND;
                 continue;
             }
-            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(
-                    tablet_info.tablet_id, tablet_info.schema_hash, tablet_info.tablet_uid);
+            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id,
+                                                                                             tablet_info.tablet_uid);
             if (tablet == nullptr) {
                 LOG(WARNING) << "can't get tablet when publish version. tablet_id=" << tablet_info.tablet_id
                              << " schema_hash=" << tablet_info.schema_hash;
@@ -132,8 +132,7 @@ OLAPStatus EnginePublishVersionTask::finish() {
             if (!_publish_version_req.strict_mode) {
                 break;
             }
-            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id,
-                                                                                             tablet_info.schema_hash);
+            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id);
             if (tablet == nullptr) {
                 _error_tablet_ids->push_back(tablet_info.tablet_id);
             } else {

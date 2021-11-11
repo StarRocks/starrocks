@@ -26,6 +26,7 @@
 #include "exec/data_sink.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/file_result_writer.h"
 
 namespace starrocks {
 
@@ -38,7 +39,6 @@ class BufferControlBlock;
 class ExprContext;
 class ResultWriter;
 class MemTracker;
-class ResultFileOptions;
 
 class ResultSink final : public DataSink {
 public:

@@ -10,8 +10,10 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/primitive_type.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/predicate_parser.h"
 #include "storage/vectorized/projection_iterator.h"
 
@@ -23,6 +25,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     _slots = &tuple_desc->slots();
 
     _init_counter(state);
+
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
 
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status);
     OlapScanConjunctsManager& cm = _conjuncts_manager;
@@ -95,6 +99,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
+    _dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state);
 
     // FixMe(kks): Ensure this logic is right.
     int scanners_per_tablet = 64;
@@ -118,7 +123,7 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash, true, &err);
+    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
     if (!_tablet) {
         std::stringstream ss;
         ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
@@ -149,6 +154,12 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
         } else {
             _not_push_down_predicates.add(p);
         }
+    }
+
+    {
+        vectorized::ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
+                                                                                  *_params.global_dictmaps);
+        not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
     }
 
     // Range
@@ -244,25 +255,36 @@ bool OlapChunkSource::has_next_chunk() const {
     return _status.ok();
 }
 
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk() {
+bool OlapChunkSource::has_output() const {
+    return !_chunk_buffer.empty();
+}
+
+size_t OlapChunkSource::get_buffer_size() const {
+    return _chunk_buffer.get_size();
+}
+
+StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
+    vectorized::ChunkPtr chunk = nullptr;
+    _chunk_buffer.try_get(&chunk);
+    return chunk;
+}
+
+Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
     if (!_status.ok()) {
         return _status;
     }
     using namespace vectorized;
-    ChunkUniquePtr chunk(ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
-    _status = _read_chunk_from_storage(_runtime_state, chunk.get());
-    if (!_status.ok()) {
-        return _status;
+
+    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+        ChunkUniquePtr chunk(
+                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
+        _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+        if (!_status.ok()) {
+            break;
+        }
+        _chunk_buffer.put(std::move(chunk));
     }
-    return std::move(chunk);
-}
-
-void OlapChunkSource::cache_next_chunk_blocking() {
-    _chunk = get_next_chunk();
-}
-
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk_nonblocking() {
-    return std::move(_chunk);
+    return _status;
 }
 
 // mapping a slot-column-id to schema-columnid
@@ -325,6 +347,7 @@ Status OlapChunkSource::close(RuntimeState* state) {
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
+    _dict_optimize_parser.close(state);
     return Status::OK();
 }
 

@@ -43,10 +43,11 @@ using MutableColumnPtr = std::unique_ptr<Column>;
 using Columns = std::vector<ColumnPtr>;
 using MutableColumns = std::vector<MutableColumnPtr>;
 
+using Int8Column = FixedLengthColumn<int8_t>;
 using UInt8Column = FixedLengthColumn<uint8_t>;
 using BooleanColumn = UInt8Column;
-using Int8Column = FixedLengthColumn<int8_t>;
 using Int16Column = FixedLengthColumn<int16_t>;
+using UInt16Column = FixedLengthColumn<uint16_t>;
 using Int32Column = FixedLengthColumn<int32_t>;
 using UInt32Column = FixedLengthColumn<uint32_t>;
 using Int64Column = FixedLengthColumn<int64_t>;

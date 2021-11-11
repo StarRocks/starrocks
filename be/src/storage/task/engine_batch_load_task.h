@@ -44,7 +44,7 @@ class StorageEngine;
 class EngineBatchLoadTask : public EngineTask {
 public:
     EngineBatchLoadTask(TPushReq& push_req, std::vector<TTabletInfo>* tablet_infos, int64_t signature,
-                        AgentStatus* res_status);
+                        AgentStatus* res_status, MemTracker* mem_tracker);
     ~EngineBatchLoadTask() override;
 
     OLAPStatus execute() override;
@@ -70,6 +70,8 @@ private:
     virtual OLAPStatus _delete_data(const TPushReq& request, vector<TTabletInfo>* tablet_info_vec);
 
     OLAPStatus _push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec);
+
+    std::unique_ptr<MemTracker> _mem_tracker;
 
     bool _is_init = false;
     TPushReq& _push_req;

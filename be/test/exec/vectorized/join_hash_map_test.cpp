@@ -13,7 +13,6 @@ protected:
     void SetUp() override {
         config::vector_chunk_size = 4096;
         _object_pool = std::make_shared<ObjectPool>();
-        _mem_tracker = std::make_shared<MemTracker>();
         _mem_pool = std::make_shared<MemPool>();
         _runtime_profile = create_runtime_profile();
         _runtime_state = create_runtime_state();
@@ -42,7 +41,6 @@ private:
                                                             TDescriptorTableBuilder* probe_desc_builder, bool nullable);
     static std::shared_ptr<RowDescriptor> create_build_desc(const std::shared_ptr<ObjectPool>& object_pool,
                                                             TDescriptorTableBuilder* build_desc_builder, bool nullable);
-    static std::shared_ptr<MemTracker> create_mem_tracker(const std::shared_ptr<RuntimeProfile>& profile);
     static std::shared_ptr<RuntimeState> create_runtime_state();
 
     static void check_probe_index(const Buffer<uint32_t>& probe_index, uint32_t step, uint32_t match_count,
@@ -85,7 +83,6 @@ private:
                                             uint32_t count);
 
     std::shared_ptr<ObjectPool> _object_pool = nullptr;
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemPool> _mem_pool = nullptr;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
@@ -496,7 +493,6 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, uint3
     table_items->next.resize(row_count + 1);
     table_items->build_pool = std::make_unique<MemPool>();
     table_items->probe_pool = std::make_unique<MemPool>();
-    table_items->mem_tracker = _mem_tracker.get();
     table_items->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTimer");
     table_items->output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTimer");
     table_items->output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTimer");
@@ -694,10 +690,6 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_build_desc(const std::sha
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
 
-std::shared_ptr<MemTracker> JoinHashMapTest::create_mem_tracker(const std::shared_ptr<RuntimeProfile>& profile) {
-    return std::make_shared<MemTracker>(profile.get(), 1024 * 1024, "test", nullptr);
-}
-
 std::shared_ptr<RuntimeState> JoinHashMapTest::create_runtime_state() {
     TUniqueId fragment_id;
     TQueryOptions query_options;
@@ -756,25 +748,6 @@ TEST_F(JoinHashMapTest, PrepareMapIndex) {
     ASSERT_EQ(probe_state.probe_match_index.size(), config::vector_chunk_size);
     ASSERT_EQ(probe_state.probe_match_filter.size(), config::vector_chunk_size);
     ASSERT_EQ(probe_state.buckets.size(), config::vector_chunk_size);
-}
-
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, CheckAndAddMemoryUsage) {
-    auto runtime_state = create_runtime_state();
-    runtime_state->init_instance_mem_tracker();
-    runtime_state->instance_mem_tracker()->set_limit(1024 * 1024);
-    runtime_state->instance_mem_tracker()->Init();
-
-    JoinHashTableItems table_items;
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
-
-    auto status = JoinHashMapHelper::check_and_add_memory_usage(runtime_state.get(), &table_items, 512 * 1024);
-    ASSERT_TRUE(status.ok());
-
-    status = JoinHashMapHelper::check_and_add_memory_usage(runtime_state.get(), &table_items, 1024 * 1024);
-    ASSERT_TRUE(!status.ok());
-
-    table_items.mem_tracker->release(1536 * 1024);
 }
 
 // NOLINTNEXTLINE
@@ -884,7 +857,6 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.next.resize(11);
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -909,7 +881,6 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
         }
         ASSERT_EQ(found_count, 1);
     }
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -929,7 +900,6 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.next.resize(11);
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -959,7 +929,6 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
             ASSERT_EQ(found_count, 1);
         }
     }
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -990,7 +959,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
     table_items.next.resize(11);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -1018,7 +986,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
         }
         ASSERT_EQ(found_count, 1);
     }
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -1049,7 +1016,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
     table_items.next.resize(11);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -1081,7 +1047,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
             ASSERT_EQ(found_count, 0);
         }
     }
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -1112,7 +1077,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     table_items.next.resize(11);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     table_items.build_pool = std::make_unique<MemPool>();
     table_items.probe_pool = std::make_unique<MemPool>();
     probe_state.probe_row_count = 10;
@@ -1144,7 +1108,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     }
     table_items.build_pool.reset();
     table_items.probe_pool.reset();
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -1175,7 +1138,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.next.resize(11);
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     table_items.build_pool = std::make_unique<MemPool>();
     table_items.probe_pool = std::make_unique<MemPool>();
     probe_state.probe_row_count = 10;
@@ -1217,7 +1179,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     }
     table_items.build_pool.reset();
     table_items.probe_pool.reset();
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -1559,7 +1520,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightAntiJoinWithOtherConjunct) {
 TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     auto runtime_profile = create_runtime_profile();
     auto runtime_state = create_runtime_state();
-    auto mem_tracker = create_mem_tracker(runtime_profile);
     std::shared_ptr<ObjectPool> object_pool = std::make_shared<ObjectPool>();
     config::vector_chunk_size = 4096;
 
@@ -1575,7 +1535,6 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
-    param.mem_tracker = mem_tracker.get();
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -1623,7 +1582,6 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
 TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     auto runtime_profile = create_runtime_profile();
     auto runtime_state = create_runtime_state();
-    auto mem_tracker = create_mem_tracker(runtime_profile);
     std::shared_ptr<ObjectPool> object_pool = std::make_shared<ObjectPool>();
     config::vector_chunk_size = 4096;
 
@@ -1639,7 +1597,6 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
-    param.mem_tracker = mem_tracker.get();
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -1687,7 +1644,6 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
 TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     auto runtime_profile = create_runtime_profile();
     auto runtime_state = create_runtime_state();
-    auto mem_tracker = create_mem_tracker(runtime_profile);
     std::shared_ptr<ObjectPool> object_pool = std::make_shared<ObjectPool>();
     std::shared_ptr<MemPool> mem_pool = std::make_shared<MemPool>();
     config::vector_chunk_size = 4096;
@@ -1704,7 +1660,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
-    param.mem_tracker = mem_tracker.get();
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.probe_row_desc = probe_row_desc.get();
@@ -1768,7 +1723,6 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
-    param.mem_tracker = _mem_tracker.get();
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_VARCHAR, false});
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_VARCHAR, false});
     param.probe_row_desc = probe_row_desc.get();
@@ -1847,8 +1801,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNotNullableColumn) {
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
     check_build_column(table_items.build_key_column, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -1885,8 +1837,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNullableColumn) {
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
     check_build_column(table_items.build_key_column, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -1924,8 +1874,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForPartialNullableColumn) {
     auto nulls = create_bools(build_row_count, 4);
     check_build_index(nulls, table_items.first, table_items.next, build_row_count);
     check_build_column(nulls, table_items.build_key_column, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -1960,8 +1908,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNotNullableColumn) {
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
     check_build_slice(table_items.build_slice, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -1998,8 +1944,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNullableColumn) {
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
     check_build_slice(table_items.build_slice, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -2037,8 +1981,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForPartialNullColumn) {
     auto nulls = create_bools(build_row_count, 4);
     check_build_index(nulls, table_items.first, table_items.next, build_row_count);
     check_build_slice(nulls, table_items.build_slice, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE

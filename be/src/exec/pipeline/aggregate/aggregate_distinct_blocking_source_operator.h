@@ -33,17 +33,19 @@ private:
 
 class AggregateDistinctBlockingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    AggregateDistinctBlockingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
+    AggregateDistinctBlockingSourceOperatorFactory(int32_t id, int32_t plan_node_id,
+                                                   AggregatorFactoryPtr aggregator_factory)
             : SourceOperatorFactory(id, "aggregate_distinct_blocking_source", plan_node_id),
-              _aggregator(std::move(aggregator)) {}
+              _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateDistinctBlockingSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AggregateDistinctBlockingSourceOperator>(_id, _plan_node_id, _aggregator);
+        return std::make_shared<AggregateDistinctBlockingSourceOperator>(
+                _id, _plan_node_id, _aggregator_factory->get_or_create(driver_sequence));
     }
 
 private:
-    AggregatorPtr _aggregator = nullptr;
+    AggregatorFactoryPtr _aggregator_factory = nullptr;
 };
 } // namespace starrocks::pipeline

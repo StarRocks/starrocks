@@ -8,7 +8,7 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // _aggregator is shared by sink operator and source operator
     // we must only prepare it at sink operator
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_runtime_profile()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), get_runtime_profile(), _mem_tracker.get()));
     return _aggregator->open(state);
 }
 
@@ -68,7 +68,8 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
         APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
-        RETURN_IF_ERROR(_aggregator->check_hash_map_memory_usage(state));
+        _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
+                          _aggregator->mem_pool()->total_reserved_bytes());
         _aggregator->try_convert_to_two_level_map();
     }
     if (_aggregator->is_none_group_by_exprs()) {

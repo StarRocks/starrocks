@@ -113,12 +113,12 @@ public:
     MemTracker* tablet_meta_mem_tracker() { return _tablet_meta_mem_tracker; }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker; }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker; }
-    MemTracker* snapshot_mem_tracker() { return _snapshot_mem_tracker; }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
-    MemTracker* local_column_pool_mem_tracker() { return _local_column_pool_mem_tracker; }
-    MemTracker* central_column_pool_mem_tracker() { return _central_column_pool_mem_tracker; }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker; }
     MemTracker* update_mem_tracker() { return _update_mem_tracker; }
+    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker; }
+    MemTracker* clone_mem_tracker() { return _clone_mem_tracker; }
+    MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker; }
 
     ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
@@ -183,23 +183,20 @@ private:
     // The memory used for schema change
     MemTracker* _schema_change_mem_tracker = nullptr;
 
-    // The memory used for snapshot
-    MemTracker* _snapshot_mem_tracker = nullptr;
-
     // The memory used for column pool
     MemTracker* _column_pool_mem_tracker = nullptr;
-
-    // The memory used for central column pool
-    MemTracker* _central_column_pool_mem_tracker = nullptr;
-
-    // The memory used for local column pool
-    MemTracker* _local_column_pool_mem_tracker = nullptr;
 
     // The memory used for page cache
     MemTracker* _page_cache_mem_tracker = nullptr;
 
     // The memory tracker for update manager
     MemTracker* _update_mem_tracker = nullptr;
+
+    MemTracker* _chunk_allocator_mem_tracker = nullptr;
+
+    MemTracker* _clone_mem_tracker = nullptr;
+
+    MemTracker* _consistency_mem_tracker = nullptr;
 
     ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;

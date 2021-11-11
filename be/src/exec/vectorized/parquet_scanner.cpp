@@ -11,7 +11,6 @@
 #include "exec/parquet_reader.h"
 #include "exec/text_converter.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/tuple.h"

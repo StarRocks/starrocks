@@ -17,7 +17,6 @@ namespace starrocks {
 class RuntimeState;
 class RuntimeProfile;
 class ExprContext;
-class MemTracker;
 class TupleDescriptor;
 
 namespace vectorized {
@@ -39,6 +38,8 @@ public:
     Status open();
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk, bool* eos);
     void close();
+
+    RuntimeState* runtime_state() { return _state; }
 
 private:
     RuntimeState* _state;

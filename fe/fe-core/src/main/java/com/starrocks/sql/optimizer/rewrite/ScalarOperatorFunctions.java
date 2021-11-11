@@ -112,7 +112,8 @@ public class ScalarOperatorFunctions {
         try {
             // unix style
             if (!SUPPORT_DATETIME_FORMATTER.contains(format.trim())) {
-                DateLiteral literal = new DateLiteral(date.getDatetime().format(DATE_TIME_FORMATTER), date.getType());
+                DateLiteral literal = new DateLiteral(date.getDatetime().format(DATE_TIME_FORMATTER), Type.DATETIME);
+                literal.setType(date.getType());
                 return ConstantOperator.createVarchar(literal.dateFormat(fmtLiteral.getVarchar()));
             } else {
                 String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
@@ -395,19 +396,6 @@ public class ScalarOperatorFunctions {
         }
         resultBuilder.append(values[values.length - 1].getVarchar());
         return ConstantOperator.createVarchar(resultBuilder.toString());
-    }
-
-    @FEFunction.List(list = {
-            @FEFunction(name = "ifnull", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "VARCHAR"),
-            @FEFunction(name = "ifnull", argTypes = {"TINYINT", "TINYINT"}, returnType = "TINYINT"),
-            @FEFunction(name = "ifnull", argTypes = {"INT", "INT"}, returnType = "INT"),
-            @FEFunction(name = "ifnull", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT"),
-            @FEFunction(name = "ifnull", argTypes = {"DATETIME", "DATETIME"}, returnType = "DATETIME"),
-            @FEFunction(name = "ifnull", argTypes = {"DATE", "DATETIME"}, returnType = "DATETIME"),
-            @FEFunction(name = "ifnull", argTypes = {"DATETIME", "DATE"}, returnType = "DATETIME")
-    })
-    public static ConstantOperator ifNull(ConstantOperator first, ConstantOperator second) {
-        return first.isNull() ? second : first;
     }
 
     private static ConstantOperator createDecimalLiteral(BigDecimal result) {

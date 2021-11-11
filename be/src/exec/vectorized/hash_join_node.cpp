@@ -123,7 +123,6 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
-    param->mem_tracker = _mem_tracker.get();
     param->build_row_desc = &child(1)->row_desc();
     param->probe_row_desc = &child(0)->row_desc();
     param->search_ht_timer = _search_ht_timer;
@@ -175,6 +174,7 @@ Status HashJoinNode::open(RuntimeState* state) {
         }
 
         {
+            RETURN_IF_ERROR(state->check_mem_limit("HashJoinNode"));
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
             RETURN_IF_ERROR(_ht.append_chunk(state, chunk));
@@ -184,6 +184,7 @@ Status HashJoinNode::open(RuntimeState* state) {
     {
         // build hash table: compute key columns, and then build the hash table.
         RETURN_IF_ERROR(_build(state));
+        RETURN_IF_ERROR(state->check_mem_limit("HashJoinNode"));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
     }
@@ -237,6 +238,8 @@ Status HashJoinNode::open(RuntimeState* state) {
             return Status::OK();
         }
     }
+
+    _mem_tracker->set(_ht.mem_usage());
 
     return Status::OK();
 }

@@ -15,16 +15,12 @@ class Column;
 
 namespace segment_v2 {
 
-class FileColumnIterator;
-
-// TODO: rename to ArrayColumnIterator
-// TODO: more unit tests
-class ArrayFileColumnIterator final : public ColumnIterator {
+class ArrayColumnIterator final : public ColumnIterator {
 public:
-    ArrayFileColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
-                            ColumnIterator* element_iterator);
+    ArrayColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
+                        ColumnIterator* element_iterator);
 
-    ~ArrayFileColumnIterator() override = default;
+    ~ArrayColumnIterator() override = default;
 
     Status init(const ColumnIteratorOptions& opts) override;
 

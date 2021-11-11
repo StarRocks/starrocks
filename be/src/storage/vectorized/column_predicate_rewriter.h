@@ -9,6 +9,7 @@
 #include "storage/olap_common.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized/conjunctive_predicates.h"
 
 namespace starrocks::vectorized {
 // For dictionary columns, predicates can be rewriten
@@ -48,4 +49,24 @@ private:
     const int _column_size;
     SparseRange& _scan_range;
 };
+
+// For global dictionary columns, predicates can be rewriten
+// ConjunctivePredicatesRewriter was a helper class, won't acquire any resource
+// ConjunctivePredicatesRewriter will rewrite ConjunctivePredicates in TabletScanner
+//
+// TODO: refactor ConjunctivePredicatesRewriter and ColumnPredicateRewriter
+class ConjunctivePredicatesRewriter {
+public:
+    ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps)
+            : _predicates(predicates), _dict_maps(dict_maps) {}
+
+    void rewrite_predicate(ObjectPool* pool);
+
+    bool column_need_rewrite(ColumnId cid) { return _dict_maps.count(cid); }
+
+private:
+    ConjunctivePredicates& _predicates;
+    const ColumnIdToGlobalDictMap& _dict_maps;
+};
+
 } // namespace starrocks::vectorized

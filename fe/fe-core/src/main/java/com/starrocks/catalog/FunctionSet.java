@@ -87,6 +87,7 @@ public class FunctionSet {
     public static final String TO_BITMAP = "to_bitmap";
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String IF = "if";
+    public static final String IF_NULL = "ifnull";
 
     // Arithmetic functions:
     public static final String ADD = "add";
@@ -156,7 +157,27 @@ public class FunctionSet {
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
     public final ImmutableSet<String> couldApplyDictOptimizationFunctions = ImmutableSet.of(
-            "like", "substr", "substring", "upper", "lower");
+           "append_trailing_char_if_absent",
+           "concat",
+           "concat_ws",
+           "hex",
+           "left",
+           "like", 
+           "lower",
+           "lpad",
+           "ltrim",
+           "regexp_extract",
+           "regexp_replace",
+           "repeat",
+           "reverse",
+           "right",
+           "rpad",
+           "rtrim",
+           "split_part",
+           "substr", 
+           "substring", 
+           "trim",
+           "upper");
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();

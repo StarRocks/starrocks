@@ -338,8 +338,6 @@ private:
     ObjectPool* _pool;
     const RowDescriptor& _input_row_desc;
 
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-
     // unique load id
     PUniqueId _load_id;
     int64_t _txn_id = -1;

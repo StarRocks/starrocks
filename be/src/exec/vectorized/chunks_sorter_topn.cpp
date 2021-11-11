@@ -5,7 +5,6 @@
 #include "column/type_traits.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
@@ -33,8 +32,6 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
         raw_chunks.push_back(chunk);
         chunk_number++;
     } else if (raw_chunks[chunk_number - 1]->num_rows() + chunk->num_rows() > config::vector_chunk_size) {
-        // add memory of last one chunk of _raw_chunks
-        RETURN_IF_ERROR(_consume_and_check_memory_limit(state, raw_chunks[chunk_number - 1]->memory_usage()));
         raw_chunks.push_back(chunk);
         chunk_number++;
     } else {
@@ -52,8 +49,6 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     // performs sorting once, and discards extra rows
 
     if (_limit > 0 && (chunk_number >= _limit || chunk_number >= _size_of_chunk_batch)) {
-        // add memory of the last one chunk of _raw_chunks
-        RETURN_IF_ERROR(_consume_and_check_memory_limit(state, raw_chunks[chunk_number - 1]->memory_usage()));
         RETURN_IF_ERROR(_sort_chunks(state));
     }
 
@@ -63,8 +58,6 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
 Status ChunksSorterTopn::done(RuntimeState* state) {
     auto& raw_chunks = _raw_chunks.chunks;
     if (!raw_chunks.empty()) {
-        // add memory of the last one chunk of _raw_chunks
-        RETURN_IF_ERROR(_consume_and_check_memory_limit(state, raw_chunks[raw_chunks.size() - 1]->memory_usage()));
         RETURN_IF_ERROR(_sort_chunks(state));
     }
 
@@ -147,11 +140,6 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
     // the result is _merged_segment as [BEFORE, IN].
     RETURN_IF_ERROR(_merge_sort_data_as_merged_segment(state, permutations, segments));
 
-    // This is memory_usage at end of this batch chunks,
-    // Just update to It prepared for next batch chunks.
-    size_t memory_in_use = sizeof(DataSegment) + _merged_segment.chunk->memory_usage();
-    RETURN_IF_ERROR(_consume_and_check_memory_limit(state, memory_in_use - _last_memory_usage));
-
     return Status::OK();
 }
 
@@ -176,17 +164,9 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
     _raw_chunks.clear();
 
     // this time, because we will filter chunks before initialize permutations, so we just check memory usage.
-    if (_init_merged_segment) {
-        // record memory usage, maybe peak memory usage.
-        RETURN_IF_ERROR(_consume_and_check_memory_limit(state, raw_chunks_size * sizeof(DataSegment)));
-    } else {
+    if (!_init_merged_segment) {
         // this time, Just initialized permutations.second.
         permutation_second.resize(row_count);
-
-        // record memory usage, maybe peak memory usage.
-        RETURN_IF_ERROR(_consume_and_check_memory_limit(
-                state,
-                raw_chunks_size * sizeof(DataSegment) + permutation_second.capacity() * sizeof(PermutationItem)));
 
         uint32_t perm_index = 0;
         for (uint32_t i = 0; i < segments.size(); ++i) {
@@ -289,33 +269,15 @@ Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
         //
         // part 1 and part 2 is not coexistence, and we use bytes_for_filter to get the larger of them,
         // subtract filter_array's memory in bytes_for_filter at end. because filter_array is used remainly.
-        int64_t bytes_for_filter;
-
-        auto check_memory_usage_in_filter = [this, &state, batch_size, &bytes_for_filter](size_t bytes) -> Status {
-            // memory usage of rows_to_compare_array
-            int64_t fixed_bytes = batch_size * sizeof(uint64_t);
-
-            // memory usage of filter_array
-            bytes += batch_size * sizeof(uint8_t);
-
-            // memory usage of compare_results_array
-            bytes_for_filter = batch_size * sizeof(int8_t) + (fixed_bytes < bytes ? bytes : fixed_bytes);
-            RETURN_IF_ERROR(this->_consume_and_check_memory_limit(state, bytes_for_filter));
-            return Status::OK();
-        };
 
         if (number_of_rows_to_sort > 1 && _merged_segment.chunk->num_rows() >= number_of_rows_to_sort) {
             RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, number_of_rows_to_sort, filter_array,
-                                                             _sort_order_flag, _null_first_flag, least_num, middle_num,
-                                                             check_memory_usage_in_filter));
+                                                             _sort_order_flag, _null_first_flag, least_num,
+                                                             middle_num));
         } else {
             RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, 1, filter_array, _sort_order_flag,
-                                                             _null_first_flag, least_num, middle_num,
-                                                             check_memory_usage_in_filter));
+                                                             _null_first_flag, least_num, middle_num));
         }
-
-        // because filter_array is Still in use.
-        bytes_for_filter -= batch_size * sizeof(uint8_t);
 
         timer.stop();
         {
@@ -323,9 +285,6 @@ Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
             permutations.first.resize(least_num);
             // BEFORE's size is enough, so we ignore IN.
             if (least_num >= number_of_rows_to_sort) {
-                RETURN_IF_ERROR(_consume_and_check_memory_limit(
-                        state, -bytes_for_filter + permutations.first.capacity() * sizeof(PermutationItem)));
-
                 // use filter_array to set permutations.first.
                 _set_permutation_before(permutations.first, segments.size(), filter_array);
             } else if (number_of_rows_to_sort > 1) {
@@ -333,17 +292,11 @@ Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
                 // BEFORE's size < number_of_rows_to_sort, we need set permutations.first and permutations.second.
                 permutations.second.resize(middle_num);
 
-                RETURN_IF_ERROR(_consume_and_check_memory_limit(
-                        state, -bytes_for_filter + (permutations.first.capacity() + permutations.second.capacity()) *
-                                                           sizeof(PermutationItem)));
-
                 // use filter_array to set permutations.first and permutations.second.
                 _set_permutation_complete(permutations, segments.size(), filter_array);
             }
         }
         timer.start();
-
-        RETURN_IF_ERROR(_consume_and_check_memory_limit(state, -(batch_size * sizeof(uint8_t))));
     }
 
     const DataSegments& data = segments;
@@ -500,9 +453,6 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
         _merged_segment = std::move(merged_segment);
     }
 
-    // record memory usage, maybe peak memory usage.
-    RETURN_IF_ERROR(_consume_and_check_memory_limit(state, sizeof(DataSegment) + big_chunk->memory_usage()));
-
     return Status::OK();
 }
 
@@ -530,9 +480,6 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
     }
 
     _merged_segment.init(_sort_exprs, big_chunk);
-
-    // record memory usage, maybe peak memory usage.
-    RETURN_IF_ERROR(_consume_and_check_memory_limit(state, sizeof(DataSegment) + big_chunk->memory_usage()));
 
     return Status::OK();
 }

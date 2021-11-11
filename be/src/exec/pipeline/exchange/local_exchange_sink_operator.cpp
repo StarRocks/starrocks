@@ -7,8 +7,8 @@
 
 namespace starrocks::pipeline {
 Status LocalExchangeSinkOperator::prepare(RuntimeState* state) {
-    _exchanger->increment_sink_number();
     Operator::prepare(state);
+    _exchanger->increment_sink_number();
     return Status::OK();
 }
 

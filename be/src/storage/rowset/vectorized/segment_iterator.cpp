@@ -24,8 +24,8 @@
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/default_value_column_iterator.h"
-#include "storage/rowset/segment_v2/file_column_iterator.h"
 #include "storage/rowset/segment_v2/row_ranges.h"
+#include "storage/rowset/segment_v2/scalar_column_iterator.h"
 #include "storage/rowset/segment_v2/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
@@ -234,7 +234,7 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
     if (_local_to_global_holder.size() > 0) {
         return Status::OK();
     }
-    auto file_column_iter = down_cast<FileColumnIterator*>(_col_iter);
+    auto file_column_iter = down_cast<ScalarColumnIterator*>(_col_iter);
     int dict_size = file_column_iter->dict_size();
 
     auto column = BinaryColumn::create();
@@ -820,40 +820,43 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk_start = next_start;
         DCHECK_EQ(chunk_start, chunk->num_rows());
     }
-    chunk_start = _filter_by_expr_predicates(chunk, rowid);
+
+    size_t raw_chunk_size = chunk->num_rows();
+
+    size_t chunk_size = _filter_by_expr_predicates(chunk, rowid);
 
     _opts.stats->block_load_ns += sw.elapsed_time();
 
     int64_t total_read = _opts.stats->raw_rows_read - prev_raw_read;
 
-    DCHECK_EQ(chunk_start, chunk->num_rows());
-    if (UNLIKELY(chunk_start == 0)) {
+    if (UNLIKELY(raw_chunk_size == 0)) {
         // Return directly if chunk_start is zero, i.e, chunk is empty.
         // Otherwise, chunk will be swapped with result, which is incorrect
         // because the chunk is a pointer to _read_chunk instead of _final_chunk.
         return Status::EndOfFile("no more data in segment");
     }
 
-    if (_context->_has_dict_column & (chunk_start > 0)) {
+    if (chunk_size > 0 && _context->_has_dict_column) {
         chunk = _context->_dict_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
+
     if (_context->_late_materialize) {
         chunk = _context->_final_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
         RETURN_IF_ERROR(_finish_late_materialization(_context));
-        if (_context->_next != nullptr && (chunk_start * 1000 > total_read * _late_materialization_ratio)) {
+        if (_context->_next != nullptr && (chunk_size * 1000 > total_read * _late_materialization_ratio)) {
             need_switch_context = true;
         }
     } else if (_context->_next != nullptr && _context_switch_count < 3 &&
-               chunk_start * 1000 <= total_read * _late_materialization_ratio) {
+               chunk_size * 1000 <= total_read * _late_materialization_ratio) {
         need_switch_context = true;
         _context_switch_count++;
     }
 
     // remove (logical) deleted rows.
-    if (chunk->num_rows() > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
+    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
         _opts.delete_predicates.evaluate(chunk, _selection.data());
@@ -1159,9 +1162,19 @@ Status SegmentIterator::_init_context() {
 }
 
 void SegmentIterator::_rewrite_predicates() {
+    //
     ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
                                      _predicate_columns, _scan_range);
     rewriter.rewrite_predicate(&_obj_pool);
+
+    // for each delete predicate,
+    // If the global dictionary optimization is enabled for the column,
+    // then the output column is of type INT, and we need to rewrite the delete condition
+    // so that the input is of type INT (the original input is of type String)
+    for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
+        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps);
+        crewriter.rewrite_predicate(&_obj_pool);
+    }
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {

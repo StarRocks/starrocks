@@ -47,9 +47,13 @@ public:
 
     bool has_next_chunk() const override;
 
-    StatusOr<vectorized::ChunkUniquePtr> get_next_chunk() override;
-    void cache_next_chunk_blocking() override;
-    StatusOr<vectorized::ChunkUniquePtr> get_next_chunk_nonblocking() override;
+    bool has_output() const override;
+
+    virtual size_t get_buffer_size() const override;
+
+    StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() override;
+
+    Status buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) override;
 
 private:
     Status _get_tablet(const TInternalScanRange* scan_range);
@@ -74,7 +78,7 @@ private:
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
-    StatusOr<vectorized::ChunkUniquePtr> _chunk;
+    UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     vectorized::ConjunctivePredicates _not_push_down_predicates;
@@ -89,6 +93,7 @@ private:
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
     vectorized::OlapScanConjunctsManager _conjuncts_manager;
+    vectorized::DictOptimizeParser _dict_optimize_parser;
 
     std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.

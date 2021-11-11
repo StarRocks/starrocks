@@ -34,6 +34,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
              _conjunct_ctxs.empty() &&                     // no 'having' clause
              _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
     while (true) {
+        RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
         bool eos = false;
         RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(_children[0]->get_next(state, &chunk, &eos));
@@ -63,7 +64,8 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
-                RETURN_IF_ERROR(_aggregator->check_hash_map_memory_usage(state));
+                _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
+                                  _aggregator->mem_pool()->total_reserved_bytes());
                 _aggregator->try_convert_to_two_level_map();
             }
             if (_aggregator->is_none_group_by_exprs()) {
@@ -110,6 +112,9 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
         }
     }
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
+
+    _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
+
     return Status::OK();
 }
 
@@ -157,22 +162,34 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
+    auto& agg_node = _tnode.agg_node;
+    size_t degree_of_parallelism;
+    if (agg_node.need_finalize) {
+        // Parallelism of finalize must be 1
+        degree_of_parallelism = 1;
+        operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
+    } else {
+        // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
+        // and we may set other parallelism for source operator in many special cases
+        degree_of_parallelism =
+                down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
+    }
 
     // shared by sink operator and source operator
-    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);
+    AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
-    operators_with_sink.emplace_back(
-            std::make_shared<AggregateBlockingSinkOperatorFactory>(context->next_operator_id(), id(), aggregator));
+    auto sink_operator = std::make_shared<AggregateBlockingSinkOperatorFactory>(context->next_operator_id(), id(),
+                                                                                aggregator_factory);
+    operators_with_sink.push_back(std::move(sink_operator));
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
-    auto source_operator =
-            std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator);
+    auto source_operator = std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(),
+                                                                                    aggregator_factory);
 
-    // TODO(hcf) Currently, the shared data structure aggregator does not support concurrency.
-    // So the degree of parallism must set to 1, we'll fix it later
-    source_operator->set_degree_of_parallelism(1);
+    // Aggregator must be used by a pair of sink and source operators,
+    // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
+    source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;
 }

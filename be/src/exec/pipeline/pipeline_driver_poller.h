@@ -24,13 +24,15 @@ public:
               _is_shutdown(false) {}
 
     using DriverList = std::list<DriverRawPtr>;
-    ~PipelineDriverPoller() = default;
+    ~PipelineDriverPoller() { shutdown(); };
     // start poller thread
     void start();
     // shutdown poller thread
     void shutdown();
     // add blocked driver to poller
     void add_blocked_driver(const DriverRawPtr driver);
+    // remove blocked driver from poller
+    void remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it);
 
 private:
     void run_internal();

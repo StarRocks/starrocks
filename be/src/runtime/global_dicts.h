@@ -2,12 +2,14 @@
 
 #include <array>
 
+#include "column/binary_column.h"
 #include "column/column.h"
 #include "column/column_hash.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
+#include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
 #include "util/phmap/phmap.h"
@@ -78,6 +80,13 @@ public:
 
     void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
+    // For global dictionary optimized columns,
+    // the type at the execution level is INT but at the storage level is TYPE_STRING/TYPE_CHAR,
+    // so we need to pass the real type to the Table Scanner.
+    static void rewrite_descriptor(RuntimeState* runtime_state, std::vector<SlotDescriptor*> slot_descs,
+                                   std::vector<ExprContext*>& conjunct_ctxs,
+                                   const std::map<int32_t, int32_t>& dict_slots_mapping);
+
 private:
     template <bool is_predicate>
     void _check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
@@ -91,6 +100,8 @@ private:
     ObjectPool _free_pool;
     std::vector<ExprContext*> _expr_close_list;
 };
+
+std::pair<std::shared_ptr<BinaryColumn>, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map);
 
 template <PrimitiveType primitive_type, typename Dict, PrimitiveType result_primitive_type>
 struct DictDecoder {

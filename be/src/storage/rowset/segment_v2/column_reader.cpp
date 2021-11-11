@@ -31,15 +31,15 @@
 #include "column/datum_convert.h"
 #include "common/logging.h"
 #include "storage/olap_cond.h"
-#include "storage/rowset/segment_v2/array_file_column_iterator.h"
+#include "storage/rowset/segment_v2/array_column_iterator.h"
 #include "storage/rowset/segment_v2/binary_dict_page.h" // for BinaryDictPageDecoder
 #include "storage/rowset/segment_v2/bitmap_index_reader.h"
 #include "storage/rowset/segment_v2/bloom_filter_index_reader.h"
 #include "storage/rowset/segment_v2/encoding_info.h"
-#include "storage/rowset/segment_v2/file_column_iterator.h"
 #include "storage/rowset/segment_v2/page_handle.h" // for PageHandle
 #include "storage/rowset/segment_v2/page_io.h"
 #include "storage/rowset/segment_v2/page_pointer.h" // for PagePointer
+#include "storage/rowset/segment_v2/scalar_column_iterator.h"
 #include "storage/rowset/segment_v2/zone_map_index.h"
 #include "storage/types.h" // for TypeInfo
 #include "storage/vectorized/column_predicate.h"
@@ -490,7 +490,7 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const vectorized::C
 
 Status ColumnReader::new_iterator(ColumnIterator** iterator) {
     if (is_scalar_field_type(delegate_type(_column_type))) {
-        *iterator = new FileColumnIterator(this);
+        *iterator = new ScalarColumnIterator(this);
         return Status::OK();
     } else if (_column_type == FieldType::OLAP_FIELD_TYPE_ARRAY) {
         size_t col = 0;
@@ -505,7 +505,7 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
         ColumnIterator* array_size_iterator;
         RETURN_IF_ERROR((*_sub_readers)[col]->new_iterator(&array_size_iterator));
 
-        *iterator = new ArrayFileColumnIterator(null_iterator, array_size_iterator, element_iterator);
+        *iterator = new ArrayColumnIterator(null_iterator, array_size_iterator, element_iterator);
         return Status::OK();
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));

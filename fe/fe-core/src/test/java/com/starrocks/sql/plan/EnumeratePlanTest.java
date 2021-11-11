@@ -193,8 +193,41 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
-    public void testTPCHQ18EnumPlan() {
-        runFileUnitTest("enumerate-plan/tpch-q18");
+    public void testTPCHQ18EnumPlan() throws Exception {
+        String sql = "select\n" +
+                "    c_name,\n" +
+                "    c_custkey,\n" +
+                "    o_orderkey,\n" +
+                "    o_orderdate,\n" +
+                "    o_totalprice,\n" +
+                "    sum(l_quantity)\n" +
+                "from\n" +
+                "    customer,\n" +
+                "    orders,\n" +
+                "    lineitem\n" +
+                "where\n" +
+                "        o_orderkey in (\n" +
+                "        select\n" +
+                "            l_orderkey\n" +
+                "        from\n" +
+                "            lineitem\n" +
+                "        group by\n" +
+                "            l_orderkey having\n" +
+                "                sum(l_quantity) > 315\n" +
+                "    )\n" +
+                "  and c_custkey = o_custkey\n" +
+                "  and o_orderkey = l_orderkey\n" +
+                "group by\n" +
+                "    c_name,\n" +
+                "    c_custkey,\n" +
+                "    o_orderkey,\n" +
+                "    o_orderdate,\n" +
+                "    o_totalprice\n" +
+                "order by\n" +
+                "    o_totalprice desc,\n" +
+                "    o_orderdate limit 100;";
+        int planCount = getPlanCount(sql);
+        Assert.assertEquals(318, planCount);
     }
 
     @Test
@@ -287,7 +320,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    numwait desc,\n" +
                 "    s_name limit 100;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(202, planCount);
+        Assert.assertEquals(502, planCount);
     }
 
     @Test

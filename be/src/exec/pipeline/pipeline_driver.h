@@ -14,10 +14,8 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/source_operator.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
 
 class PipelineDriver;
@@ -102,6 +100,8 @@ private:
 };
 
 class PipelineDriver {
+    friend class PipelineDriverPoller;
+
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    int32_t driver_id, bool is_root)
@@ -114,7 +114,9 @@ public:
               _is_root(is_root),
               _state(DriverState::NOT_READY),
               _yield_max_chunks_moved(config::pipeline_yield_max_chunks_moved),
-              _yield_max_time_spent(config::pipeline_yield_max_time_spent) {}
+              _yield_max_time_spent(config::pipeline_yield_max_time_spent) {
+        _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
+    }
 
     PipelineDriver(const PipelineDriver& driver)
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id,
@@ -132,7 +134,9 @@ public:
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() { return _state; }
     void set_driver_state(DriverState state) { _state = state; }
+    Operators& operators() { return _operators; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
+    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
 
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
@@ -167,7 +171,7 @@ public:
 
     bool is_root() const { return _is_root; }
 
-    std::string to_debug_string() const;
+    std::string to_readable_string() const;
 
 private:
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
@@ -188,9 +192,15 @@ private:
     MorselQueue* _morsel_queue = nullptr;
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     const size_t _yield_max_chunks_moved;
     const int64_t _yield_max_time_spent;
+
+    // metrics
+    RuntimeProfile::Counter* _total_timer = nullptr;
+    RuntimeProfile::Counter* _active_timer = nullptr;
+    RuntimeProfile::Counter* _pending_timer = nullptr;
+    MonotonicStopWatch* _total_timer_sw = nullptr;
+    MonotonicStopWatch* _pending_timer_sw = nullptr;
 };
 
 } // namespace pipeline

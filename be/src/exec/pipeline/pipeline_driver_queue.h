@@ -40,7 +40,7 @@ class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriv
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
 public:
-    QuerySharedDriverQueue() : _is_closed(false), _is_empty(true) {
+    QuerySharedDriverQueue() : _is_closed(false) {
         double factor = 1;
         for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
             // initialize factor for every sub queue,
@@ -66,7 +66,6 @@ private:
     std::mutex _global_mutex;
     std::condition_variable _cv;
     bool _is_closed;
-    std::atomic<bool> _is_empty;
 };
 
 } // namespace pipeline

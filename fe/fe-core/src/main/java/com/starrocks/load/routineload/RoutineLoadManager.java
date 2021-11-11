@@ -47,6 +47,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -239,6 +240,7 @@ public class RoutineLoadManager implements Writable {
         routineLoadJobList.add(routineLoadJob);
         // add txn state callback in factory
         Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
+        IDictManager.getInstance().forbitGlobalDict(routineLoadJob.getTableId());
     }
 
     // TODO(ml): Idempotency

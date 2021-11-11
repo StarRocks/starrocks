@@ -29,6 +29,8 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
              << _aggregator->needs_finalize();
 
     while (true) {
+        RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
+
         bool eos = false;
         RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(_children[0]->get_next(state, &chunk, &eos));
@@ -61,8 +63,6 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
                     break;
                 }
             }
-
-            RETURN_IF_ERROR(_aggregator->check_hash_set_memory_usage(state));
         }
     }
 
@@ -82,6 +82,9 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 #undef HASH_SET_METHOD
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
+
+    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
+
     return Status::OK();
 }
 
@@ -124,22 +127,25 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
+    // Parallelism must be 1
+    size_t degree_of_parallelism = 1;
     operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
 
     // shared by sink operator and source operator
-    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);
+    AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
-    operators_with_sink.emplace_back(std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
-            context->next_operator_id(), id(), aggregator));
+    auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(context->next_operator_id(),
+                                                                                        id(), aggregator_factory);
+    operators_with_sink.push_back(std::move(sink_operator));
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
     auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(context->next_operator_id(),
-                                                                                            id(), aggregator);
+                                                                                            id(), aggregator_factory);
 
-    // TODO(hcf) Currently, the shared data structure aggregator does not support concurrency.
-    // So the degree of parallism must set to 1, we'll fix it later
-    source_operator->set_degree_of_parallelism(1);
+    // Aggregator must be used by a pair of sink and source operators,
+    // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
+    source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;
 }

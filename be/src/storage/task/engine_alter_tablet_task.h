@@ -35,11 +35,13 @@ public:
     OLAPStatus execute() override;
 
 public:
-    EngineAlterTabletTask(const TAlterTabletReqV2& alter_tablet_request, int64_t signature,
+    EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& alter_tablet_request, int64_t signature,
                           const TTaskType::type task_type, vector<string>* error_msgs, const string& process_name);
     ~EngineAlterTabletTask() override = default;
 
 private:
+    std::unique_ptr<MemTracker> _mem_tracker;
+
     const TAlterTabletReqV2& _alter_tablet_req;
     int64_t _signature;
     const TTaskType::type _task_type;

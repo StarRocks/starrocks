@@ -81,7 +81,7 @@ add_library(Olap STATIC
     update_manager.cpp
     utils.cpp
     wrapper_field.cpp
-    rowset/segment_v2/array_file_column_iterator.cpp
+    rowset/segment_v2/array_column_iterator.cpp
     rowset/segment_v2/binary_plain_page.cpp
     rowset/segment_v2/bitmap_index_reader.cpp
     rowset/segment_v2/bitmap_index_writer.cpp
@@ -92,7 +92,7 @@ add_library(Olap STATIC
     rowset/segment_v2/column_writer.cpp
     rowset/segment_v2/default_value_column_iterator.cpp
     rowset/segment_v2/encoding_info.cpp
-    rowset/segment_v2/file_column_iterator.cpp
+    rowset/segment_v2/scalar_column_iterator.cpp
     rowset/segment_v2/index_page.cpp
     rowset/segment_v2/indexed_column_reader.cpp
     rowset/segment_v2/indexed_column_writer.cpp
@@ -144,6 +144,7 @@ add_library(Olap STATIC
     vectorized/predicate_parser.cpp
     vectorized/projection_iterator.cpp
     vectorized/push_handler.cpp
+    vectorized/row_source_mask.cpp
     vectorized/schema_change.cpp
     vectorized/tablet_reader.cpp
     vectorized/tablet_reader_params.cpp
@@ -160,4 +161,5 @@ add_library(Olap STATIC
     vectorized/compaction.cpp
     vectorized/rowset_merger.cpp
     vectorized/column_predicate_rewriter.cpp
+    vectorized/column_predicate_dict_conjuct.cpp
 )

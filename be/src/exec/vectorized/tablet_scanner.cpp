@@ -14,6 +14,7 @@
 #include "exec/vectorized/olap_scan_node.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/predicate_parser.h"
 #include "storage/vectorized/projection_iterator.h"
 
@@ -96,7 +97,7 @@ Status TabletScanner::_get_tablet(const TInternalScanRange* scan_range) {
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash, true, &err);
+    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
     if (!_tablet) {
         std::stringstream ss;
         ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
@@ -130,6 +131,9 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
             _predicates.add(p);
         }
     }
+
+    ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
+    not_pushdown_predicate_rewriter.rewrite_predicate(&_parent->_obj_pool);
 
     // Range
     for (auto key_range : *key_ranges) {

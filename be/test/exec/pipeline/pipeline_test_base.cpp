@@ -71,7 +71,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state = _fragment_ctx->runtime_state();
 
     _runtime_state->set_batch_size(config::vector_chunk_size);
-    ASSERT_TRUE(_runtime_state->init_mem_trackers(query_id).ok());
+    _runtime_state->init_mem_trackers(query_id);
     _runtime_state->set_be_number(_request.backend_num);
 
     _obj_pool = _runtime_state->obj_pool();

@@ -549,18 +549,17 @@ public class MaterializedViewRule extends Rule {
         }
     }
 
-    private void checkAggregationFunction(
-            Map<String, Integer> columnToIds,
-            Set<CallOperator> aggregatedColumnsInQueryOutput,
-            Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta,
-            boolean disableSPJGMV, boolean isSPJQuery) {
+    private void checkAggregationFunction(Map<String, Integer> columnToIds,
+                                          Set<CallOperator> aggregatedColumnsInQueryOutput,
+                                          Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta,
+                                          boolean disableSPJGMV, boolean isSPJQuery) {
         Iterator<Map.Entry<Long, MaterializedIndexMeta>> iterator = candidateIndexIdToMeta.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<Long, MaterializedIndexMeta> entry = iterator.next();
             MaterializedIndexMeta candidateIndexMeta = entry.getValue();
-            List<CallOperator> indexAggColumnExpsList = mvAggColumnsToExprList(columnToIds, candidateIndexMeta);
+            List<CallOperator> indexAggColumnExprList = mvAggColumnsToExprList(columnToIds, candidateIndexMeta);
             // When the candidate index is SPJ type, it passes the verification directly
-            if (indexAggColumnExpsList.size() == 0 && candidateIndexMeta.getKeysType() == KeysType.DUP_KEYS) {
+            if (indexAggColumnExprList.size() == 0 && candidateIndexMeta.getKeysType() == KeysType.DUP_KEYS) {
                 continue;
             }
             // When the query is SPJ type but the candidate index is SPJG type, it will not pass directly.
@@ -576,11 +575,10 @@ public class MaterializedViewRule extends Rule {
             if (aggregatedColumnsInQueryOutput == null) {
                 continue;
             }
-            keyColumnsToExprList(columnToIds, candidateIndexMeta, indexAggColumnExpsList);
+            keyColumnsToExprList(columnToIds, candidateIndexMeta, indexAggColumnExprList);
             // The aggregated columns in query output must be subset of the aggregated columns in view
-            if (!aggFunctionsMatchAggColumns(entry.getKey(),
-                    aggregatedColumnsInQueryOutput,
-                    indexAggColumnExpsList)) {
+            if (!aggFunctionsMatchAggColumns(columnToIds, candidateIndexMeta, entry.getKey(),
+                    aggregatedColumnsInQueryOutput, indexAggColumnExprList)) {
                 iterator.remove();
             }
         }
@@ -656,13 +654,25 @@ public class MaterializedViewRule extends Rule {
         }
     }
 
-    private boolean aggFunctionsMatchAggColumns(Long indexId,
-                                                Set<CallOperator> queryExprList,
+    private boolean aggFunctionsMatchAggColumns(Map<String, Integer> columnToIds,
+                                                MaterializedIndexMeta candidateIndexMeta,
+                                                Long indexId, Set<CallOperator> queryExprList,
                                                 List<CallOperator> mvColumnExprList) {
+
+        ColumnRefSet aggregateColumns = new ColumnRefSet();
+        ColumnRefSet keyColumns = new ColumnRefSet();
+        for (Column column : candidateIndexMeta.getSchema()) {
+            if (!column.isAggregated()) {
+                keyColumns.union(factory.getColumnRef(columnToIds.get(column.getName())));
+            } else {
+                aggregateColumns.union(factory.getColumnRef(columnToIds.get(column.getName())));
+            }
+        }
+
         for (CallOperator queryExpr : queryExprList) {
             boolean match = false;
             for (CallOperator mvExpr : mvColumnExprList) {
-                if (isMVMatchAggFunctions(indexId, queryExpr, mvExpr, mvColumnExprList)) {
+                if (isMVMatchAggFunctions(indexId, queryExpr, mvExpr, mvColumnExprList, keyColumns, aggregateColumns)) {
                     match = true;
                     break;
                 }
@@ -696,8 +706,9 @@ public class MaterializedViewRule extends Rule {
         columnAggTypeMatchFnName = builder.build();
     }
 
-    public boolean isMVMatchAggFunctions(Long indexId, CallOperator queryFn,
-                                         CallOperator mvColumnFn, List<CallOperator> mvColumnExprList) {
+    public boolean isMVMatchAggFunctions(Long indexId, CallOperator queryFn, CallOperator mvColumnFn,
+                                         List<CallOperator> mvColumnExprList, ColumnRefSet keyColumns,
+                                         ColumnRefSet aggregateColumns) {
         String queryFnName = queryFn.getFnName();
         if (queryFn.getFnName().equals(FunctionSet.COUNT) && queryFn.isDistinct()) {
             queryFnName = FunctionSet.MULTI_DISTINCT_COUNT;
@@ -713,17 +724,39 @@ public class MaterializedViewRule extends Rule {
             return false;
         }
         ScalarOperator queryFnChild0 = queryFn.getChild(0);
-        if (queryFnChild0 instanceof CastOperator) {
+        // select x1, sum(cast(x2 as tinyint)) from table;
+        // sum(x2) result of materialized view maybe greater x2, like many x2 = 100, cast(part_sum(x2) as tinyint) maybe will
+        // overflow, but x2(100) isn't overflow
+        if (queryFnChild0 instanceof CastOperator && (queryFnChild0.getType().isDecimalOfAnyVersion() ||
+                (queryFnChild0.getChild(0).getType().isNumericType() &&
+                        queryFnChild0.getType().getSlotSize() >= queryFnChild0.getChild(0).getType().getSlotSize()))) {
             queryFnChild0 = queryFnChild0.getChild(0);
         }
         ScalarOperator mvColumnFnChild0 = mvColumnFn.getChild(0);
-        if (!isQueryAndMVFunctionChildMatch(queryFnChild0, mvColumnFnChild0)) {
-            return false;
+
+        if (!queryFnChild0.isColumnRef()) {
+            IsNoCallChildrenValidator validator = new IsNoCallChildrenValidator(keyColumns, aggregateColumns);
+            if (!(isSupportScalarOperator(queryFnChild0) && queryFnChild0.accept(validator, null))) {
+                ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnFnChild0.getUsedColumns().getFirstId());
+                Column mvColumn = factory.getColumn(mvColumnRef);
+                if (mvColumn.getDefineExpr() != null && mvColumn.getDefineExpr() instanceof FunctionCallExpr &&
+                        queryFnChild0 instanceof CallOperator) {
+                    CallOperator queryCall = (CallOperator) queryFnChild0;
+                    String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFnName().getFunction();
+                    String queryName = queryCall.getFnName();
+
+                    if (!mvName.equalsIgnoreCase(queryName)) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
         }
 
         if (queryFnChild0.getUsedColumns().equals(mvColumnFnChild0.getUsedColumns())) {
             return true;
-        } else if (queryFnChild0 instanceof CaseWhenOperator) {
+        } else if (isSupportScalarOperator(queryFnChild0)) {
             int[] queryColumnIds = queryFnChild0.getUsedColumns().getColumnIds();
             Set<Integer> mvColumnIdSet = mvColumnExprList.stream()
                     .map(u -> u.getUsedColumns().getFirstId())
@@ -757,32 +790,6 @@ public class MaterializedViewRule extends Rule {
         return false;
     }
 
-    private boolean isQueryAndMVFunctionChildMatch(ScalarOperator queryFnChild0, ScalarOperator mvColumnFnChild0) {
-        if (queryFnChild0.isColumnRef()) {
-            return true;
-        }
-
-        if (queryFnChild0 instanceof CaseWhenOperator) {
-            CaseWhenOperator caseWhenOperator = (CaseWhenOperator) queryFnChild0;
-            IsNoCallChildrenValidator validator =
-                    new IsNoCallChildrenValidator();
-            if (caseWhenOperator.accept(validator, null)) {
-                return true;
-            }
-        }
-
-        ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnFnChild0.getUsedColumns().getFirstId());
-        Column mvColumn = factory.getColumn(mvColumnRef);
-        if (mvColumn.getDefineExpr() != null && mvColumn.getDefineExpr() instanceof FunctionCallExpr &&
-                queryFnChild0 instanceof CallOperator) {
-            CallOperator queryCall = (CallOperator) queryFnChild0;
-            String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFnName().getFunction();
-            String queryName = queryCall.getFnName();
-            return mvName.equalsIgnoreCase(queryName);
-        }
-        return false;
-    }
-
     public static class RewriteContext {
         ColumnRefOperator queryColumnRef;
         ColumnRefOperator mvColumnRef;
@@ -798,5 +805,14 @@ public class MaterializedViewRule extends Rule {
             this.mvColumnRef = mvColumnRef;
             this.mvColumn = mvColumn;
         }
+    }
+
+    private boolean isSupportScalarOperator(ScalarOperator operator) {
+        if (operator instanceof CaseWhenOperator) {
+            return true;
+        }
+
+        return operator instanceof CallOperator &&
+                FunctionSet.IF.equalsIgnoreCase(((CallOperator) operator).getFnName());
     }
 }

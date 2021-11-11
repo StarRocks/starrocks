@@ -117,7 +117,7 @@ public:
             if (bytes < 0) release(-bytes);
             return;
         }
-        for (auto& tracker : _all_trackers) {
+        for (auto* tracker : _all_trackers) {
             tracker->_consumption->add(bytes);
         }
     }
@@ -210,8 +210,6 @@ public:
         for (auto* tracker : _all_trackers) {
             tracker->_consumption->add(-bytes);
         }
-
-        /// TODO: Release brokered memory?
     }
 
     // Returns true if a valid limit of this tracker or one of its ancestors is exceeded.
@@ -225,7 +223,7 @@ public:
     }
 
     // Return limit exceeded tracker or null
-    MemTracker* find_limit_exceeded_tracker() {
+    MemTracker* find_limit_exceeded_tracker() const {
         for (auto& _limit_tracker : _limit_trackers) {
             if (_limit_tracker->limit_exceeded()) {
                 return _limit_tracker;
@@ -290,6 +288,37 @@ public:
     /// If 'failed_allocation_size' is greater than zero, logs the allocation size. If
     /// 'failed_allocation_size' is zero, nothing about the allocation size is logged.
     Status MemLimitExceeded(RuntimeState* state, const std::string& details, int64_t failed_allocation = 0);
+
+    Status check_mem_limit(const std::string& msg) const {
+        MemTracker* tracker = find_limit_exceeded_tracker();
+        if (LIKELY(tracker == nullptr)) {
+            return Status::OK();
+        }
+
+        std::stringstream str;
+        str << "Memory exceed limit. " << msg << " ";
+        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";
+        switch (tracker->type()) {
+        case MemTracker::NO_SET:
+            break;
+        case MemTracker::QUERY:
+            str << "Mem usage has exceed the limit of single query, You can change the limit by "
+                   "set session variable exec_mem_limit.";
+            break;
+        case MemTracker::PROCESS:
+            str << "Mem usage has exceed the limit of BE";
+            break;
+        case MemTracker::QUERY_POOL:
+            str << "Mem usage has exceed the limit of query pool";
+            break;
+        case MemTracker::LOAD:
+            str << "Mem usage has exceed the limit of load";
+            break;
+        default:
+            break;
+        }
+        return Status::MemoryLimitExceeded(str.str());
+    }
 
     static const std::string COUNTER_NAME;
 

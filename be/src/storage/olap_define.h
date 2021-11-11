@@ -58,6 +58,7 @@ static const std::string TRASH_PREFIX = "/trash";           // NOLINT
 static const std::string UNUSED_PREFIX = "/unused";         // NOLINT
 static const std::string ERROR_LOG_PREFIX = "/error_log";   // NOLINT
 static const std::string CLONE_PREFIX = "/clone";           // NOLINT
+static const std::string TMP_PREFIX = "/tmp";               // NOLINT
 
 static const int32_t OLAP_DATA_VERSION_APPLIED = STARROCKS_V1;
 

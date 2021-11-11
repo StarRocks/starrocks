@@ -94,6 +94,7 @@ Status DataDir::init(bool read_only) {
     RETURN_IF_ERROR_WITH_WARN(update_capacity(), "update_capacity failed");
     RETURN_IF_ERROR_WITH_WARN(_init_cluster_id(), "_init_cluster_id failed");
     RETURN_IF_ERROR_WITH_WARN(_init_data_dir(), "_init_data_dir failed");
+    RETURN_IF_ERROR_WITH_WARN(_init_tmp_dir(), "_init_tmp_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_file_system(), "_init_file_system failed");
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
 
@@ -183,7 +184,15 @@ Status DataDir::_init_data_dir() {
         RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create data root path $0", data_path)),
                                   "check_exist failed");
     }
+    return Status::OK();
+}
 
+Status DataDir::_init_tmp_dir() {
+    std::string tmp_path = _path + TMP_PREFIX;
+    if (!FileUtils::check_exist(tmp_path) && !FileUtils::create_dir(tmp_path).ok()) {
+        RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create tmp path $0", tmp_path)),
+                                  "check_exist failed");
+    }
     return Status::OK();
 }
 
@@ -488,8 +497,7 @@ OLAPStatus DataDir::load() {
     // 2. add visible rowset to tablet
     // ignore any errors when load tablet or rowset, because fe will repair them after report
     for (const auto& rowset_meta : dir_rowset_metas) {
-        TabletSharedPtr tablet =
-                _tablet_manager->get_tablet(rowset_meta->tablet_id(), rowset_meta->tablet_schema_hash());
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(rowset_meta->tablet_id(), false);
         // tablet maybe dropped, but not drop related rowset meta
         if (tablet == nullptr) {
             // LOG(WARNING) << "could not find tablet id: " << rowset_meta->tablet_id()
@@ -570,7 +578,7 @@ void DataDir::perform_path_gc_by_tablet() {
             LOG(WARNING) << "invalid tablet id " << tablet_id << " or schema hash " << schema_hash << ", path=" << path;
             continue;
         }
-        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, schema_hash);
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
         if (tablet != nullptr) {
             // could find the tablet, then skip check it
             continue;
@@ -618,7 +626,7 @@ void DataDir::perform_path_gc_by_rowsetid() {
             RowsetId rowset_id;
             bool is_rowset_file = TabletManager::get_rowset_id_from_path(path, &rowset_id);
             if (is_rowset_file) {
-                TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, schema_hash);
+                TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
                 if (tablet != nullptr) {
                     if (!tablet->check_rowset_id(rowset_id) &&
                         !StorageEngine::instance()->check_rowset_id_in_unused_rowsets(rowset_id)) {

@@ -8,6 +8,7 @@
 #include <random>
 
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -156,6 +157,25 @@ private:
     std::default_random_engine& _re;
 };
 
+template <PrimitiveType Type>
+class MakeNullableExpr final : public Expr {
+public:
+    MakeNullableExpr(const TExprNode& t, size_t size, Expr* inner) : Expr(t), _inner(inner) { init(); }
+    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _col; }
+    Expr* clone(ObjectPool* pool) const { return nullptr; }
+
+    ColumnPtr get_col_ptr() { return _col; }
+
+private:
+    void init() {
+        auto res = _inner->evaluate(nullptr, nullptr);
+        int sz = res->size();
+        _col = NullableColumn::create(std::move(res), NullColumn::create(sz));
+    }
+    Expr* _inner;
+    ColumnPtr _col;
+};
+
 TEST_F(VectorizedConditionExprTest, ifExpr) {
     std::default_random_engine e;
 
@@ -243,6 +263,59 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
         ASSERT_EQ(result, res_col4->get_data()[i]);
     }
     // Test INT8 const const
+
+    // Test Nullable(INT8) var const
+    {
+        expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
+        auto if_expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+        RandomValueExpr<TYPE_TINYINT> v_col(expr_node, batch_size, e);
+        MakeNullableExpr<TYPE_TINYINT> col_x(expr_node, batch_size, &v_col);
+        MockConstVectorizedExpr<TYPE_TINYINT> col_y(expr_node, 123);
+
+        if_expr->_children.push_back(&select_col);
+        if_expr->_children.push_back(&col_x);
+        if_expr->_children.push_back(&col_y);
+
+        ptr = if_expr->evaluate(nullptr, nullptr);
+
+        ColumnViewer<TYPE_TINYINT> viewer(ptr);
+        for (int i = 0; i < ptr->size(); ++i) {
+            auto result = select_col.get_data()[i] ? v_col.get_data()[i] : 123;
+            if (!viewer.is_null(i)) {
+                ASSERT_EQ(viewer.value(i), result);
+            } else {
+                ASSERT_TRUE(select_col.get_data()[i]);
+            }
+        }
+    }
+
+    // Test Nullable(Selector) const const
+    {
+        expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
+        auto if_expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+        MakeNullableExpr<TYPE_TINYINT> nullable_selector(expr_node, batch_size, &select_col);
+        MockConstVectorizedExpr<TYPE_TINYINT> col_x(expr_node, 123);
+        MockConstVectorizedExpr<TYPE_TINYINT> col_y(expr_node, 4);
+
+        if_expr->_children.push_back(&nullable_selector);
+        if_expr->_children.push_back(&col_x);
+        if_expr->_children.push_back(&col_y);
+
+        ptr = if_expr->evaluate(nullptr, nullptr);
+
+        ColumnViewer<TYPE_BOOLEAN> sel_viewer(nullable_selector.get_col_ptr());
+        auto* res_x = down_cast<Int8Column*>(ptr.get());
+
+        for (int i = 0; i < ptr->size(); ++i) {
+            auto result = 0;
+            if (sel_viewer.is_null(i) || !sel_viewer.value(i)) {
+                result = 4;
+            } else {
+                result = 123;
+            }
+            ASSERT_EQ(result, res_x->get_data()[i]);
+        }
+    }
 }
 
 } // namespace vectorized

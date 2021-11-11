@@ -13,13 +13,6 @@ namespace starrocks::vectorized {
 
 Status SerializedJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* table_items,
                                         HashTableProbeState* probe_state) {
-    size_t serialize_mem_usage = sizeof(Slice) * (table_items->row_count + 1);
-    size_t bucket_array_mem_usage = sizeof(uint32_t) * config::vector_chunk_size;
-    size_t null_array_mem_usage = sizeof(uint8_t) * config::vector_chunk_size;
-
-    RETURN_IF_ERROR(JoinHashMapHelper::check_and_add_memory_usage(
-            state, table_items, serialize_mem_usage + bucket_array_mem_usage + null_array_mem_usage));
-
     table_items->build_slice.resize(table_items->row_count + 1);
     probe_state->buckets.resize(config::vector_chunk_size);
     probe_state->is_nulls.resize(config::vector_chunk_size);
@@ -211,9 +204,7 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
     }
 }
 
-JoinHashTable::~JoinHashTable() {
-    _table_items.mem_tracker->release(_table_items.last_memory_usage);
-}
+JoinHashTable::~JoinHashTable() {}
 
 void JoinHashTable::close() {
     _table_items.build_pool.reset();
@@ -224,7 +215,6 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items.row_count = 0;
     _table_items.bucket_size = 0;
     _table_items.build_chunk = std::make_shared<Chunk>();
-    _table_items.mem_tracker = param.mem_tracker;
     _table_items.build_pool = std::make_unique<MemPool>();
     _table_items.probe_pool = std::make_unique<MemPool>();
     _table_items.with_other_conjunct = param.with_other_conjunct;
@@ -290,10 +280,6 @@ Status JoinHashTable::build(RuntimeState* state) {
     }
 
     JoinHashMapHelper::prepare_map_index(&_probe_state);
-
-    // size of hashtable index
-    RETURN_IF_ERROR(JoinHashMapHelper::check_and_add_memory_usage(
-            state, &_table_items, (_table_items.first.size() + _table_items.row_count + 1) * sizeof(uint32_t)));
 
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
@@ -381,8 +367,6 @@ Status JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
             }
         }
     }
-
-    RETURN_IF_ERROR(JoinHashMapHelper::check_and_add_memory_usage(state, &_table_items, chunk_memory_size));
 
     _table_items.row_count += chunk->num_rows();
     return Status::OK();

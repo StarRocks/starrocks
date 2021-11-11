@@ -23,18 +23,25 @@ public:
 
     virtual Status close(RuntimeState* state) = 0;
 
+    // Return true if eos is not reached
+    // Return false if eos is reached or error occurred
     virtual bool has_next_chunk() const = 0;
 
-    virtual StatusOr<vectorized::ChunkUniquePtr> get_next_chunk() = 0;
-    virtual void cache_next_chunk_blocking() = 0;
-    virtual StatusOr<vectorized::ChunkUniquePtr> get_next_chunk_nonblocking() = 0;
+    // Whether cache is empty or not
+    virtual bool has_output() const = 0;
+
+    virtual size_t get_buffer_size() const = 0;
+
+    virtual StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() = 0;
+
+    virtual Status buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) = 0;
 
 protected:
     // The morsel will own by pipeline driver
     MorselPtr _morsel;
 };
 
-using ChunkSourcePtr = starrocks::exclusive_ptr<ChunkSource>;
+using ChunkSourcePtr = std::shared_ptr<ChunkSource>;
 using ChunkSourcePromise = std::promise<ChunkSourcePtr>;
 using ChunkSourceFromisePtr = starrocks::exclusive_ptr<ChunkSourcePromise>;
 using ChunkSourceFuture = std::future<ChunkSourcePtr>;

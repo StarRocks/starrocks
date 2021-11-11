@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedSameColumnRule;
 
 import java.util.List;
 
@@ -34,6 +35,18 @@ public class ScalarOperatorRewriter {
             new ArithmeticCommutativeRule()
     );
 
+    public static final List<ScalarOperatorRewriteRule> DEFAULT_REWRITE_SCAN_PREDICATE_RULES = Lists.newArrayList(
+            // required
+            new ImplicitCastRule(),
+            // optional
+            new ReduceCastRule(),
+            new NormalizePredicateRule(),
+            new FoldConstantsRule(),
+            new SimplifiedSameColumnRule(),
+            new SimplifiedPredicateRule(),
+            new ExtractCommonPredicateRule(),
+            new ArithmeticCommutativeRule()
+    );
     private final ScalarOperatorRewriteContext context;
 
     public ScalarOperatorRewriter() {
@@ -52,7 +65,8 @@ public class ScalarOperatorRewriter {
             }
 
             if (changeNums > Config.max_planner_scalar_rewrite_num) {
-                throw new StarRocksPlannerException("Planner rewrite scalar operator over limit", ErrorType.INTERNAL_ERROR);
+                throw new StarRocksPlannerException("Planner rewrite scalar operator over limit",
+                        ErrorType.INTERNAL_ERROR);
             }
         } while (changeNums != context.changeNum());
 
