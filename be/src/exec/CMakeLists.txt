@@ -182,6 +182,9 @@ set(EXEC_FILES
     pipeline/set/intersect_output_source_operator.cpp
 )
 
+# simdjson Runtime CPU Detection: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+
 set(EXEC_FILES
     ${EXEC_FILES}
     vectorized/mysql_scan_node.cpp

@@ -5,7 +5,6 @@
 #include "common/compiler_util.h"
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <rapidjson/document.h>
 
 #include <utility>
 DIAGNOSTIC_POP
@@ -101,47 +100,19 @@ public:
      */
     DEFINE_VECTORIZED_FN(get_json_string);
 
-    /**
-     * The `document` parameter must be has parsed.
-     * return Value Is Array object
-     */
-    static rapidjson::Value* get_json_array_from_parsed_json(const std::vector<JsonPath>& parsed_paths,
-                                                             rapidjson::Value* document,
-                                                             rapidjson::Document::AllocatorType& mem_allocator);
-
-    // this is only for test, it will parse the json path inside,
-    // so that we can easily pass a json path as string.
-    static rapidjson::Value* get_json_array_from_parsed_json(const std::string& jsonpath, rapidjson::Value* document,
-                                                             rapidjson::Document::AllocatorType& mem_allocator);
-
-    static rapidjson::Value* get_json_object_from_parsed_json(const std::vector<JsonPath>& parsed_paths,
-                                                              rapidjson::Value* document,
-                                                              rapidjson::Document::AllocatorType& mem_allocator);
-
     static bool extract_from_object(simdjson::ondemand::object& obj, const std::vector<JsonPath>& jsonpath,
                                      simdjson::ondemand::value& value);
 
     static void parse_json_paths(const std::string& path_strings, std::vector<JsonPath>* parsed_paths);
 
-    static std::string get_raw_json_string(const rapidjson::Value& value);
-
 private:
+
+    static Status _get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths);
+
+    /* Following functions are only used in test. */
+
     template <PrimitiveType primitive_type>
-    static ColumnPtr iterate_rows(FunctionContext* context, const Columns& columns);
-
-    static rapidjson::Value* get_json_object(FunctionContext* context, const std::string& json_string,
-                                             const std::string& path_string, const JsonFunctionType& fntype,
-                                             rapidjson::Document* document);
-
-    static rapidjson::Value* match_value(const std::vector<JsonPath>& parsed_paths, rapidjson::Value* document,
-                                         rapidjson::Document::AllocatorType& mem_allocator,
-                                         bool is_insert_null = false);
-
-    static void get_matched_values_from_stream(
-            const std::string& name, simdjson::dom::document_stream& stream,
-            std::vector<simdjson::dom::document_stream::iterator::value_type> output);
-
-    static Status get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths);
+    static ColumnPtr _iterate_rows(FunctionContext* context, const Columns& columns);
 };
 
 } // namespace vectorized

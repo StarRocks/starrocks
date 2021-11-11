@@ -485,7 +485,7 @@ build_librdkafka() {
     CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
     CFLAGS="-fPIC" \
-    STATIC_LIB_libzstd=$TP_INSTALL_DIR/lib64/libzstd.a ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-sasl
+    ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-sasl
     make -j$PARALLEL && make install
 }
 
