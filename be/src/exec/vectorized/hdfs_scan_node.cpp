@@ -324,10 +324,12 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             _close_pending_scanners();
         }
     } else {
-        DCHECK(scanner != nullptr);
-        scanner->close(_runtime_state);
-        _closed_scanners.fetch_add(1, std::memory_order_release);
-        _close_pending_scanners();
+        // sometimes state == ok but global_status was not ok
+        if (scanner != nullptr) {
+            scanner->close(_runtime_state);
+            _closed_scanners.fetch_add(1, std::memory_order_release);
+            _close_pending_scanners();
+        }
     }
 
     if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
@@ -432,13 +434,12 @@ Status HdfsScanNode::close(RuntimeState* state) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
+    _close_pending_scanners();
     for (auto* hdfsFile : _hdfs_files) {
         if (hdfsFile->hdfs_fs != nullptr && hdfsFile->hdfs_file != nullptr) {
             hdfsCloseFile(hdfsFile->hdfs_fs, hdfsFile->hdfs_file);
         }
     }
-
-    _close_pending_scanners();
 
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
