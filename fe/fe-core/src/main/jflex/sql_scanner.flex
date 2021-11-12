@@ -254,6 +254,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("load", new Integer(SqlParserSymbols.KW_LOAD));
         keywordMap.put("local", new Integer(SqlParserSymbols.KW_LOCAL));
         keywordMap.put("location", new Integer(SqlParserSymbols.KW_LOCATION));
+        keywordMap.put("logical", new Integer(SqlParserSymbols.KW_LOGICAL));
         keywordMap.put("materialized", new Integer(SqlParserSymbols.KW_MATERIALIZED));
         keywordMap.put("max", new Integer(SqlParserSymbols.KW_MAX));
         keywordMap.put("maxvalue", new Integer(SqlParserSymbols.KW_MAX_VALUE));

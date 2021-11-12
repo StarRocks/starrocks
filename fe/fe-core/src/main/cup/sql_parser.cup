@@ -245,7 +245,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_JOIN,
     KW_KEY, KW_KEYS, KW_KILL,
     KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LOAD,
-    KW_LOCAL, KW_LOCATION, KW_LATERAL,
+    KW_LOCAL, KW_LOCATION, KW_LATERAL, KW_LOGICAL,
     KW_MATERIALIZED, KW_MAX, KW_MAX_VALUE, KW_MERGE, KW_MIN, KW_MINUTE, KW_MINUS, KW_MIGRATE, KW_MIGRATIONS, KW_MODIFY, KW_MONTH,
     KW_NAME, KW_NAMES, KW_NEGATIVE, KW_NO, KW_NOT, KW_NULL, KW_NULLS,
     KW_OBSERVER, KW_OFFSET, KW_ON, KW_ONLY, KW_OPEN, KW_OR, KW_ORDER, KW_OUTER, KW_OUTFILE, KW_OVER,
@@ -478,8 +478,7 @@ nonterminal IndexDef.IndexType opt_index_type;
 
 nonterminal ShowAlterStmt.AlterType opt_alter_type;
 nonterminal Boolean opt_builtin;
-nonterminal Boolean opt_costs;
-nonterminal Boolean opt_verbose;
+nonterminal StatementBase.ExplainLevel opt_explain_level;
 
 nonterminal Boolean opt_tmp;
 
@@ -2657,25 +2656,23 @@ opt_builtin ::=
     :}
     ;
 
-opt_costs ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_COSTS
-    {:
-        RESULT = true;
-    :}
-    ;
-
-opt_verbose ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_VERBOSE
-    {:
-        RESULT = true;
-    :}
-    ;
+opt_explain_level ::=
+     {:
+         RESULT = StatementBase.ExplainLevel.NORMAL;
+     :}
+     | KW_VERBOSE
+     {:
+         RESULT = StatementBase.ExplainLevel.VERBOSE;
+     :}
+     | KW_COSTS
+     {:
+     RESULT = StatementBase.ExplainLevel.COST;
+     :}
+     | KW_LOGICAL
+     {:
+         RESULT = StatementBase.ExplainLevel.LOGICAL;
+     :}
+     ;
 
 // Describe statement
 describe_stmt ::=
@@ -2683,15 +2680,11 @@ describe_stmt ::=
     {:
         RESULT = new DescribeStmt(table, false);
     :}
-    | describe_command table_name:table KW_ALL
-    {:
-        RESULT = new DescribeStmt(table, true);
-    :}
-    | describe_command opt_verbose:isVerbose opt_costs:isCosts query_stmt:query
-    {:
-        query.setIsExplain(true, isVerbose, isCosts);
-        RESULT = query;
-    :}
+    | describe_command opt_explain_level:explain_level query_stmt:query
+     {:
+         query.setIsExplain(true, explain_level);
+         RESULT = query;
+     :}
     | describe_command insert_stmt:stmt
     {:
         stmt.getQueryStmt().setIsExplain(true);
@@ -4991,6 +4984,8 @@ keyword ::=
     | KW_LOCAL:id
     {: RESULT = id; :}
     | KW_LOCATION:id
+    {: RESULT = id; :}
+    | KW_LOGICAL:id
     {: RESULT = id; :}
     | KW_MATERIALIZED:id
     {: RESULT = id; :}
