@@ -67,7 +67,7 @@ bool ResultSinkOperator::need_input() const {
         return true;
     }
     auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
-    auto status = mysql_writer->try_add_batch(std::move(_fetch_data_result));
+    auto status = mysql_writer->try_add_batch(_fetch_data_result);
     if (status.ok()) {
         return status.value();
     } else {
@@ -85,7 +85,7 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     auto status = mysql_writer->process_chunk(chunk.get());
     if (status.ok()) {
         _fetch_data_result = std::move(status.value());
-        return mysql_writer->try_add_batch(std::move(_fetch_data_result)).status();
+        return mysql_writer->try_add_batch(_fetch_data_result).status();
     } else {
         return status.status();
     }

@@ -74,7 +74,6 @@ public:
     // Create RowBatch for a maximum of 'capacity' rows of tuples specified
     // by 'row_desc'.
     RowBatch(const RowDescriptor& row_desc, int capacity);
-    Status init();
 
     // Populate a row batch from input_batch by copying input_batch's
     // tuple_data into the row batch's mempool and converting all offsets
@@ -84,7 +83,6 @@ public:
     RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch);
 
     RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch);
-    Status init(const PRowBatch& input_batch);
 
     // Releases all resources accumulated at this row batch.  This includes
     //  - tuple_ptrs

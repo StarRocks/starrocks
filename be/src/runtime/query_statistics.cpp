@@ -21,8 +21,6 @@
 
 #include "runtime/query_statistics.h"
 
-#include "util/scoped_cleanup.h"
-
 namespace starrocks {
 
 void QueryStatistics::merge(QueryStatisticsRecvr* recvr) {
@@ -35,9 +33,7 @@ void QueryStatisticsRecvr::insert(const PQueryStatistics& statistics, int sender
     auto iter = _query_statistics.find(sender_id);
     if (iter == _query_statistics.end()) {
         query_statistics = new QueryStatistics;
-        auto cleanup = MakeScopedCleanup([&]() { delete query_statistics; });
         _query_statistics[sender_id] = query_statistics;
-        cleanup.cancel();
     } else {
         query_statistics = iter->second;
     }
@@ -45,7 +41,8 @@ void QueryStatisticsRecvr::insert(const PQueryStatistics& statistics, int sender
 }
 
 QueryStatisticsRecvr::~QueryStatisticsRecvr() {
-    std::lock_guard<SpinLock> l(_lock);
+    // It is unnecessary to lock here, because the destructor will be
+    // called alter DataStreamRecvr's close in ExchangeNode.
     for (auto& pair : _query_statistics) {
         delete pair.second;
     }
