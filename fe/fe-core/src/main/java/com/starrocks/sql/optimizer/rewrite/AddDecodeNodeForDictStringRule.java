@@ -166,6 +166,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
                 if (context.hasEncoded) {
                     insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), i, context);
+                } else {
+                    optExpression.setChild(i, newChildExpr);
                 }
             }
             return visitProjectionAfter(optExpression, context);
@@ -653,7 +655,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         result.setLogicalProperty(childExpr.get(0).getLogicalProperty());
         return result;
     }
-
 
     private static class CouldApplyDictOptimizeVisitor extends ScalarOperatorVisitor<Boolean, Void> {
 

@@ -405,4 +405,13 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertTrue(plan.contains(" 5:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(3 IS NULL, NULL, 7))"));
     }
+
+    @Test
+    public void testGroupByWithOrderBy() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select max(S_NAME) as b from supplier group by S_ADDRESS order by b";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
 }
