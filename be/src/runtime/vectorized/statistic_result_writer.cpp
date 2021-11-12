@@ -22,7 +22,9 @@ StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              starrocks::RuntimeProfile* parent_profile)
         : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
 
-StatisticResultWriter::~StatisticResultWriter() = default;
+StatisticResultWriter::~StatisticResultWriter() {
+    close();
+}
 
 Status StatisticResultWriter::init(RuntimeState* state) {
     _init_profile();
@@ -65,18 +67,18 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
 
     int version = down_cast<Int32Column*>(ColumnHelper::get_data_column(result_columns[0].get()))->get_data()[0];
 
-    auto* result = new (std::nothrow) TFetchDataResult();
+    std::unique_ptr<TFetchDataResult> result = std::make_unique<TFetchDataResult>();
 
     // Step 3: fill statistic data
     if (version == STATISTIC_DATA_VERSION1) {
-        _fill_statistic_data_v1(version, result_columns, chunk, result);
+        _fill_statistic_data_v1(version, result_columns, chunk, result.get());
     } else if (version == DICT_STATISTIC_DATA_VERSION) {
-        _fill_dict_statistic_data(version, result_columns, chunk, result);
+        _fill_dict_statistic_data(version, result_columns, chunk, result.get());
     }
 
     // Step 4: send
     size_t num_rows = result->result_batch.rows.size();
-    Status status = _sinker->add_batch(result);
+    Status status = _sinker->add_batch(std::move(result));
 
     if (status.ok()) {
         _written_rows += num_rows;
@@ -84,7 +86,6 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     }
 
     LOG(WARNING) << "Append statistic result to sink failed.";
-    delete result;
     return status;
 }
 

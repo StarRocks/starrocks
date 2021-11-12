@@ -71,43 +71,6 @@ public:
         }
     }
 
-    TupleRow* dcopy_with_new(const std::vector<TupleDescriptor*>& descs, MemPool* pool, int64_t* bytes) {
-        int size = descs.size() * sizeof(Tuple*);
-        TupleRow* result = reinterpret_cast<TupleRow*>(pool->allocate(size));
-        *bytes = dcopy_with_new(result, descs, pool, false);
-        return result;
-    }
-
-    int64_t dcopy_with_new(TupleRow* dst, const std::vector<TupleDescriptor*>& descs, MemPool* pool,
-                           bool reuse_tuple_mem) {
-        int64_t bytes = 0;
-        for (int i = 0; i < descs.size(); ++i) {
-            Tuple* old_tuple = dst->get_tuple(i);
-            if (_tuples[i] != nullptr) {
-                if (reuse_tuple_mem && old_tuple != nullptr) {
-                    bytes += _tuples[i]->dcopy_with_new(dst->get_tuple(i), *descs[i]);
-                } else {
-                    int64_t new_bytes = 0;
-                    dst->set_tuple(i, _tuples[i]->dcopy_with_new(*descs[i], pool, &new_bytes));
-                    bytes += new_bytes;
-                }
-            } else {
-                dst->set_tuple(i, nullptr);
-            }
-        }
-        return bytes;
-    }
-
-    int64_t release_tuples(const std::vector<TupleDescriptor*>& descs) {
-        int64_t bytes = 0;
-        for (int i = 0; i < descs.size(); ++i) {
-            if (_tuples[i] != nullptr) {
-                bytes += _tuples[i]->release_string(*descs[i]);
-            }
-        }
-        return bytes;
-    }
-
     std::string to_string(const RowDescriptor& d);
 
 private:

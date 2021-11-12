@@ -59,7 +59,7 @@ public:
 
     // try to add result into _sinker if ResultQueue is not full and this operation is
     // non-blocking. return true on success, false in case of that ResultQueue is full.
-    StatusOr<bool> try_add_batch(TFetchDataResultPtr& result);
+    StatusOr<bool> try_add_batch(TFetchDataResultPtr result);
 
 private:
     void _init_profile();

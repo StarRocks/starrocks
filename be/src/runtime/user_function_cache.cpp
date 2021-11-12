@@ -34,6 +34,7 @@
 #include "util/dynamic_util.h"
 #include "util/file_utils.h"
 #include "util/md5.h"
+#include "util/scoped_cleanup.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -251,9 +252,11 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
             entry = it->second;
         } else {
             entry = new UserFunctionCacheEntry(fid, checksum, _make_lib_file(fid, checksum));
+            auto cleanup = MakeScopedCleanup([&]() { delete entry; });
 
             entry->ref();
             _entry_map.emplace(fid, entry);
+            cleanup.cancel();
         }
         entry->ref();
     }

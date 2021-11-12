@@ -25,6 +25,7 @@
 #include "runtime/routine_load/data_consumer.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -168,6 +169,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
         RdKafka::Message* msg;
         bool res = _queue.blocking_get(&msg);
         if (res) {
+            DeferOp delete_msg([msg] { delete msg; });
             VLOG(3) << "get kafka message"
                     << ", partition: " << msg->partition() << ", offset: " << msg->offset() << ", len: " << msg->len();
 
@@ -184,7 +186,6 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id;
                 eos = true;
             }
-            delete msg;
         } else {
             // queue is empty and shutdown
             eos = true;
