@@ -204,6 +204,8 @@ set(EXEC_FILES
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./simd/simd_test.cpp
+        ./simd/simd_selector_test.cpp
+        ./simd/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
         ./util/arrow/arrow_row_batch_test.cpp
         ./util/arrow/arrow_row_block_test.cpp
