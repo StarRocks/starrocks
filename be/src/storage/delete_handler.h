@@ -69,7 +69,6 @@ private:
 struct DeleteConditions {
     DeleteConditions() {}
     ~DeleteConditions() = default;
-
     int32_t filter_version{0};     // delete condition version
     Conditions* del_cond{nullptr}; // delete condition
 };
@@ -93,7 +92,7 @@ public:
     typedef std::vector<DeleteConditions>::size_type cond_num_t;
 
     DeleteHandler() {}
-    ~DeleteHandler() = default;
+    ~DeleteHandler();
 
     // Use regular expression to extract 'column_name', 'op' and 'operands'
     static bool parse_condition(const std::string& condition_str, TCondition* condition);

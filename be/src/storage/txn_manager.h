@@ -70,12 +70,7 @@ class TxnManager {
 public:
     TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size);
 
-    ~TxnManager() {
-        delete[] _txn_tablet_maps;
-        delete[] _txn_partition_maps;
-        delete[] _txn_map_locks;
-        delete[] _txn_mutex;
-    }
+    ~TxnManager() = default;
 
     OLAPStatus prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                            const PUniqueId& load_id);
@@ -181,16 +176,17 @@ private:
     const int32_t _txn_shard_size;
 
     // _txn_map_locks[i] protect _txn_tablet_maps[i], i=0,1,2...,and i < _txn_map_shard_size
-    txn_tablet_map_t* _txn_tablet_maps;
+    std::unique_ptr<txn_tablet_map_t[]> _txn_tablet_maps;
     // transaction_id -> corresponding partition ids
     // This is mainly for the clear txn task received from FE, which may only has transaction id,
     // so we need this map to find out which partitions are corresponding to a transaction id.
     // The _txn_partition_maps[i] should be constructed/deconstructed/modified alongside with '_txn_tablet_maps[i]'
-    txn_partition_map_t* _txn_partition_maps;
+    std::unique_ptr<txn_partition_map_t[]> _txn_partition_maps;
 
-    std::shared_mutex* _txn_map_locks;
+    std::unique_ptr<std::shared_mutex[]> _txn_map_locks;
 
-    std::mutex* _txn_mutex;
+    std::unique_ptr<std::mutex[]> _txn_mutex;
+
     TxnManager(const TxnManager&) = delete;
     const TxnManager& operator=(const TxnManager&) = delete;
 }; // TxnManager
