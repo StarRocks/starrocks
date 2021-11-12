@@ -3,7 +3,6 @@
 #pragma once
 
 #include "common/compiler_util.h"
-
 #include "env/env.h"
 #include "env/env_stream_pipe.h"
 #include "env/env_util.h"
@@ -82,9 +81,10 @@ private:
     Status _process_array(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::array& arr);
 
     Status _process_array_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
-                                          simdjson::ondemand::array& arr);
+                                         simdjson::ondemand::array& arr);
 
-    Status _process_object(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::object& obj);
+    Status _process_object(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
+                           simdjson::ondemand::object& obj);
 
     Status _process_object_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                           simdjson::ondemand::object& obj);

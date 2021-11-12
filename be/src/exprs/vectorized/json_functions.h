@@ -101,12 +101,11 @@ public:
     DEFINE_VECTORIZED_FN(get_json_string);
 
     static bool extract_from_object(simdjson::ondemand::object& obj, const std::vector<JsonPath>& jsonpath,
-                                     simdjson::ondemand::value& value);
+                                    simdjson::ondemand::value& value);
 
     static void parse_json_paths(const std::string& path_strings, std::vector<JsonPath>* parsed_paths);
 
 private:
-
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths);
 
     /* Following functions are only used in test. */

@@ -163,7 +163,7 @@ Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<s
 
     auto paths = elem.get_array();
 
-    for(auto path : paths) {
+    for (auto path : paths) {
         if (!path.is_string()) {
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
         }
@@ -285,7 +285,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 
     for (; _doc_stream_itr != _doc_stream.end(); ++_doc_stream_itr) {
         auto doc = (*_doc_stream_itr);
-        if(doc.error()) {
+        if (doc.error()) {
             std::string err_msg = strings::Substitute("Failed to parse string to json. code=$0, error=$1", doc.error(),
                                                       simdjson::error_message(doc.error()));
             _state->append_error_msg_to_file("", err_msg);
@@ -347,7 +347,6 @@ Status JsonReader::_process_array(Chunk* chunk, const std::vector<SlotDescriptor
 Status JsonReader::_process_array_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                                  simdjson::ondemand::array& arr) {
     for (auto a : arr) {
-
         if (a.error()) {
             std::string err_msg = strings::Substitute("Failed to parse json. code=$0, error=$1", a.error(),
                                                       simdjson::error_message(a.error()));
