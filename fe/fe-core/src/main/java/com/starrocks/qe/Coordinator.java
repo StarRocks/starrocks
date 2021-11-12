@@ -190,6 +190,7 @@ public class Coordinator {
     private final Set<Integer> replicateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
+    private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -1204,6 +1205,9 @@ public class Coordinator {
             HashJoinNode joinNode = (HashJoinNode) node;
             if (joinNode.isLocalHashBucket()) {
                 bucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
+                if (joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin()) {
+                    rightOrFullBucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
+                }
                 return true;
             }
         }
@@ -2010,6 +2014,35 @@ public class Coordinator {
                     TScanRangeParams scanRangeParams = new TScanRangeParams();
                     scanRangeParams.scan_range = location.scan_range;
                     scanRangeParamsList.add(scanRangeParams);
+                }
+            }
+            // Because of the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
+            // So if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate.
+            if (rightOrFullBucketShuffleFragmentIds.contains(fragmentId.asInt())) {
+                int bucketNum = getFragmentBucketNum(fragmentId);
+                HashMap<TNetworkAddress, Long> assignedBucketPerHost = Maps.newHashMap();
+                Set<TNetworkAddress> aliveBackendAdress =
+                        Catalog.getCurrentSystemInfo().getIdToBackend().values().stream().filter(Backend::isAlive)
+                                .map(be -> new TNetworkAddress(be.getHost(), be.getBePort()))
+                                .collect(Collectors.toSet());
+
+                for (int bucketSeq = 0; bucketSeq < bucketNum; ++bucketSeq) {
+                    if (!bucketSeqToAddress.containsKey(bucketSeq)) {
+                        Long minAssignedBuckets = Long.MAX_VALUE;
+                        TNetworkAddress minLocation = null;
+                        for (TNetworkAddress location : aliveBackendAdress) {
+                            Long assignedBucket = findOrInsert(assignedBucketPerHost, location, 0L);
+                            if (assignedBucket < minAssignedBuckets) {
+                                minAssignedBuckets = assignedBucket;
+                                minLocation = location;
+                            }
+                        }
+                        bucketSeqToAddress.put(bucketSeq, minLocation);
+                    }
+                    if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
+                        bucketSeqToScanRange.put(bucketSeq, Maps.newHashMap());
+                        bucketSeqToScanRange.get(bucketSeq).put(scanNode.getId().asInt(), Lists.newArrayList());
+                    }
                 }
             }
         }
