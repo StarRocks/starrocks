@@ -299,7 +299,8 @@ class QueryTransformer {
 
         for (Expr groupingItem : groupByExpressions) {
             // grouping columns save one least
-            if (groupingItem.isConstant() && !(groupAllConst && groupByColumnRefs.isEmpty())) {
+            if (groupingItem.isConstant() && !(groupAllConst && groupByColumnRefs.isEmpty()) &&
+                    groupingSetsList == null) {
                 continue;
             }
 

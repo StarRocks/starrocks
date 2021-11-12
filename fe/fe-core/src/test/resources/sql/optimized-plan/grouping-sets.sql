@@ -189,3 +189,25 @@ AGGREGATE ([GLOBAL] aggregate [{4: count(distinct 1: v1)=multi_distinct_count(4:
         AGGREGATE ([LOCAL] aggregate [{4: count(distinct 1: v1)=multi_distinct_count(1: v1), 6: sum(distinct 1: v1)=multi_distinct_sum(1: v1)}] group by [[]] having [null]
             SCAN (columns[1: v1] predicate[null])
 [end]
+
+[sql]
+select v2,sum(v1) from t0 group by rollup(v2, 1)
+[result]
+AGGREGATE ([GLOBAL] aggregate [{5: sum(1: v1)=sum(5: sum(1: v1))}] group by [[2: v2, 4: expr, 6: GROUPING_ID]] having [null]
+    EXCHANGE SHUFFLE[2, 4, 6]
+        AGGREGATE ([LOCAL] aggregate [{5: sum(1: v1)=sum(1: v1)}] group by [[2: v2, 4: expr, 6: GROUPING_ID]] having [null]
+            REPEAT [[], [2: v2], [2: v2, 4: expr]]
+                SCAN (columns[1: v1, 2: v2] predicate[null])
+[end]
+
+[sql]
+select case when c1=1 then 1 end from (select '1' c1  union  all select '2') a group by rollup(case  when c1=1 then 1 end, 1 + 1);
+[result]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: case, 5: expr, 6: GROUPING_ID]] having [null]
+    EXCHANGE SHUFFLE[4, 5, 6]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[4: case, 5: expr, 6: GROUPING_ID]] having [null]
+            REPEAT [[], [4: case], [4: case, 5: expr]]
+                UNION
+                    VALUES (1)
+                    VALUES (2)
+[end]
