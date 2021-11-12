@@ -43,7 +43,13 @@ public:
     // The operator should finish processing.
     // The method should be idempotent, because it may be triggered
     // multiple times in the entire life cycle
+    // finish function is used to finish the following operator of the current operator that encounters its EOS
+    // and has no data to push into its following operator.
     virtual void finish(RuntimeState* state) = 0;
+
+    // finish_backward is used to finish the preceding operator of the current operator that finishes in advance
+    // and never need input data to consume.
+    virtual void finish_backward(RuntimeState* state) { finish(state); }
 
     // Pull chunk from this operator
     // Use shared_ptr, because in some cases (local broadcast exchange),

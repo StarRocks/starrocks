@@ -132,7 +132,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         }
         // close finished operators and update _first_unfinished index
         for (auto i = _first_unfinished; i < _new_first_unfinished; ++i) {
-            _operators[i]->finish(runtime_state);
+            _operators[i]->finish_backward(runtime_state);
             RETURN_IF_ERROR(_operators[i]->close(runtime_state));
         }
         _first_unfinished = _new_first_unfinished;
@@ -170,7 +170,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
 void PipelineDriver::finish_operators(RuntimeState* state) {
     for (auto i = _first_unfinished; i < _operators.size(); ++i) {
-        _operators[i]->finish(state);
+        _operators[i]->finish_backward(state);
     }
 }
 
@@ -179,7 +179,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     if (state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR) {
         auto num_operators = _operators.size();
         for (auto i = _first_unfinished; i < num_operators; ++i) {
-            _operators[i]->finish(runtime_state);
+            _operators[i]->finish_backward(runtime_state);
             _operators[i]->close(runtime_state);
         }
     } else {
