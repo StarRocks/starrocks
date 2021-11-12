@@ -259,6 +259,10 @@ public class Function implements Writable {
         return checksum;
     }
 
+    public void setArgTypes(Type[] argTypes) {
+        this.argTypes = argTypes;
+    }
+
     // TODO(cmy): Currently we judge whether it is UDF by wheter the 'location' is set.
     // Maybe we should use a separate variable to identify,
     // but additional variables need to modify the persistence information.
