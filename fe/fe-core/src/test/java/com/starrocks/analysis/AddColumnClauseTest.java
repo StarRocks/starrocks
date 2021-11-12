@@ -55,9 +55,9 @@ public class AddColumnClauseTest {
                 minTimes = 0;
                 result = "`testCol` INT";
 
-                definition.getDefaultValue();
+                definition.existBatchConstDefaultValue();
                 minTimes = 0;
-                result = "";
+                result = true;
 
                 definition.getAggregateType();
                 minTimes = 0;
