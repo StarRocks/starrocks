@@ -162,9 +162,9 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v1, 6: sum(2: v2)]] having [nul
 select v from (select sum(v1) as v from t0 union select v4 from t1 except select v1 /2 + 0.5 from t0) a;
 [result]
 EXCEPT
-    AGGREGATE ([GLOBAL] aggregate [{}] group by [[6: expr]] having [null]
+    AGGREGATE ([GLOBAL] aggregate [{}] group by [[6: cast]] having [null]
         EXCHANGE SHUFFLE[6]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[6: expr]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[6: cast]] having [null]
                 UNION
                     AGGREGATE ([GLOBAL] aggregate [{4: sum(1: v1)=sum(4: sum(1: v1))}] group by [[]] having [null]
                         EXCHANGE GATHER

@@ -408,18 +408,18 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
 [sql]
 select cast(v1 as varchar) from t0 group by cast(v1 as varchar)
 [result]
-AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: expr]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: cast]] having [null]
     EXCHANGE SHUFFLE[4]
-        AGGREGATE ([LOCAL] aggregate [{}] group by [[4: expr]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[4: cast]] having [null]
             SCAN (columns[1: v1] predicate[null])
 [end]
 
 [sql]
 select cast(v1 as varchar) + 1 from t0 group by cast(v1 as varchar)
 [result]
-AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: expr]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: cast]] having [null]
     EXCHANGE SHUFFLE[4]
-        AGGREGATE ([LOCAL] aggregate [{}] group by [[4: expr]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[4: cast]] having [null]
             SCAN (columns[1: v1] predicate[null])
 [end]
 
