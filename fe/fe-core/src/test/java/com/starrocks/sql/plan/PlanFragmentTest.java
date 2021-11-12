@@ -4548,4 +4548,29 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PREDICATES: if(1: v1 IS NOT NULL, NULL, NULL)"));
     }
+
+    @Test
+    public void testCountDecimalV3Literal() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "select count( - - cast(89 AS DECIMAL )) from t0";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("output: count(89)"));
+
+        sql = "select max( - - cast(89 AS DECIMAL )) from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("output: max(89)"));
+
+        sql = "select min( - - cast(89 AS DECIMAL )) from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("output: min(89)"));
+
+        sql = "select sum( - - cast(89 AS DECIMAL )) from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("output: sum(89)"));
+
+        sql = "select avg( - - cast(89 AS DECIMAL )) from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("output: avg(89)"));
+        Config.enable_decimal_v3 = false;
+    }
 }
