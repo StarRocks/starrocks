@@ -48,8 +48,6 @@ namespace starrocks {
 class TFetchDataResult;
 class PFetchDataResult;
 
-using TFetchDataResultPtr = std::unique_ptr<TFetchDataResult>;
-
 struct GetResultBatchCtx {
     brpc::Controller* cntl = nullptr;
     PFetchDataResult* result = nullptr;
@@ -60,7 +58,7 @@ struct GetResultBatchCtx {
 
     void on_failure(const Status& status);
     void on_close(int64_t packet_seq, QueryStatistics* statistics = nullptr);
-    void on_data(const TFetchDataResultPtr& t_result, int64_t packet_seq, bool eos = false);
+    void on_data(TFetchDataResult* t_result, int64_t packet_seq, bool eos = false);
 };
 
 // buffer used for result customer and productor
@@ -70,12 +68,12 @@ public:
     ~BufferControlBlock();
 
     Status init();
-    Status add_batch(TFetchDataResultPtr result);
+    Status add_batch(TFetchDataResult* result);
     // non-blocking version of add_batch
-    StatusOr<bool> try_add_batch(TFetchDataResultPtr result);
+    StatusOr<bool> try_add_batch(TFetchDataResult* result);
 
     // get result from batch, use timeout?
-    Status get_batch(TFetchDataResultPtr* result);
+    Status get_batch(TFetchDataResult* result);
 
     void get_batch(GetResultBatchCtx* ctx);
 
@@ -101,7 +99,7 @@ public:
     }
 
 private:
-    typedef std::list<TFetchDataResultPtr> ResultQueue;
+    typedef std::list<TFetchDataResult*> ResultQueue;
 
     // result's query id
     TUniqueId _fragment_id;
