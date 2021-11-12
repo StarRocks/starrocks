@@ -113,7 +113,7 @@ private:
     friend class DataStreamMgr;
     class SenderQueue;
 
-    DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* mem_tracker, const RowDescriptor& row_desc,
+    DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
                     int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
                     std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline);
@@ -158,9 +158,6 @@ private:
     // total number of bytes held across all sender queues.
     std::atomic<int> _num_buffered_bytes{0};
 
-    // Memtracker for batches in the sender queue(s).
-    MemTracker* _mem_tracker = nullptr;
-
     // One or more queues of row batches received from senders. If _is_merging is true,
     // there is one SenderQueue for each sender. Otherwise, row batches from all senders
     // are placed in the same SenderQueue. The SenderQueue instances are owned by the
@@ -175,6 +172,11 @@ private:
 
     // Runtime profile storing the counters below.
     std::shared_ptr<RuntimeProfile> _profile;
+
+    // instance profile and mem_tracker
+    std::shared_ptr<RuntimeProfile> _instance_profile;
+    std::shared_ptr<MemTracker> _query_mem_tracker;
+    std::shared_ptr<MemTracker> _instance_mem_tracker;
 
     // Number of bytes received
     RuntimeProfile::Counter* _bytes_received_counter;

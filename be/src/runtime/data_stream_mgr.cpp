@@ -59,9 +59,9 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
         bool is_merging, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline) {
     DCHECK(profile != nullptr);
     VLOG_FILE << "creating receiver for fragment=" << fragment_instance_id << ", node=" << dest_node_id;
-    std::shared_ptr<DataStreamRecvr> recvr(new DataStreamRecvr(
-            this, state->instance_mem_tracker(), row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
-            buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline));
+    std::shared_ptr<DataStreamRecvr> recvr(
+            new DataStreamRecvr(this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
+                                buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline));
     uint32_t hash_value = get_hash_value(fragment_instance_id, dest_node_id);
     std::lock_guard<std::mutex> l(_lock);
     _fragment_stream_set.emplace(fragment_instance_id, dest_node_id);
