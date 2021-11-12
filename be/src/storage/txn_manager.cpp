@@ -65,18 +65,10 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
     DCHECK_GT(_txn_shard_size, 0);
     DCHECK_EQ(_txn_map_shard_size & (_txn_map_shard_size - 1), 0);
     DCHECK_EQ(_txn_shard_size & (_txn_shard_size - 1), 0);
-    _txn_map_locks = new std::shared_mutex[_txn_map_shard_size];
-    ScopedCleanup txn_map_locks_release_guard([&]() { delete[] _txn_map_locks; });
-    _txn_tablet_maps = new txn_tablet_map_t[_txn_map_shard_size];
-    ScopedCleanup txn_tablet_maps_release_guard([&]() { delete[] _txn_tablet_maps; });
-    _txn_partition_maps = new txn_partition_map_t[_txn_map_shard_size];
-    ScopedCleanup txn_partition_maps_release_guard([&]() { delete[] _txn_partition_maps; });
-    _txn_mutex = new std::mutex[_txn_shard_size];
-    ScopedCleanup txn_mutex_release_guard([&]() { delete[] _txn_mutex; });
-    txn_map_locks_release_guard.cancel();
-    txn_tablet_maps_release_guard.cancel();
-    txn_partition_maps_release_guard.cancel();
-    txn_mutex_release_guard.cancel();
+    _txn_map_locks = std::unique_ptr<std::shared_mutex[]>(new std::shared_mutex[_txn_map_shard_size]);
+    _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
+    _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
+    _txn_mutex = std::unique_ptr<std::mutex[]>(new std::mutex[_txn_shard_size]);
 }
 
 OLAPStatus TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,

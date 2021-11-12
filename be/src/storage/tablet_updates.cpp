@@ -517,14 +517,12 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     // apply in-memory state after commit success
     _next_log_id++;
     _next_rowset_id += rowsetid_add;
-    EditVersionInfo* newversion = new EditVersionInfo();
-    ScopedCleanup free_guard([&]() { delete newversion; });
+    std::unique_ptr<EditVersionInfo> newversion = std::make_unique<EditVersionInfo>();
     newversion->version = EditVersion(version, 0);
     newversion->creation_time = creation_time;
     newversion->rowsets.swap(nrs);
     newversion->deltas.push_back(rowsetid);
-    _versions.emplace_back(newversion);
-    free_guard.cancel();
+    _versions.emplace_back(std::move(newversion));
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         _rowsets[rowsetid] = rowset;
@@ -1036,14 +1034,13 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     (*pinfo)->output = rowsetid;
     _next_log_id++;
     _next_rowset_id += rowsetid_add;
-    EditVersionInfo* newversion = new EditVersionInfo();
-    ScopedCleanup free_guard([&]() { delete newversion; });
+    std::unique_ptr<EditVersionInfo> newversion = std::make_unique<EditVersionInfo>();
     newversion->version = EditVersion(v->major(), v->minor());
     newversion->creation_time = creation_time;
     newversion->rowsets.swap(nrs);
     newversion->compaction.swap(*pinfo);
-    _versions.emplace_back(newversion);
-    free_guard.cancel();
+    _versions.emplace_back(std::move(newversion));
+    auto newversion_ptr = _versions.back().get();
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         _rowsets[rowsetid] = rowset;
@@ -1059,14 +1056,15 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         std::lock_guard lg(_rowset_stats_lock);
         _rowset_stats.emplace(rowsetid, std::move(rowset_stats));
     }
-    LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id() << " version:" << newversion->version.to_string()
-              << " rowset:" << rowsetid << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+    LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id()
+              << " version:" << newversion_ptr->version.to_string() << " rowset:" << rowsetid
+              << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
               << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
               << " #pending:" << _pending_commits.size()
               << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
     VLOG(1) << "update compaction commit " << _debug_string(false, true);
     _check_for_apply();
-    *commit_version = newversion->version;
+    *commit_version = newversion_ptr->version;
     return Status::OK();
 }
 
