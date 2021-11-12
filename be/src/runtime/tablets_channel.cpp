@@ -49,6 +49,8 @@ TabletsChannel::TabletsChannel(const TabletsChannelKey& key, MemTracker* mem_tra
 TabletsChannel::~TabletsChannel() {
     _s_tablet_writer_count -= _tablet_writers.size();
     _s_tablet_writer_count -= _vectorized_tablet_writers.size();
+    STLDeleteValues(&_tablet_writers);
+    STLDeleteValues(&_vectorized_tablet_writers);
     delete _row_desc;
     delete _schema;
     _mem_pool.reset();
@@ -97,10 +99,6 @@ Status TabletsChannel::add_batch(const PTabletWriterAddBatchRequest& params) {
     }
 
     RowBatch row_batch(*_row_desc, params.row_batch());
-    Status status = row_batch.init(params.row_batch());
-    if (!status.ok()) {
-        return Status::InternalError("batch init failed for tablet to append data");
-    }
 
     // iterator all data
     for (int i = 0; i < params.tablet_ids_size(); ++i) {
@@ -265,7 +263,7 @@ Status TabletsChannel::close(int sender_id, bool* finished,
             if (!_is_vectorized) {
                 // All senders are closed
                 // 1. close all delta writers
-                std::vector<std::shared_ptr<DeltaWriter>> need_wait_writers;
+                std::vector<DeltaWriter*> need_wait_writers;
                 for (auto& it : _tablet_writers) {
                     if (_partition_ids.count(it.second->partition_id()) > 0) {
                         auto st = it.second->close();
@@ -300,7 +298,7 @@ Status TabletsChannel::close(int sender_id, bool* finished,
     if (*finished & _is_vectorized) {
         // All senders are closed
         // 1. close all delta writers
-        std::unordered_map<int64_t, std::shared_ptr<vectorized::DeltaWriter>> need_wait_writers;
+        std::unordered_map<int64_t, vectorized::DeltaWriter*> need_wait_writers;
         for (auto& it : _vectorized_tablet_writers) {
             if (_partition_ids.count(it.second->partition_id()) > 0) {
                 std::lock_guard<std::mutex> l(_tablet_locks[it.first & k_shard_size]);
@@ -338,7 +336,7 @@ Status TabletsChannel::close(int sender_id, bool* finished,
 
 Status TabletsChannel::reduce_mem_usage_async(const std::set<int64_t>& flush_tablet_ids, int64_t* tablet_id,
                                               int64_t* tablet_mem_consumption) {
-    std::shared_ptr<vectorized::DeltaWriter> vectorized_writer;
+    vectorized::DeltaWriter* vectorized_writer = nullptr;
     int64_t max_consume = 0L;
 
     {
@@ -360,7 +358,7 @@ Status TabletsChannel::reduce_mem_usage_async(const std::set<int64_t>& flush_tab
                 }
             }
         } else {
-            std::shared_ptr<DeltaWriter> writer;
+            DeltaWriter* writer = nullptr;
             // find tablet writer with largest mem consumption
             for (auto& it : _tablet_writers) {
                 if (it.second->mem_consumption() > max_consume &&
@@ -371,7 +369,7 @@ Status TabletsChannel::reduce_mem_usage_async(const std::set<int64_t>& flush_tab
                 }
             }
 
-            if (writer.get() == nullptr || max_consume == 0) {
+            if (writer == nullptr || max_consume == 0) {
                 // barely not happend, just return OK
                 return Status::OK();
             }
@@ -382,7 +380,7 @@ Status TabletsChannel::reduce_mem_usage_async(const std::set<int64_t>& flush_tab
         }
     }
     if (_is_vectorized) {
-        if (vectorized_writer.get() == nullptr || max_consume == 0) {
+        if (vectorized_writer == nullptr || max_consume == 0) {
             // barely not happend, just return OK
             return Status::OK();
         }
@@ -395,7 +393,7 @@ Status TabletsChannel::reduce_mem_usage_async(const std::set<int64_t>& flush_tab
 }
 
 Status TabletsChannel::wait_mem_usage_reduced(int64_t tablet_id) {
-    std::shared_ptr<vectorized::DeltaWriter> vectorized_writer;
+    vectorized::DeltaWriter* vectorized_writer = nullptr;
     {
         std::lock_guard<std::mutex> l(_global_lock);
         if (_is_vectorized) {
@@ -413,7 +411,7 @@ Status TabletsChannel::wait_mem_usage_reduced(int64_t tablet_id) {
                 ss << "tablet writer is not found. tablet id: " << tablet_id;
                 return Status::InternalError(ss.str());
             }
-            auto writer = it->second;
+            DeltaWriter* writer = it->second;
             return writer->wait_memtable_flushed();
         }
     }
@@ -470,7 +468,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
             request.slots = index_slots;
             request.global_dicts = &_global_dicts;
 
-            std::shared_ptr<vectorized::DeltaWriter> writer;
+            vectorized::DeltaWriter* writer = nullptr;
             auto st = vectorized::DeltaWriter::open(&request, _mem_tracker.get(), &writer);
             if (!st.ok()) {
                 std::stringstream ss;
@@ -501,7 +499,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
             request.tuple_desc = _tuple_desc;
             request.slots = index_slots;
 
-            std::shared_ptr<DeltaWriter> writer;
+            DeltaWriter* writer = nullptr;
             auto st = DeltaWriter::open(&request, _mem_tracker.get(), &writer);
             if (st != OLAP_SUCCESS) {
                 std::stringstream ss;

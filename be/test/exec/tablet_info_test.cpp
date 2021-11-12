@@ -144,8 +144,6 @@ TEST_F(OlapTablePartitionParamTest, normal) {
     RowDescriptor row_desc(*desc_tbl, {0}, {false});
     TupleDescriptor* tuple_desc = desc_tbl->get_tuple_descriptor(0);
     RowBatch batch(row_desc, 1024);
-    st = batch.init();
-    ASSERT_TRUE(st.ok());
     // 12, 9, "abc"
     {
         Tuple* tuple = (Tuple*)batch.tuple_data_pool()->allocate(tuple_desc->byte_size());
@@ -282,8 +280,6 @@ TEST_F(OlapTablePartitionParamTest, unpartitioned) {
     RowDescriptor row_desc(*desc_tbl, {0}, {false});
     TupleDescriptor* tuple_desc = desc_tbl->get_tuple_descriptor(0);
     RowBatch batch(row_desc, 1024);
-    st = batch.init();
-    ASSERT_TRUE(st.ok());
     // 12, 9, "abc"
     {
         Tuple* tuple = (Tuple*)batch.tuple_data_pool()->allocate(tuple_desc->byte_size());
