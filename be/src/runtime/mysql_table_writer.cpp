@@ -130,9 +130,10 @@ Status MysqlTableWriter::insert_row(TupleRow* row) {
                     ss << "NULL";
                 }
             } else {
-                std::unique_ptr<char[]> buf(new char[2 * string_val->len + 1], std::default_delete<char[]>());
-                mysql_real_escape_string(_mysql_conn, buf.get(), string_val->ptr, string_val->len);
-                ss << "\'" << buf.get() << "\'";
+                char* buf = new char[2 * string_val->len + 1];
+                mysql_real_escape_string(_mysql_conn, buf, string_val->ptr, string_val->len);
+                ss << "\'" << buf << "\'";
+                delete[] buf;
             }
             break;
         }

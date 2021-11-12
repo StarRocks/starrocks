@@ -291,13 +291,14 @@ TEST_F(TestDeltaWriter, open) {
     load_id.set_hi(0);
     load_id.set_lo(0);
     WriteRequest write_req = {10003, 270068375, WriteType::LOAD, 20001, 30001, load_id, tuple_desc};
-    std::shared_ptr<DeltaWriter> delta_writer;
+    DeltaWriter* delta_writer = nullptr;
     DeltaWriter::open(&write_req, k_tablet_meta_mem_tracker, &delta_writer);
-    ASSERT_NE(delta_writer.get(), nullptr);
+    ASSERT_NE(delta_writer, nullptr);
     OLAPStatus res = delta_writer->close();
     ASSERT_EQ(OLAP_SUCCESS, res);
     res = delta_writer->close_wait(nullptr);
     ASSERT_EQ(OLAP_SUCCESS, res);
+    SAFE_DELETE(delta_writer);
 
     TDropTabletReq drop_request;
     auto tablet_id = 10003;
@@ -326,9 +327,9 @@ TEST_F(TestDeltaWriter, write) {
     load_id.set_lo(0);
     WriteRequest write_req = {10004, 270068376, WriteType::LOAD, 20002,
                               30002, load_id,   tuple_desc,      &(tuple_desc->slots())};
-    std::shared_ptr<DeltaWriter> delta_writer;
+    DeltaWriter* delta_writer = nullptr;
     DeltaWriter::open(&write_req, k_tablet_meta_mem_tracker, &delta_writer);
-    ASSERT_NE(delta_writer.get(), nullptr);
+    ASSERT_NE(delta_writer, nullptr);
 
     MemPool pool;
     // Tuple 1
@@ -419,6 +420,7 @@ TEST_F(TestDeltaWriter, write) {
 
     st = k_engine->tablet_manager()->drop_tablet(write_req.tablet_id);
     ASSERT_TRUE(st.ok()) << st.to_string();
+    delete delta_writer;
 }
 
 } // namespace starrocks
