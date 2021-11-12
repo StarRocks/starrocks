@@ -48,6 +48,11 @@ public class CostModel {
         return getRealCost(costEstimate);
     }
 
+    public static CostEstimate calculateCostEstimate(ExpressionContext expressionContext) {
+        CostEstimator costEstimator = new CostEstimator();
+        return expressionContext.getOp().accept(costEstimator, expressionContext);
+    }
+
     public static double getRealCost(CostEstimate costEstimate) {
         double cpuCostWeight = 0.5;
         double memoryCostWeight = 2;
@@ -128,7 +133,7 @@ public class CostModel {
             // 3 Must do one stage aggregate If the child contains limit,
             // the aggregation must be a single node to ensure correctness.
             // eg. select count(*) from (select * table limit 2) t
-            if (((LogicalOperator) context.getChildOperator(0)).hasLimit()) {
+            if (context.getChildOperator(0).hasLimit()) {
                 return true;
             }
 
@@ -215,7 +220,7 @@ public class CostModel {
             Statistics inputStatistics = context.getChildStatistics(0);
             CostEstimate otherExtraCost = computeAggFunExtraCost(node, statistics, inputStatistics);
             return CostEstimate.addCost(CostEstimate.of(inputStatistics.getComputeSize(),
-                            CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
+                    CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
                     otherExtraCost);
         }
 

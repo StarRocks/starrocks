@@ -160,6 +160,11 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     }
 
     private boolean couldApplyStringDict(CallOperator operator, ColumnRefSet dictSet) {
+        for (ScalarOperator child : operator.getChildren()) {
+            if (!(child instanceof ColumnRefOperator)) {
+                return false;
+            }
+        }
         ColumnRefSet usedColumns = operator.getUsedColumns();
         if (usedColumns.isIntersect(dictSet)) {
             // TODO(kks): support more functions

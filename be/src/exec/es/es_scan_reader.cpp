@@ -110,8 +110,7 @@ Status ESScanReader::open() {
     Status status = _network_client.execute_post_request(_query, &_cached_response);
     VLOG(1) << "ES Query:" << _query;
     if (!status.ok() || _network_client.get_http_status() != 200) {
-        std::string err_msg = fmt::format("Failed to connect to ES server, errmsg is: {:<100}, response:{}",
-                                          status.get_error_msg(), _cached_response);
+        std::string err_msg = fmt::format("Failed to connect to ES server, errmsg is: {}", status.get_error_msg());
         return Status::InternalError(err_msg);
     }
     VLOG(1) << "open _cached response: " << _cached_response;

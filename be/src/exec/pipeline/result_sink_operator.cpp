@@ -17,9 +17,6 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     // Create profile
     _profile = std::make_unique<RuntimeProfile>("result sink");
 
-    // Create sender
-    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), 1024, &_sender));
-
     // Create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
@@ -38,18 +35,21 @@ Status ResultSinkOperator::close(RuntimeState* state) {
     // Close the writer
     if (_writer != nullptr) {
         st = _writer->close();
+        _num_written_rows.fetch_add(_writer->get_written_rows(), std::memory_order_relaxed);
     }
 
-    // Close sender
-    if (_sender != nullptr) {
-        if (_writer != nullptr) {
-            _sender->update_num_written_rows(_writer->get_written_rows());
+    // Close the shared sender when the last result sink operator is closing.
+    if (_num_result_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        if (_sender != nullptr) {
+            // Incrementing and reading _num_written_rows needn't memory barrier, because
+            // the visibility of _num_written_rows is guaranteed by _num_result_sinkers.fetch_sub().
+            _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
+            _sender->close(st);
         }
-        _sender->close(st);
-    }
 
-    state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                    state->fragment_instance_id());
+        state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
+                                                        state->fragment_instance_id());
+    }
 
     Operator::close(state);
     return Status::OK();
@@ -67,7 +67,7 @@ bool ResultSinkOperator::need_input() const {
         return true;
     }
     auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
-    auto status = mysql_writer->try_add_batch(_fetch_data_result);
+    auto status = mysql_writer->try_add_batch(std::move(_fetch_data_result));
     if (status.ok()) {
         return status.value();
     } else {
@@ -85,15 +85,21 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     auto status = mysql_writer->process_chunk(chunk.get());
     if (status.ok()) {
         _fetch_data_result = std::move(status.value());
-        return mysql_writer->try_add_batch(_fetch_data_result).status();
+        return mysql_writer->try_add_batch(std::move(_fetch_data_result)).status();
     } else {
         return status.status();
     }
 }
+
 Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), 1024, &_sender));
+
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
+
     RowDescriptor row_desc;
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, row_desc));
+    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+
     return Status::OK();
 }
 

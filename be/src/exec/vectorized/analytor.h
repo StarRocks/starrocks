@@ -38,7 +38,7 @@ public:
     ~Analytor() = default;
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc);
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
     Status close(RuntimeState* state);
 
@@ -75,9 +75,6 @@ public:
     int64_t partition_end() { return _partition_end; }
     int64_t peer_group_start() { return _peer_group_start; }
     int64_t peer_group_end() { return _peer_group_end; }
-
-    int64_t last_memory_usage() { return _last_memory_usage; }
-    void set_last_memory_usage(int64_t last_memory_usage) { _last_memory_usage = last_memory_usage; }
 
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
@@ -128,7 +125,6 @@ private:
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     ObjectPool* _pool;
-    MemTracker* _mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
 
     // only used in pipeline engine
@@ -169,8 +165,6 @@ private:
     // if type is CURRENT ROW or UNBOUNDED PRECEDING/FOLLOWING.
     int64_t _rows_start_offset = 0;
     int64_t _rows_end_offset = 0;
-
-    int64_t _last_memory_usage = 0;
 
     // The offset of the n-th window function in a row of window functions.
     std::vector<size_t> _agg_states_offsets;

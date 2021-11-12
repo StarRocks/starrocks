@@ -2,6 +2,7 @@
 
 #include "storage/vectorized/delta_writer.h"
 
+#include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_factory.h"
@@ -11,11 +12,12 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/memtable.h"
+#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
-Status DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, DeltaWriter** writer) {
-    *writer = new DeltaWriter(req, mem_tracker, StorageEngine::instance());
+Status DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, std::shared_ptr<DeltaWriter>* writer) {
+    *writer = std::shared_ptr<DeltaWriter>(new DeltaWriter(req, mem_tracker, StorageEngine::instance()));
     return Status::OK();
 }
 
@@ -61,9 +63,9 @@ void DeltaWriter::_garbage_collection() {
     }
 }
 
-Status DeltaWriter::init() {
+Status DeltaWriter::_init() {
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    _tablet = tablet_mgr->get_tablet(_req.tablet_id, _req.schema_hash);
+    _tablet = tablet_mgr->get_tablet(_req.tablet_id, false);
     if (_tablet == nullptr) {
         std::stringstream ss;
         ss << "Fail to get tablet. tablet_id=" << _req.tablet_id;
@@ -124,7 +126,6 @@ Status DeltaWriter::init() {
     }
 
     RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
-    writer_context.mem_tracker = _mem_tracker.get();
     writer_context.rowset_id = _storage_engine->next_rowset_id();
     writer_context.tablet_uid = _tablet->tablet_uid();
     writer_context.tablet_id = _req.tablet_id;
@@ -163,11 +164,14 @@ Status DeltaWriter::init() {
 }
 
 Status DeltaWriter::write(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     if (_is_cancelled) {
         return Status::OK();
     }
     if (!_is_init) {
-        RETURN_IF_ERROR(init());
+        RETURN_IF_ERROR(_init());
     }
 
     bool flush = _mem_table->insert(chunk, indexes, from, size);
@@ -187,18 +191,20 @@ Status DeltaWriter::_flush_memtable_async() {
 }
 
 Status DeltaWriter::flush_memtable_async() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     if (_is_cancelled) {
         return Status::OK();
     }
 
-    if (mem_consumption() == _mem_table->memory_usage()) {
+    if (_flush_token->get_stats().cur_flush_count < 1) {
         // equal means there is no memtable in flush queue, just flush this memtable
         VLOG(3) << "flush memtable to reduce mem consumption. memtable size: " << _mem_table->memory_usage()
                 << ", tablet: " << _req.tablet_id << ", load id: " << print_id(_req.load_id);
         RETURN_IF_ERROR(_flush_memtable_async());
         _reset_mem_table();
     } else {
-        DCHECK(mem_consumption() > _mem_table->memory_usage());
         // this means there should be at least one memtable in flush queue.
     }
     return Status::OK();
@@ -225,6 +231,9 @@ void DeltaWriter::_reset_mem_table() {
 }
 
 Status DeltaWriter::close() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     if (_is_cancelled) {
         return Status::OK();
     }
@@ -234,7 +243,7 @@ Status DeltaWriter::close() {
         // in same partition has data loaded.
         // so we have to also init this DeltaWriter, so that it can create a empty rowset
         // for this tablet when being closd.
-        RETURN_IF_ERROR(init());
+        RETURN_IF_ERROR(_init());
     }
 
     RETURN_IF_ERROR(_flush_memtable_async());
@@ -243,6 +252,9 @@ Status DeltaWriter::close() {
 }
 
 Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     if (_is_cancelled) {
         return Status::OK();
     }
@@ -252,7 +264,6 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     if (_flush_token->wait() != OLAPStatus::OLAP_SUCCESS) {
         return Status::InternalError("Fail to flush memtable");
     }
-    DCHECK_EQ(_mem_tracker->consumption(), 0);
 
     // use rowset meta manager to save meta
     _cur_rowset = _rowset_writer->build();
@@ -291,6 +302,9 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
 }
 
 Status DeltaWriter::cancel() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     if (_is_cancelled) {
         return Status::OK();
     }
@@ -303,7 +317,6 @@ Status DeltaWriter::cancel() {
         _flush_token->cancel();
     }
     _is_cancelled = true;
-    DCHECK_EQ(_mem_tracker->consumption(), 0);
     return Status::OK();
 }
 

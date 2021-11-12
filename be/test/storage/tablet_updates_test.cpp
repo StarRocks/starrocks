@@ -96,7 +96,7 @@ public:
         request.tablet_schema.columns.push_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
     TabletSharedPtr create_tablet2(int64_t tablet_id, int32_t schema_hash) {
@@ -135,20 +135,18 @@ public:
         request.tablet_schema.columns.push_back(k4);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
     void SetUp() override { _compaction_mem_tracker.reset(new MemTracker(-1)); }
 
     void TearDown() override {
         if (_tablet2) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id(), _tablet2->schema_hash(),
-                                                                     false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id(), false);
             _tablet2.reset();
         }
         if (_tablet) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), _tablet->schema_hash(),
-                                                                     false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), false);
             _tablet.reset();
         }
     }
@@ -240,7 +238,7 @@ public:
         auto st = tablet_manager->create_tablet_from_meta_snapshot(store, new_tablet_id, new_schema_hash,
                                                                    new_tablet_path);
         CHECK(st.ok()) << st;
-        return tablet_manager->get_tablet(new_tablet_id, new_schema_hash);
+        return tablet_manager->get_tablet(new_tablet_id, false);
     }
 
 protected:
@@ -261,11 +259,11 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
     CHECK(st.ok()) << st;
 
     // Parse tablet meta.
-    auto tablet_meta = std::make_shared<TabletMeta>(tablet->mem_tracker());
+    auto tablet_meta = std::make_shared<TabletMeta>();
     CHECK(tablet_meta->deserialize(serialized_meta).ok());
 
     // Create a new tablet instance from the latest snapshot.
-    auto tablet1 = Tablet::create_tablet_from_meta(tablet->mem_tracker(), tablet_meta, data_dir);
+    auto tablet1 = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
     CHECK(tablet1 != nullptr);
     CHECK(tablet1->init().ok());
     CHECK(tablet1->init_succeeded());
@@ -768,8 +766,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->tablet_path());
         (void)FileUtils::remove_all(tablet1->tablet_path());
     });

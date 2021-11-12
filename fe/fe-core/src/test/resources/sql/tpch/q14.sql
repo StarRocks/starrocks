@@ -13,9 +13,9 @@ where
   and l_shipdate >= date '1997-02-01'
   and l_shipdate < date '1997-03-01';
 [result]
-AGGREGATE ([GLOBAL] aggregate [{30: sum(28: expr)=sum(30: sum(28: expr)), 31: sum(29: expr)=sum(31: sum(29: expr))}] group by [[]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{30: sum(28: case)=sum(30: sum(28: case)), 31: sum(29: expr)=sum(31: sum(29: expr))}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{30: sum(28: expr)=sum(28: expr), 31: sum(29: expr)=sum(29: expr)}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{30: sum(28: case)=sum(28: case), 31: sum(29: expr)=sum(29: expr)}] group by [[]] having [null]
             INNER JOIN (join-predicate [18: P_PARTKEY = 2: L_PARTKEY] post-join-predicate [null])
                 SCAN (columns[18: P_PARTKEY, 22: P_TYPE] predicate[null])
                 EXCHANGE SHUFFLE[2]

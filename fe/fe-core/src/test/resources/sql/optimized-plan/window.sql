@@ -36,8 +36,8 @@ ANALYTIC ({4: sum(1: v1)=sum(1: v1), 5: avg(1: v1)=avg(1: v1)} [2: v2] [3: v3 AS
 [sql]
 select sum(v1) over(partition by v2), avg(v1) over(partition by v2 order by v3) from t0;
 [result]
-ANALYTIC ({4: sum(1: v1)=sum(1: v1)} [2: v2] [] )
-    ANALYTIC ({5: avg(1: v1)=avg(1: v1)} [2: v2] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+ANALYTIC ({5: avg(1: v1)=avg(1: v1)} [2: v2] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    ANALYTIC ({4: sum(1: v1)=sum(1: v1)} [2: v2] [] )
         TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
             EXCHANGE SHUFFLE[2]
                 SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
@@ -67,8 +67,8 @@ ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [] [] )
 [sql]
 select avg(v1) over(), sum(v1) over(order by v3) from t0;
 [result]
-ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [] [] )
-    ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [] [] )
         TOP-N (order by [[3: v3 ASC NULLS FIRST]])
             TOP-N (order by [[3: v3 ASC NULLS FIRST]])
                 SCAN (columns[1: v1, 3: v3] predicate[null])
@@ -160,12 +160,12 @@ ANALYTIC ({4: sum(2: v2)=sum(2: v2)} [3: v3] [1: v1 ASC NULLS FIRST] RANGE BETWE
 [sql]
 select sum(v1) over(partition by v2 + 1), avg(v1) over(partition by v2 order by v3) from t0;
 [result]
-ANALYTIC ({8: sum(4: v1)=sum(4: v1)} [7: expr] [] )
-    TOP-N (order by [[7: expr ASC NULLS FIRST]])
-        EXCHANGE SHUFFLE[7]
-            ANALYTIC ({9: avg(4: v1)=avg(4: v1)} [2: v2] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-                TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
-                    EXCHANGE SHUFFLE[2]
+ANALYTIC ({9: avg(4: v1)=avg(4: v1)} [2: v2] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
+        EXCHANGE SHUFFLE[2]
+            ANALYTIC ({8: sum(4: v1)=sum(4: v1)} [7: expr] [] )
+                TOP-N (order by [[7: expr ASC NULLS FIRST]])
+                    EXCHANGE SHUFFLE[7]
                         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
@@ -272,14 +272,57 @@ ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UN
 [sql]
 select avg(v1) over(partition by v2, v3 order by v2), sum(v1) over(partition by v2 order by v2) from t0
 [result]
-ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [2: v2] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-    TOP-N (order by [[2: v2 ASC NULLS FIRST]])
+ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [2: v2, 3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [2: v2] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
+            EXCHANGE SHUFFLE[2]
+                SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+[end]
+
+[sql]
+select avg(v1) over(partition by v2, v3 order by v2), sum(v1) over(partition by v2 order by v3) from t0
+[result]
+ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [2: v2, 3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [2: v2] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
+            EXCHANGE SHUFFLE[2]
+                SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+[end]
+
+[sql]
+select avg(v1) over(partition by v3 order by v2), sum(v1) over(partition by v2 order by v3) from t0
+[result]
+ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [2: v2] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
         EXCHANGE SHUFFLE[2]
-            ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [2: v2, 3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-                TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
-                    EXCHANGE SHUFFLE[2, 3]
+            ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                TOP-N (order by [[3: v3 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST]])
+                    EXCHANGE SHUFFLE[3]
                         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
+
+[sql]
+select avg(v1) over(partition by v2,v3 order by v2), sum(v1) over(partition by v3 order by v2) from t0
+[result]
+ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [2: v2, 3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
+        ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+            TOP-N (order by [[3: v3 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST]])
+                EXCHANGE SHUFFLE[3]
+                    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+[end]
+
+[sql]
+select sum(v1) over(partition by v3 order by v2), avg(v1) over(partition by v2,v3 order by v2) from t0
+[result]
+ANALYTIC ({5: avg(1: v1)=avg(1: v1)} [2: v2, 3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
+        ANALYTIC ({4: sum(1: v1)=sum(1: v1)} [3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+            TOP-N (order by [[3: v3 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST]])
+                EXCHANGE SHUFFLE[3]
+                    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+[end]
+
 
 [sql]
 select avg(v1) over(partition by v2 order by v3), sum(v1) over(partition by v2 order by v2), max(v1) over(partition by v2 order by v3) from t0
@@ -294,8 +337,8 @@ ANALYTIC ({6: sum(1: v1)=sum(1: v1)} [2: v2] [2: v2 ASC NULLS FIRST] RANGE BETWE
 [sql]
 select avg(v1) over(partition by v2 order by v3), sum(v1) over(partition by v2 order by v2), sum(v1) over(partition by v2 order by v3 rows between  1 preceding and 1 following) from t0
 [result]
-ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [2: v2] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-    ANALYTIC ({6: sum(1: v1)=sum(1: v1)} [2: v2] [3: v3 ASC NULLS FIRST] ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+ANALYTIC ({6: sum(1: v1)=sum(1: v1)} [2: v2] [3: v3 ASC NULLS FIRST] ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+    ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [2: v2] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
         ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [2: v2] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
             TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
                 EXCHANGE SHUFFLE[2]
@@ -305,25 +348,22 @@ ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [2: v2] [2: v2 ASC NULLS FIRST] RANGE BETWE
 [sql]
 select avg(v1) over(partition by v2,v3 order by v3), sum(v1) over(partition by v3 order by v3), max(v1) over(partition by v2, v3 order by v2) from t0
 [result]
-ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [3: v3] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-    TOP-N (order by [[3: v3 ASC NULLS FIRST]])
-        EXCHANGE SHUFFLE[3]
-            ANALYTIC ({6: max(1: v1)=max(1: v1)} [2: v2, 3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-                ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [2: v2, 3: v3] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-                    TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
-                        EXCHANGE SHUFFLE[2, 3]
-                            SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+ANALYTIC ({6: max(1: v1)=max(1: v1)} [2: v2, 3: v3] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [2: v2, 3: v3] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
+            ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [3: v3] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                TOP-N (order by [[3: v3 ASC NULLS FIRST]])
+                    EXCHANGE SHUFFLE[3]
+                        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
 select avg(v1) over(partition by v1,v2 order by v3), sum(v1) over(partition by v1 order by v2) from t0
 [result]
-ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [1: v1] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-    TOP-N (order by [[1: v1 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST]])
-        EXCHANGE SHUFFLE[1]
-            ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [1: v1, 2: v2] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-                TOP-N (order by [[1: v1 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
-                    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+ANALYTIC ({4: avg(1: v1)=avg(1: v1)} [1: v1, 2: v2] [3: v3 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [1: v1] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        TOP-N (order by [[1: v1 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
+            SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]

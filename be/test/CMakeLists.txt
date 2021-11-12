@@ -170,6 +170,7 @@ set(EXEC_FILES
         ./storage/vectorized/projection_iterator_test.cpp
         ./storage/vectorized/push_handler_test.cpp
         ./storage/vectorized/range_test.cpp
+        ./storage/vectorized/row_source_mask_test.cpp
         ./storage/vectorized/union_iterator_test.cpp
         ./storage/vectorized/unique_iterator_test.cpp
         ./storage/vectorized/cumulative_compaction_test.cpp
@@ -203,6 +204,8 @@ set(EXEC_FILES
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./simd/simd_test.cpp
+        ./simd/simd_selector_test.cpp
+        ./simd/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
         ./util/arrow/arrow_row_batch_test.cpp
         ./util/arrow/arrow_row_block_test.cpp
@@ -269,6 +272,7 @@ SET_TARGET_PROPERTIES(${PLUGIN_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$
 # Thus we need a standalone binary without sanitizer to test it.
 add_executable(bytes_test
         ./column/bytes_test.cpp
+        ../src/service/mem_hook.cpp
         )
 
 set_target_properties(bytes_test PROPERTIES

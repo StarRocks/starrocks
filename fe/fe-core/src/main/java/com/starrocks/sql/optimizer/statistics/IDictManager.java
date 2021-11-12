@@ -13,6 +13,8 @@ public interface IDictManager {
 
     void removeGlobalDict(long tableId, String columnName);
 
+    void forbitGlobalDict(long tableId);
+
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
     ColumnDict getGlobalDict(long tableId, String columnName);
 

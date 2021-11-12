@@ -61,7 +61,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
@@ -138,11 +137,16 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _rows_returned_rate(nullptr),
           _memory_used_counter(nullptr),
           _use_vectorized(tnode.use_vectorized),
+          _runtime_state(nullptr),
           _is_closed(false) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 
-ExecNode::~ExecNode() = default;
+ExecNode::~ExecNode() {
+    if (runtime_state() != nullptr) {
+        ExecNode::close(_runtime_state);
+    }
+}
 
 void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
@@ -209,6 +213,7 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
 
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     VLOG(2) << "ExecNode init:\n" << apache::thrift::ThriftDebugString(tnode);
+    _runtime_state = state;
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs));
     RETURN_IF_ERROR(init_join_runtime_filters(tnode, state));
     return Status::OK();
@@ -224,8 +229,7 @@ Status ExecNode::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
-    _mem_tracker.reset(
-            new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), state->instance_mem_tracker()));
+    _mem_tracker.reset(new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc()));
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), _runtime_profile.get()));
 
@@ -353,10 +357,6 @@ Status ExecNode::close(RuntimeState* state) {
 
     Expr::close(_conjunct_ctxs, state);
     _runtime_filter_collector.close(state);
-
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->close();
-    }
 
     return result;
 }
@@ -617,6 +617,7 @@ static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, ve
 void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
                               vectorized::FilterPtr* filter_ptr) {
     // No need to do expression if none rows
+    DCHECK(chunk != nullptr);
     if (chunk->num_rows() == 0) {
         return;
     }

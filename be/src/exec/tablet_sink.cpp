@@ -31,6 +31,7 @@
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
@@ -39,6 +40,7 @@
 #include "simd/simd.h"
 #include "storage/hll.h"
 #include "util/brpc_stub_cache.h"
+#include "util/defer_op.h"
 #include "util/monotime.h"
 #include "util/uid_util.h"
 
@@ -58,7 +60,7 @@ namespace starrocks::stream_load {
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id, int32_t schema_hash)
         : _parent(parent), _index_id(index_id), _node_id(node_id), _schema_hash(schema_hash) {
     // restrict the chunk memory usage of send queue
-    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", parent->_mem_tracker.get());
+    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
 }
 
 NodeChannel::~NodeChannel() {
@@ -249,25 +251,21 @@ Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_id
 
     if (_cur_chunk->columns().empty()) {
         _cur_chunk = chunk->clone_empty_with_slot();
-        _mem_tracker->consume(_cur_chunk->memory_usage());
     }
 
     if (_cur_chunk->num_rows() >= config::vector_chunk_size) {
         {
             SCOPED_RAW_TIMER(&_queue_push_lock_ns);
             std::lock_guard<std::mutex> l(_pending_batches_lock);
+            _mem_tracker->consume(_cur_chunk->memory_usage());
             _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
             _pending_batches_num++;
         }
         _cur_chunk = chunk->clone_empty_with_slot();
-        _mem_tracker->consume(_cur_chunk->memory_usage());
         _cur_add_chunk_request.clear_tablet_ids();
     }
 
-    int64_t chunk_memory_usage = _cur_chunk->memory_usage();
     _cur_chunk->append_selective(*chunk, indexes, from, size);
-    chunk_memory_usage = static_cast<int64_t>(_cur_chunk->memory_usage()) - chunk_memory_usage;
-    _mem_tracker->consume(chunk_memory_usage);
     for (size_t i = 0; i < size; ++i) {
         _cur_add_chunk_request.add_tablet_ids(tablet_ids[indexes[from + i]]);
     }
@@ -285,6 +283,7 @@ Status NodeChannel::mark_close() {
         {
             std::lock_guard<std::mutex> l(_pending_batches_lock);
             DCHECK(_cur_chunk != nullptr);
+            _mem_tracker->consume(_cur_chunk->memory_usage());
             _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
             _pending_batches_num++;
         }
@@ -357,6 +356,7 @@ int NodeChannel::try_send_chunk_and_fetch_status() {
             DCHECK(!_pending_chunks.empty());
             send_chunk = std::move(_pending_chunks.front());
             _pending_chunks.pop();
+            _mem_tracker->release(send_chunk.first->memory_usage());
             _pending_batches_num--;
         }
 
@@ -388,7 +388,6 @@ int NodeChannel::try_send_chunk_and_fetch_status() {
         _add_batch_closure->set_in_flight();
         _stub->tablet_writer_add_chunk(&_add_batch_closure->cntl, &request, &_add_batch_closure->result,
                                        _add_batch_closure);
-        _mem_tracker->release(chunk->memory_usage());
         _next_packet_seq++;
     }
 
@@ -414,12 +413,9 @@ void NodeChannel::clear_all_batches() {
     std::lock_guard<std::mutex> lg(_pending_batches_lock);
     if (_is_vectorized) {
         while (!_pending_chunks.empty()) {
-            auto& chunk = _pending_chunks.front().first;
-            _mem_tracker->release(chunk->memory_usage());
             _pending_chunks.pop();
         }
         if (_cur_chunk != nullptr) {
-            _mem_tracker->release(_cur_chunk->memory_usage());
             _cur_chunk.reset();
         }
     }
@@ -516,12 +512,6 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
-    int64_t load_mem_limit = state->get_load_mem_limit();
-    if (load_mem_limit == 0) {
-        _mem_tracker = std::make_unique<MemTracker>(-1, "OlapTableSink", state->instance_mem_tracker());
-    } else {
-        _mem_tracker = std::make_unique<MemTracker>(load_mem_limit, "OlapTableSink", state->instance_mem_tracker());
-    }
 
     SCOPED_TIMER(_profile->total_time_counter());
 
@@ -1098,6 +1088,9 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
 }
 
 void OlapTableSink::_send_chunk_process() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_runtime_state->instance_mem_tracker());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     SCOPED_RAW_TIMER(&_non_blocking_send_ns);
     while (true) {
         int running_channels_num = 0;

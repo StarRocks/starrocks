@@ -28,19 +28,31 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     // Driver has no dependencies always sets _all_dependencies_ready to true;
     _all_dependencies_ready = _dependencies.empty();
     _state = DriverState::READY;
+
+    _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
+    _active_timer = ADD_TIMER(_runtime_profile, "DriverActiveTime");
+    _pending_timer = ADD_TIMER(_runtime_profile, "DriverPendingTime");
+
+    _total_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _pending_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _total_timer_sw->start();
+    _pending_timer_sw->start();
+
     return Status::OK();
 }
 
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
+    SCOPED_TIMER(_active_timer);
     _state = DriverState::RUNNING;
     size_t total_chunks_moved = 0;
     int64_t time_spent = 0;
     while (true) {
+        RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
+
         size_t num_chunk_moved = 0;
         bool should_yield = false;
         size_t num_operators = _operators.size();
         size_t _new_first_unfinished = _first_unfinished;
-        VLOG_ROW << "[Driver] " << to_debug_string() << ", driver=" << this;
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);
@@ -51,10 +63,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
-                        VLOG_ROW << "[Driver] " << curr_op->get_name() << " finish, driver=" << this;
                         curr_op->finish(runtime_state);
                     }
-                    VLOG_ROW << "[Driver] " << next_op->get_name() << " finish, driver=" << this;
                     next_op->finish(runtime_state);
                     _new_first_unfinished = i + 1;
                     continue;
@@ -71,7 +81,11 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
                 // pull chunk from current operator and push the chunk onto next
                 // operator
-                auto maybe_chunk = curr_op->pull_chunk(runtime_state);
+                StatusOr<vectorized::ChunkPtr> maybe_chunk;
+                {
+                    SCOPED_TIMER(curr_op->_pull_timer);
+                    maybe_chunk = curr_op->pull_chunk(runtime_state);
+                }
                 auto status = maybe_chunk.status();
                 if (!status.ok() && !status.is_end_of_file()) {
                     LOG(WARNING) << " status " << status.to_string();
@@ -83,10 +97,16 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
 
                 if (status.ok()) {
+                    COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
                     if (maybe_chunk.value() && maybe_chunk.value()->num_rows() > 0) {
-                        VLOG_ROW << "[Driver] transfer chunk(" << maybe_chunk.value()->num_rows() << ") from "
-                                 << curr_op->get_name() << " to " << next_op->get_name() << ", driver=" << this;
-                        next_op->push_chunk(runtime_state, maybe_chunk.value());
+                        size_t row_num = maybe_chunk.value()->num_rows();
+                        {
+                            SCOPED_TIMER(next_op->_push_timer);
+                            next_op->push_chunk(runtime_state, maybe_chunk.value());
+                        }
+                        COUNTER_UPDATE(curr_op->_pull_row_num_counter, row_num);
+                        COUNTER_UPDATE(next_op->_push_chunk_num_counter, 1);
+                        COUNTER_UPDATE(next_op->_push_row_num_counter, row_num);
                     }
                     num_chunk_moved += 1;
                     total_chunks_moved += 1;
@@ -96,10 +116,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
-                        VLOG_ROW << "[Driver] " << curr_op->get_name() << " finish, driver=" << this;
                         curr_op->finish(runtime_state);
                     }
-                    VLOG_ROW << "[Driver] " << next_op->get_name() << " finish, driver=" << this;
                     next_op->finish(runtime_state);
                     _new_first_unfinished = i + 1;
                     continue;
@@ -114,7 +132,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         }
         // close finished operators and update _first_unfinished index
         for (auto i = _first_unfinished; i < _new_first_unfinished; ++i) {
-            VLOG_ROW << "[Driver] " << _operators[i]->get_name() << " finish, driver=" << this;
             _operators[i]->finish(runtime_state);
             RETURN_IF_ERROR(_operators[i]->close(runtime_state));
         }
@@ -170,6 +187,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     }
     _state = state;
 
+    // Calculate total time before report profile
+    _total_timer->update(_total_timer_sw->elapsed_time());
+
     // last root driver cancel the all drivers' execution and notify FE the
     // fragment's completion but do not unregister the FragmentContext because
     // some non-root drivers maybe has pending io io tasks hold the reference to
@@ -192,7 +212,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     }
 }
 
-std::string PipelineDriver::to_debug_string() const {
+std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
     ss << "operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {

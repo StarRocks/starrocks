@@ -30,6 +30,7 @@
 #include "env/env.h"
 #include "env/output_stream_wrapper.h"
 #include "gen_cpp/Types_constants.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/rowset/beta_rowset.h"
@@ -38,6 +39,7 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
+#include "util/defer_op.h"
 #include "util/raw_container.h"
 
 using std::map;
@@ -57,13 +59,17 @@ SnapshotManager* SnapshotManager::instance() {
     if (_s_instance == nullptr) {
         std::lock_guard<std::mutex> lock(_mlock);
         if (_s_instance == nullptr) {
-            _s_instance = new SnapshotManager(ExecEnv::GetInstance()->snapshot_mem_tracker());
+            _s_instance = new SnapshotManager(ExecEnv::GetInstance()->clone_mem_tracker());
         }
     }
     return _s_instance;
 }
 
 Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* snapshot_path) {
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "snapshot", _mem_tracker);
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     LOG(INFO) << "Received a snapshot request: " << apache::thrift::ThriftDebugString(request);
     if (config::storage_format_version == 1) {
         // If you upgrade from storage_format_version=1
@@ -83,7 +89,7 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
         LOG(WARNING) << "Invalid snapshot format. version=" << request.preferred_snapshot_format;
         return Status::InvalidArgument("invalid snapshot_format");
     }
-    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id, request.schema_hash);
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to get tablet. tablet=" << request.tablet_id << " schema_hash=" << request.schema_hash;
         return Status::RuntimeError("tablet not found");
@@ -106,6 +112,10 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
 }
 
 OLAPStatus SnapshotManager::release_snapshot(const string& snapshot_path) {
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "snapshot", _mem_tracker);
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     // If the requested snapshot_path is located under the root/snapshot folder,
     // it is considered legitimate and can be deleted.
     // Otherwise, it is considered an illegal request and returns an error result
@@ -145,8 +155,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     if (has_meta_file) {
         return Status::OK();
     } else {
-        MemTracker mem_tracker;
-        TabletMeta cloned_tablet_meta(&mem_tracker);
+        TabletMeta cloned_tablet_meta;
         if (Status st = cloned_tablet_meta.create_from_file(cloned_header_file); !st.ok()) {
             LOG(WARNING) << "Fail to create rowset meta from " << cloned_header_file << ": " << st;
             return Status::RuntimeError("fail to load cloned header file");
@@ -216,9 +225,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
     rowset_meta->init_from_pb(rs_meta_pb);
     RowsetSharedPtr org_rowset;
-    if (!RowsetFactory::create_rowset(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), &tablet_schema, new_path,
-                                      rowset_meta, &org_rowset)
-                 .ok()) {
+    if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -227,7 +234,6 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     RETURN_IF_ERROR(org_rowset->load());
     RowsetMetaSharedPtr org_rowset_meta = org_rowset->rowset_meta();
     RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
-    context.mem_tracker = _mem_tracker;
     context.rowset_id = rowset_id;
     context.tablet_id = org_rowset_meta->tablet_id();
     context.partition_id = org_rowset_meta->partition_id();
@@ -298,8 +304,7 @@ std::string SnapshotManager::_get_header_full_path(const TabletSharedPtr& tablet
 StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPtr& tablet,
                                                             const std::vector<int64_t>& delta_versions,
                                                             int64_t timeout_s) {
-    MemTracker mem_tracker;
-    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>(&mem_tracker);
+    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>();
     std::vector<RowsetSharedPtr> snapshot_rowsets;
     std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
 
@@ -364,8 +369,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
 
 StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version,
                                                      int64_t timeout_s) {
-    MemTracker mem_tracker;
-    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>(&mem_tracker);
+    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>();
     std::vector<RowsetSharedPtr> snapshot_rowsets;
     std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
 

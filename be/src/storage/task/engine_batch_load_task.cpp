@@ -31,12 +31,14 @@
 #include <string>
 
 #include "gen_cpp/AgentService_types.h"
+#include "runtime/current_thread.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/push_handler.h"
+#include "util/defer_op.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
@@ -48,12 +50,17 @@ using std::vector;
 namespace starrocks {
 
 EngineBatchLoadTask::EngineBatchLoadTask(TPushReq& push_req, std::vector<TTabletInfo>* tablet_infos, int64_t signature,
-                                         AgentStatus* res_status)
-        : _push_req(push_req), _tablet_infos(tablet_infos), _signature(signature), _res_status(res_status) {}
+                                         AgentStatus* res_status, MemTracker* mem_tracker)
+        : _push_req(push_req), _tablet_infos(tablet_infos), _signature(signature), _res_status(res_status) {
+    _mem_tracker = std::make_unique<MemTracker>(-1, "BatchLoad", mem_tracker);
+}
 
 EngineBatchLoadTask::~EngineBatchLoadTask() = default;
 
 OLAPStatus EngineBatchLoadTask::execute() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     AgentStatus status = STARROCKS_SUCCESS;
     if (_push_req.push_type == TPushType::LOAD_V2) {
         status = _init();
@@ -100,7 +107,7 @@ AgentStatus EngineBatchLoadTask::_init() {
 
     // Check replica exist
     TabletSharedPtr tablet;
-    tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id, _push_req.schema_hash);
+    tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "get tables failed. "
                      << "tablet_id: " << _push_req.tablet_id << ", schema_hash: " << _push_req.schema_hash;
@@ -151,8 +158,7 @@ OLAPStatus EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabl
         return OLAP_ERR_CE_CMD_PARAMS_ERROR;
     }
 
-    TabletSharedPtr tablet =
-            StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id, request.schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "false to find tablet. tablet=" << request.tablet_id << ", schema_hash=" << request.schema_hash;
         StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
@@ -214,8 +220,7 @@ OLAPStatus EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vecto
     }
 
     // 1. Get all tablets with same tablet_id
-    TabletSharedPtr tablet =
-            StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id, request.schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "can't find tablet. tablet=" << request.tablet_id << ", schema_hash=" << request.schema_hash;
         return OLAP_ERR_TABLE_NOT_FOUND;

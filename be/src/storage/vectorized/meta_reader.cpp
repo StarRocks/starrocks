@@ -6,6 +6,7 @@
 
 #include "column/datum_convert.h"
 #include "storage/rowset/beta_rowset.h"
+#include "storage/rowset/segment_v2/column_iterator.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -124,9 +125,11 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
     }
 
     std::vector<RowsetSharedPtr> rowsets;
-    tablet->obtain_header_rdlock();
-    Status acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
-    tablet->release_header_lock();
+    Status acquire_rowset_st;
+    {
+        std::shared_lock l(tablet->get_header_lock());
+        acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
+    }
 
     if (!acquire_rowset_st.ok()) {
         std::stringstream ss;

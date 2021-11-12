@@ -5,7 +5,6 @@
 #include <algorithm>
 
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -16,17 +15,21 @@ Operator::Operator(int32_t id, const std::string& name, int32_t plan_node_id)
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("$0 (id=$1)", upper_name, _id));
     _runtime_profile->set_metadata(_id);
+    _mem_tracker = std::make_unique<MemTracker>(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr);
 }
 
 Status Operator::prepare(RuntimeState* state) {
-    _mem_tracker = std::make_shared<MemTracker>(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr);
+    _push_timer = ADD_TIMER(_runtime_profile, "PushTotalTime");
+    _pull_timer = ADD_TIMER(_runtime_profile, "PullTotalTime");
+
+    _push_chunk_num_counter = ADD_COUNTER(_runtime_profile, "PushChunkNum", TUnit::UNIT);
+    _push_row_num_counter = ADD_COUNTER(_runtime_profile, "PushRowNum", TUnit::UNIT);
+    _pull_chunk_num_counter = ADD_COUNTER(_runtime_profile, "PullChunkNum", TUnit::UNIT);
+    _pull_row_num_counter = ADD_COUNTER(_runtime_profile, "PullRowNum", TUnit::UNIT);
     return Status::OK();
 }
 
 Status Operator::close(RuntimeState* state) {
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->close();
-    }
     return Status::OK();
 }
 

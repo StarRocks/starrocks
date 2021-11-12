@@ -71,14 +71,10 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;
 
-    _runtime_state = std::make_unique<RuntimeState>(params.query_id, params.fragment_instance_id, request.query_options,
-                                                    request.query_globals, _exec_env);
-
     if (_is_vectorized) {
         _runtime_state->set_batch_size(config::vector_chunk_size);
     }
 
-    RETURN_IF_ERROR(_runtime_state->init_mem_trackers(_query_id));
     _runtime_state->set_be_number(request.backend_num);
     if (request.__isset.import_label) {
         _runtime_state->set_import_label(request.import_label);
@@ -130,7 +126,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     // set up plan
     DCHECK(request.__isset.fragment);
-    RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state.get(), obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
+    RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
     _runtime_state->set_fragment_root_id(_plan->id());
 
     if (request.params.__isset.debug_node_id) {
@@ -162,7 +158,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _runtime_state->set_batch_size(config::vector_chunk_size);
     }
 
-    RETURN_IF_ERROR(_plan->prepare(_runtime_state.get()));
+    RETURN_IF_ERROR(_plan->prepare(_runtime_state));
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
@@ -224,7 +220,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
 Status PlanFragmentExecutor::open() {
     LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
-    CurrentThread::set_query_id(_runtime_state->query_id());
+    tls_thread_status.set_query_id(_runtime_state->query_id());
 
     Status status = _open_internal_vectorized();
     if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {
@@ -243,7 +239,7 @@ Status PlanFragmentExecutor::open() {
 Status PlanFragmentExecutor::_open_internal_vectorized() {
     {
         SCOPED_TIMER(profile()->total_time_counter());
-        RETURN_IF_ERROR(_plan->open(_runtime_state.get()));
+        RETURN_IF_ERROR(_plan->open(_runtime_state));
     }
 
     if (_sink == nullptr) {
@@ -255,6 +251,8 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
     // when this returns the query has actually finished
     vectorized::ChunkPtr chunk;
     while (true) {
+        RETURN_IF_ERROR(runtime_state()->check_mem_limit("QUERY"));
+
         RETURN_IF_ERROR(_get_next_internal_vectorized(&chunk));
 
         if (chunk == nullptr) {
@@ -367,7 +365,7 @@ Status PlanFragmentExecutor::_get_next_internal_vectorized(vectorized::ChunkPtr*
     // If we set chunk to nullptr, means this fragment read done
     while (!_done) {
         SCOPED_TIMER(profile()->total_time_counter());
-        RETURN_IF_ERROR(_plan->get_next(_runtime_state.get(), &_chunk, &_done));
+        RETURN_IF_ERROR(_plan->get_next(_runtime_state, &_chunk, &_done));
         if (_done) {
             *chunk = nullptr;
             return Status::OK();
@@ -461,7 +459,7 @@ void PlanFragmentExecutor::close() {
     if (_runtime_state != nullptr) {
         // _runtime_state init failed
         if (_plan != nullptr) {
-            _plan->close(_runtime_state.get());
+            _plan->close(_runtime_state);
         }
 
         if (_sink != nullptr) {
@@ -491,10 +489,6 @@ void PlanFragmentExecutor::close() {
         }
     }
 
-    // _mem_tracker init failed
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->release(_mem_tracker->consumption());
-    }
     _closed = true;
 }
 

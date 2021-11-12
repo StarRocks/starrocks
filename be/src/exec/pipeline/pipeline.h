@@ -2,11 +2,12 @@
 
 #pragma once
 
+#include <ctime>
+
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/source_operator.h"
-
+#include "gutil/strings/substitute.h"
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
 
 class Pipeline;
@@ -50,7 +51,7 @@ public:
         }
     }
 
-    std::string to_debug_string() const {
+    std::string to_readable_string() const {
         std::stringstream ss;
         ss << "operator-chain: [";
         for (size_t i = 0; i < _op_factories.size(); ++i) {

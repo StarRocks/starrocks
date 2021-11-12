@@ -27,8 +27,6 @@
 
 namespace starrocks {
 
-class MemTracker;
-
 // Helper class to Prepare() , Open() and Close() the ordering expressions used to perform
 // comparisons in a sort. Used by TopNNode, SortNode.  When two
 // rows are compared, the ordering expressions are evaluated once for each side.
@@ -42,6 +40,7 @@ class MemTracker;
 
 class SortExecExprs {
 public:
+    ~SortExecExprs();
     // Initialize the expressions from a TSortInfo using the specified pool.
     Status init(const TSortInfo& sort_info, ObjectPool* pool);
 
@@ -86,6 +85,9 @@ private:
     // analogous functions in this class). Used for testing.
     Status init(const std::vector<ExprContext*>& lhs_ordering_expr_ctxs,
                 const std::vector<ExprContext*>& rhs_ordering_expr_ctxs);
+
+    bool _is_closed = false;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 struct OrderByType {

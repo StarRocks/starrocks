@@ -12,7 +12,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"

@@ -40,11 +40,7 @@ inline std::size_t hash_value(const TNetworkAddress& host_port) {
     return HashUtil::hash(&host_port.port, sizeof(host_port.port), hash);
 }
 
-ClientCacheHelper::~ClientCacheHelper() {
-    for (auto& it : _client_map) {
-        delete it.second;
-    }
-}
+ClientCacheHelper::~ClientCacheHelper() {}
 
 Status ClientCacheHelper::get_client(const TNetworkAddress& hostport, const client_factory& factory_method,
                                      void** client_key, int timeout_ms) {
@@ -81,7 +77,7 @@ Status ClientCacheHelper::reopen_client(const client_factory& factory_method, vo
     std::lock_guard<std::mutex> lock(_lock);
     ClientMap::iterator i = _client_map.find(*client_key);
     DCHECK(i != _client_map.end());
-    ThriftClientImpl* info = i->second;
+    std::unique_ptr<ThriftClientImpl>& info = i->second;
     const std::string ipaddress = info->ipaddress();
     int port = info->port();
 
@@ -91,7 +87,6 @@ Status ClientCacheHelper::reopen_client(const client_factory& factory_method, vo
     // not clean up internal buffers it reopens. To work around this issue, create a new
     // client instead.
     _client_map.erase(*client_key);
-    delete info;
     *client_key = nullptr;
 
     if (_metrics_enabled) {
@@ -122,7 +117,7 @@ Status ClientCacheHelper::create_client(const TNetworkAddress& hostport, const c
     }
 
     // Because the client starts life 'checked out', we don't add it to the cache map
-    _client_map[*client_key] = client_impl.release();
+    _client_map[*client_key] = std::move(client_impl);
 
     if (_metrics_enabled) {
         _opened_clients->increment(1);
@@ -136,7 +131,7 @@ void ClientCacheHelper::release_client(void** client_key) {
     std::lock_guard<std::mutex> lock(_lock);
     ClientMap::iterator client_map_entry = _client_map.find(*client_key);
     DCHECK(client_map_entry != _client_map.end());
-    ThriftClientImpl* info = client_map_entry->second;
+    std::unique_ptr<ThriftClientImpl>& info = client_map_entry->second;
     ClientCacheMap::iterator j = _client_cache.find(make_network_address(info->ipaddress(), info->port()));
     DCHECK(j != _client_cache.end());
 
@@ -144,7 +139,6 @@ void ClientCacheHelper::release_client(void** client_key) {
         // cache of this host is full, close this client connection and remove if from _client_map
         info->close();
         _client_map.erase(*client_key);
-        delete info;
 
         if (_metrics_enabled) {
             _opened_clients->increment(-1);
@@ -171,10 +165,9 @@ void ClientCacheHelper::close_connections(const TNetworkAddress& hostport) {
     for (void* client_key : client_keys) {
         ClientMap::iterator client_map_entry = _client_map.find(client_key);
         DCHECK(client_map_entry != _client_map.end());
-        ThriftClientImpl* info = client_map_entry->second;
+        std::unique_ptr<ThriftClientImpl>& info = client_map_entry->second;
         info->close();
         _client_map.erase(client_key);
-        delete info;
     }
     _client_cache.erase(cache_entry);
 }

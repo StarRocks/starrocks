@@ -25,7 +25,7 @@ struct PHashSet<Type, std::enable_if_t<isSlicePT<Type>>> {
 
 template <PrimitiveType Type>
 using PHashSetType = typename PHashSet<Type>::PType;
-} // in_const_pred_detail
+} // namespace in_const_pred_detail
 
 /**
  * Support In predicate which right-values only contains const value.
@@ -225,6 +225,8 @@ public:
     bool is_not_in() const { return _is_not_in; }
 
     bool null_in_set() const { return _null_in_set; }
+
+    void set_null_in_set(bool v) { _null_in_set = v; }
 
     bool is_join_runtime_filter() const { return _is_join_runtime_filter; }
 

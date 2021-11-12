@@ -1515,18 +1515,6 @@ public class ViewPlanTest extends PlanTestBase {
         testView(sql);
     }
 
-//    @Test
-//    public void testWithSelectStar() throws Exception {
-//        String sql = "with xx1 as (select v1 + 1, v2 + 2 from t0) select * from xx1";
-//        testView(sql);
-//
-//        sql = "with xx1 as (select * from t0) select * from xx1";
-//        testView(sql);
-//
-//        sql = "with xx1 as (select v1, v2 from t0) select * from xx1";
-//        testView(sql);
-//    }
-
     @Test
     public void testAliasView() throws Exception {
         String sql = "select * from (select a.A, count(*) as cnt from ( SELECT 1 AS A UNION ALL SELECT 2 UNION ALL " +
@@ -1538,5 +1526,41 @@ public class ViewPlanTest extends PlanTestBase {
         String viewPlan = getFragmentPlan("select * from alias_view");
         Assert.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("alias_view");
+    }
+
+    @Test
+    public void testAliasView2() throws Exception {
+        String sql = "select SUM(A.v1), SUM(A.v2) from t0 A inner join t1 B on A.v1 = B.v4";
+        String createView = "create view alias_view(col1, col2) as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from alias_view");
+        Assert.assertEquals(sqlPlan, viewPlan);
+        starRocksAssert.dropView("alias_view");
+    }
+
+    @Test
+    public void testExpressionRewriteView() throws Exception {
+        String sql =
+                "select from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd') as x1, sum(t1c) as x3 " +
+                        "from test_all_type " +
+                        "group by from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd')";
+        testView(sql);
+    }
+
+    @Test
+    public void testUnionView() throws Exception {
+        String sql = "select count(c_1) c1 ,cast(c_1 as string) c2 from (" +
+                "select 1 c_1 union all select 2) a group by cast(c_1 as string)  union all  " +
+                "select count(c_1) c1 ,cast(c_1 as string) c2 from (select 1 c_1 union all select 2) a " +
+                "group by cast(c_1 as string);";
+        String createView = "create view test_view15 (col_1,col_2) as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from test_view15");
+        Assert.assertEquals(sqlPlan, viewPlan);
+        starRocksAssert.dropView("test_view15");
     }
 }

@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.external.hive.HdfsFileBlockDesc;
@@ -376,12 +377,59 @@ public class HdfsScanNode extends ScanNode {
 
     private void addScanRangeLocations(long partitionId, HdfsFileDesc fileDesc, HdfsFileBlockDesc blockDesc,
                                        HdfsFileFormat fileFormat) {
+        // NOTE: Config.hive_max_split_size should be extracted to a local variable,
+        // because it may be changed before calling 'splitScanRangeLocations'
+        // and after needSplit has been calculated.
+        long splitSize = Config.hive_max_split_size;
+        boolean needSplit = fileDesc.isSplittable() && blockDesc.getLength() > splitSize;
+        if (needSplit) {
+            splitScanRangeLocations(partitionId, fileDesc, blockDesc, fileFormat, splitSize);
+        } else {
+            createScanRangeLocationsForSplit(partitionId, fileDesc, blockDesc,
+                    fileFormat, blockDesc.getOffset(), blockDesc.getLength());
+        }
+    }
+
+    private void splitScanRangeLocations(long partitionId,
+                                         HdfsFileDesc fileDesc,
+                                         HdfsFileBlockDesc blockDesc,
+                                         HdfsFileFormat fileFormat,
+                                         long splitSize) {
+        long remainingBytes = blockDesc.getLength();
+        long length = blockDesc.getLength();
+        long offset = blockDesc.getOffset();
+        do {
+            if (remainingBytes <= splitSize) {
+                createScanRangeLocationsForSplit(partitionId, fileDesc,
+                        blockDesc, fileFormat, offset + length - remainingBytes, remainingBytes);
+                remainingBytes = 0;
+            } else if (remainingBytes <= 2 * splitSize) {
+                long mid = (remainingBytes + 1) / 2;
+                createScanRangeLocationsForSplit(partitionId, fileDesc,
+                        blockDesc, fileFormat, offset + length - remainingBytes, mid);
+                createScanRangeLocationsForSplit(partitionId, fileDesc,
+                        blockDesc, fileFormat, offset + length - remainingBytes + mid,
+                        remainingBytes - mid);
+                remainingBytes = 0;
+            } else {
+                createScanRangeLocationsForSplit(partitionId, fileDesc,
+                        blockDesc, fileFormat, offset + length - remainingBytes, splitSize);
+                remainingBytes -= splitSize;
+            }
+        } while (remainingBytes > 0);
+    }
+
+    private void createScanRangeLocationsForSplit(long partitionId,
+                                                  HdfsFileDesc fileDesc,
+                                                  HdfsFileBlockDesc blockDesc,
+                                                  HdfsFileFormat fileFormat,
+                                                  long offset, long length) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setRelative_path(fileDesc.getFileName());
-        hdfsScanRange.setOffset(blockDesc.getOffset());
-        hdfsScanRange.setLength(blockDesc.getLength());
+        hdfsScanRange.setOffset(offset);
+        hdfsScanRange.setLength(length);
         hdfsScanRange.setPartition_id(partitionId);
         hdfsScanRange.setFile_length(fileDesc.getLength());
         hdfsScanRange.setFile_format(fileFormat.toThrift());

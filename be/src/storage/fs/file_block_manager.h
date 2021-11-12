@@ -112,12 +112,6 @@ private:
     // May be null if instantiated without metrics.
     std::unique_ptr<internal::BlockManagerMetrics> _metrics;
 
-    // Tracks memory consumption of any allocations numerous enough to be
-    // interesting.
-    std::unique_ptr<MemTracker> _mem_tracker;
-
-    // DISALLOW_COPY_AND_ASSIGN(FileBlockManager);
-
     // Underlying cache instance. Caches opened files.
     std::unique_ptr<FileCache<RandomAccessFile>> _file_cache;
 };

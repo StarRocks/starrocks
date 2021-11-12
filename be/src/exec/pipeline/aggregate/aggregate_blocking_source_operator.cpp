@@ -2,6 +2,8 @@
 
 #include "aggregate_blocking_source_operator.h"
 
+#include "exec/exec_node.h"
+
 namespace starrocks::pipeline {
 
 bool AggregateBlockingSourceOperator::has_output() const {
@@ -50,8 +52,7 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
     // For having
     size_t old_size = chunk->num_rows();
 
-    // TODO(hcf) force annotation
-    // ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
+    ExecNode::eval_conjuncts(_aggregator->conjunct_ctxs(), chunk.get());
     _aggregator->update_num_rows_returned(-(old_size - chunk->num_rows()));
 
     DCHECK_CHUNK(chunk);

@@ -4,8 +4,8 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/source_operator.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
+
 // UNION ALL operator has three kinds of sub-node as follows:
 // 1. Passthrough.
 //    The src column from sub-node is projected to the dest column without expressions.
@@ -29,7 +29,6 @@ public:
               _const_expr_lists(const_expr_lists),
               _rows_total(rows_total) {
         DCHECK_NOTNULL(_const_expr_lists);
-        DCHECK_EQ(_const_expr_lists->size(), _rows_total);
     }
 
     bool has_output() const override { return _next_processed_row_index < _rows_total; }
@@ -61,12 +60,12 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         // Divide _const_expr_lists into *degree_of_parallelism* parts,
-        // each of which contains *rows_num_per_driver* continuous rows except the last part.
+        // each of which contains *num_rows_per_driver* continuous rows except the last part.
         size_t rows_total = _const_expr_lists.size();
-        size_t rows_num_per_driver = (rows_total + degree_of_parallelism - 1) / degree_of_parallelism;
-        size_t rows_offset = rows_num_per_driver * driver_sequence;
+        size_t num_rows_per_driver = (rows_total + degree_of_parallelism - 1) / degree_of_parallelism;
+        size_t rows_offset = num_rows_per_driver * driver_sequence;
         DCHECK(rows_total > rows_offset);
-        size_t rows_count = std::min(rows_num_per_driver, rows_total - rows_offset);
+        size_t rows_count = std::min(num_rows_per_driver, rows_total - rows_offset);
 
         return std::make_shared<UnionConstSourceOperator>(_id, _plan_node_id, _dst_slots,
                                                           _const_expr_lists.data() + rows_offset, rows_count);
@@ -82,5 +81,4 @@ private:
     const std::vector<std::vector<ExprContext*>>& _const_expr_lists;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

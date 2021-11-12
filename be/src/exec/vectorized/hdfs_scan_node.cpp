@@ -8,11 +8,13 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {
@@ -260,6 +262,12 @@ int HdfsScanNode::_compute_priority(int32_t num_submitted_tasks) {
 }
 
 void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        _running_threads.fetch_sub(1, std::memory_order_release);
+    });
+
     Status status = scanner->open(_runtime_state);
     scanner->set_keep_priority(false);
 
@@ -321,16 +329,17 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             _close_pending_scanners();
         }
     } else {
-        DCHECK(scanner != nullptr);
-        scanner->close(_runtime_state);
-        _closed_scanners.fetch_add(1, std::memory_order_release);
-        _close_pending_scanners();
+        // sometimes state == ok but global_status was not ok
+        if (scanner != nullptr) {
+            scanner->close(_runtime_state);
+            _closed_scanners.fetch_add(1, std::memory_order_release);
+            _close_pending_scanners();
+        }
     }
 
     if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
         _result_chunks.shutdown();
     }
-    _running_threads.fetch_sub(1, std::memory_order_release);
 }
 
 void HdfsScanNode::_close_pending_scanners() {
@@ -429,13 +438,12 @@ Status HdfsScanNode::close(RuntimeState* state) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
+    _close_pending_scanners();
     for (auto* hdfsFile : _hdfs_files) {
         if (hdfsFile->hdfs_fs != nullptr && hdfsFile->hdfs_file != nullptr) {
             hdfsCloseFile(hdfsFile->hdfs_fs, hdfsFile->hdfs_file);
         }
     }
-
-    _close_pending_scanners();
 
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);

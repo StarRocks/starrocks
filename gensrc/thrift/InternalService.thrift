@@ -150,8 +150,6 @@ struct TQueryOptions {
   53: optional i32 runtime_filter_send_timeout_ms = 400;
   // For pipeline query engine
   54: optional i32 pipeline_dop;
-  // For pipeline query engine
-  55: optional i32 pipeline_scan_mode;
   // For query context expired period
   56: optional i32 pipeline_query_expire_seconds
 }

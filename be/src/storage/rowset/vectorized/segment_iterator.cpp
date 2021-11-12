@@ -6,7 +6,6 @@
 #include <memory>
 #include <unordered_map>
 
-#include "butil/containers/flat_map.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -16,16 +15,17 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
-#include "runtime/current_mem_tracker.h"
 #include "simd/simd.h"
-#include "storage/column_predicate.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
 #include "storage/row_block2.h"
 #include "storage/rowset/segment_v2/bitmap_index_reader.h"
+#include "storage/rowset/segment_v2/column_decoder.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/common.h"
+#include "storage/rowset/segment_v2/default_value_column_iterator.h"
 #include "storage/rowset/segment_v2/row_ranges.h"
+#include "storage/rowset/segment_v2/scalar_column_iterator.h"
 #include "storage/rowset/segment_v2/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
@@ -36,10 +36,10 @@
 #include "storage/vectorized/chunk_iterator.h"
 #include "storage/vectorized/column_or_predicate.h"
 #include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/range.h"
 #include "storage/vectorized/roaring2range.h"
-#include "util/phmap/phmap_fwd_decl.h"
 #include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
@@ -234,7 +234,7 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
     if (_local_to_global_holder.size() > 0) {
         return Status::OK();
     }
-    auto file_column_iter = down_cast<FileColumnIterator*>(_col_iter);
+    auto file_column_iter = down_cast<ScalarColumnIterator*>(_col_iter);
     int dict_size = file_column_iter->dict_size();
 
     auto column = BinaryColumn::create();
@@ -287,7 +287,6 @@ private:
         ~ScanContext() = default;
 
         void close() {
-            CurrentMemTracker::release(memory_usage());
             _read_chunk.reset();
             _dict_chunk.reset();
             _final_chunk.reset();
@@ -354,6 +353,7 @@ private:
     Status _read_columns(const Schema& schema, Chunk* chunk, size_t nrows);
 
     uint16_t _filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
+    uint16_t _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
 
     void _init_column_predicates();
 
@@ -363,8 +363,6 @@ private:
     Status _build_context(ScanContext* ctx);
 
     void _rewrite_predicates();
-
-    bool _rewrite_predicate(const FieldPtr& field);
 
     Status _decode_dict_codes(ScanContext* ctx);
 
@@ -406,6 +404,7 @@ private:
 
     std::vector<const ColumnPredicate*> _vectorized_preds;
     std::vector<const ColumnPredicate*> _branchless_preds;
+    std::vector<const ColumnPredicate*> _expr_ctx_preds; // predicates using ExprContext*
     // _selection is used to accelerate
     Buffer<uint8_t> _selection;
 
@@ -467,21 +466,26 @@ Status SegmentIterator::_init() {
 
     _selection.resize(_opts.chunk_size);
     _selected_idx.resize(_opts.chunk_size);
-    CurrentMemTracker::consume(_selection.capacity() * sizeof(_selection[0]));
-    CurrentMemTracker::consume(_selected_idx.capacity() * sizeof(_selected_idx[0]));
     StarRocksMetrics::instance()->segment_read_total.increment(1);
     // get file handle from file descriptor of segment
     RETURN_IF_ERROR(_opts.block_mgr->open_block(_segment->file_name(), &_rblock));
 
     /// the calling order matters, do not change unless you know why.
 
+    // init stage
+    // The main task is to do some initialization,
+    // initialize the iterator and check if certain optimizations can be applied
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators(_schema));
+    // filter by index stage
+    // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    // rewrite stage
+    // Rewriting predicates using segment dictionary codes
     _rewrite_predicates();
     RETURN_IF_ERROR(_init_context());
     _init_column_predicates();
@@ -549,7 +553,9 @@ void SegmentIterator::_init_column_predicates() {
             if (pred->is_index_filter_only()) {
                 continue;
             }
-            if (pred->can_vectorized()) {
+            if (pred->is_expr_predicate()) {
+                _expr_ctx_preds.emplace_back(pred);
+            } else if (pred->can_vectorized()) {
                 _vectorized_preds.emplace_back(pred);
             } else {
                 _branchless_preds.emplace_back(pred);
@@ -796,14 +802,9 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     uint16_t chunk_start = 0;
     bool need_switch_context = false;
 
-    CurrentMemTracker::release(_context->memory_usage());
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
     _context->_final_chunk->reset();
-
-    int64_t old_mem_usage = _context->memory_usage();
-    int64_t curr_mem_usage = old_mem_usage; // Will be updated later.
-    CurrentMemTracker::consume(old_mem_usage);
 
     Chunk* chunk = _context->_read_chunk.get();
 
@@ -820,40 +821,42 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         DCHECK_EQ(chunk_start, chunk->num_rows());
     }
 
+    size_t raw_chunk_size = chunk->num_rows();
+
+    size_t chunk_size = _filter_by_expr_predicates(chunk, rowid);
+
     _opts.stats->block_load_ns += sw.elapsed_time();
 
     int64_t total_read = _opts.stats->raw_rows_read - prev_raw_read;
 
-    DCHECK_EQ(chunk_start, chunk->num_rows());
-    if (UNLIKELY(chunk_start == 0)) {
+    if (UNLIKELY(raw_chunk_size == 0)) {
         // Return directly if chunk_start is zero, i.e, chunk is empty.
         // Otherwise, chunk will be swapped with result, which is incorrect
         // because the chunk is a pointer to _read_chunk instead of _final_chunk.
-        curr_mem_usage = _context->memory_usage();
-        CurrentMemTracker::consume(curr_mem_usage - old_mem_usage);
         return Status::EndOfFile("no more data in segment");
     }
 
-    if (_context->_has_dict_column & (chunk_start > 0)) {
+    if (chunk_size > 0 && _context->_has_dict_column) {
         chunk = _context->_dict_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
+
     if (_context->_late_materialize) {
         chunk = _context->_final_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
         RETURN_IF_ERROR(_finish_late_materialization(_context));
-        if (_context->_next != nullptr && (chunk_start * 1000 > total_read * _late_materialization_ratio)) {
+        if (_context->_next != nullptr && (chunk_size * 1000 > total_read * _late_materialization_ratio)) {
             need_switch_context = true;
         }
     } else if (_context->_next != nullptr && _context_switch_count < 3 &&
-               chunk_start * 1000 <= total_read * _late_materialization_ratio) {
+               chunk_size * 1000 <= total_read * _late_materialization_ratio) {
         need_switch_context = true;
         _context_switch_count++;
     }
 
     // remove (logical) deleted rows.
-    if (chunk->num_rows() > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
+    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
         _opts.delete_predicates.evaluate(chunk, _selection.data());
@@ -878,9 +881,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
     }
 
-    curr_mem_usage = _context->memory_usage();
-    CurrentMemTracker::consume(curr_mem_usage - old_mem_usage);
-
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
@@ -901,13 +901,11 @@ void SegmentIterator::_switch_context(ScanContext* to) {
 
     if (to->_read_chunk == nullptr) {
         to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _opts.chunk_size);
-        CurrentMemTracker::consume(to->_read_chunk->memory_usage());
     }
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
             to->_dict_chunk = ChunkHelper::new_chunk(to->_dict_decode_schema, _opts.chunk_size);
-            CurrentMemTracker::consume(to->_dict_chunk->memory_usage());
         }
     } else {
         to->_dict_chunk = to->_read_chunk;
@@ -917,7 +915,6 @@ void SegmentIterator::_switch_context(ScanContext* to) {
         if (to->_final_chunk == nullptr) {
             DCHECK_GT(this->encoded_schema().num_fields(), 0);
             to->_final_chunk = ChunkHelper::new_chunk(this->encoded_schema(), _opts.chunk_size);
-            CurrentMemTracker::consume(to->_final_chunk->memory_usage());
         }
     } else {
         to->_final_chunk = to->_dict_chunk;
@@ -996,7 +993,6 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
     }
 
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
-
     uint16_t chunk_size = to;
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
     if (hit_count == 0) {
@@ -1014,6 +1010,40 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
     }
     _opts.stats->rows_del_vec_filtered += del_vec_filtered;
     _opts.stats->rows_vec_cond_filtered += (to - chunk_size) - del_vec_filtered;
+    return chunk_size;
+}
+
+uint16_t SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
+    size_t chunk_size = chunk->num_rows();
+    if (_expr_ctx_preds.size() != 0 && chunk_size > 0) {
+        const auto* pred = _expr_ctx_preds[0];
+        Column* c = chunk->get_column_by_id(pred->column_id()).get();
+        pred->evaluate(c, _selection.data(), 0, chunk_size);
+
+        for (int i = 1; i < _expr_ctx_preds.size(); ++i) {
+            pred = _expr_ctx_preds[i];
+            c = chunk->get_column_by_id(pred->column_id()).get();
+            pred->evaluate_and(c, _selection.data(), 0, chunk_size);
+        }
+
+        size_t hit_count = SIMD::count_nonzero(_selection.data(), chunk_size);
+        size_t new_size = chunk_size;
+        if (hit_count == 0) {
+            chunk->set_num_rows(0);
+            new_size = 0;
+            if (rowid != nullptr) {
+                rowid->resize(0);
+            }
+        } else if (hit_count != chunk_size) {
+            new_size = chunk->filter_range(_selection, 0, chunk_size);
+            if (rowid != nullptr) {
+                auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), 0, chunk_size);
+                rowid->resize(size);
+            }
+        }
+        _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
+        chunk_size = new_size;
+    }
     return chunk_size;
 }
 
@@ -1132,107 +1162,19 @@ Status SegmentIterator::_init_context() {
 }
 
 void SegmentIterator::_rewrite_predicates() {
-    for (size_t i = 0; i < _predicate_columns; i++) {
-        const FieldPtr& field = _schema.field(i);
-        ColumnId cid = field->id();
-        _predicate_need_rewrite[cid] = _predicate_need_rewrite[cid] && _rewrite_predicate(field);
-    }
-}
+    //
+    ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
+                                     _predicate_columns, _scan_range);
+    rewriter.rewrite_predicate(&_obj_pool);
 
-bool SegmentIterator::_rewrite_predicate(const FieldPtr& field) {
-    ColumnId cid = field->id();
-    DCHECK(_column_iterators[cid]->all_page_dict_encoded());
-
-    auto iter = _opts.predicates.find(cid);
-    RETURN_IF(iter == _opts.predicates.end(), false);
-
-    PredicateList& preds = iter->second;
-    // the predicate has been erased, because of bitmap index filter.
-    RETURN_IF(preds.empty(), false);
-    const ColumnPredicate* pred = preds[0];
-    if (PredicateType::kEQ == pred->type()) {
-        Datum value = pred->value();
-        int code = _column_iterators[cid]->dict_lookup(value.get_slice());
-        if (code < 0) {
-            // predicate always false, clear scan range, this will make `get_next` return EOF directly.
-            _scan_range = _scan_range.intersection(SparseRange());
-            return false;
-        }
-        auto ptr = new_column_eq_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
-        preds[0] = _obj_pool.add(ptr);
-        return true;
+    // for each delete predicate,
+    // If the global dictionary optimization is enabled for the column,
+    // then the output column is of type INT, and we need to rewrite the delete condition
+    // so that the input is of type INT (the original input is of type String)
+    for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
+        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps);
+        crewriter.rewrite_predicate(&_obj_pool);
     }
-    if (PredicateType::kNE == pred->type()) {
-        Datum value = pred->value();
-        int code = _column_iterators[cid]->dict_lookup(value.get_slice());
-        if (code < 0) {
-            if (!field->is_nullable()) {
-                // predicate always true, clear this predicate.
-                preds.clear();
-                return false;
-            } else {
-                // convert this predicate to `not null` predicate.
-                auto ptr = new_column_null_predicate(get_type_info(kDictCodeType), cid, false);
-                preds[0] = _obj_pool.add(ptr);
-                return true;
-            }
-        }
-        auto ptr = new_column_ne_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
-        preds[0] = _obj_pool.add(ptr);
-        return true;
-    }
-    if (PredicateType::kInList == pred->type()) {
-        std::vector<Datum> values = pred->values();
-        std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
-        if (codewords.empty()) {
-            // predicate always false, clear scan range.
-            _scan_range = _scan_range.intersection(SparseRange());
-            return false;
-        }
-        std::vector<std::string> str_codewords;
-        str_codewords.reserve(codewords.size());
-        for (int code : codewords) {
-            str_codewords.emplace_back(std::to_string(code));
-        }
-        auto ptr = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
-        preds[0] = _obj_pool.add(ptr);
-        return true;
-    }
-    if (PredicateType::kNotInList == pred->type()) {
-        std::vector<Datum> values = pred->values();
-        std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
-        if (codewords.empty()) {
-            if (!field->is_nullable()) {
-                // predicate always true, clear this predicate.
-                preds.clear();
-                return false;
-            } else {
-                // convert this predicate to `not null` predicate.
-                auto ptr = new_column_null_predicate(get_type_info(kDictCodeType), cid, false);
-                preds[0] = _obj_pool.add(ptr);
-                return true;
-            }
-        }
-        std::vector<std::string> str_codewords;
-        str_codewords.reserve(codewords.size());
-        for (int code : codewords) {
-            str_codewords.emplace_back(std::to_string(code));
-        }
-        auto ptr = new_column_not_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
-        preds[0] = _obj_pool.add(ptr);
-        return true;
-    }
-    return false;
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
@@ -1280,18 +1222,9 @@ Status SegmentIterator::_check_low_cardinality_optimization() {
         auto iter = _opts.predicates.find(cid);
         DCHECK(iter != _opts.predicates.end());
         const PredicateList& preds = iter->second;
-
         if (preds.size() > 0) {
-            if (preds.size() == 1) {
-                _predicate_need_rewrite[cid] =
-                        preds[0]->type() == PredicateType::kEQ || preds[0]->type() == PredicateType::kInList ||
-                        preds[0]->type() == PredicateType::kNE || preds[0]->type() == PredicateType::kNotInList;
-            }
-            if (_can_using_global_dict(field) && !_predicate_need_rewrite[cid]) {
-                std::string msg = fmt::format("expect predicates could use low cardinality in cid:{}", cid);
-                DCHECK(false) << msg;
-                return Status::InternalError(msg);
-            }
+            // for string column of low cardinality, we can always rewrite predicates.
+            _predicate_need_rewrite[cid] = true;
         }
     }
     return Status::OK();
@@ -1453,8 +1386,6 @@ void SegmentIterator::close() {
     _rblock.reset();
     _segment.reset();
 
-    CurrentMemTracker::release(_selection.capacity() * sizeof(_selection[0]));
-    CurrentMemTracker::release(_selected_idx.capacity() * sizeof(_selected_idx[0]));
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
 

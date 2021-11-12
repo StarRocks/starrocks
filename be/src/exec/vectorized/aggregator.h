@@ -54,8 +54,6 @@ using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 // Component used to process aggregation including bloking aggregate and streaming aggregate
 // it contains common data struct and algorithm of aggregation
-// TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
-// TODO(hcf) all the data should be protected by lightweight lock
 class Aggregator {
 public:
     Aggregator(const TPlanNode& tnode);
@@ -63,12 +61,13 @@ public:
     ~Aggregator() = default;
 
     Status open(RuntimeState* state);
-    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
 
     Status close(RuntimeState* state);
 
     std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
+    const std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
@@ -129,9 +128,6 @@ public:
     // selection[1] = 1: not found in hash table
     void output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk);
 
-    Status check_hash_map_memory_usage(RuntimeState* state);
-    Status check_hash_set_memory_usage(RuntimeState* state);
-
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
     // two level hash map is better in large data set.
@@ -140,19 +136,18 @@ public:
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
     static constexpr size_t streaming_hash_table_size_threshold = 10000000;
-    static constexpr size_t memory_check_batch_size = 65535;
 #else
     static constexpr size_t two_level_memory_threshold = 64;
     static constexpr size_t streaming_hash_table_size_threshold = 4;
-    static constexpr size_t memory_check_batch_size = 1;
 #endif
 
 private:
     const TPlanNode& _tnode;
 
+    MemTracker* _mem_tracker = nullptr;
+
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
-    MemTracker* _mem_tracker;
     RuntimeProfile* _runtime_profile;
 
     int64_t _limit = -1;
@@ -175,10 +170,6 @@ private:
     // At least one group by column is nullable
     bool _has_nullable_key = false;
     int64_t _num_input_rows = 0;
-    // memory used for hashmap or hashset
-    int64_t _last_ht_memory_usage = 0;
-    // memory used for agg function
-    int64_t _last_agg_func_memory_usage = 0;
     int64_t _num_pass_through_rows = 0;
 
     TStreamingPreaggregationMode::type _streaming_preaggregation_mode;
@@ -210,6 +201,9 @@ private:
     // In order batch update agg states
     vectorized::Buffer<vectorized::AggDataPtr> _tmp_agg_states;
     std::vector<AggFunctionTypes> _agg_fn_types;
+
+    // Exprs used to evaluate conjunct
+    std::vector<ExprContext*> _conjunct_ctxs;
 
     // Exprs used to evaluate group by column
     std::vector<ExprContext*> _group_by_expr_ctxs;

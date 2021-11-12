@@ -9,6 +9,8 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/logging.h"
+#include "exec/pipeline/dict_decode_operator.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
@@ -64,11 +66,14 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
             auto& [expr_ctx, dict_ctx] = _string_functions[need_encode_cid];
             DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
             _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
-            DCHECK(dict_ctx.could_apply_dict_optimize);
+
+            if (!dict_ctx.could_apply_dict_optimize) {
+                Status::InternalError(fmt::format("Not found dict for function-called cid:{}", need_encode_cid));
+            }
+
             _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, need_encode_cid);
             dict_iter = global_dict.find(need_encode_cid);
             DCHECK(dict_iter != global_dict.end());
-            return Status::InternalError(fmt::format("Not found dict for function-called cid:{}", need_encode_cid));
         }
 
         DefaultDecoderPtr decoder = std::make_unique<DefaultDecoder>();
@@ -138,8 +143,19 @@ Status DictDecodeNode::close(RuntimeState* state) {
     }
     RETURN_IF_ERROR(ExecNode::close(state));
     Expr::close(_expr_ctxs, state);
+    _dict_optimize_parser.close(state);
 
     return Status::OK();
+}
+
+pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    operators.emplace_back(std::make_shared<DictDecodeOperatorFactory>(
+            context->next_operator_id(), id(), std::move(_encode_column_cids), std::move(_decode_column_cids),
+            std::move(_expr_ctxs), std::move(_string_functions)));
+
+    return operators;
 }
 
 } // namespace starrocks::vectorized

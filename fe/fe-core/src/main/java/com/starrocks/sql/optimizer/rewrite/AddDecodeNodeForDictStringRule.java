@@ -75,6 +75,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
     private static final Type ID_TYPE = Type.INT;
 
     static class DecodeContext {
+        // The parent operators whether need the child operators to encode
+        boolean needEncode = false;
+        // The child operators whether have encoded
         boolean hasEncoded = false;
         final ColumnRefFactory columnRefFactory;
         final Map<Long, List<Integer>> tableIdToStringColumnIds;
@@ -110,8 +113,12 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             this.hasEncoded = true;
             this.stringColumnIdToDictColumnIds.putAll(other.stringColumnIdToDictColumnIds);
             this.stringFunctions.putAll(other.stringFunctions);
-            this.globalDicts.addAll(other.globalDicts);
             this.disableDictOptimizeColumns = other.disableDictOptimizeColumns;
+            for (Pair<Integer, ColumnDict> dict : other.globalDicts) {
+                if (!this.globalDicts.contains(dict)) {
+                    this.globalDicts.add(dict);
+                }
+            }
             return this;
         }
     }
@@ -128,6 +135,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         private void visitProjectionBefore(OptExpression optExpression, DecodeContext context) {
             if (optExpression.getOp().getProjection() != null) {
+                context.needEncode = true;
                 Projection projection = optExpression.getOp().getProjection();
                 projection.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
             }
@@ -158,6 +166,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
                 if (context.hasEncoded) {
                     insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), i, context);
+                } else {
+                    optExpression.setChild(i, newChildExpr);
                 }
             }
             return visitProjectionAfter(optExpression, context);
@@ -172,6 +182,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public OptExpression visitPhysicalOlapScan(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
+
+            if (!context.needEncode) {
+                return optExpression;
+            }
 
             PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
             long tableId = scanOperator.getTable().getId();
@@ -205,8 +219,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         for (ScalarOperator predicate : predicates) {
                             if (predicate.getUsedColumns().contains(columnId)) {
                                 if (couldApplyDictOptimize(predicate)) {
-                                    newDictColumn = context.columnRefFactory.create(
-                                            stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
+                                    if (newDictColumn == null) {
+                                        newDictColumn = context.columnRefFactory.create(
+                                                stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
+                                    }
 
                                     // For simple predicate, our olap scan node handle it by string,
                                     // So we couldn't rewrite it.
@@ -223,7 +239,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                         Preconditions.checkState(rewritePredicate.equals(predicate));
                                     }
                                 } else {
+                                    globalDictStringColumns.remove(stringColumn);
+                                    dictStringIdToIntIds.remove(stringColumn.getId());
                                     couldEncoded = false;
+                                    break;
                                 }
                             }
                         }
@@ -464,6 +483,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public OptExpression visitPhysicalHashJoin(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
+            context.needEncode = true;
 
             PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
             joinOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
@@ -484,6 +504,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 }
             }
 
+            context.clear();
             context.merge(mergeContext);
             return visitProjectionAfter(optExpression, context);
         }
@@ -491,6 +512,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public OptExpression visitPhysicalHashAggregate(OptExpression aggExpr, DecodeContext context) {
             visitProjectionBefore(aggExpr, context);
+            context.needEncode = true;
 
             OptExpression childExpr = aggExpr.inputAt(0);
             context.hasEncoded = false;
@@ -552,6 +574,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         if (!ConnectContext.get().getSessionVariable().isEnableLowCardinalityOptimize()) {
             return root;
         }
+
         List<LogicalOlapScanOperator> scanOperators = taskContext.getAllScanOperators();
 
         for (LogicalOlapScanOperator scanOperator : scanOperators) {

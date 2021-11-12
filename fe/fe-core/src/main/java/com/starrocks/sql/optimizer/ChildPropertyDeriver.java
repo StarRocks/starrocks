@@ -17,13 +17,13 @@ import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
-import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
@@ -148,9 +148,9 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             return visitJoinRequirements(node, context, false);
         }
 
-        tryReplicatedHashJoin(context, node.getJoinType(), leftDistribution);
         // Colocate join and bucket shuffle join only support column to column binary predicate
         if (equalOnPredicate.stream().anyMatch(p -> !isColumnToColumnBinaryPredicate(p))) {
+            tryReplicatedHashJoin(context, node.getJoinType(), leftDistribution);
             return visitJoinRequirements(node, context, false);
         }
 
@@ -158,6 +158,9 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         // 3 For colocate join
         if (!"BUCKET".equalsIgnoreCase(hint)) {
             canDoColocatedJoin = tryColocate(leftDistribution, rightDistribution);
+            if (!canDoColocatedJoin) {
+                tryReplicatedHashJoin(context, node.getJoinType(), leftDistribution);
+            }
         }
 
         // 4 For bucket shuffle join
@@ -290,7 +293,6 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                     createLocalByByHashColumns(leftShuffleDistribution.getShuffleColumns()));
             outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
                     Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
-            return true;
         } else {
             // colocate group
             if (!colocateIndex.isSameGroup(left.getTable().getId(), right.getTable().getId())) {
@@ -337,8 +339,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
             outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
                     Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
-            return true;
         }
+        return true;
     }
 
     private void tryReplicatedCrossJoin(ExpressionContext context) {
@@ -355,15 +357,16 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         }
 
         GroupExpression rightChild = context.getChildGroupExpression(1);
-        List<LogicalOlapScanOperator> rightScanLists = Lists.newArrayList();
-        Utils.extractOlapScanOperator(rightChild, rightScanLists);
+        List<LogicalScanOperator> rightScanLists = Lists.newArrayList();
+        Utils.extractScanOperator(rightChild, rightScanLists);
         if (rightScanLists.size() != 1) {
             return;
         }
 
-        LogicalOlapScanOperator rightScan = rightScanLists.get(0);
-        if (rightScan.canDoReplicatedJoin()) {
-            generatePropertiesForReplicated(leftScanLists.get(0), rightScan);
+        LogicalScanOperator rightScan = rightScanLists.get(0);
+        if (rightScan instanceof LogicalOlapScanOperator &&
+                ((LogicalOlapScanOperator) rightScan).canDoReplicatedJoin()) {
+            generatePropertiesForReplicated(leftScanLists.get(0), (LogicalOlapScanOperator) rightScan);
         }
     }
 
@@ -398,16 +401,16 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         }
 
         GroupExpression rightChild = context.getChildGroupExpression(1);
-        List<LogicalOlapScanOperator> scanLists = Lists.newArrayList();
-        Utils.extractOlapScanOperator(rightChild, scanLists);
+        List<LogicalScanOperator> scanLists = Lists.newArrayList();
+        Utils.extractScanOperator(rightChild, scanLists);
 
         if (scanLists.size() != 1) {
             return;
         }
 
-        LogicalOlapScanOperator right = scanLists.get(0);
-        if (right.canDoReplicatedJoin()) {
-            generatePropertiesForReplicated(leftTable.get(), right);
+        LogicalScanOperator right = scanLists.get(0);
+        if (right instanceof LogicalOlapScanOperator && ((LogicalOlapScanOperator) right).canDoReplicatedJoin()) {
+            generatePropertiesForReplicated(leftTable.get(), (LogicalOlapScanOperator) right);
         }
     }
 
@@ -557,7 +560,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void visitJoinRequirements(PhysicalHashJoinOperator node, ExpressionContext context,
-                                       boolean canDoColocated) {
+                                       boolean canDoColocate) {
         //require property is gather
         Optional<GatherDistributionSpec> requiredGatherDistribution = getRequiredGatherDesc();
         if (requiredGatherDistribution.isPresent()) {
@@ -614,7 +617,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             }
         } else {
             // Could only requiredLocalColumnsFromRight for colocated join
-            if (!canDoColocated) {
+            if (!canDoColocate) {
+                // replicate join don't support LOCAL properties for right table
                 outputInputProps.clear();
                 return visitOperator(node, context);
             }
@@ -871,21 +875,13 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
         List<Integer> partitionColumnRefSet = new ArrayList<>();
-        List<Ordering> orderings = new ArrayList<>();
 
         node.getPartitionExpressions().forEach(e -> {
             partitionColumnRefSet
                     .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList()));
-            orderings.add(new Ordering((ColumnRefOperator) e, true, true));
         });
 
-        node.getOrderByElements().forEach(o -> {
-            if (orderings.stream().noneMatch(ordering -> ordering.getColumnRef().equals(o.getColumnRef()))) {
-                orderings.add(o);
-            }
-        });
-
-        SortProperty sortProperty = new SortProperty(new OrderSpec(orderings));
+        SortProperty sortProperty = new SortProperty(new OrderSpec(node.getEnforceOrderBy()));
 
         Optional<HashDistributionDesc> required = getRequiredLocalDesc();
         if (required.isPresent()) {

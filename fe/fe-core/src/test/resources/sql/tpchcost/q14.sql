@@ -20,11 +20,11 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 9:Project
-|  <slot 32> : 100.0 * 30: sum(28: expr) / 31: sum(29: expr)
+|  <slot 32> : 100.0 * 30: sum(28: case) / 31: sum(29: expr)
 |  use vectorized: true
 |
 8:AGGREGATE (merge finalize)
-|  output: sum(30: sum(28: expr)), sum(31: sum(29: expr))
+|  output: sum(30: sum(28: case)), sum(31: sum(29: expr))
 |  group by:
 |  use vectorized: true
 |
@@ -40,12 +40,12 @@ EXCHANGE ID: 07
 UNPARTITIONED
 
 6:AGGREGATE (update serialize)
-|  output: sum(28: expr), sum(29: expr)
+|  output: sum(28: case), sum(29: expr)
 |  group by:
 |  use vectorized: true
 |
 5:Project
-|  <slot 28> : CASE WHEN 22: P_TYPE LIKE 'PROMO%' THEN 34: multiply ELSE 0.0 END
+|  <slot 28> : if(22: P_TYPE LIKE 'PROMO%', 34: multiply, 0.0)
 |  <slot 29> : 34: multiply
 |  common expressions:
 |  <slot 33> : 1.0 - 7: L_DISCOUNT

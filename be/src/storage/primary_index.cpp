@@ -38,21 +38,21 @@ public:
 
     virtual void reserve(size_t size) = 0;
 
-    virtual Status insert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks) = 0;
-    virtual Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks) = 0;
-    virtual void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes) = 0;
-    virtual void upsert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                        DeletesMap* deletes) = 0;
+    // batch insert a range [idx_begin, idx_end) of keys
+    virtual Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
+                          uint32_t idx_begin, uint32_t idx_end) = 0;
+    // batch upsert a range [idx_begin, idx_end) of keys
+    virtual void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                        uint32_t idx_end, DeletesMap* deletes) = 0;
+    // batch try_replace a range [idx_begin, idx_end) of keys
     virtual void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                             const vector<uint32_t>& src_rssid, vector<uint32_t>* failed) = 0;
-    virtual void try_replace(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                             const vector<uint32_t>& src_rssid, vector<uint32_t>* failed) = 0;
-    virtual void erase(const vectorized::Column& pks, DeletesMap* deletes) = 0;
+                             const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                             vector<uint32_t>* failed) = 0;
+    // batch erase a range [idx_begin, idx_end) of keys
+    virtual void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
 
-    // just an estimate value for now.
+    // just an estimate value for now
     virtual std::size_t memory_usage() const = 0;
-
-    virtual std::string memory_info() const = 0;
 };
 
 #pragma pack(push)
@@ -88,6 +88,7 @@ public:
 };
 
 const uint32_t PREFETCHN = 8;
+const uint32_t ROWID_MASK = 0xffffffff;
 
 template <typename Key>
 class HashIndexImpl : public HashIndex {
@@ -106,36 +107,14 @@ public:
 
     void reserve(size_t size) override { _map.reserve(size); };
 
-    Status insert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks) override {
+    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks, uint32_t idx_begin,
+                  uint32_t idx_end) override {
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
-        auto size = pks.size();
-        uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) _map.prefetch(keys[prefetch_i]);
-            RowIdPack4 v(base + i);
-            auto p = _map.insert({keys[i], v});
-            if (!p.second) {
-                uint64_t old = p.first->second.value;
-                std::string msg = strings::Substitute(
-                        "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
-                        "key=$4",
-                        rssid, rowid_start + i, (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff), keys[i]);
-                LOG(ERROR) << msg;
-                return Status::InternalError(msg);
-            }
-        }
-        return Status::OK();
-    }
-
-    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks) override {
-        auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
-        auto size = pks.size();
-        DCHECK(size == rowids.size());
+        DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
-        for (auto i = 0; i < size; i++) {
+        for (auto i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) _map.prefetch(keys[prefetch_i]);
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
             RowIdPack4 v(base + rowids[i]);
             auto p = _map.insert({keys[i], v});
             if (!p.second) {
@@ -143,7 +122,7 @@ public:
                 std::string msg = strings::Substitute(
                         "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
                         "key=$4",
-                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff), keys[i]);
+                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i]);
                 LOG(ERROR) << msg;
                 return Status::InternalError(msg);
             }
@@ -151,13 +130,13 @@ public:
         return Status::OK();
     }
 
-    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes) override {
+    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                uint32_t idx_end, DeletesMap* deletes) override {
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
-        auto size = pks.size();
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        for (uint32_t i = 0; i < size; i++) {
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) _map.prefetch(keys[prefetch_i]);
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
             RowIdPack4 v(base + i);
             auto p = _map.insert({keys[i], v});
             if (!p.second) {
@@ -166,42 +145,20 @@ public:
                     LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i] << " idx=" << i
                                << " rowid=" << rowid_start + i;
                 }
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
-                p.first->second = v;
-            }
-        }
-    }
-
-    void upsert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                DeletesMap* deletes) override {
-        auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
-        auto size = pks.size();
-        uint64_t base = (((uint64_t)rssid) << 32);
-        for (auto i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) _map.prefetch(keys[prefetch_i]);
-            RowIdPack4 v(base + rowids[i]);
-            auto p = _map.insert({keys[i], v});
-            if (!p.second) {
-                uint64_t old = p.first->second.value;
-                if ((old >> 32) == rssid) {
-                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i] << " idx=" << i
-                               << " rowid=" << rowids[i];
-                }
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             }
         }
     }
 
     void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                     const vector<uint32_t>& src_rssid, vector<uint32_t>* failed) override {
+                     const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                     vector<uint32_t>* failed) override {
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
-        auto size = pks.size();
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        for (uint32_t i = 0; i < size; i++) {
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) _map.prefetch(keys[prefetch_i]);
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
             auto p = _map.find(keys[i]);
             if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
                 // matched, can replace
@@ -213,35 +170,15 @@ public:
         }
     }
 
-    void try_replace(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                     const vector<uint32_t>& src_rssid, vector<uint32_t>* failed) override {
+    void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
-        auto size = pks.size();
-        uint64_t base = (((uint64_t)rssid) << 32);
-        for (auto i = 0; i < size; i++) {
+        for (auto i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) _map.prefetch(keys[prefetch_i]);
-            auto p = _map.find(keys[i]);
-            if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
-                // matched, can replace
-                p->second = RowIdPack4(base + rowids[i]);
-            } else {
-                // not match, mark failed
-                failed->push_back(rowids[i]);
-            }
-        }
-    }
-
-    void erase(const vectorized::Column& pks, DeletesMap* deletes) override {
-        auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
-        auto size = pks.size();
-        for (auto i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) _map.prefetch(keys[prefetch_i]);
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
             auto iter = _map.find(keys[i]);
             if (iter != _map.end()) {
                 uint64_t old = iter->second.value;
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 _map.erase(iter);
             }
         }
@@ -249,15 +186,6 @@ public:
 
     std::size_t memory_usage() const final {
         return _map.capacity() * (1 + (sizeof(Key) + 3) / 4 * 4 + sizeof(RowIdPack4));
-    }
-
-    std::string memory_info() const override {
-        auto caps = _map.capacities();
-        string caps_str;
-        for (auto e : caps) {
-            StringAppendF(&caps_str, "%zu,", e);
-        }
-        return Substitute("$0M($1/$2 $3)", memory_usage() / (1024 * 1024), size(), capacity(), caps_str);
     }
 };
 
@@ -298,308 +226,223 @@ public:
 
     void reserve(size_t size) override { _map.reserve(size); };
 
-    Status insert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
-        uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        FixSlice<S> prefetch_keys[PREFETCHN];
-        size_t prefetch_hashs[PREFETCHN];
-        for (uint32_t i = 0; i < std::min(size, PREFETCHN); i++) {
-            prefetch_keys[i].assign(keys[i]);
-            prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-            _map.prefetch_hash(prefetch_hashs[i]);
-        }
-        for (uint32_t i = 0; i < size; i++) {
-            uint64_t v = base + i;
-            uint32_t pslot = i % PREFETCHN;
-            auto p = _map.emplace_with_hash(prefetch_hashs[pslot], prefetch_keys[pslot], v);
-            if (!p.second) {
-                uint64_t old = p.first->second.value;
-                std::string msg = strings::Substitute(
-                        "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
-                        "key=$4 [$5]",
-                        rssid, rowid_start + i, (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff),
-                        keys[i].to_string(), hexdump(keys[i].data, keys[i].size));
-                LOG(ERROR) << msg;
-                return Status::InternalError(msg);
+    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks, uint32_t idx_begin,
+                  uint32_t idx_end) override {
+        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        DCHECK(idx_end <= rowids.size());
+        uint64_t base = (((uint64_t)rssid) << 32);
+        uint32_t n = idx_end - idx_begin;
+        if (n >= PREFETCHN * 2) {
+            FixSlice<S> prefetch_keys[PREFETCHN];
+            size_t prefetch_hashes[PREFETCHN];
+            for (uint32_t i = 0; i < PREFETCHN; i++) {
+                prefetch_keys[i].assign(keys[idx_begin + i]);
+                prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
+                _map.prefetch_hash(prefetch_hashes[i]);
             }
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                prefetch_keys[pslot].assign(keys[prefetch_i]);
-                prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                _map.prefetch_hash(prefetch_hashs[pslot]);
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint64_t v = base + rowids[i];
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
+                if (!p.second) {
+                    uint64_t old = p.first->second.value;
+                    std::string msg = strings::Substitute(
+                            "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
+                            "key=$4 [$5]",
+                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
+                            hexdump(keys[i].data, keys[i].size));
+                    LOG(ERROR) << msg;
+                    return Status::InternalError(msg);
+                }
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
+        } else {
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint64_t v = base + rowids[i];
+                auto p = _map.emplace(FixSlice<S>(keys[i]), v);
+                if (!p.second) {
+                    uint64_t old = p.first->second.value;
+                    std::string msg = strings::Substitute(
+                            "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
+                            "key=$4 [$5]",
+                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
+                            hexdump(keys[i].data, keys[i].size));
+                    LOG(ERROR) << msg;
+                    return Status::InternalError(msg);
+                }
             }
         }
         return Status::OK();
     }
 
-    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
-        DCHECK(size == rowids.size());
-        uint64_t base = (((uint64_t)rssid) << 32);
-        FixSlice<S> prefetch_keys[PREFETCHN];
-        size_t prefetch_hashs[PREFETCHN];
-        for (uint32_t i = 0; i < std::min(size, PREFETCHN); i++) {
-            prefetch_keys[i].assign(keys[i]);
-            prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-            _map.prefetch_hash(prefetch_hashs[i]);
-        }
-        for (uint32_t i = 0; i < size; i++) {
-            uint64_t v = base + rowids[i];
-            uint32_t pslot = i % PREFETCHN;
-            auto p = _map.emplace_with_hash(prefetch_hashs[pslot], prefetch_keys[pslot], v);
-            if (!p.second) {
-                uint64_t old = p.first->second.value;
-                std::string msg = strings::Substitute(
-                        "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
-                        "key=$4 [$5]",
-                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff), keys[i].to_string(),
-                        hexdump(keys[i].data, keys[i].size));
-                LOG(ERROR) << msg;
-                return Status::InternalError(msg);
-            }
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                prefetch_keys[pslot].assign(keys[prefetch_i]);
-                prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                _map.prefetch_hash(prefetch_hashs[pslot]);
-            }
-        }
-        return Status::OK();
-    }
-
-    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = (uint32_t)pks.size();
+    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                uint32_t idx_end, DeletesMap* deletes) override {
+        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        FixSlice<S> prefetch_keys[PREFETCHN];
-        size_t prefetch_hashs[PREFETCHN];
-        for (uint32_t i = 0; i < std::min(size, PREFETCHN); i++) {
-            prefetch_keys[i].assign(keys[i]);
-            prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-            _map.prefetch_hash(prefetch_hashs[i]);
-        }
-        for (uint32_t i = 0; i < size; i++) {
-            uint64_t v = base + i;
-            uint32_t pslot = i % PREFETCHN;
-            auto p = _map.emplace_with_hash(prefetch_hashs[pslot], prefetch_keys[pslot], v);
-            if (!p.second) {
-                uint64_t old = p.first->second.value;
-                if ((old >> 32) == rssid) {
-                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                               << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                }
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
-                p.first->second = v;
+        uint32_t n = idx_end - idx_begin;
+        if (n >= PREFETCHN * 2) {
+            FixSlice<S> prefetch_keys[PREFETCHN];
+            size_t prefetch_hashes[PREFETCHN];
+            for (uint32_t i = 0; i < PREFETCHN; i++) {
+                prefetch_keys[i].assign(keys[idx_begin + i]);
+                prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
+                _map.prefetch_hash(prefetch_hashes[i]);
             }
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                prefetch_keys[pslot].assign(keys[prefetch_i]);
-                prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                _map.prefetch_hash(prefetch_hashs[pslot]);
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint64_t v = base + i;
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
+                if (!p.second) {
+                    uint64_t old = p.first->second.value;
+                    if ((old >> 32) == rssid) {
+                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
+                                   << " [" << hexdump(keys[i].data, keys[i].size) << "]";
+                    }
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    p.first->second = v;
+                }
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
+        } else {
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint64_t v = base + i;
+                auto p = _map.emplace(FixSlice<S>(keys[i]), v);
+                if (!p.second) {
+                    uint64_t old = p.first->second.value;
+                    if ((old >> 32) == rssid) {
+                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
+                                   << " [" << hexdump(keys[i].data, keys[i].size) << "]";
+                    }
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    p.first->second = v;
+                }
             }
         }
     }
-
-    void upsert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                DeletesMap* deletes) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = (uint32_t)pks.size();
-        uint64_t base = (((uint64_t)rssid) << 32);
-        FixSlice<S> prefetch_keys[PREFETCHN];
-        size_t prefetch_hashs[PREFETCHN];
-        for (uint32_t i = 0; i < std::min(size, PREFETCHN); i++) {
-            prefetch_keys[i].assign(keys[i]);
-            prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-            _map.prefetch_hash(prefetch_hashs[i]);
-        }
-        for (auto i = 0; i < size; i++) {
-            uint64_t v = base + rowids[i];
-            uint32_t pslot = i % PREFETCHN;
-            auto p = _map.emplace_with_hash(prefetch_hashs[pslot], prefetch_keys[pslot], v);
-            if (!p.second) {
-                uint64_t old = p.first->second.value;
-                if ((old >> 32) == rssid) {
-                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                               << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                }
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
-                p.first->second = v;
-            }
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                prefetch_keys[pslot].assign(keys[prefetch_i]);
-                prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                _map.prefetch_hash(prefetch_hashs[pslot]);
-            }
-        }
-    }
-
     void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                     const vector<uint32_t>& src_rssid, vector<uint32_t>* failed) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
+                     const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                     vector<uint32_t>* failed) override {
+        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        FixSlice<S> prefetch_keys[PREFETCHN];
-        size_t prefetch_hashs[PREFETCHN];
-        for (uint32_t i = 0; i < std::min(size, PREFETCHN); i++) {
-            prefetch_keys[i].assign(keys[i]);
-            prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-            _map.prefetch_hash(prefetch_hashs[i]);
-        }
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t pslot = i % PREFETCHN;
-            auto p = _map.find(prefetch_keys[pslot], prefetch_hashs[pslot]);
-            if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
-                // matched, can replace
-                p->second.value = base + i;
-            } else {
-                // not match, mark failed
-                failed->push_back(rowid_start + i);
+        uint32_t n = idx_end - idx_begin;
+        if (n >= PREFETCHN * 2) {
+            FixSlice<S> prefetch_keys[PREFETCHN];
+            size_t prefetch_hashes[PREFETCHN];
+            for (uint32_t i = 0; i < PREFETCHN; i++) {
+                prefetch_keys[i].assign(keys[idx_begin + i]);
+                prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
+                _map.prefetch_hash(prefetch_hashes[i]);
             }
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                prefetch_keys[pslot].assign(keys[prefetch_i]);
-                prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                _map.prefetch_hash(prefetch_hashs[pslot]);
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto p = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
+                if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
+                    // matched, can replace
+                    p->second.value = base + i;
+                } else {
+                    // not match, mark failed
+                    failed->push_back(rowid_start + i);
+                }
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
             }
-        }
-    }
-
-    void try_replace(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                     const vector<uint32_t>& src_rssid, vector<uint32_t>* failed) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
-        uint64_t base = (((uint64_t)rssid) << 32);
-        FixSlice<S> prefetch_keys[PREFETCHN];
-        size_t prefetch_hashs[PREFETCHN];
-        for (uint32_t i = 0; i < std::min(size, PREFETCHN); i++) {
-            prefetch_keys[i].assign(keys[i]);
-            prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-            _map.prefetch_hash(prefetch_hashs[i]);
-        }
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t pslot = i % PREFETCHN;
-            auto p = _map.find(prefetch_keys[pslot], prefetch_hashs[pslot]);
-            if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
-                // matched, can replace
-                p->second.value = base + rowids[i];
-            } else {
-                // not match, mark failed
-                failed->push_back(rowids[i]);
-            }
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                prefetch_keys[pslot].assign(keys[prefetch_i]);
-                prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                _map.prefetch_hash(prefetch_hashs[pslot]);
+        } else {
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                auto p = _map.find(FixSlice<S>(keys[i]));
+                if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
+                    // matched, can replace
+                    p->second.value = base + i;
+                } else {
+                    // not match, mark failed
+                    failed->push_back(rowid_start + i);
+                }
             }
         }
     }
 
-    void erase(const vectorized::Column& pks, DeletesMap* deletes) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
-        FixSlice<S> prefetch_keys[PREFETCHN];
-        size_t prefetch_hashs[PREFETCHN];
-        for (uint32_t i = 0; i < std::min(size, PREFETCHN); i++) {
-            prefetch_keys[i].assign(keys[i]);
-            prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-            _map.prefetch_hash(prefetch_hashs[i]);
-        }
-        for (auto i = 0; i < size; i++) {
-            uint32_t pslot = i % PREFETCHN;
-            auto iter = _map.find(prefetch_keys[pslot], prefetch_hashs[pslot]);
-            if (iter != _map.end()) {
-                uint64_t old = iter->second.value;
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
-                _map.erase(iter);
+    void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        uint32_t n = idx_end - idx_begin;
+        if (n >= PREFETCHN * 2) {
+            FixSlice<S> prefetch_keys[PREFETCHN];
+            size_t prefetch_hashes[PREFETCHN];
+            for (uint32_t i = 0; i < PREFETCHN; i++) {
+                prefetch_keys[i].assign(keys[idx_begin + i]);
+                prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
+                _map.prefetch_hash(prefetch_hashes[i]);
             }
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                prefetch_keys[pslot].assign(keys[prefetch_i]);
-                prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                _map.prefetch_hash(prefetch_hashs[pslot]);
+            for (auto i = idx_begin; i < idx_end; i++) {
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto iter = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
+                if (iter != _map.end()) {
+                    uint64_t old = iter->second.value;
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    _map.erase(iter);
+                }
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
+        } else {
+            for (auto i = idx_begin; i < idx_end; i++) {
+                auto iter = _map.find(FixSlice<S>(keys[i]));
+                if (iter != _map.end()) {
+                    uint64_t old = iter->second.value;
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    _map.erase(iter);
+                }
             }
         }
     }
 
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
-
-    std::string memory_info() const override {
-        auto caps = _map.capacities();
-        string caps_str;
-        for (auto e : caps) {
-            StringAppendF(&caps_str, "%zu,", e);
-        }
-        return Substitute("$0M($1/$2 $3)", memory_usage() / (1024 * 1024), size(), capacity(), caps_str);
-    }
 };
 
 struct StringHash {
     size_t operator()(const string& v) const { return vectorized::crc_hash_64(v.data(), v.length(), 0x811C9DC5); }
 };
 
-template <>
-class HashIndexImpl<Slice> : public HashIndex {
+class SliceHashIndex : public HashIndex {
 private:
     using StringMap =
             phmap::parallel_flat_hash_map<string, tablet_rowid_t, StringHash, phmap::priv::hash_default_eq<string>,
                                           TraceAlloc<phmap::priv::Pair<const string, tablet_rowid_t>>, 4,
                                           phmap::NullMutex, false>;
-
     StringMap _map;
     size_t _total_length = 0;
 
 public:
-    HashIndexImpl() = default;
-    ~HashIndexImpl() override = default;
+    SliceHashIndex() = default;
+    ~SliceHashIndex() override = default;
 
     size_t size() const override { return _map.size(); }
 
     size_t capacity() const override { return _map.capacity(); }
 
     void reserve(size_t size) override { _map.reserve(size); }
-
-    Status insert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks) override {
+    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks, uint32_t idx_begin,
+                  uint32_t idx_end) override {
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
-        uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                size_t hv = vectorized::crc_hash_64(keys[prefetch_i].data, keys[prefetch_i].size, 0x811C9DC5);
-                _map.prefetch_hash(hv);
-            }
-            uint64_t v = base + i;
-            auto p = _map.insert({keys[i].to_string(), v});
-            if (!p.second) {
-                uint64_t old = p.first->second;
-                std::string msg = strings::Substitute(
-                        "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
-                        "key=$4 [$5]",
-                        rssid, rowid_start + i, (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff),
-                        keys[i].to_string(), hexdump(keys[i].data, keys[i].size));
-                LOG(ERROR) << msg;
-                return Status::InternalError(msg);
-            }
-            _total_length += keys[i].size;
-        }
-        return Status::OK();
-    }
-
-    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
-        DCHECK(size == rowids.size());
+        DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                size_t hv = vectorized::crc_hash_64(keys[prefetch_i].data, keys[prefetch_i].size, 0x811C9DC5);
-                _map.prefetch_hash(hv);
-            }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
             uint64_t v = base + rowids[i];
             auto p = _map.insert({keys[i].to_string(), v});
             if (!p.second) {
@@ -607,7 +450,7 @@ public:
                 std::string msg = strings::Substitute(
                         "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
                         "key=$4 [$5]",
-                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff), keys[i].to_string(),
+                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                         hexdump(keys[i].data, keys[i].size));
                 LOG(ERROR) << msg;
                 return Status::InternalError(msg);
@@ -617,16 +460,11 @@ public:
         return Status::OK();
     }
 
-    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes) override {
+    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                uint32_t idx_end, DeletesMap* deletes) override {
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                size_t hv = vectorized::crc_hash_64(keys[prefetch_i].data, keys[prefetch_i].size, 0x811C9DC5);
-                _map.prefetch_hash(hv);
-            }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
             uint64_t v = base + i;
             auto p = _map.insert({keys[i].to_string(), v});
             if (!p.second) {
@@ -635,34 +473,7 @@ public:
                     LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                 }
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
-                p.first->second = v;
-            } else {
-                _total_length += keys[i].size;
-            }
-        }
-    }
-
-    void upsert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                DeletesMap* deletes) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
-        uint64_t base = (((uint64_t)rssid) << 32);
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                size_t hv = vectorized::crc_hash_64(keys[prefetch_i].data, keys[prefetch_i].size, 0x811C9DC5);
-                _map.prefetch_hash(hv);
-            }
-            uint64_t v = base + rowids[i];
-            auto p = _map.insert({keys[i].to_string(), v});
-            if (!p.second) {
-                uint64_t old = p.first->second;
-                if ((old >> 32) == rssid) {
-                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                               << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                }
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             } else {
                 _total_length += keys[i].size;
@@ -671,16 +482,11 @@ public:
     }
 
     void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                     const vector<uint32_t>& src_rssid, vector<uint32_t>* failed) override {
+                     const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                     vector<uint32_t>* failed) override {
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                size_t hv = vectorized::crc_hash_64(keys[prefetch_i].data, keys[prefetch_i].size, 0x811C9DC5);
-                _map.prefetch_hash(hv);
-            }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
             if (p != _map.end() && ((uint32_t)(p->second >> 32) == src_rssid[i])) {
                 // matched, can replace
@@ -692,41 +498,13 @@ public:
         }
     }
 
-    void try_replace(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                     const vector<uint32_t>& src_rssid, vector<uint32_t>* failed) override {
+    void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
-        uint64_t base = (((uint64_t)rssid) << 32);
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                size_t hv = vectorized::crc_hash_64(keys[prefetch_i].data, keys[prefetch_i].size, 0x811C9DC5);
-                _map.prefetch_hash(hv);
-            }
-            auto p = _map.find(keys[i].to_string());
-            if (p != _map.end() && ((uint32_t)(p->second >> 32) == src_rssid[i])) {
-                // matched, can replace
-                p->second = base + rowids[i];
-            } else {
-                // not match, mark failed
-                failed->push_back(rowids[i]);
-            }
-        }
-    }
-
-    void erase(const vectorized::Column& pks, DeletesMap* deletes) override {
-        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        uint32_t size = pks.size();
-        for (uint32_t i = 0; i < size; i++) {
-            uint32_t prefetch_i = i + PREFETCHN;
-            if (LIKELY(prefetch_i < size)) {
-                size_t hv = vectorized::crc_hash_64(keys[prefetch_i].data, keys[prefetch_i].size, 0x811C9DC5);
-                _map.prefetch_hash(hv);
-            }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
             if (p != _map.end()) {
                 uint64_t old = p->second;
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 _map.erase(p);
                 _total_length -= keys[i].size;
             }
@@ -744,14 +522,167 @@ public:
         }
         return ret;
     }
+};
 
-    std::string memory_info() const override {
-        auto caps = _map.capacities();
-        string caps_str;
-        for (auto e : caps) {
-            StringAppendF(&caps_str, "%zu,", e);
+class ShardByLengthSliceHashIndex : public HashIndex {
+private:
+    constexpr static size_t max_fix_length = 40;
+    std::unique_ptr<HashIndex> _maps[max_fix_length];
+
+    HashIndex* get_index_by_length(size_t len) {
+#define CASE_LEN(L)                                        \
+    case L: {                                              \
+        auto& p = _maps[L];                                \
+        if (!p) {                                          \
+            p.reset(new FixSliceHashIndex<(L + 3) / 4>()); \
+        }                                                  \
+        return p.get();                                    \
+    }
+        switch (len) {
+            CASE_LEN(1)
+            CASE_LEN(2)
+            CASE_LEN(3)
+            CASE_LEN(4)
+            CASE_LEN(5)
+            CASE_LEN(6)
+            CASE_LEN(7)
+            CASE_LEN(8)
+            CASE_LEN(9)
+            CASE_LEN(10)
+            CASE_LEN(11)
+            CASE_LEN(12)
+            CASE_LEN(13)
+            CASE_LEN(14)
+            CASE_LEN(15)
+            CASE_LEN(16)
+            CASE_LEN(17)
+            CASE_LEN(18)
+            CASE_LEN(19)
+            CASE_LEN(20)
+            CASE_LEN(21)
+            CASE_LEN(22)
+            CASE_LEN(23)
+            CASE_LEN(24)
+            CASE_LEN(25)
+            CASE_LEN(26)
+            CASE_LEN(27)
+            CASE_LEN(28)
+            CASE_LEN(29)
+            CASE_LEN(30)
+            CASE_LEN(31)
+            CASE_LEN(32)
+            CASE_LEN(33)
+            CASE_LEN(34)
+            CASE_LEN(35)
+            CASE_LEN(36)
+            CASE_LEN(37)
+            CASE_LEN(38)
+            CASE_LEN(39)
+        default: {
+            auto& p = _maps[0];
+            if (!p) p.reset(new SliceHashIndex());
+            return p.get();
         }
-        return Substitute("$0M($1/$2 $3)", memory_usage() / (1024 * 1024), size(), capacity(), caps_str);
+        }
+#undef CASE_LEN
+    }
+
+public:
+    ShardByLengthSliceHashIndex() = default;
+    ~ShardByLengthSliceHashIndex() override = default;
+
+    size_t size() const override {
+        size_t ret = 0;
+        for (int i = 0; i < max_fix_length; i++) {
+            if (_maps[i]) {
+                ret += _maps[i]->size();
+            }
+        }
+        return ret;
+    }
+
+    size_t capacity() const override {
+        size_t ret = 0;
+        for (int i = 0; i < max_fix_length; i++) {
+            if (_maps[i]) {
+                ret += _maps[i]->capacity();
+            }
+        }
+        return ret;
+    }
+
+    void reserve(size_t size) override {
+        // cannot do reserve for sharding map
+    }
+
+    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks, uint32_t idx_begin,
+                  uint32_t idx_end) override {
+        if (idx_begin < idx_end) {
+            auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+            for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
+                if (keys[i].size != keys[idx_begin].size) {
+                    RETURN_IF_ERROR(
+                            get_index_by_length(keys[idx_begin].size)->insert(rssid, rowids, pks, idx_begin, i));
+                    idx_begin = i;
+                }
+            }
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)->insert(rssid, rowids, pks, idx_begin, idx_end));
+        }
+        return Status::OK();
+    }
+
+    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                uint32_t idx_end, DeletesMap* deletes) override {
+        if (idx_begin < idx_end) {
+            auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+            for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
+                if (keys[i].size != keys[idx_begin].size) {
+                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, deletes);
+                    idx_begin = i;
+                }
+            }
+            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        }
+    }
+
+    void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                     const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                     vector<uint32_t>* failed) override {
+        if (idx_begin < idx_end) {
+            auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+            for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
+                if (keys[i].size != keys[idx_begin].size) {
+                    get_index_by_length(keys[idx_begin].size)
+                            ->try_replace(rssid, rowid_start, pks, src_rssid, idx_begin, i, failed);
+                    idx_begin = i;
+                }
+            }
+            get_index_by_length(keys[idx_begin].size)
+                    ->try_replace(rssid, rowid_start, pks, src_rssid, idx_begin, idx_end, failed);
+        }
+    }
+
+    void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+        if (idx_begin < idx_end) {
+            auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+            for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
+                if (keys[i].size != keys[idx_begin].size) {
+                    get_index_by_length(keys[idx_begin].size)->erase(pks, idx_begin, i, deletes);
+                    idx_begin = i;
+                }
+            }
+            get_index_by_length(keys[idx_begin].size)->erase(pks, idx_begin, idx_end, deletes);
+        }
+    }
+
+    std::size_t memory_usage() const final {
+        size_t ret = 0;
+        for (int i = 0; i < max_fix_length; i++) {
+            if (_maps[i]) {
+                ret += _maps[i]->memory_usage();
+            }
+        }
+        return ret;
     }
 };
 
@@ -773,6 +704,8 @@ static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t f
             return std::make_unique<FixSliceHashIndex<8>>();
         } else if (fix_size <= 36) {
             return std::make_unique<FixSliceHashIndex<9>>();
+        } else if (fix_size <= 40) {
+            return std::make_unique<FixSliceHashIndex<10>>();
         }
     }
 
@@ -787,15 +720,18 @@ static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t f
         CASE_TYPE(OLAP_FIELD_TYPE_INT);
         CASE_TYPE(OLAP_FIELD_TYPE_BIGINT);
         CASE_TYPE(OLAP_FIELD_TYPE_LARGEINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_CHAR);
-        CASE_TYPE(OLAP_FIELD_TYPE_VARCHAR);
-    case (OLAP_FIELD_TYPE_DATE_V2):
+    case OLAP_FIELD_TYPE_CHAR:
+        return std::make_unique<ShardByLengthSliceHashIndex>();
+    case OLAP_FIELD_TYPE_VARCHAR:
+        return std::make_unique<ShardByLengthSliceHashIndex>();
+    case OLAP_FIELD_TYPE_DATE_V2:
         return std::make_unique<HashIndexImpl<int32_t>>();
-    case (OLAP_FIELD_TYPE_TIMESTAMP):
+    case OLAP_FIELD_TYPE_TIMESTAMP:
         return std::make_unique<HashIndexImpl<int64_t>>();
     default:
         return nullptr;
     }
+#undef CASE_TYPE
 }
 
 PrimaryIndex::PrimaryIndex() = default;
@@ -965,50 +901,37 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     return Status::OK();
 }
 
-Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks) {
-    DCHECK(_status.ok() && _pkey_to_rssid_rowid);
-    return _pkey_to_rssid_rowid->insert(rssid, rowid_start, pks);
-}
-
 Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks) {
     DCHECK(_status.ok() && _pkey_to_rssid_rowid);
-    return _pkey_to_rssid_rowid->insert(rssid, rowids, pks);
+    return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
+}
+
+Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks) {
+    vector<uint32_t> rids(pks.size());
+    for (int i = 0; i < rids.size(); i++) {
+        rids[i] = rowid_start + i;
+    }
+    return insert(rssid, rids, pks);
 }
 
 void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes) {
     DCHECK(_status.ok() && _pkey_to_rssid_rowid);
-    _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, deletes);
-}
-
-void PrimaryIndex::upsert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                          DeletesMap* deletes) {
-    DCHECK(_status.ok() && _pkey_to_rssid_rowid);
-    _pkey_to_rssid_rowid->upsert(rssid, rowids, pks, deletes);
+    _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
 }
 
 void PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                                const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && _pkey_to_rssid_rowid);
-    _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, deletes);
-}
-
-void PrimaryIndex::try_replace(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                               const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
-    DCHECK(_status.ok() && _pkey_to_rssid_rowid);
-    _pkey_to_rssid_rowid->try_replace(rssid, rowids, pks, src_rssid, deletes);
+    _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
 }
 
 void PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
     DCHECK(_status.ok() && _pkey_to_rssid_rowid);
-    _pkey_to_rssid_rowid->erase(key_col, deletes);
+    _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
 }
 
 std::size_t PrimaryIndex::memory_usage() const {
     return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->memory_usage() : 0;
-}
-
-std::string PrimaryIndex::memory_info() const {
-    return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->memory_info() : "Null";
 }
 
 std::size_t PrimaryIndex::size() const {
@@ -1017,6 +940,12 @@ std::size_t PrimaryIndex::size() const {
 
 std::size_t PrimaryIndex::capacity() const {
     return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->capacity() : 0;
+}
+
+void PrimaryIndex::reserve(size_t s) {
+    if (_pkey_to_rssid_rowid) {
+        _pkey_to_rssid_rowid->reserve(s);
+    }
 }
 
 std::string PrimaryIndex::to_string() const {

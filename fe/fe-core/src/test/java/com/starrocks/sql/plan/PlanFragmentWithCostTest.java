@@ -490,12 +490,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testReplicatedJoin() throws Exception {
-        new Expectations(connectContext.getSessionVariable()) {
-            {
-                connectContext.getSessionVariable().isEnableReplicationJoin();
-                result = true;
-            }
-        };
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
                 "( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
@@ -504,16 +498,18 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains(" 3:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (REPLICATED)\n" +
+        Assert.assertTrue(plan.contains("  10:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (REPLICATED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 4: S_NATIONKEY = 9: N_NATIONKEY"));
-        Assert.assertTrue(plan.contains("18:HASH JOIN\n" +
-                "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY"));
+        Assert.assertTrue(plan.contains("  13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: S_SUPPKEY = 15: PS_SUPPKEY"));
+                "  |  equal join conjunct: 32: L_PARTKEY = 14: PS_PARTKEY\n" +
+                "  |  equal join conjunct: 33: L_SUPPKEY = 15: PS_SUPPKEY\n" +
+                "  |  other join predicates: CAST(16: PS_AVAILQTY AS DOUBLE) > 0.5 * 48: sum(35: L_QUANTITY)"));
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
@@ -626,7 +622,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testSemiJoinPushDownPredicate() throws Exception {
-        String sql  = "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String sql = "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -638,7 +634,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testOuterJoinPushDownPredicate() throws Exception {
-        String sql  = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -678,6 +674,35 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "\n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
+        setTableStatistics(t0, 10000);
+    }
+
+    @Test
+    public void testNotPushDownRuntimeFilterToSortNode() throws Exception {
+        Catalog catalog = connectContext.getCatalog();
+        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        setTableStatistics(t0, 10);
+
+        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        setTableStatistics(t1, 1000000000L);
+
+        String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x join [broadcast] t0 where t0.v1 = t1x.v4";
+        String planFragment = getVerboseExplain(sql);
+
+        Assert.assertTrue(planFragment.contains("  1:TOP-N\n" +
+                "  |  order by: [1, BIGINT, true] ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 1000000000\n" +
+                "  |  cardinality: 1000000000\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
+
+        Assert.assertTrue(planFragment.contains("  2:MERGING-EXCHANGE\n" +
+                "     limit: 1000000000\n" +
+                "     cardinality: 1000000000\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: v4)"));
+
         setTableStatistics(t0, 10000);
     }
 }

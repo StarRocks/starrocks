@@ -43,7 +43,6 @@ namespace starrocks {
 // TODO: Remove old query executor related codes before 2021-09-30
 
 class MemPool;
-class MemTracker;
 class RowBatch;
 
 struct OlapTableIndexSchema {

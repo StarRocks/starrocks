@@ -58,7 +58,6 @@ extern const uint32_t k_segment_magic_length;
 struct SegmentWriterOptions {
     uint32_t storage_format_version = 1;
     uint32_t num_rows_per_block = 1024;
-    MemTracker* mem_tracker = nullptr;
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
 };
 
@@ -99,7 +98,6 @@ private:
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t* column_id, const TabletColumn& column);
 
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     uint32_t _segment_id;
     const TabletSchema* _tablet_schema;
     SegmentWriterOptions _opts;

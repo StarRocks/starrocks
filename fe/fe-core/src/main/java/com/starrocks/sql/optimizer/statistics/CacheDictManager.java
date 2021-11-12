@@ -34,7 +34,8 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
 public class CacheDictManager implements IDictManager {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
-    private static final Set<ColumnIdentifier> NoDictStringColumns = Sets.newHashSet();
+    private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newHashSet();
+    private static final Set<Long> forbiddenDictTableIds = Sets.newHashSet();
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
@@ -136,8 +137,13 @@ public class CacheDictManager implements IDictManager {
     @Override
     public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        if (NoDictStringColumns.contains(columnIdentifier)) {
+        if (noDictStringColumns.contains(columnIdentifier)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
+            return false;
+        }
+
+        if (forbiddenDictTableIds.contains(tableId)) {
+            LOG.debug("table {} forbit low cardinality global dict", tableId);
             return false;
         }
 
@@ -165,10 +171,14 @@ public class CacheDictManager implements IDictManager {
                 return false;
             }
             if (!realResult.isPresent()) {
-                LOG.debug("invalidate {}", columnName);
+                LOG.debug("Invalidate column {} dict cache because don't present", columnName);
                 dictStatistics.synchronous().invalidate(columnIdentifier);
+            } else if (realResult.get().getVersionTime() < versionTime) {
+                LOG.debug("Invalidate column {} dict cache because out of date", columnName);
+                dictStatistics.synchronous().invalidate(columnIdentifier);
+            } else {
+                return true;
             }
-            return realResult.filter(columnDict -> columnDict.getVersionTime() >= versionTime).isPresent();
         }
         LOG.debug("{} first get column dict", columnName);
         return false;
@@ -185,6 +195,12 @@ public class CacheDictManager implements IDictManager {
         LOG.debug("remove dict for column {}", columnName);
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         dictStatistics.synchronous().invalidate(columnIdentifier);
+    }
+
+    @Override
+    public void forbitGlobalDict(long tableId) {
+        LOG.debug("remove dict for table {}", tableId);
+        forbiddenDictTableIds.add(tableId);
     }
 
     @Override
@@ -218,5 +234,4 @@ public class CacheDictManager implements IDictManager {
         Preconditions.checkArgument(false, "Shouldn't run here");
         return null;
     }
-
 }

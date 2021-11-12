@@ -190,6 +190,7 @@ public class Coordinator {
     private final Set<Integer> replicateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
+    private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -1122,7 +1123,7 @@ public class Coordinator {
                     }
 
                     // 1. Handle replicated scan node if need
-                    boolean isReplicated = isRelicatedFragment(fragment.getPlanRoot());
+                    boolean isReplicated = isReplicatedFragment(fragment.getPlanRoot());
                     if (isReplicated) {
                         for (Integer planNodeId : value.keySet()) {
                             if (!replicateScanIds.contains(planNodeId)) {
@@ -1163,14 +1164,19 @@ public class Coordinator {
         }
 
         boolean childHasColocate = false;
-        for (PlanNode childNode : node.getChildren()) {
-            childHasColocate |= isColocateFragment(childNode);
+        if (node.isReplicated()) {
+            // Only check left if node is replicate join
+            childHasColocate = isColocateFragment(node.getChild(0));
+        } else {
+            for (PlanNode childNode : node.getChildren()) {
+                childHasColocate |= isColocateFragment(childNode);
+            }
         }
 
         return childHasColocate;
     }
 
-    private boolean isRelicatedFragment(PlanNode node) {
+    private boolean isReplicatedFragment(PlanNode node) {
         if (replicateFragmentIds.contains(node.getFragmentId().asInt())) {
             return true;
         }
@@ -1182,7 +1188,7 @@ public class Coordinator {
 
         boolean childHasColocate = false;
         for (PlanNode childNode : node.getChildren()) {
-            childHasColocate |= isRelicatedFragment(childNode);
+            childHasColocate |= isReplicatedFragment(childNode);
         }
 
         return childHasColocate;
@@ -1204,6 +1210,9 @@ public class Coordinator {
             HashJoinNode joinNode = (HashJoinNode) node;
             if (joinNode.isLocalHashBucket()) {
                 bucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
+                if (joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin()) {
+                    rightOrFullBucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
+                }
                 return true;
             }
         }
@@ -1284,7 +1293,8 @@ public class Coordinator {
             // 3.construct instanceExecParam add the scanRange should be scan by instance
             for (List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> perInstanceScanRange : perInstanceScanRanges) {
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, addressScanRange.getKey(), 0, params);
-
+                // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly when they are in different buckets
+                Set<Integer> instanceReplicateScanSet = new HashSet<>();
                 for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> nodeScanRangeMap : perInstanceScanRange) {
                     instanceParam.addBucketSeq(nodeScanRangeMap.getKey());
                     for (Map.Entry<Integer, List<TScanRangeParams>> nodeScanRange : nodeScanRangeMap.getValue()
@@ -1294,10 +1304,10 @@ public class Coordinator {
                             instanceParam.perNodeScanRanges.put(scanId, new ArrayList<>());
                         }
                         if (replicateScanIds.contains(scanId)) {
-                            List<TScanRangeParams> scanRangeParams =
-                                    fragmentExecParamsMap.get(fragmentId).scanRangeAssignment.
-                                            get(addressScanRange.getKey()).get(scanId);
-                            instanceParam.perNodeScanRanges.get(scanId).addAll(scanRangeParams);
+                            if (!instanceReplicateScanSet.contains(scanId)) {
+                                instanceParam.perNodeScanRanges.get(scanId).addAll(nodeScanRange.getValue());
+                                instanceReplicateScanSet.add(scanId);
+                            }
                         } else {
                             instanceParam.perNodeScanRanges.get(scanId).addAll(nodeScanRange.getValue());
                         }
@@ -1335,8 +1345,8 @@ public class Coordinator {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
                 boolean hasBucket =
                         isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
-                boolean hasRelicated = isRelicatedFragment(scanNode.getFragment().getPlanRoot());
-                if (assignment.size() > 0 && hasRelicated && scanNode.canDoReplicatedJoin()) {
+                boolean hasReplicated = isReplicatedFragment(scanNode.getFragment().getPlanRoot());
+                if (assignment.size() > 0 && hasReplicated && scanNode.canDoReplicatedJoin()) {
                     BackendSelector selector = new RelicatedBackendSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
@@ -1820,7 +1830,8 @@ public class Coordinator {
                 // For broker load, the ConnectContext.get() is null
                 if (ConnectContext.get() != null &&
                         ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-                    params.setIs_pipeline(fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                    params.setIs_pipeline(
+                            fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
                 }
                 paramsList.add(params);
             }
@@ -1963,6 +1974,28 @@ public class Coordinator {
                     scanRangeParamsList.add(scanRangeParams);
                 }
             }
+            // If this fragment has bucket/colocate join, there need to fill fragmentIdBucketSeqToScanRangeMap here.
+            // For example:
+            //                       join(replicated)
+            //                    /                    \
+            //            join(bucket/colocate)       scan(C)
+            //              /           \
+            //            scan(A)         scan(B)
+            // There are replicate join and bucket/colocate join in same fragment. for each bucket A,B used, we need to
+            // add table C all tablet because of the character of the replicate join.
+            BucketSeqToScanRange bucketSeqToScanRange = fragmentIdBucketSeqToScanRangeMap.get(scanNode.getFragmentId());
+            if (bucketSeqToScanRange != null && !bucketSeqToScanRange.isEmpty()) {
+                for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
+                    for (TScanRangeLocations scanRangeLocations : locations) {
+                        List<TScanRangeParams> scanRangeParamsList = findOrInsert(
+                                entry.getValue(), scanNode.getId().asInt(), new ArrayList<>());
+                        // add scan range
+                        TScanRangeParams scanRangeParams = new TScanRangeParams();
+                        scanRangeParams.scan_range = scanRangeLocations.scan_range;
+                        scanRangeParamsList.add(scanRangeParams);
+                    }
+                }
+            }
         }
     }
 
@@ -2001,8 +2034,6 @@ public class Coordinator {
                     Map<Integer, List<TScanRangeParams>> scanRanges =
                             bucketSeqToScanRange.computeIfAbsent(bucketSeq, k -> Maps.newHashMap());
 
-                    assignment.computeIfAbsent(bucketSeqToAddress.get(bucketSeq), k -> scanRanges);
-
                     List<TScanRangeParams> scanRangeParamsList =
                             scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
 
@@ -2010,6 +2041,48 @@ public class Coordinator {
                     TScanRangeParams scanRangeParams = new TScanRangeParams();
                     scanRangeParams.scan_range = location.scan_range;
                     scanRangeParamsList.add(scanRangeParams);
+                }
+            }
+            // Because of the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
+            // So if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate.
+            if (rightOrFullBucketShuffleFragmentIds.contains(fragmentId.asInt())) {
+                int bucketNum = getFragmentBucketNum(fragmentId);
+                HashMap<TNetworkAddress, Long> assignedBucketPerHost = Maps.newHashMap();
+                Set<TNetworkAddress> aliveBackendAdress =
+                        Catalog.getCurrentSystemInfo().getIdToBackend().values().stream().filter(Backend::isAlive)
+                                .map(be -> new TNetworkAddress(be.getHost(), be.getBePort()))
+                                .collect(Collectors.toSet());
+
+                for (int bucketSeq = 0; bucketSeq < bucketNum; ++bucketSeq) {
+                    if (!bucketSeqToAddress.containsKey(bucketSeq)) {
+                        Long minAssignedBuckets = Long.MAX_VALUE;
+                        TNetworkAddress minLocation = null;
+                        for (TNetworkAddress location : aliveBackendAdress) {
+                            Long assignedBucket = findOrInsert(assignedBucketPerHost, location, 0L);
+                            if (assignedBucket < minAssignedBuckets) {
+                                minAssignedBuckets = assignedBucket;
+                                minLocation = location;
+                            }
+                        }
+                        bucketSeqToAddress.put(bucketSeq, minLocation);
+                    }
+                    if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
+                        bucketSeqToScanRange.put(bucketSeq, Maps.newHashMap());
+                        bucketSeqToScanRange.get(bucketSeq).put(scanNode.getId().asInt(), Lists.newArrayList());
+                    }
+                }
+            }
+
+            // use bucketSeqToScanRange to fill FragmentScanRangeAssignment
+            for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
+                Integer bucketSeq = entry.getKey();
+                // fill FragmentScanRangeAssignment only when there are scan id in the bucket
+                if (entry.getValue().containsKey(scanNode.getId().asInt())) {
+                    Map<Integer, List<TScanRangeParams>> scanRanges =
+                            assignment.computeIfAbsent(bucketSeqToAddress.get(bucketSeq), k -> Maps.newHashMap());
+                    List<TScanRangeParams> scanRangeParamsList =
+                            scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
+                    scanRangeParamsList.addAll(entry.getValue().get(scanNode.getId().asInt()));
                 }
             }
         }

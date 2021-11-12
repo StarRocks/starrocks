@@ -50,12 +50,6 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    // Clones the src column to the dst chunk, which used when the src column is mapped to multiple dest columns.
-    void _clone_column(ChunkPtr& dst_chunk, const ColumnPtr& src_column, const SlotDescriptor* dst_slot,
-                       size_t row_count);
-    // Moves the src column to the dst chunk, which used when the src column is mapped to the only one dest column.
-    void _move_column(ChunkPtr& dst_chunk, ColumnPtr& src_column, const SlotDescriptor* dst_slot, size_t row_count);
-
     // Maps the dst slot id of the dest chunk to that of the src chunk.
     // There may be multiple dest slot ids mapping to the same src slot id,
     // so we should decide whether you can move the src column according to this situation.

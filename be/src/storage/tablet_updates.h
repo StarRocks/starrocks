@@ -235,7 +235,7 @@ private:
 
     StatusOr<std::unique_ptr<CompactionInfo>> _get_compaction();
 
-    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo, MemTracker* mem_tracker, bool wait_apply);
+    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply);
 
     void _calc_compaction_score(RowsetStats* stats);
 

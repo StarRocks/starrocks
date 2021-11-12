@@ -32,11 +32,13 @@
 
 #include "column/chunk.h"
 #include "gen_cpp/data.pb.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/row_batch.h"
 #include "runtime/vectorized/sorted_chunks_merger.h"
 #include "util/block_compression.h"
 #include "util/debug_util.h"
+#include "util/defer_op.h"
 #include "util/faststring.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
@@ -57,7 +59,7 @@ class DataStreamRecvr::SenderQueue {
 public:
     SenderQueue(DataStreamRecvr* parent_recvr, int num_senders);
 
-    ~SenderQueue() = default;
+    ~SenderQueue();
 
     // Return the next batch form this sender queue. Sets the returned batch in _cur_batch.
     // A returned batch that is not filled to capacity does *not* indicate
@@ -134,7 +136,7 @@ private:
 
     // queue of (batch length, batch) pairs.  The SenderQueue block owns memory to
     // these batches. They are handed off to the caller via get_batch.
-    typedef list<pair<int, RowBatch*>> RowBatchQueue;
+    typedef list<pair<int, std::unique_ptr<RowBatch>>> RowBatchQueue;
     RowBatchQueue _batch_queue;
 
     typedef std::list<std::pair<int, ChunkUniquePtr>> ChunkQueue;
@@ -249,7 +251,7 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
     auto iter = _packet_seq_map.find(be_number);
     if (iter != _packet_seq_map.end()) {
         if (iter->second >= packet_seq) {
-            LOG(WARNING) << "packet already exist [cur_packet_id= " << iter->second
+            LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
                          << " receive_packet_id=" << packet_seq << "]";
             return;
         }
@@ -287,17 +289,23 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
         return;
     }
 
-    RowBatch* batch = nullptr;
+    std::unique_ptr<RowBatch> batch;
     {
         SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
         // Note: if this function makes a row batch, the batch *must* be added
         // to _batch_queue. It is not valid to create the row batch and destroy
         // it in this thread.
-        batch = new RowBatch(_recvr->row_desc(), pb_batch, _recvr->mem_tracker());
+        batch = std::make_unique<RowBatch>(_recvr->row_desc(), pb_batch);
+        Status status = batch->init(pb_batch);
+        if (!status.ok()) {
+            LOG(WARNING) << "batch init failed, [cur_packet_id= " << iter->second << " receive_packet_id=" << packet_seq
+                         << "]";
+            return;
+        }
     }
 
     VLOG_ROW << "added #rows=" << batch->num_rows() << " batch_size=" << batch_size << "\n";
-    _batch_queue.emplace_back(batch_size, batch);
+    _batch_queue.emplace_back(batch_size, std::move(batch));
 
     // if done is nullptr, this function can't delay this response
     if (done != nullptr && _recvr->exceeds_limit(batch_size)) {
@@ -380,7 +388,7 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         auto iter = _packet_seq_map.find(be_number);
         if (iter != _packet_seq_map.end()) {
             if (iter->second >= sequence) {
-                LOG(WARNING) << "packet already exist [cur_packet_id= " << iter->second
+                LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
                              << " receive_packet_id=" << sequence << "]";
                 return Status::OK();
             }
@@ -530,12 +538,12 @@ void DataStreamRecvr::SenderQueue::close() {
         _pending_closures.clear();
     }
 
-    // Delete any batches queued in _batch_queue
-    for (auto& it : _batch_queue) {
-        delete it.second;
-    }
-
+    _batch_queue.clear();
     _current_batch.reset();
+}
+
+DataStreamRecvr::SenderQueue::~SenderQueue() {
+    close();
 }
 
 Status DataStreamRecvr::create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
@@ -596,7 +604,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, c
     return Status::OK();
 }
 
-DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_tracker, const RowDescriptor& row_desc,
+DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
                                  std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
@@ -609,14 +617,11 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
           _is_merging(is_merging),
           _num_buffered_bytes(0),
           _profile(std::move(profile)),
+          _instance_profile(runtime_state->runtime_profile_ptr()),
+          _query_mem_tracker(runtime_state->query_mem_tracker_ptr()),
+          _instance_mem_tracker(runtime_state->instance_mem_tracker_ptr()),
           _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
           _is_pipeline(is_pipeline) {
-    (void)parent_tracker;
-    // TODO: Now the parent tracker may cause problem when we need spill to disk, so we
-    // replace parent_tracker with nullptr, fix future
-    _mem_tracker = std::make_unique<MemTracker>(_profile.get(), -1, "DataStreamRecvr", nullptr);
-    // _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", parent_tracker));
-
     // Create one queue per sender if is_merging is true.
 
     int num_queues = is_merging ? num_senders : 1;
@@ -665,6 +670,9 @@ void DataStreamRecvr::add_batch(const PRowBatch& batch, int sender_id, int be_nu
 }
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     SCOPED_TIMER(_sender_total_timer);
     COUNTER_UPDATE(_request_received_counter, 1);
     int use_sender_id = _is_merging ? request.sender_id() : 0;
@@ -692,17 +700,18 @@ void DataStreamRecvr::close() {
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->close();
     }
+    _sender_queues.clear();
     // Remove this receiver from the DataStreamMgr that created it.
     // TODO: log error msg
-    _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
-    _mgr = nullptr;
+    if (_mgr) {
+        _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
+        _mgr = nullptr;
+    }
     _chunks_merger.reset();
-    _mem_tracker->close();
-    _mem_tracker.reset();
 }
 
 DataStreamRecvr::~DataStreamRecvr() {
-    DCHECK(_mgr == nullptr) << "Must call close()";
+    close();
 }
 
 Status DataStreamRecvr::get_chunk(std::unique_ptr<vectorized::Chunk>* chunk) {

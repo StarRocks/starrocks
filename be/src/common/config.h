@@ -305,6 +305,11 @@ CONF_mInt32(base_compaction_trace_threshold, "120");
 CONF_mInt32(cumulative_compaction_trace_threshold, "60");
 CONF_mInt32(update_compaction_trace_threshold, "20");
 
+// Max row source mask memory bytes, default is 200M.
+// Should be smaller than compaction_mem_limit.
+// When the row source mask buffer exceeds this, it will be persisted to a temporary file on the disk.
+CONF_Int64(max_row_source_mask_memory_bytes, "209715200");
+
 // Port to start debug webserver on
 CONF_Int32(webserver_port, "8040");
 // Number of webserver workers
@@ -633,6 +638,8 @@ CONF_Int64(pipeline_io_thread_pool_thread_num, "3");
 CONF_Int64(pipeline_io_thread_pool_queue_size, "102400");
 // the number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "3");
+// the buffer size of io task
+CONF_Int64(pipeline_io_buffer_size, "64");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 // schema change vectorized

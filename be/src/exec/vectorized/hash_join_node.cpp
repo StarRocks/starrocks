@@ -23,6 +23,8 @@
 #include "util/runtime_profile.h"
 namespace starrocks::vectorized {
 
+static constexpr size_t kHashJoinKeyColumnOffset = 1;
+
 HashJoinNode::HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _hash_join_node(tnode.hash_join_node),
@@ -121,7 +123,6 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
-    param->mem_tracker = _mem_tracker.get();
     param->build_row_desc = &child(1)->row_desc();
     param->probe_row_desc = &child(0)->row_desc();
     param->search_ht_timer = _search_ht_timer;
@@ -173,6 +174,7 @@ Status HashJoinNode::open(RuntimeState* state) {
         }
 
         {
+            RETURN_IF_ERROR(state->check_mem_limit("HashJoinNode"));
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
             RETURN_IF_ERROR(_ht.append_chunk(state, chunk));
@@ -182,6 +184,7 @@ Status HashJoinNode::open(RuntimeState* state) {
     {
         // build hash table: compute key columns, and then build the hash table.
         RETURN_IF_ERROR(_build(state));
+        RETURN_IF_ERROR(state->check_mem_limit("HashJoinNode"));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
     }
@@ -235,6 +238,8 @@ Status HashJoinNode::open(RuntimeState* state) {
             return Status::OK();
         }
     }
+
+    _mem_tracker->set(_ht.mem_usage());
 
     return Status::OK();
 }
@@ -357,8 +362,8 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
     // Up to now, both HashJoin{Build, Probe}Operator is not parallelized, so add LocalExchangeOperator
     // to merge multi-stream into one stream then pipe into HashJoin{Build, Probe}Operator.
-    auto operators_with_build_op = context->maybe_interpolate_local_exchange(rhs_operators);
-    auto operators_with_probe_op = context->maybe_interpolate_local_exchange(lhs_operators);
+    auto operators_with_build_op = context->maybe_interpolate_local_passthrough_exchange(rhs_operators);
+    auto operators_with_probe_op = context->maybe_interpolate_local_passthrough_exchange(lhs_operators);
     // add build-side pipeline to context and return probe-side pipeline.
     operators_with_build_op.emplace_back(std::move(build_op));
     context->add_pipeline(operators_with_build_op);
@@ -722,7 +727,8 @@ Status HashJoinNode::_push_down_in_filter(RuntimeState* state) {
             ExprContext* filter =
                     RuntimeFilterHelper::create_runtime_in_filter(state, _pool, probe_expr, _is_null_safes[i]);
             if (filter == nullptr) continue;
-            RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_in_filter(column, probe_expr, filter));
+            RETURN_IF_ERROR(
+                    RuntimeFilterHelper::fill_runtime_in_filter(column, probe_expr, filter, kHashJoinKeyColumnOffset));
             _runtime_in_filters.push_back(filter);
         }
     }
@@ -753,7 +759,8 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         filter->set_join_mode(rf_desc->join_mode());
         filter->init(_ht.get_row_count());
         ColumnPtr column = _ht.get_key_columns()[rf_desc->build_expr_order()];
-        RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter));
+        RETURN_IF_ERROR(
+                RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter, kHashJoinKeyColumnOffset));
         rf_desc->set_runtime_filter(filter);
     }
 

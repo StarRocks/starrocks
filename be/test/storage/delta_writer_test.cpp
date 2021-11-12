@@ -291,19 +291,18 @@ TEST_F(TestDeltaWriter, open) {
     load_id.set_hi(0);
     load_id.set_lo(0);
     WriteRequest write_req = {10003, 270068375, WriteType::LOAD, 20001, 30001, load_id, tuple_desc};
-    DeltaWriter* delta_writer = nullptr;
+    std::shared_ptr<DeltaWriter> delta_writer;
     DeltaWriter::open(&write_req, k_tablet_meta_mem_tracker, &delta_writer);
-    ASSERT_NE(delta_writer, nullptr);
+    ASSERT_NE(delta_writer.get(), nullptr);
     OLAPStatus res = delta_writer->close();
     ASSERT_EQ(OLAP_SUCCESS, res);
     res = delta_writer->close_wait(nullptr);
     ASSERT_EQ(OLAP_SUCCESS, res);
-    SAFE_DELETE(delta_writer);
 
     TDropTabletReq drop_request;
     auto tablet_id = 10003;
     auto schema_hash = 270068375;
-    st = k_engine->tablet_manager()->drop_tablet(tablet_id, schema_hash);
+    st = k_engine->tablet_manager()->drop_tablet(tablet_id);
     ASSERT_TRUE(st.ok()) << st.to_string();
 }
 
@@ -327,9 +326,9 @@ TEST_F(TestDeltaWriter, write) {
     load_id.set_lo(0);
     WriteRequest write_req = {10004, 270068376, WriteType::LOAD, 20002,
                               30002, load_id,   tuple_desc,      &(tuple_desc->slots())};
-    DeltaWriter* delta_writer = nullptr;
+    std::shared_ptr<DeltaWriter> delta_writer;
     DeltaWriter::open(&write_req, k_tablet_meta_mem_tracker, &delta_writer);
-    ASSERT_NE(delta_writer, nullptr);
+    ASSERT_NE(delta_writer.get(), nullptr);
 
     MemPool pool;
     // Tuple 1
@@ -393,7 +392,7 @@ TEST_F(TestDeltaWriter, write) {
     ASSERT_EQ(OLAP_SUCCESS, res);
 
     // publish version success
-    TabletSharedPtr tablet = k_engine->tablet_manager()->get_tablet(write_req.tablet_id, write_req.schema_hash);
+    TabletSharedPtr tablet = k_engine->tablet_manager()->get_tablet(write_req.tablet_id);
     std::cout << "before publish, tablet row nums:" << tablet->num_rows() << std::endl;
     KVStore* meta = tablet->data_dir()->get_meta();
     Version version;
@@ -418,9 +417,8 @@ TEST_F(TestDeltaWriter, write) {
     }
     ASSERT_EQ(1, tablet->num_rows());
 
-    st = k_engine->tablet_manager()->drop_tablet(write_req.tablet_id, write_req.schema_hash);
+    st = k_engine->tablet_manager()->drop_tablet(write_req.tablet_id);
     ASSERT_TRUE(st.ok()) << st.to_string();
-    delete delta_writer;
 }
 
 } // namespace starrocks

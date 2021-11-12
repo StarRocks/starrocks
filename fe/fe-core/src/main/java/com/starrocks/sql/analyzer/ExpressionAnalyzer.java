@@ -623,7 +623,8 @@ public class ExpressionAnalyzer {
                 thenTypes.add(elseExpr.getType());
             }
 
-            Type returnType = TypeManager.getCompatibleTypeForCaseWhen(thenTypes);
+            Type returnType = thenTypes.stream().allMatch(Type.NULL::equals) ? Type.BOOLEAN :
+                    TypeManager.getCompatibleTypeForCaseWhen(thenTypes);
             for (Type type : thenTypes) {
                 if (!canCast(type, returnType)) {
                     throw new SemanticException("Invalid then type cast " + type.toSql()

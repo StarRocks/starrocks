@@ -412,6 +412,7 @@ struct OlapReaderStatistics {
     int64_t segment_init_ns = 0;
     int64_t segment_create_chunk_ns = 0;
 
+    int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;
     int64_t rows_stats_filtered = 0;
     int64_t rows_bf_filtered = 0;

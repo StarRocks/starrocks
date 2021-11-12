@@ -2,6 +2,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
@@ -128,10 +129,10 @@ public class PlanFragmentBuilder {
     public ExecPlan createPhysicalPlan(OptExpression plan, PlannerContext plannerContext, ConnectContext connectContext,
                                        List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory,
                                        List<String> colNames) {
-        ExecPlan execPlan = new ExecPlan(plannerContext, connectContext, colNames);
+        ExecPlan execPlan = new ExecPlan(plannerContext, connectContext, colNames, plan, outputColumns);
         createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).visit(plan, execPlan), execPlan,
                 outputColumns);
-
+        execPlan.setPlanCount(plan.getPlanCount());
         try {
             List<PlanFragment> fragments = execPlan.getFragments();
             for (PlanFragment fragment : fragments) {
@@ -150,7 +151,7 @@ public class PlanFragmentBuilder {
                                                 ConnectContext connectContext,
                                                 List<ColumnRefOperator> outputColumns,
                                                 ColumnRefFactory columnRefFactory, boolean isStatistic) {
-        ExecPlan execPlan = new ExecPlan(plannerContext, connectContext, new ArrayList<>());
+        ExecPlan execPlan = new ExecPlan(plannerContext, connectContext, new ArrayList<>(), plan, outputColumns);
         createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).visit(plan, execPlan), execPlan,
                 outputColumns);
 
@@ -368,7 +369,8 @@ public class PlanFragmentBuilder {
             Map<SlotId, Expr> projectMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : node.getStringFunctions().entrySet()) {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), node.getStringFunctions()));
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                node.getStringFunctions()));
 
                 projectMap.put(new SlotId(entry.getKey().getId()), expr);
                 Preconditions.checkState(context.getColRefToExpr().containsKey(entry.getKey()));
@@ -474,6 +476,8 @@ public class PlanFragmentBuilder {
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
             scanNode.setDictStringIdToIntIds(node.getDictStringIdToIntIds());
+            scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
+                    map(entry -> entry.first).collect(Collectors.toSet()));
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -1218,6 +1222,7 @@ public class PlanFragmentBuilder {
                     joinNode.setReplicated(true);
                 }
 
+                leftFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
                 return leftFragment;
             } else {
                 JoinOperator joinOperator = node.getJoinType();
@@ -1237,10 +1242,13 @@ public class PlanFragmentBuilder {
                     distributionMode = HashJoinNode.DistributionMode.BROADCAST;
                 } else if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
                         !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                    if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
+                    if (isColocateJoin(optExpr, context, leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                        distributionMode = HashJoinNode.DistributionMode.COLOCATE;
+                    } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
                             rightFragment.getPlanRoot().canDoReplicatedJoin()) {
                         distributionMode = HashJoinNode.DistributionMode.REPLICATED;
                     } else {
+                        Preconditions.checkState(false, "Must be replicate join or colocate join");
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
                     }
                 } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
@@ -1325,6 +1333,7 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(leftFragment);
                     leftFragment.setPlanRoot(hashJoinNode);
                     leftFragment.addChild(rightFragment.getChild(0));
+                    leftFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
@@ -1364,6 +1373,8 @@ public class PlanFragmentBuilder {
                     joinFragment.addChild(leftFragment.getChild(0));
                     joinFragment.addChild(rightFragment.getChild(0));
 
+                    joinFragment.mergeGlobalDicts(leftFragment.getGlobalDicts());
+                    joinFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
                     context.getFragments().add(joinFragment);
 
                     return joinFragment;
@@ -1383,6 +1394,8 @@ public class PlanFragmentBuilder {
 
                     context.getFragments().remove(leftFragment);
                     context.getFragments().add(leftFragment);
+
+                    leftFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
@@ -1394,10 +1407,10 @@ public class PlanFragmentBuilder {
                     // distributionMode is SHUFFLE_HASH_BUCKET
                     if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
                             !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                        return computeRunTimeBucketShufflePlanFragment(context, leftOnPredicateColumns, rightFragment,
+                        return computeRunTimeBucketShufflePlanFragment(context, rightFragment,
                                 leftFragment, hashJoinNode);
                     } else {
-                        return computeRunTimeBucketShufflePlanFragment(context, rightOnPredicateColumns, leftFragment,
+                        return computeRunTimeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, hashJoinNode);
                     }
                 } else {
@@ -1410,14 +1423,54 @@ public class PlanFragmentBuilder {
                     // distributionMode is BUCKET_SHUFFLE
                     if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
                             !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                        return computeBucketShufflePlanFragment(context, leftOnPredicateColumns, rightFragment,
+                        return computeBucketShufflePlanFragment(context, rightFragment,
                                 leftFragment, hashJoinNode);
                     } else {
-                        return computeBucketShufflePlanFragment(context, rightOnPredicateColumns, leftFragment,
+                        return computeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, hashJoinNode);
                     }
                 }
             }
+        }
+
+        private boolean isColocateJoin(OptExpression optExpression, ExecPlan context, PlanNode left, PlanNode right) {
+            List<OlapScanNode> rightScanNodes = Lists.newArrayList();
+            right.collectAll((Predicate<PlanNode>) node -> node instanceof OlapScanNode, rightScanNodes);
+            if (rightScanNodes.size() != 1) {
+                return true;
+            }
+
+            PhysicalHashJoinOperator joinNode = (PhysicalHashJoinOperator) optExpression.getOp();
+            List<OlapScanNode> leftScanNodes = Lists.newArrayList();
+            left.collectAll((Predicate<PlanNode>) node -> node instanceof OlapScanNode, leftScanNodes);
+
+            ColumnRefSet leftChildColumns = optExpression.getInputs().get(0).getOutputColumns();
+            ColumnRefSet rightChildColumns = optExpression.getInputs().get(1).getOutputColumns();
+            List<BinaryPredicateOperator> equalOnPredicate =
+                    JoinPredicateUtils.getEqConj(leftChildColumns, rightChildColumns,
+                            Utils.extractConjuncts(joinNode.getJoinPredicate()));
+
+            List<Integer> leftOnPredicateColumns = new ArrayList<>();
+            List<Integer> rightOnPredicateColumns = new ArrayList<>();
+            JoinPredicateUtils.getJoinOnPredicatesColumns(equalOnPredicate, leftChildColumns, rightChildColumns,
+                    leftOnPredicateColumns, rightOnPredicateColumns);
+
+            ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+            for (OlapScanNode node : leftScanNodes) {
+                if (leftOnPredicateColumns.stream()
+                        .allMatch(s -> null != context.getDescTbl().getTupleDesc(node.getTupleId()).getSlot(s))) {
+                    boolean isColocateGroup = colocateIndex
+                            .isSameGroup(node.getOlapTable().getId(), rightScanNodes.get(0).getOlapTable().getId());
+                    if (node.getOlapTable().getId() == rightScanNodes.get(0).getOlapTable().getId() &&
+                            !isColocateGroup) {
+                        return true;
+                    } else {
+                        return isColocateGroup &&
+                                !colocateIndex.isGroupUnstable(colocateIndex.getGroup(node.getOlapTable().getId()));
+                    }
+                }
+            }
+            return false;
         }
 
         public boolean isShuffleJoin(HashJoinNode node) {
@@ -1453,7 +1506,7 @@ public class PlanFragmentBuilder {
             return false;
         }
 
-        public PlanFragment computeBucketShufflePlanFragment(ExecPlan context, List<Integer> columns,
+        public PlanFragment computeBucketShufflePlanFragment(ExecPlan context,
                                                              PlanFragment stayFragment,
                                                              PlanFragment removeFragment, HashJoinNode hashJoinNode) {
             hashJoinNode.setLocalHashBucket(true);
@@ -1470,10 +1523,11 @@ public class PlanFragmentBuilder {
 
             stayFragment.setPlanRoot(hashJoinNode);
             stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.mergeGlobalDicts(removeFragment.getGlobalDicts());
             return stayFragment;
         }
 
-        public PlanFragment computeRunTimeBucketShufflePlanFragment(ExecPlan context, List<Integer> columns,
+        public PlanFragment computeRunTimeBucketShufflePlanFragment(ExecPlan context,
                                                                     PlanFragment stayFragment,
                                                                     PlanFragment removeFragment,
                                                                     HashJoinNode hashJoinNode) {
@@ -1491,6 +1545,7 @@ public class PlanFragmentBuilder {
 
             stayFragment.setPlanRoot(hashJoinNode);
             stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.mergeGlobalDicts(removeFragment.getGlobalDicts());
             return stayFragment;
         }
 
@@ -1705,6 +1760,13 @@ public class PlanFragmentBuilder {
                     outputGroupingTuple,
                     repeatSlotIdList,
                     repeatOperator.getGroupingIds());
+            List<ScalarOperator> predicates = Utils.extractConjuncts(repeatOperator.getPredicate());
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+
+            for (ScalarOperator predicate : predicates) {
+                repeatNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
             repeatNode.computeStatistics(optExpr.getStatistics());
 
             inputFragment.setPlanRoot(repeatNode);

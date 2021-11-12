@@ -8,6 +8,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/tablet_schema.h"
+#include "storage/vectorized/column_expr_predicate.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/type_utils.h"
 
@@ -72,7 +73,7 @@ ColumnPredicate* PredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc
     auto scale = col.scale();
     auto type = TypeUtils::to_storage_format_v2(col.type());
     auto&& type_info = get_type_info(type, precision, scale);
-    return new_column_expr_predicate(type_info, column_id, state, expr_ctx, &slot_desc);
+    return new ColumnExprPredicate(type_info, column_id, state, expr_ctx, &slot_desc);
 }
 
 } // namespace starrocks::vectorized

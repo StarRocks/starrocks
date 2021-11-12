@@ -18,7 +18,6 @@
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
 class FragmentContext {
     friend FragmentContextManager;
@@ -42,6 +41,7 @@ public:
     const TNetworkAddress& fe_addr() { return _fe_addr; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
+    std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
     ExecNode* plan() const { return _plan; }
     void set_plan(ExecNode* plan) { _plan = plan; }

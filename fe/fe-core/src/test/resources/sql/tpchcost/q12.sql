@@ -29,7 +29,7 @@ order by
     l_shipmode ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:25: L_SHIPMODE | 30: sum(28: expr) | 31: sum(29: expr)
+OUTPUT EXPRS:25: L_SHIPMODE | 30: sum(28: case) | 31: sum(29: case)
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -51,7 +51,7 @@ UNPARTITIONED
 |  use vectorized: true
 |
 8:AGGREGATE (merge finalize)
-|  output: sum(30: sum(28: expr)), sum(31: sum(29: expr))
+|  output: sum(30: sum(28: case)), sum(31: sum(29: case))
 |  group by: 25: L_SHIPMODE
 |  use vectorized: true
 |
@@ -68,14 +68,14 @@ HASH_PARTITIONED: 25: L_SHIPMODE
 
 6:AGGREGATE (update serialize)
 |  STREAMING
-|  output: sum(28: expr), sum(29: expr)
+|  output: sum(28: case), sum(29: case)
 |  group by: 25: L_SHIPMODE
 |  use vectorized: true
 |
 5:Project
 |  <slot 25> : 25: L_SHIPMODE
-|  <slot 28> : CASE WHEN (6: O_ORDERPRIORITY = '1-URGENT') OR (6: O_ORDERPRIORITY = '2-HIGH') THEN 1 ELSE 0 END
-|  <slot 29> : CASE WHEN (6: O_ORDERPRIORITY != '1-URGENT') AND (6: O_ORDERPRIORITY != '2-HIGH') THEN 1 ELSE 0 END
+|  <slot 28> : if((6: O_ORDERPRIORITY = '1-URGENT') OR (6: O_ORDERPRIORITY = '2-HIGH'), 1, 0)
+|  <slot 29> : if((6: O_ORDERPRIORITY != '1-URGENT') AND (6: O_ORDERPRIORITY != '2-HIGH'), 1, 0)
 |  use vectorized: true
 |
 4:HASH JOIN

@@ -27,6 +27,19 @@ public:
     void get_next(ChunkPtr* chunk, bool* eos) override;
     bool pull_chunk(ChunkPtr* chunk) override;
 
+    int64_t mem_usage() const override {
+        int64_t usage = 0;
+        if (_big_chunk != nullptr) {
+            usage += _big_chunk->memory_usage();
+        }
+        if (_sorted_segment != nullptr) {
+            usage += _sorted_segment->mem_usage();
+        }
+        usage += _sorted_permutation.capacity() * sizeof(Permutation);
+        usage += _selective_values.capacity() * sizeof(uint32_t);
+        return usage;
+    }
+
     friend class SortHelper;
 
 private:

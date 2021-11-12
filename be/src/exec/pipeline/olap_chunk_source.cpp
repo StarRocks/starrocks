@@ -7,12 +7,13 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/map_util.h"
-#include "runtime/current_mem_tracker.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/primitive_type.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/predicate_parser.h"
 #include "storage/vectorized/projection_iterator.h"
 
@@ -24,6 +25,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     _slots = &tuple_desc->slots();
 
     _init_counter(state);
+
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
 
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status);
     OlapScanConjunctsManager& cm = _conjuncts_manager;
@@ -96,6 +99,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
+    _dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state);
 
     // FixMe(kks): Ensure this logic is right.
     int scanners_per_tablet = 64;
@@ -119,7 +123,7 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash, true, &err);
+    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
     if (!_tablet) {
         std::stringstream ss;
         ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
@@ -150,6 +154,12 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
         } else {
             _not_push_down_predicates.add(p);
         }
+    }
+
+    {
+        vectorized::ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
+                                                                                  *_params.global_dictmaps);
+        not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
     }
 
     // Range
@@ -212,6 +222,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
+    RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
@@ -229,6 +240,10 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     if (!_not_push_down_conjuncts.empty() || !_not_push_down_predicates.empty()) {
         _expr_filter_timer = ADD_TIMER(_scan_profile, "ExprFilterTime");
     }
+
+    DCHECK(_params.global_dictmaps != nullptr);
+    RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
+
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
     return Status::OK();
@@ -240,25 +255,59 @@ bool OlapChunkSource::has_next_chunk() const {
     return _status.ok();
 }
 
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk() {
+bool OlapChunkSource::has_output() const {
+    return !_chunk_buffer.empty();
+}
+
+size_t OlapChunkSource::get_buffer_size() const {
+    return _chunk_buffer.get_size();
+}
+
+StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
+    vectorized::ChunkPtr chunk = nullptr;
+    _chunk_buffer.try_get(&chunk);
+    return chunk;
+}
+
+Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
     if (!_status.ok()) {
         return _status;
     }
     using namespace vectorized;
-    ChunkUniquePtr chunk(ChunkHelper::new_chunk_pooled(_prj_iter->schema(), config::vector_chunk_size, true));
-    _status = _read_chunk_from_storage(_runtime_state, chunk.get());
-    if (!_status.ok()) {
-        return _status;
+
+    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+        ChunkUniquePtr chunk(
+                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
+        _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+        if (!_status.ok()) {
+            break;
+        }
+        _chunk_buffer.put(std::move(chunk));
     }
-    return std::move(chunk);
+    return _status;
 }
 
-void OlapChunkSource::cache_next_chunk_blocking() {
-    _chunk = get_next_chunk();
-}
+// mapping a slot-column-id to schema-columnid
+Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* params) {
+    const auto& global_dict_map = _runtime_state->get_global_dict_map();
+    auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
+    // mapping column id to storage column ids
+    const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(_tuple_id);
+    for (auto slot : tuple_desc->slots()) {
+        if (!slot->is_materialized()) {
+            continue;
+        }
+        auto iter = global_dict_map.find(slot->id());
+        if (iter != global_dict_map.end()) {
+            auto& dict_map = iter->second.first;
+            int32_t index = _tablet->field_index(slot->col_name());
+            DCHECK(index >= 0);
+            global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+        }
+    }
+    params->global_dictmaps = global_dict;
 
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk_nonblocking() {
-    return std::move(_chunk);
+    return Status::OK();
 }
 
 Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized::Chunk* chunk) {
@@ -277,20 +326,16 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         }
 
         if (!_not_push_down_predicates.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
             _not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows);
             chunk->filter(_selection);
-            CurrentMemTracker::consume((int64_t)chunk->memory_usage() - old_mem_usage);
             DCHECK_CHUNK(chunk);
         }
         if (!_not_push_down_conjuncts.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk);
-            CurrentMemTracker::consume((int64_t)chunk->memory_usage() - old_mem_usage);
             DCHECK_CHUNK(chunk);
         }
     } while (chunk->num_rows() == 0);
@@ -302,6 +347,7 @@ Status OlapChunkSource::close(RuntimeState* state) {
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
+    _dict_optimize_parser.close(state);
     return Status::OK();
 }
 

@@ -82,7 +82,7 @@ public:
     // Specific parts of the fragment (i.e. exec nodes, sinks, data stream senders, etc)
     // will add a fourth level when they are initialized.
     // This function also initializes a user function mem tracker (in the fourth level).
-    Status init_mem_trackers(const TUniqueId& query_id);
+    void init_mem_trackers(const TUniqueId& query_id);
 
     // for ut only
     Status init_instance_mem_tracker();
@@ -106,6 +106,8 @@ public:
     ExecEnv* exec_env() { return _exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
+    std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
+    std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
 
@@ -115,7 +117,8 @@ public:
     }
 
     // Returns runtime state profile
-    RuntimeProfile* runtime_profile() { return &_profile; }
+    RuntimeProfile* runtime_profile() { return _profile.get(); }
+    std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _profile; }
 
     Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
@@ -183,6 +186,8 @@ public:
     // or a mem limit was exceeded). Exec nodes should check this periodically so execution
     // doesn't continue if the query terminates abnormally.
     Status check_query_state(const std::string& msg);
+
+    Status check_mem_limit(const std::string& msg);
 
     std::vector<std::string>& output_files() { return _output_files; }
 
@@ -276,7 +281,7 @@ private:
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some of object in _obj_pool will use profile when deconstructing.
-    RuntimeProfile _profile;
+    std::shared_ptr<RuntimeProfile> _profile;
 
     DescriptorTbl* _desc_tbl = nullptr;
 
@@ -309,10 +314,10 @@ private:
 
     // MemTracker that is shared by all fragment instances running on this host.
     // The query mem tracker must be released after the _instance_mem_tracker.
-    std::unique_ptr<MemTracker> _query_mem_tracker;
+    std::shared_ptr<MemTracker> _query_mem_tracker;
 
     // Memory usage of this fragment instance
-    std::unique_ptr<MemTracker> _instance_mem_tracker;
+    std::shared_ptr<MemTracker> _instance_mem_tracker;
 
     std::shared_ptr<ObjectPool> _obj_pool;
 
@@ -369,6 +374,45 @@ private:
 
     vectorized::GlobalDictMaps _global_dicts;
 };
+
+#define LIMIT_EXCEEDED(tracker, state, msg)                                                       \
+    do {                                                                                          \
+        stringstream str;                                                                         \
+        str << "Memory exceed limit. " << msg << " ";                                             \
+        str << "Backend: " << BackendOptions::get_localhost() << ", ";                            \
+        if (state != nullptr) {                                                                   \
+            str << "fragment: " << print_id(state->fragment_instance_id()) << " ";                \
+        }                                                                                         \
+        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";     \
+        switch (tracker->type()) {                                                                \
+        case MemTracker::NO_SET:                                                                  \
+            break;                                                                                \
+        case MemTracker::QUERY:                                                                   \
+            str << "Mem usage has exceed the limit of single query, You can change the limit by " \
+                   "set session variable exec_mem_limit.";                                        \
+            break;                                                                                \
+        case MemTracker::PROCESS:                                                                 \
+            str << "Mem usage has exceed the limit of BE";                                        \
+            break;                                                                                \
+        case MemTracker::QUERY_POOL:                                                              \
+            str << "Mem usage has exceed the limit of query pool";                                \
+            break;                                                                                \
+        case MemTracker::LOAD:                                                                    \
+            str << "Mem usage has exceed the limit of load";                                      \
+            break;                                                                                \
+        default:                                                                                  \
+            break;                                                                                \
+        }                                                                                         \
+        return Status::MemoryLimitExceeded(str.str());                                            \
+    } while (false)
+
+#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
+    do {                                                                                    \
+        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker(); \
+        if (tracker != nullptr) {                                                           \
+            LIMIT_EXCEEDED(tracker, state, msg);                                            \
+        }                                                                                   \
+    } while (false)
 
 #define RETURN_IF_CANCELLED(state)                                                       \
     do {                                                                                 \
