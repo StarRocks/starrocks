@@ -52,7 +52,7 @@ class DataDir;
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
+    TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -132,6 +132,11 @@ public:
     void register_clone_tablet(int64_t tablet_id);
     void unregister_clone_tablet(int64_t tablet_id);
 
+    size_t shutdown_tablets() const {
+        std::shared_lock l(_shutdown_tablets_lock);
+        return _shutdown_tablets.size();
+    }
+
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
     using TabletSet = std::unordered_set<int64_t>;
@@ -203,9 +208,9 @@ private:
     LockTable _schema_change_lock_tbl;
 
     // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock
-    std::shared_mutex _partition_tablet_map_lock;
+    mutable std::shared_mutex _partition_tablet_map_lock;
     // Protect _shutdown_tablets, should not be obtained before _tablet_map_lock to avoid deadlock
-    std::shared_mutex _shutdown_tablets_lock;
+    mutable std::shared_mutex _shutdown_tablets_lock;
     // partition_id => tablet_info
     std::map<int64_t, std::set<TabletInfo>> _partition_tablet_map;
     std::map<int64_t, TabletSharedPtr> _shutdown_tablets;

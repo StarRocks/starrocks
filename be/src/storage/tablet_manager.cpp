@@ -21,6 +21,7 @@
 
 #include "storage/tablet_manager.h"
 
+#include <bvar/bvar.h>
 #include <fmt/format.h>
 #include <re2/re2.h>
 #include <thrift/protocol/TDebugProtocol.h>
@@ -57,6 +58,17 @@ using std::set;
 using strings::Substitute;
 
 namespace starrocks {
+
+static void get_shutdown_tablets(std::ostream& os, void*) {
+    auto mgr = StorageEngine::instance() ? StorageEngine::instance()->tablet_manager() : nullptr;
+    if (mgr != nullptr) {
+        os << mgr->shutdown_tablets();
+    } else {
+        os << "unknown";
+    }
+}
+
+bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
 TabletManager::TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size)
         : _mem_tracker(mem_tracker),
