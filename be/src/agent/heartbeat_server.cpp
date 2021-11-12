@@ -95,8 +95,15 @@ Status HeartbeatServer::_heartbeat(const TMasterInfo& master_info) {
             return Status::InternalError("fail to set cluster id.");
         } else {
             _master_info->cluster_id = master_info.cluster_id;
-            LOG(INFO) << "record cluster id. host: " << master_info.network_address.hostname
-                      << ". port: " << master_info.network_address.port << ". cluster id: " << master_info.cluster_id;
+            std::string LOCALHOST = "127.0.0.1";
+            if ((master_info.network_address.hostname == LOCALHOST) && (master_info.backend_ip != LOCALHOST)) {
+                std::stringstream ss;
+                ss << "FE heartbeat with localhost ip but BE is not deployed on the same machine " << master_info.backend_ip;
+                return Status::InternalError(ss.str());
+            } else {
+                LOG(INFO) << "record cluster id. host: " << master_info.network_address.hostname
+                          << ". port: " << master_info.network_address.port << ". cluster id: " << master_info.cluster_id;
+            }
         }
     } else {
         if (_master_info->cluster_id != master_info.cluster_id) {
