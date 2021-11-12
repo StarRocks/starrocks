@@ -39,11 +39,11 @@ order by
     numwait desc,
     s_name limit 100;
 [result]
-TOP-N (order by [[77: count() DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])
-    TOP-N (order by [[77: count() DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{77: count()=count(77: count())}] group by [[2: S_NAME]] having [null]
+TOP-N (order by [[77: count DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])
+    TOP-N (order by [[77: count DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{77: count=count(77: count)}] group by [[2: S_NAME]] having [null]
             EXCHANGE SHUFFLE[2]
-                AGGREGATE ([LOCAL] aggregate [{77: count()=count()}] group by [[2: S_NAME]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{77: count=count()}] group by [[2: S_NAME]] having [null]
                     RIGHT ANTI JOIN (join-predicate [59: L_ORDERKEY = 9: L_ORDERKEY AND 61: L_SUPPKEY != 11: L_SUPPKEY] post-join-predicate [null])
                         SCAN (columns[70: L_COMMITDATE, 71: L_RECEIPTDATE, 59: L_ORDERKEY, 61: L_SUPPKEY] predicate[71: L_RECEIPTDATE > 70: L_COMMITDATE])
                         EXCHANGE SHUFFLE[9]

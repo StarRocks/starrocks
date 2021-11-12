@@ -137,7 +137,9 @@ public class Explain {
             StringBuilder sb = new StringBuilder("- SCAN [")
                     .append(((OlapTable) scan.getTable()).getIndexNameById(scan.getSelectedIndexId()))
                     .append("]")
-                    .append(buildOutputColumns(scan, scan.getOutputColumns().toString()))
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
                     .append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);
@@ -340,7 +342,8 @@ public class Explain {
                 StringBuilder valuesRow = new StringBuilder();
                 for (List<ScalarOperator> row : values.getRows()) {
                     valuesRow.append("{");
-                    valuesRow.append(row.stream().map(new ExpressionPrinter()::print).collect(Collectors.joining(", ")));
+                    valuesRow.append(
+                            row.stream().map(new ExpressionPrinter()::print).collect(Collectors.joining(", ")));
                     valuesRow.append("}, ");
                 }
                 valuesRow.delete(valuesRow.length() - 2, valuesRow.length());

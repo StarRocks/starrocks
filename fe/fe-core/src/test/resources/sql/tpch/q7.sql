@@ -41,9 +41,9 @@ order by
 [result]
 TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
     TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{57: sum(56: expr)=sum(57: sum(56: expr))}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{57: sum=sum(57: sum)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
             EXCHANGE SHUFFLE[46, 51, 55]
-                AGGREGATE ([LOCAL] aggregate [{57: sum(56: expr)=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{57: sum=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
                     INNER JOIN (join-predicate [46: N_NAME = CANADA AND 51: N_NAME = IRAN OR 46: N_NAME = IRAN AND 51: N_NAME = CANADA AND 45: N_NATIONKEY = 4: S_NATIONKEY] post-join-predicate [null])
                         SCAN (columns[45: N_NATIONKEY, 46: N_NAME] predicate[46: N_NAME IN (CANADA, IRAN)])
                         EXCHANGE BROADCAST

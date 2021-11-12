@@ -29,7 +29,7 @@ order by
     l_shipmode ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:25: L_SHIPMODE | 30: sum(28: case) | 31: sum(29: case)
+OUTPUT EXPRS:25: L_SHIPMODE | 30: sum | 31: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -51,7 +51,7 @@ UNPARTITIONED
 |  use vectorized: true
 |
 8:AGGREGATE (merge finalize)
-|  output: sum(30: sum(28: case)), sum(31: sum(29: case))
+|  output: sum(30: sum), sum(31: sum)
 |  group by: 25: L_SHIPMODE
 |  use vectorized: true
 |

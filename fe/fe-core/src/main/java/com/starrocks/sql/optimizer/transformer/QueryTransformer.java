@@ -62,6 +62,8 @@ class QueryTransformer {
         builder = filter(builder, queryBlock.getHaving());
         builder = window(builder, queryBlock.getOutputAnalytic());
 
+        List<Expr> outputExpressions = queryBlock.getOutputExpr();
+
         if (queryBlock.hasOrderBy()) {
             if (!queryBlock.hasAggregation()) {
                 //requires both output and source fields to be visible if there are no aggregations
@@ -322,7 +324,7 @@ class QueryTransformer {
             CallOperator aggOperator = (CallOperator) aggCallOperator;
 
             ColumnRefOperator colRef =
-                    columnRefFactory.create(aggOperator.toString(), aggregate.getType(), aggregate.isNullable());
+                    columnRefFactory.create(aggOperator.getFnName(), aggregate.getType(), aggregate.isNullable());
             aggregationsMap.put(colRef, aggOperator);
             groupingTranslations.put(aggregate, colRef);
         }
