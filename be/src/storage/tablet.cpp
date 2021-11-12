@@ -171,10 +171,14 @@ OLAPStatus Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& ro
         StorageEngine::instance()->add_unused_rowset(it->second);
         _rs_version_map.erase(it);
     }
-    for (auto& it : _inc_rs_version_map) {
-        StorageEngine::instance()->add_unused_rowset(it.second);
+    for (auto& [v, rowset] : _inc_rs_version_map) {
+        StorageEngine::instance()->add_unused_rowset(rowset);
+    }
+    for (auto& [v, rowset] : _stale_rs_version_map) {
+        StorageEngine::instance()->add_unused_rowset(rowset);
     }
     _inc_rs_version_map.clear();
+    _stale_rs_version_map.clear();
 
     for (auto& rs_meta : rowsets_to_clone) {
         Version version = {rs_meta->start_version(), rs_meta->end_version()};
@@ -425,108 +429,34 @@ void Tablet::delete_expired_stale_rowset() {
         return;
     }
 
-    // fetch missing version before delete
-    std::vector<Version> missed_versions;
-    calc_missed_versions_unlocked(lastest_delta->end_version(), &missed_versions);
-
-    // do check consistent operation
-    auto path_id_iter = path_id_vec.begin();
-
-    std::map<int64_t, PathVersionListSharedPtr> stale_version_path_map;
-    while (path_id_iter != path_id_vec.end()) {
-        PathVersionListSharedPtr version_path = _timestamped_version_tracker.fetch_and_delete_path_by_id(*path_id_iter);
-
-        Version test_version = Version(0, lastest_delta->end_version());
-        stale_version_path_map[*path_id_iter] = version_path;
-
-        OLAPStatus status = capture_consistent_versions(test_version, nullptr);
-        // 1. When there is no consistent versions, we must reconstruct the tracker.
-        if (status != OLAP_SUCCESS) {
-            LOG(WARNING) << "The consistent version check fails, there are bugs. "
-                         << "Reconstruct the tracker to recover versions in tablet=" << tablet_id();
-
-            _timestamped_version_tracker.recover_versioned_tracker(stale_version_path_map);
-
-            // 2. fetch missing version after delete
-            std::vector<Version> after_missed_versions;
-            calc_missed_versions_unlocked(lastest_delta->end_version(), &after_missed_versions);
-
-            // 2.1 check whether missed_versions and after_missed_versions are the same.
-            // when they are the same, it means we can delete the path securely.
-            bool is_missng = missed_versions.size() != after_missed_versions.size();
-
-            if (!is_missng) {
-                for (int ver_index = 0; ver_index < missed_versions.size(); ver_index++) {
-                    if (missed_versions[ver_index] != after_missed_versions[ver_index]) {
-                        is_missng = true;
-                        break;
-                    }
-                }
-            }
-
-            if (is_missng) {
-                LOG(WARNING) << "The consistent version check fails, there are bugs. "
-                             << "Reconstruct the tracker to recover versions in tablet=" << tablet_id();
-
-                // 3. try to recover
-                _timestamped_version_tracker.recover_versioned_tracker(stale_version_path_map);
-
-                // 4. double check the consistent versions
-                // fetch missing version after recover
-                std::vector<Version> recover_missed_versions;
-                calc_missed_versions_unlocked(lastest_delta->end_version(), &recover_missed_versions);
-
-                // 4.1 check whether missed_versions and recover_missed_versions are the same.
-                // when they are the same, it means we recover successlly.
-                bool is_recover_missng = missed_versions.size() != recover_missed_versions.size();
-
-                if (!is_recover_missng) {
-                    for (int ver_index = 0; ver_index < missed_versions.size(); ver_index++) {
-                        if (missed_versions[ver_index] != recover_missed_versions[ver_index]) {
-                            is_recover_missng = true;
-                            break;
-                        }
-                    }
-                }
-
-                // 5. check recover fail, version is mission
-                if (is_recover_missng) {
-                    if (!config::ignore_rowset_stale_unconsistent_delete) {
-                        LOG(FATAL) << "rowset stale unconsistent delete. tablet= " << tablet_id();
-                    } else {
-                        LOG(WARNING) << "rowset stale unconsistent delete. tablet= " << tablet_id();
-                    }
-                }
-            }
-            return;
-        }
-        path_id_iter++;
+    std::vector<PathVersionListSharedPtr> stale_version_paths;
+    stale_version_paths.reserve(path_id_vec.size());
+    for (int64_t path_id : path_id_vec) {
+        PathVersionListSharedPtr version_path = _timestamped_version_tracker.fetch_and_delete_path_by_id(path_id);
+        stale_version_paths.emplace_back(std::move(version_path));
     }
 
     auto old_size = _stale_rs_version_map.size();
     auto old_meta_size = _tablet_meta->all_stale_rs_metas().size();
 
     // do delete operation
-    auto to_delete_iter = stale_version_path_map.begin();
-    while (to_delete_iter != stale_version_path_map.end()) {
-        std::vector<TimestampedVersionSharedPtr>& to_delete_version = to_delete_iter->second->timestamped_versions();
-        for (auto& timestampedVersion : to_delete_version) {
-            auto it = _stale_rs_version_map.find(timestampedVersion->version());
+    for (const auto& version_path : stale_version_paths) {
+        for (const auto& timestamped_version : version_path->timestamped_versions()) {
+            auto it = _stale_rs_version_map.find(timestamped_version->version());
             if (it != _stale_rs_version_map.end()) {
                 // delete rowset
                 StorageEngine::instance()->add_unused_rowset(it->second);
                 _stale_rs_version_map.erase(it);
                 LOG(INFO) << "delete stale rowset tablet=" << full_name() << " version["
-                          << timestampedVersion->version().first << "," << timestampedVersion->version().second
+                          << timestamped_version->version().first << "," << timestamped_version->version().second
                           << "] move to unused_rowset success " << std::fixed << expired_stale_sweep_endtime;
             } else {
                 LOG(WARNING) << "delete stale rowset tablet=" << full_name() << " version["
-                             << timestampedVersion->version().first << "," << timestampedVersion->version().second
+                             << timestamped_version->version().first << "," << timestamped_version->version().second
                              << "] not find in stale rs version map";
             }
-            _delete_stale_rowset_by_version(timestampedVersion->version());
+            _delete_stale_rowset_by_version(timestamped_version->version());
         }
-        to_delete_iter++;
     }
     LOG(INFO) << "delete stale rowset _stale_rs_version_map tablet=" << full_name()
               << " current_size=" << _stale_rs_version_map.size() << " old_size=" << old_size
