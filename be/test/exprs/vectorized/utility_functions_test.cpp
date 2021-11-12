@@ -7,6 +7,9 @@
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
+#include "util/random.h"
+#include "util/time.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -54,6 +57,47 @@ TEST_F(UtilityFunctionsTest, sleepTest) {
 
         auto v = ColumnHelper::get_const_value<TYPE_BOOLEAN>(result);
         ASSERT_TRUE(v);
+    }
+}
+
+TEST_F(UtilityFunctionsTest, uuidTest) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    // test uuid
+    {
+        int column_size = static_cast<int>(Random(GetCurrentTimeNanos()).Uniform(10) + 1);
+        auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(column_size, column_size);
+
+        Columns columns;
+        columns.emplace_back(var1_col);
+
+        ColumnPtr result = UtilityFunctions::uuid(ctx, columns);
+
+        ASSERT_FALSE(result->is_constant());
+
+        std::set<int> hyphens_position = {8, 13, 18, 23};
+        std::set<std::string> deduplication;
+        ColumnViewer<TYPE_VARCHAR> column_viewer(result);
+
+        ASSERT_EQ(column_viewer.size(), column_size);
+
+        for (int column_idx = 0; column_idx < column_viewer.size(); column_idx++) {
+            auto& column = column_viewer.value(column_idx);
+            ASSERT_EQ(36, column.get_size());
+            deduplication.insert(column.to_string());
+
+            for (int i = 0; i < column.get_size(); i++) {
+                if (hyphens_position.count(i)) {
+                    ASSERT_EQ(column.get_data()[i], '-');
+                } else {
+                    ASSERT_GE(column.get_data()[i], '0');
+                    ASSERT_LE(column.get_data()[i], 'f');
+                }
+            }
+        }
+
+        ASSERT_EQ(deduplication.size(), column_size);
     }
 }
 
