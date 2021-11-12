@@ -1623,6 +1623,15 @@ void OrcScannerAdapter::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc:
         return true;                                                 \
     }
 
+#define ADD_RF_BOOLEAN_TYPE(type)                                      \
+    case type: {                                                       \
+        auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
+        if (xrf == nullptr) return false;                              \
+        auto lower = orc::Literal(bool(xrf->min_value()));             \
+        auto upper = orc::Literal(bool(xrf->max_value()));             \
+        ADD_RF_TO_BUILDER                                              \
+    }
+
 #define ADD_RF_INT_TYPE(type)                                          \
     case type: {                                                       \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
@@ -1686,7 +1695,7 @@ bool OrcScannerAdapter::_add_runtime_filter(const SlotDescriptor* slot, const Jo
     if (type_it == _supported_primitive_types.end()) return false;
     orc::PredicateDataType pred_type = type_it->second;
     switch (ptype) {
-        ADD_RF_INT_TYPE(PrimitiveType::TYPE_BOOLEAN);
+        ADD_RF_BOOLEAN_TYPE(PrimitiveType::TYPE_BOOLEAN);
         ADD_RF_INT_TYPE(PrimitiveType::TYPE_TINYINT);
         ADD_RF_INT_TYPE(PrimitiveType::TYPE_SMALLINT);
         ADD_RF_INT_TYPE(PrimitiveType::TYPE_INT);
