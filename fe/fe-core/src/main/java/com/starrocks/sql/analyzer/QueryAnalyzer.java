@@ -597,6 +597,11 @@ public class QueryAnalyzer {
     private Scope analyzeFrom(SelectStmt node, AnalyzeState analyzeState, Scope scope) {
         Relation sourceRelation = null;
         TableRef lastTableRef = null;
+
+        if (node.getTableRefs().size() == 1 && node.getTableRefs().get(0) instanceof FunctionTableRef) {
+            throw unsupportedException("Table function must be used with lateral join");
+        }
+
         for (TableRef tableRef : node.getTableRefs()) {
             Scope resolveTableScope;
 
