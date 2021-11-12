@@ -50,6 +50,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/utils.h" // for check_dir_existed
+#include "util/defer_op.h"
 #include "util/errno.h"
 #include "util/file_utils.h"
 #include "util/monotime.h"
@@ -127,10 +128,13 @@ Status DataDir::_init_cluster_id() {
                 "open file failed");
     }
 
-    int lock_res = flock(fp->_fileno, LOCK_EX | LOCK_NB);
-    if (lock_res < 0) {
+    DeferOp close_fp([&]() {
         fclose(fp);
         fp = nullptr;
+    });
+
+    int lock_res = flock(fp->_fileno, LOCK_EX | LOCK_NB);
+    if (lock_res < 0) {
         RETURN_IF_ERROR_WITH_WARN(
                 Status::IOError(strings::Substitute("failed to flock cluster id file $0", cluster_id_path)),
                 "flock file failed");
@@ -138,7 +142,6 @@ Status DataDir::_init_cluster_id() {
 
     // obtain cluster id of all root paths
     auto st = _read_cluster_id(cluster_id_path, &_cluster_id);
-    fclose(fp);
     return st;
 }
 

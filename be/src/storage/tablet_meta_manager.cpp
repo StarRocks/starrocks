@@ -39,6 +39,7 @@
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
+#include "util/defer_op.h"
 #include "util/url_coding.h"
 
 namespace starrocks {

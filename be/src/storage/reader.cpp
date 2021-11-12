@@ -40,6 +40,7 @@
 #include "storage/tablet.h"
 #include "util/date_func.h"
 #include "util/mem_util.hpp"
+#include "util/scoped_cleanup.h"
 
 using std::nothrow;
 using std::set;
@@ -727,7 +728,9 @@ void Reader::_init_conditions_param(const ReaderParams& read_params) {
         _conditions.append_condition(condition);
         ColumnPredicate* predicate = _parse_to_predicate(condition);
         if (predicate != nullptr) {
+            ScopedCleanup free_guard([&]() { delete predicate; });
             _col_predicates.push_back(predicate);
+            free_guard.cancel();
         }
     }
 }
