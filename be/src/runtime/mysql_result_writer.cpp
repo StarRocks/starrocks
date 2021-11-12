@@ -227,7 +227,7 @@ Status MysqlResultWriter::append_row_batch(const RowBatch* batch) {
 
     Status status;
     // convert one batch
-    TFetchDataResult* result = new (std::nothrow) TFetchDataResult();
+    auto result = std::make_unique<TFetchDataResult>();
     int num_rows = batch->num_rows();
     result->result_batch.rows.resize(num_rows);
 
@@ -246,18 +246,14 @@ Status MysqlResultWriter::append_row_batch(const RowBatch* batch) {
     if (status.ok()) {
         SCOPED_TIMER(_result_send_timer);
         // push this batch to back
-        status = _sinker->add_batch(result);
+        status = _sinker->add_batch(std::move(result));
 
         if (status.ok()) {
-            result = nullptr;
             _written_rows += num_rows;
         } else {
             LOG(WARNING) << "append result batch to sink failed.";
         }
     }
-
-    delete result;
-    result = nullptr;
 
     return status;
 }
@@ -273,11 +269,8 @@ Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {
     }
 
     TFetchDataResultPtr result = std::move(status.value());
-    auto* fetch_data = result.release();
     SCOPED_TIMER(_result_send_timer);
-    // Note: this method will delete result pointer if status is OK
-    // TODO(kks): use std::unique_ptr instead of raw pointer
-    auto add_status = _sinker->add_batch(fetch_data);
+    auto add_status = _sinker->add_batch(std::move(result));
     if (status.ok()) {
         _written_rows += num_rows;
         return add_status;
@@ -285,7 +278,6 @@ Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {
         LOG(WARNING) << "append result batch to sink failed.";
     }
 
-    delete fetch_data;
     return add_status;
 }
 
@@ -362,22 +354,17 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk
     return result;
 }
 
-StatusOr<bool> MysqlResultWriter::try_add_batch(TFetchDataResultPtr& result) {
+StatusOr<bool> MysqlResultWriter::try_add_batch(TFetchDataResultPtr result) {
     SCOPED_TIMER(_result_send_timer);
-    auto* fetch_data = result.release();
-    auto num_rows = fetch_data->result_batch.rows.size();
-    auto status = _sinker->try_add_batch(fetch_data);
+    auto num_rows = result->result_batch.rows.size();
+    auto status = _sinker->try_add_batch(std::move(result));
 
     if (status.ok()) {
         // success in add result to ResultQueue of _sinker
         if (status.value()) {
             _written_rows += num_rows;
-        } else {
-            // the result is given back to chunk
-            result.reset(fetch_data);
         }
     } else {
-        delete fetch_data;
         if (!status.ok()) {
             LOG(WARNING) << "Append result batch to sink failed: status=" << status.status().to_string();
         }

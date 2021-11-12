@@ -50,7 +50,7 @@ public:
     // sender is not used when call cancel or unregister
     Status create_sender(const TUniqueId& query_id, int buffer_size, std::shared_ptr<BufferControlBlock>* sender);
     // fetch data, used by RPC
-    Status fetch_data(const TUniqueId& fragment_id, TFetchDataResult* result);
+    Status fetch_data(const TUniqueId& fragment_id, std::unique_ptr<TFetchDataResult>* result);
 
     void fetch_data(const PUniqueId& finst_id, GetResultBatchCtx* ctx);
 

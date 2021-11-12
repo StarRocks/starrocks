@@ -27,6 +27,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "util/cpu_info.h"
+#include "util/scoped_cleanup.h"
 
 namespace starrocks {
 
@@ -96,8 +97,10 @@ void ThreadResourceMgr::unregister_pool(ResourcePool* pool) {
     std::unique_lock<std::mutex> l(_lock);
     // this may be double unregisted after pr #3326 by LaiYingChun, so check if the pool is already unregisted
     if (_pools.find(pool) != _pools.end()) {
+        auto cleanup = MakeScopedCleanup([&]() { delete pool; });
         _pools.erase(pool);
         _free_pool_objs.push_back(pool);
+        cleanup.cancel();
         update_pool_quotas();
     }
 }
