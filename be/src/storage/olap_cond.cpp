@@ -32,6 +32,7 @@
 #include "storage/olap_define.h"
 #include "storage/utils.h"
 #include "storage/wrapper_field.h"
+#include "util/scoped_cleanup.h"
 
 using std::nothrow;
 using std::pair;
@@ -579,7 +580,9 @@ OLAPStatus Conditions::append_condition(const TCondition& tcond) {
     auto it = _columns.find(index);
     if (it == _columns.end()) {
         auto cond_col = new CondColumn(*_schema, index);
+        ScopedCleanup free_guard([&] { delete cond_col; });
         _columns[index] = cond_col;
+        free_guard.cancel();
         return cond_col->add_cond(tcond, column);
     } else {
         return it->second->add_cond(tcond, column);
