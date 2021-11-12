@@ -48,6 +48,15 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
     RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc()));
+    return Status::OK();
+}
+
+Status DictDecodeNode::open(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+    RETURN_IF_ERROR(ExecNode::open(state));
+    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+    RETURN_IF_CANCELLED(state);
+    RETURN_IF_ERROR(_children[0]->open(state));
 
     const auto& global_dict = state->get_global_dict_map();
     _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
@@ -87,14 +96,6 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
         }
     }
 
-    return Status::OK();
-}
-
-Status DictDecodeNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(_children[0]->open(state));
     return Status::OK();
 }
 
