@@ -168,7 +168,9 @@ void TaskWorkerPool::stop() {
     _stopped = true;
     _worker_thread_condition_variable->notify_all();
     for (uint32_t i = 0; i < _worker_count; ++i) {
-        _worker_threads[i].join();
+        if (_worker_threads[i].joinable()) {
+            _worker_threads[i].join();
+        }
     }
 }
 

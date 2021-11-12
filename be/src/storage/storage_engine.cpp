@@ -470,29 +470,51 @@ void StorageEngine::stop() {
     }
     _bg_worker_stopped.store(true, std::memory_order_release);
 
-    _update_cache_expire_thread.join();
-    _unused_rowset_monitor_thread.join();
-    _garbage_sweeper_thread.join();
-    _disk_stat_monitor_thread.join();
+    if (_update_cache_expire_thread.joinable()) {
+        _update_cache_expire_thread.join();
+    }
+    if (_unused_rowset_monitor_thread.joinable()) {
+        _unused_rowset_monitor_thread.join();
+    }
+    if (_garbage_sweeper_thread.joinable()) {
+        _garbage_sweeper_thread.join();
+    }
+    if (_disk_stat_monitor_thread.joinable()) {
+        _disk_stat_monitor_thread.join();
+    }
     for (auto& thread : _base_compaction_threads) {
-        thread.join();
-    }
-    for (auto& thread : _cumulative_compaction_threads) {
-        thread.join();
-    }
-    for (auto& thread : _update_compaction_threads) {
-        thread.join();
-    }
-    for (auto& thread : _tablet_checkpoint_threads) {
-        thread.join();
-    }
-    _fd_cache_clean_thread.join();
-    if (config::path_gc_check) {
-        for (auto& thread : _path_scan_threads) {
+        if (thread.joinable()) {
             thread.join();
         }
-        for (auto& thread : _path_gc_threads) {
+    }
+    for (auto& thread : _cumulative_compaction_threads) {
+        if (thread.joinable()) {
             thread.join();
+        }
+    }
+    for (auto& thread : _update_compaction_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    for (auto& thread : _tablet_checkpoint_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    if (_fd_cache_clean_thread.joinable()) {
+        _fd_cache_clean_thread.join();
+    }
+    if (config::path_gc_check) {
+        for (auto& thread : _path_scan_threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+        for (auto& thread : _path_gc_threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
         }
     }
 
