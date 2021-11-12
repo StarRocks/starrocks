@@ -88,7 +88,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
                 auto status = maybe_chunk.status();
                 if (!status.ok() && !status.is_end_of_file()) {
-                    LOG(WARNING) << " status " << status.to_string();
                     return status;
                 }
 
@@ -175,7 +174,6 @@ void PipelineDriver::finish_operators(RuntimeState* state) {
 }
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
-    VLOG_ROW << "[Driver] finalize, driver=" << this;
     if (state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR) {
         auto num_operators = _operators.size();
         for (auto i = _first_unfinished; i < num_operators; ++i) {
@@ -207,14 +205,13 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     if (_fragment_ctx->count_down_drivers()) {
         auto status = _fragment_ctx->final_status();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
-        VLOG_ROW << "[Driver] Last driver finished: final_status=" << status.to_string();
         _query_ctx->count_down_fragments();
     }
 }
 
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
-    ss << "operator-chain: [";
+    ss << "driver=" << this << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();

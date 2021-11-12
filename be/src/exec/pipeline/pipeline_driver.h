@@ -132,7 +132,7 @@ public:
     StatusOr<DriverState> process(RuntimeState* runtime_state);
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
-    DriverState driver_state() { return _state; }
+    DriverState driver_state() const { return _state; }
     void set_driver_state(DriverState state) { _state = state; }
     Operators& operators() { return _operators; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }

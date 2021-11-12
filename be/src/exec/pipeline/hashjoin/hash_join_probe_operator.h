@@ -25,6 +25,9 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
     void finish(RuntimeState* state) override;
     bool is_ready() const override;
+    std::string get_name() const override {
+        return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _hash_joiner);
+    }
 
 private:
     HashJoiner* _hash_joiner;

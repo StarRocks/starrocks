@@ -5,6 +5,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
 #include "util/runtime_profile.h"
 
@@ -59,10 +60,8 @@ public:
 
     RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
-    std::string get_name() const {
-        std::stringstream ss;
-        ss << _name + "_" << this;
-        return ss.str();
+    virtual std::string get_name() const {
+        return strings::Substitute("$0_$1($2)", _name, this, is_finished() ? "X" : "O");
     }
 
 protected:
