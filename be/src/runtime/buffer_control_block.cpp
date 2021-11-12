@@ -50,7 +50,7 @@ void GetResultBatchCtx::on_close(int64_t packet_seq, QueryStatistics* statistics
     delete this;
 }
 
-void GetResultBatchCtx::on_data(TFetchDataResult* t_result, int64_t packet_seq, bool eos) {
+void GetResultBatchCtx::on_data(const TFetchDataResultPtr& t_result, int64_t packet_seq, bool eos) {
     uint8_t* buf = nullptr;
     uint32_t len = 0;
     ThriftSerializer ser(false, 4096);
@@ -77,18 +77,13 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
 
 BufferControlBlock::~BufferControlBlock() {
     cancel();
-
-    for (ResultQueue::iterator iter = _batch_queue.begin(); _batch_queue.end() != iter; ++iter) {
-        delete *iter;
-        *iter = NULL;
-    }
 }
 
 Status BufferControlBlock::init() {
     return Status::OK();
 }
 
-Status BufferControlBlock::add_batch(TFetchDataResult* result) {
+Status BufferControlBlock::add_batch(TFetchDataResultPtr result) {
     std::unique_lock<std::mutex> l(_lock);
 
     if (_is_cancelled) {
@@ -107,19 +102,18 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result) {
 
     if (_waiting_rpc.empty()) {
         _buffer_rows += num_rows;
-        _batch_queue.push_back(result);
+        _batch_queue.push_back(std::move(result));
         _data_arriaval.notify_one();
     } else {
         auto* ctx = _waiting_rpc.front();
         _waiting_rpc.pop_front();
         ctx->on_data(result, _packet_num);
-        delete result;
         _packet_num++;
     }
     return Status::OK();
 }
 
-StatusOr<bool> BufferControlBlock::try_add_batch(TFetchDataResult* result) {
+StatusOr<bool> BufferControlBlock::try_add_batch(TFetchDataResultPtr result) {
     std::unique_lock<std::mutex> l(_lock);
 
     if (_is_cancelled) {
@@ -134,20 +128,19 @@ StatusOr<bool> BufferControlBlock::try_add_batch(TFetchDataResult* result) {
 
     if (_waiting_rpc.empty()) {
         _buffer_rows += num_rows;
-        _batch_queue.push_back(result);
+        _batch_queue.push_back(std::move(result));
         _data_arriaval.notify_one();
     } else {
         auto* ctx = _waiting_rpc.front();
         _waiting_rpc.pop_front();
         ctx->on_data(result, _packet_num);
-        delete result;
         _packet_num++;
     }
     return true;
 }
 
-Status BufferControlBlock::get_batch(TFetchDataResult* result) {
-    TFetchDataResult* item = nullptr;
+Status BufferControlBlock::get_batch(TFetchDataResultPtr* result) {
+    TFetchDataResultPtr item;
     {
         std::unique_lock<std::mutex> l(_lock);
 
@@ -166,8 +159,8 @@ Status BufferControlBlock::get_batch(TFetchDataResult* result) {
         if (_batch_queue.empty()) {
             if (_is_close) {
                 // no result, normal end
-                result->eos = true;
-                result->__set_packet_num(_packet_num);
+                (*result)->eos = true;
+                (*result)->__set_packet_num(_packet_num);
                 _packet_num++;
                 return Status::OK();
             } else {
@@ -177,17 +170,14 @@ Status BufferControlBlock::get_batch(TFetchDataResult* result) {
         }
 
         // get result
-        item = _batch_queue.front();
+        item = std::move(_batch_queue.front());
         _batch_queue.pop_front();
         _buffer_rows -= item->result_batch.rows.size();
         _data_removal.notify_one();
     }
-    swap(*result, *item);
-    result->__set_packet_num(_packet_num);
+    (*result).swap(item);
+    (*result)->__set_packet_num(_packet_num);
     _packet_num++;
-    // destruct item new from Result writer
-    delete item;
-    item = nullptr;
 
     return Status::OK();
 }
@@ -204,16 +194,13 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
     }
     if (!_batch_queue.empty()) {
         // get result
-        TFetchDataResult* result = _batch_queue.front();
+        TFetchDataResultPtr result = std::move(_batch_queue.front());
         _batch_queue.pop_front();
         _buffer_rows -= result->result_batch.rows.size();
         _data_removal.notify_one();
 
         ctx->on_data(result, _packet_num);
         _packet_num++;
-
-        delete result;
-        result = nullptr;
 
         return;
     }

@@ -87,7 +87,7 @@ std::shared_ptr<BufferControlBlock> ResultBufferMgr::find_control_block(const TU
     return std::shared_ptr<BufferControlBlock>();
 }
 
-Status ResultBufferMgr::fetch_data(const TUniqueId& query_id, TFetchDataResult* result) {
+Status ResultBufferMgr::fetch_data(const TUniqueId& query_id, std::unique_ptr<TFetchDataResult>* result) {
     std::shared_ptr<BufferControlBlock> cb = find_control_block(query_id);
 
     if (nullptr == cb) {

@@ -63,7 +63,8 @@ public:
     ~ClientCacheHelper();
     // Callback method which produces a client object when one cannot be
     // found in the cache. Supplied by the ClientCache wrapper.
-    typedef std::function<ThriftClientImpl*(const TNetworkAddress& hostport, void** client_key)> client_factory;
+    typedef std::function<std::unique_ptr<ThriftClientImpl>(const TNetworkAddress& hostport, void** client_key)>
+            client_factory;
 
     // Return client for specific host/port in 'client'. If a client
     // is not available, the client parameter is set to NULL.
@@ -104,11 +105,11 @@ private:
     std::mutex _lock;
 
     // map from (host, port) to list of client keys for that address
-    typedef boost::unordered_map<TNetworkAddress, std::list<void*> > ClientCacheMap;
+    typedef boost::unordered_map<TNetworkAddress, std::list<void*>> ClientCacheMap;
     ClientCacheMap _client_cache;
 
     // Map from client key back to its associated ThriftClientImpl transport
-    typedef boost::unordered_map<void*, ThriftClientImpl*> ClientMap;
+    typedef boost::unordered_map<void*, std::unique_ptr<ThriftClientImpl>> ClientMap;
     ClientMap _client_map;
 
     // MetricRegistry
@@ -196,13 +197,13 @@ public:
     typedef ThriftClient<T> Client;
 
     ClientCache()
-            : _client_factory(std::bind<ThriftClientImpl*>(std::mem_fn(&ClientCache::make_client), this,
-                                                           std::placeholders::_1, std::placeholders::_2)) {}
+            : _client_factory(std::bind<std::unique_ptr<ThriftClientImpl>>(
+                      std::mem_fn(&ClientCache::make_client), this, std::placeholders::_1, std::placeholders::_2)) {}
 
     ClientCache(int max_cache_size)
             : _client_cache_helper(max_cache_size),
-              _client_factory(std::bind<ThriftClientImpl*>(std::mem_fn(&ClientCache::make_client), this,
-                                                           std::placeholders::_1, std::placeholders::_2)) {}
+              _client_factory(std::bind<std::unique_ptr<ThriftClientImpl>>(
+                      std::mem_fn(&ClientCache::make_client), this, std::placeholders::_1, std::placeholders::_2)) {}
 
     // Helper method which returns a debug string
     std::string debug_string() { return _client_cache_helper.debug_string(); }
@@ -253,8 +254,8 @@ private:
     void release_client(T** client) { return _client_cache_helper.release_client(reinterpret_cast<void**>(client)); }
 
     // Factory method to produce a new ThriftClient<T> for the wrapped cache
-    ThriftClientImpl* make_client(const TNetworkAddress& hostport, void** client_key) {
-        Client* client = new Client(hostport.hostname, hostport.port);
+    std::unique_ptr<ThriftClientImpl> make_client(const TNetworkAddress& hostport, void** client_key) {
+        std::unique_ptr<Client> client = std::make_unique<Client>(Client(hostport.hostname, hostport.port));
         *client_key = reinterpret_cast<void*>(client->iface());
         return client;
     }

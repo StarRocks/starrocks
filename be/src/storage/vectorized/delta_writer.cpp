@@ -16,8 +16,8 @@
 
 namespace starrocks::vectorized {
 
-Status DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, DeltaWriter** writer) {
-    *writer = new DeltaWriter(req, mem_tracker, StorageEngine::instance());
+Status DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, std::shared_ptr<DeltaWriter>* writer) {
+    *writer = std::shared_ptr<DeltaWriter>(new DeltaWriter(req, mem_tracker, StorageEngine::instance()));
     return Status::OK();
 }
 

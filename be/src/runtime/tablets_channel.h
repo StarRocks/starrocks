@@ -133,7 +133,7 @@ private:
     Status _close_status;
 
     // tablet_id -> TabletChannel
-    std::unordered_map<int64_t, DeltaWriter*> _tablet_writers;
+    std::unordered_map<int64_t, std::shared_ptr<DeltaWriter>> _tablet_writers;
 
     std::unordered_set<int64_t> _partition_ids;
 
@@ -145,7 +145,7 @@ private:
     vectorized::RuntimeChunkMeta _chunk_meta;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel
-    std::unordered_map<int64_t, vectorized::DeltaWriter*> _vectorized_tablet_writers;
+    std::unordered_map<int64_t, std::shared_ptr<vectorized::DeltaWriter>> _vectorized_tablet_writers;
 
     vectorized::GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;

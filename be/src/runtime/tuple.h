@@ -86,11 +86,6 @@ public:
     void deep_copy(Tuple* dst, const TupleDescriptor& desc, MemPool* pool, bool convert_ptrs);
     void deep_copy(Tuple* dst, const TupleDescriptor& desc, MemPool* pool) { deep_copy(dst, desc, pool, false); }
 
-    // deep copy use 'new', must be 'free' after use
-    Tuple* dcopy_with_new(const TupleDescriptor& desc, MemPool* pool, int64_t* bytes);
-    int64_t dcopy_with_new(Tuple* dst, const TupleDescriptor& desc);
-    int64_t release_string(const TupleDescriptor& desc);
-
     // create a copy of 'this', including all referenced string data, into
     // data. The tuple is written first, followed by any strings. data and offset
     // will be incremented by the total number of bytes written. data must already
