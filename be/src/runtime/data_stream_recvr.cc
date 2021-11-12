@@ -234,6 +234,11 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
     _chunk_queue.pop_front();
 
     if (!_pending_closures.empty()) {
+#ifndef BE_TEST
+        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
+        DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+#endif
+
         auto closure_pair = _pending_closures.front();
         closure_pair.first->Run();
         _pending_closures.pop_front();
