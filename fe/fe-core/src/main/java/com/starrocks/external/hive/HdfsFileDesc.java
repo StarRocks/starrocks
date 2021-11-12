@@ -9,6 +9,7 @@ public class HdfsFileDesc {
     private String compression;
     private long length;
     private ImmutableList<HdfsFileBlockDesc> blockDescs;
+    private boolean splittable;
 
     public HdfsFileDesc(String fileName, String compression, long length,
                         ImmutableList<HdfsFileBlockDesc> blockDescs) {
@@ -16,6 +17,13 @@ public class HdfsFileDesc {
         this.compression = compression;
         this.length = length;
         this.blockDescs = blockDescs;
+        this.splittable = false;
+    }
+
+    public HdfsFileDesc(String fileName, String compression, long length,
+                        ImmutableList<HdfsFileBlockDesc> blockDescs, boolean splittable) {
+        this(fileName, compression, length, blockDescs);
+        this.splittable = splittable;
     }
 
     public String getFileName() {
@@ -32,5 +40,9 @@ public class HdfsFileDesc {
 
     public ImmutableList<HdfsFileBlockDesc> getBlockDescs() {
         return blockDescs;
+    }
+
+    public boolean isSplittable() {
+        return splittable;
     }
 }
