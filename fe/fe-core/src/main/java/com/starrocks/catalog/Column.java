@@ -29,13 +29,13 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TColumn;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.joda.time.DateTime;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -48,7 +48,6 @@ import java.util.Objects;
  * This class represents the column-related metadata.
  */
 public class Column implements Writable {
-    private static final Logger LOG = LogManager.getLogger(Column.class);
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "type")
@@ -70,6 +69,9 @@ public class Column implements Writable {
     private boolean isAllowNull;
     @SerializedName(value = "defaultValue")
     private String defaultValue;
+    // this handle function like now() or simple expression
+    @SerializedName(value = "defaultExpr")
+    private String defaultExpr;
     @SerializedName(value = "comment")
     private String comment;
     @SerializedName(value = "stats")
@@ -137,6 +139,7 @@ public class Column implements Writable {
         this.comment = column.getComment();
         this.stats = column.getStats();
         this.defineExpr = column.getDefineExpr();
+        this.defaultExpr = column.defaultExpr;
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
     }
@@ -229,6 +232,51 @@ public class Column implements Writable {
         this.isAllowNull = isAllowNull;
     }
 
+    public String getMetaDefaultValue(List<String> extras) {
+        String defaultValue = FeConstants.null_string;
+        if (this.getDefaultValue() != null) {
+            defaultValue = this.getDefaultExpr();
+        } else if (this.getDefaultExpr() != null) {
+            if ("now()".equalsIgnoreCase(this.getDefaultExpr())) {
+                defaultValue = "CURRENT_TIMESTAMP";
+                extras.add("DEFAULT_GENERATED");
+            }
+        }
+        return defaultValue;
+    }
+
+    public String getDefaultExpr() {
+        return defaultExpr;
+    }
+
+    public void setDefaultExpr(String defaultExpr) {
+        this.defaultExpr = defaultExpr;
+    }
+
+    // if the value or expr calculated is the same for each row of a batch like now(). return true
+    // else for a batch of every row different like uuid(). return null
+    public boolean existBatchConstDefaultValue() {
+        if (defaultValue != null) {
+            return true;
+        }
+        if ("now()".equalsIgnoreCase(defaultExpr)) {
+            return true;
+        }
+        return false;
+    }
+
+    // if the value or expr calculated is the same for each row of a batch like now(). calculated default value
+    // else for a batch of every row different like uuid(). return null
+    public String getCalculatedDefaultValue() {
+        if (defaultValue != null) {
+            return defaultValue;
+        }
+        if ("now()".equalsIgnoreCase(defaultExpr)) {
+            return DateTime.now().toString();
+        }
+        return null;
+    }
+
     public void setDefaultValue(String defaultValue) {
         this.defaultValue = defaultValue;
     }
@@ -273,6 +321,10 @@ public class Column implements Writable {
         tColumn.setIs_key(this.isKey);
         tColumn.setIs_allow_null(this.isAllowNull);
         tColumn.setDefault_value(this.defaultValue);
+        if (null != this.defaultExpr) {
+            // the current default value are all computable
+            tColumn.setDefault_value(this.getCalculatedDefaultValue());
+        }
         // The define expr does not need to be serialized here for now.
         // At present, only serialized(analyzed) define expr is directly used when creating a materialized view.
         // It will not be used here, but through another structure `TAlterMaterializedViewParam`.
@@ -379,7 +431,10 @@ public class Column implements Writable {
         } else {
             sb.append("NOT NULL ");
         }
-        if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
+        if ("now()".equalsIgnoreCase(defaultExpr)) {
+            // compatible with mysql
+            sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+        } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }

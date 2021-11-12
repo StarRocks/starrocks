@@ -64,7 +64,7 @@ public class AddColumnsClause extends AlterTableClause {
         for (ColumnDef colDef : columnDefs) {
             colDef.analyze(true);
 
-            if (!colDef.isAllowNull() && colDef.getDefaultValue() == null) {
+            if (!colDef.isAllowNull() && !colDef.existBatchConstDefaultValue()) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DEFAULT_FOR_FIELD, colDef.getName());
             }
         }

@@ -395,7 +395,7 @@ public class InsertStmt extends DdlStmt {
             if (mentionedCols.contains(col.getName())) {
                 continue;
             }
-            if (col.getDefaultValue() == null && !col.isAllowNull()) {
+            if (!col.existBatchConstDefaultValue() && !col.isAllowNull()) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_COL_NOT_MENTIONED, col.getName());
             }
         }
@@ -638,17 +638,17 @@ public class InsertStmt extends DdlStmt {
             Expr expr = row.get(i);
             Column col = targetColumns.get(i);
 
-            // TargeTable's hll column must be hll_hash's result
+            // TargetTable's hll column must be hll_hash's result
             if (col.getType().isHllType()) {
                 checkHllCompatibility(col, expr);
             }
 
             if (expr instanceof DefaultValueExpr) {
-                if (targetColumns.get(i).getDefaultValue() == null) {
+                if (!targetColumns.get(i).existBatchConstDefaultValue()) {
                     throw new AnalysisException(
                             "Column has no default value, column=" + targetColumns.get(i).getName());
                 }
-                expr = new StringLiteral(targetColumns.get(i).getDefaultValue());
+                expr = new StringLiteral(targetColumns.get(i).getCalculatedDefaultValue());
             }
 
             expr.analyze(analyzer);
@@ -739,7 +739,7 @@ public class InsertStmt extends DdlStmt {
             if (exprByName.containsKey(col.getName())) {
                 resultExprs.add(exprByName.get(col.getName()));
             } else {
-                if (col.getDefaultValue() == null) {
+                if (!col.existBatchConstDefaultValue()) {
                     /*
                     The import stmt has been filtered in function checkColumnCoverage when
                         the default value of column is null and column is not nullable.
@@ -748,7 +748,7 @@ public class InsertStmt extends DdlStmt {
                     Preconditions.checkState(col.isAllowNull());
                     resultExprs.add(NullLiteral.create(col.getType()));
                 } else {
-                    resultExprs.add(checkTypeCompatibility(col, new StringLiteral(col.getDefaultValue())));
+                    resultExprs.add(checkTypeCompatibility(col, new StringLiteral(col.getCalculatedDefaultValue())));
                 }
             }
         }

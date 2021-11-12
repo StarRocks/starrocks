@@ -294,10 +294,10 @@ public class SparkLoadPendingTask extends LoadTask {
 
         // default value
         String defaultValue = null;
-        if (column.getDefaultValue() != null) {
-            defaultValue = column.getDefaultValue();
+        if (column.existBatchConstDefaultValue()) {
+            defaultValue = column.getCalculatedDefaultValue();
         }
-        if (column.isAllowNull() && column.getDefaultValue() == null) {
+        if (column.isAllowNull() && !column.existBatchConstDefaultValue()) {
             defaultValue = "\\N";
         }
 

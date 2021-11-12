@@ -107,7 +107,7 @@ public class Table extends MetaObject implements Writable {
         this.id = id;
         this.name = tableName;
         this.type = type;
-        // must copy the list, it should not be the same object as in indexIdToSchmea
+        // must copy the list, it should not be the same object as in indexIdToSchema
         if (fullSchema != null) {
             this.fullSchema = Lists.newArrayList(fullSchema);
         }

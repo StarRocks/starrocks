@@ -145,6 +145,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("cube", new Integer(SqlParserSymbols.KW_CUBE));
         keywordMap.put("current", new Integer(SqlParserSymbols.KW_CURRENT));
         keywordMap.put("current_user", new Integer(SqlParserSymbols.KW_CURRENT_USER));
+        keywordMap.put("current_timestamp", new Integer(SqlParserSymbols.KW_CURRENT_TIMESTAMP));
         keywordMap.put("data", new Integer(SqlParserSymbols.KW_DATA));
         keywordMap.put("database", new Integer(SqlParserSymbols.KW_DATABASE));
         keywordMap.put("databases", new Integer(SqlParserSymbols.KW_DATABASES));

@@ -26,7 +26,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Arrays;
@@ -73,14 +72,14 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
             if (bfColumns != null && bfColumns.contains(column.getName())) {
                 extras.add("BLOOM_FILTER");
             }
+            String defaultStr = column.getMetaDefaultValue(extras);
             String extraStr = StringUtils.join(extras, ",");
 
             List<String> rowList = Arrays.asList(column.getName(),
                     column.getType().toString(),
                     column.isAllowNull() ? "Yes" : "No",
                     ((Boolean) column.isKey()).toString(),
-                    column.getDefaultValue() == null
-                            ? FeConstants.null_string : column.getDefaultValue(),
+                    defaultStr,
                     extraStr);
             result.addRow(rowList);
         }

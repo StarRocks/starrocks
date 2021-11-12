@@ -136,7 +136,7 @@ public class InsertPlanner {
             if (insertRelation.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
-                        row.set(columnIdx, new StringLiteral(targetColumn.getDefaultValue()));
+                        row.set(columnIdx, new StringLiteral(targetColumn.getCalculatedDefaultValue()));
                     }
                     row.set(columnIdx, TypeManager.addCastExpr(row.get(columnIdx), targetColumn.getType()));
                 }
@@ -146,7 +146,7 @@ public class InsertPlanner {
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (row.get(idx) instanceof DefaultValueExpr) {
-                            row.set(idx, new StringLiteral(targetColumn.getDefaultValue()));
+                            row.set(idx, new StringLiteral(targetColumn.getCalculatedDefaultValue()));
                         }
                         row.set(idx, TypeManager.addCastExpr(row.get(idx), targetColumn.getType()));
                     }
@@ -171,10 +171,10 @@ public class InsertPlanner {
                 int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName());
                 if (idx == -1) {
                     ScalarOperator scalarOperator;
-                    if (targetColumn.getDefaultValue() == null) {
+                    if (!targetColumn.existBatchConstDefaultValue()) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                     } else {
-                        scalarOperator = ConstantOperator.createVarchar(targetColumn.getDefaultValue());
+                        scalarOperator = ConstantOperator.createVarchar(targetColumn.getCalculatedDefaultValue());
                     }
                     ColumnRefOperator col = columnRefFactory
                             .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
@@ -247,10 +247,10 @@ public class InsertPlanner {
                         targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
                 outputColumns.add(columnRefOperator);
 
-                if (targetColumn.getDefaultValue() == null) {
+                if (!targetColumn.existBatchConstDefaultValue()) {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
                 } else {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(targetColumn.getDefaultValue()));
+                    columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(targetColumn.getCalculatedDefaultValue()));
                 }
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));

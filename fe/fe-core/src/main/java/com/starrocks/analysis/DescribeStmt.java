@@ -138,22 +138,20 @@ public class DescribeStmt extends ShowStmt {
                         for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
                             if (olapTable.getIndexNameById(mvIdx.getId()).equalsIgnoreCase(dbTableName.getTbl())) {
                                 List<Column> columns = olapTable.getIndexIdToSchema().get(mvIdx.getId());
-                                for (int j = 0; j < columns.size(); ++j) {
-                                    Column column = columns.get(j);
-
+                                for (Column column : columns) {
                                     // Extra string (aggregation and bloom filter)
                                     List<String> extras = Lists.newArrayList();
                                     if (column.getAggregationType() != null && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                                         extras.add(column.getAggregationType().name());
                                     }
+                                    String defaultStr = column.getMetaDefaultValue(extras);
                                     String extraStr = StringUtils.join(extras, ",");
                                     List<String> row = Arrays.asList(
                                             column.getDisplayName(),
                                             column.getType().toString(),
                                             column.isAllowNull() ? "Yes" : "No",
                                             ((Boolean) column.isKey()).toString(),
-                                            column.getDefaultValue() == null
-                                                    ? FeConstants.null_string : column.getDefaultValue(),
+                                            defaultStr,
                                             extraStr);
                                     totalRows.add(row);
                                 }
@@ -213,16 +211,15 @@ public class DescribeStmt extends ShowStmt {
                             if (bfColumns != null && bfColumns.contains(column.getName())) {
                                 extras.add("BLOOM_FILTER");
                             }
+                            String defaultStr = column.getMetaDefaultValue(extras);
                             String extraStr = StringUtils.join(extras, ",");
-
                             List<String> row = Arrays.asList("",
                                     "",
                                     column.getDisplayName(),
                                     column.getType().toString(),
                                     column.isAllowNull() ? "Yes" : "No",
                                     ((Boolean) column.isKey()).toString(),
-                                    column.getDefaultValue() == null
-                                            ? FeConstants.null_string : column.getDefaultValue(),
+                                    defaultStr,
                                     extraStr);
 
                             if (j == 0) {

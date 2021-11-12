@@ -527,7 +527,7 @@ public class DataDescription {
     private static void validateReplaceValue(List<String> args, Column column) throws AnalysisException {
         String replaceValue = null;
         if (args.size() == 1) {
-            replaceValue = column.getDefaultValue();
+            replaceValue = column.getCalculatedDefaultValue();
             if (replaceValue == null) {
                 throw new AnalysisException("Column " + column.getName() + " has no default value");
             }
