@@ -349,8 +349,7 @@ void TabletUpdates::_sync_apply_version_idx(const EditVersion& v) {
 }
 
 void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& v) {
-    EditVersionInfo* tmp = new EditVersionInfo();
-    ScopedCleanup free_guard([&]() { delete tmp; });
+    std::unique_ptr<EditVersionInfo> tmp = std::make_unique<EditVersionInfo>();
     tmp->version = EditVersion(v.version().major(), v.version().minor());
     tmp->creation_time = v.creation_time();
     if (v.rowsets_add_size() > 0 || v.rowsets_del_size() > 0) {
@@ -372,8 +371,7 @@ void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& v) {
         tmp->compaction->inputs.assign(cpb.inputs().begin(), cpb.inputs().end());
         tmp->compaction->output = cpb.outputs()[0];
     }
-    _versions.emplace_back(tmp);
-    free_guard.cancel();
+    _versions.emplace_back(std::move(tmp));
     _next_rowset_id += v.rowsetid_add();
 }
 
