@@ -298,7 +298,8 @@ class QueryTransformer {
         boolean groupAllConst = groupByExpressions.stream().allMatch(Expr::isConstant);
 
         for (Expr groupingItem : groupByExpressions) {
-            // grouping columns save one least
+            //Grouping columns save one least
+            //Grouping set type aggregation cannot delete constant aggregation columns
             if (groupingItem.isConstant() && !(groupAllConst && groupByColumnRefs.isEmpty()) &&
                     groupingSetsList == null) {
                 continue;
