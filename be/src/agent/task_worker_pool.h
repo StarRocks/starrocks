@@ -27,6 +27,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -49,13 +50,11 @@ public:
         PUSH,
         REALTIME_PUSH,
         PUBLISH_VERSION,
-        // Deprecated
-        CLEAR_ALTER_TASK,
+        CLEAR_ALTER_TASK, // Deprecated
         CLEAR_TRANSACTION_TASK,
         DELETE,
         ALTER_TABLE,
-        // Deprecated
-        QUERY_SPLIT_KEY,
+        QUERY_SPLIT_KEY, // Deprecated
         CLONE,
         STORAGE_MEDIUM_MIGRATE,
         CHECK_CONSISTENCY,
@@ -74,16 +73,19 @@ public:
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
     TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info, int worker_num);
-    virtual ~TaskWorkerPool();
+    ~TaskWorkerPool();
 
-    // Start the task worker callback thread
-    virtual void start();
+    // start the task worker callback thread
+    void start();
+
+    // stop the task worker callback thread
+    void stop();
 
     // Submit task to task pool
     //
     // Input parameters:
     // * task: the task need callback thread to do
-    virtual void submit_task(const TAgentTaskRequest& task);
+    void submit_task(const TAgentTaskRequest& task);
 
 private:
     bool _register_task_info(const TTaskType::type task_type, int64_t signature);
@@ -141,6 +143,9 @@ private:
 
     static std::mutex _s_task_signatures_lock;
     static std::map<TTaskType::type, std::set<int64_t>> _s_task_signatures;
+
+    std::atomic<bool> _stopped{false};
+    std::vector<std::thread> _worker_threads;
 
     TaskWorkerPool(const TaskWorkerPool&) = delete;
     const TaskWorkerPool& operator=(const TaskWorkerPool&) = delete;

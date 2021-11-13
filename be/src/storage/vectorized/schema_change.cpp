@@ -579,7 +579,9 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
         _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
     }
 
-    while (!_heap.empty()) {
+    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    bool bg_worker_stopped = storage_engine->bg_worker_stopped();
+    while (!_heap.empty() && !bg_worker_stopped) {
         if (tmp_chunk->reach_capacity_limit() || nread >= config::vector_chunk_size) {
             if (_tablet->keys_type() == KeysType::AGG_KEYS) {
                 aggregate_chunk(*_aggregator, tmp_chunk, rowset_writer);
@@ -596,6 +598,11 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
             process_err();
             return false;
         }
+        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    }
+
+    if (bg_worker_stopped) {
+        return false;
     }
 
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
@@ -676,6 +683,10 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     do {
+        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        if (bg_worker_stopped) {
+            return false;
+        }
 #ifndef BE_TEST
         Status st = tls_thread_status.mem_tracker()->check_mem_limit("DirectSchemaChange");
         if (!st.ok()) {
@@ -763,7 +774,9 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
             this->_chunk_allocator->release(it, it->num_rows());
         }
     });
-    while (true) {
+    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    bool bg_worker_stopped = storage_engine->bg_worker_stopped();
+    while (!bg_worker_stopped) {
 #ifndef BE_TEST
         Status st = tls_thread_status.mem_tracker()->check_mem_limit("SortSchemaChange");
         if (!st.ok()) {
@@ -824,6 +837,11 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
 
         chunk_arr.push_back(new_chunk);
         mem_pool->clear();
+        bg_worker_stopped = storage_engine->bg_worker_stopped();
+    }
+
+    if (bg_worker_stopped) {
+        return false;
     }
 
     if (!chunk_arr.empty()) {

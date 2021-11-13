@@ -89,6 +89,7 @@ protected:
     }
 
     void TearDown() override {
+        k_engine->stop();
         delete k_engine;
         k_engine = nullptr;
         starrocks::ExecEnv::GetInstance()->set_storage_engine(nullptr);
