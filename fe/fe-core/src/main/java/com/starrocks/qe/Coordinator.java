@@ -2020,24 +2020,16 @@ public class Coordinator {
             // So if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate.
             if (rightOrFullBucketShuffleFragmentIds.contains(fragmentId.asInt())) {
                 int bucketNum = getFragmentBucketNum(fragmentId);
-                HashMap<TNetworkAddress, Long> assignedBucketPerHost = Maps.newHashMap();
-                Set<TNetworkAddress> aliveBackendAdress =
-                        Catalog.getCurrentSystemInfo().getIdToBackend().values().stream().filter(Backend::isAlive)
-                                .map(be -> new TNetworkAddress(be.getHost(), be.getBePort()))
-                                .collect(Collectors.toSet());
 
                 for (int bucketSeq = 0; bucketSeq < bucketNum; ++bucketSeq) {
                     if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                        Long minAssignedBuckets = Long.MAX_VALUE;
-                        TNetworkAddress minLocation = null;
-                        for (TNetworkAddress location : aliveBackendAdress) {
-                            Long assignedBucket = findOrInsert(assignedBucketPerHost, location, 0L);
-                            if (assignedBucket < minAssignedBuckets) {
-                                minAssignedBuckets = assignedBucket;
-                                minLocation = location;
-                            }
+                        Reference<Long> backendIdRef = new Reference<>();
+                        TNetworkAddress execHostport = SimpleScheduler.getHost(idToBackend, backendIdRef);
+                        if (execHostport == null) {
+                            throw new UserException("there is no scanNode Backend");
                         }
-                        bucketSeqToAddress.put(bucketSeq, minLocation);
+                        addressToBackendID.put(execHostport, backendIdRef.getRef());
+                        bucketSeqToAddress.put(bucketSeq, execHostport);
                     }
                     if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
                         bucketSeqToScanRange.put(bucketSeq, Maps.newHashMap());
