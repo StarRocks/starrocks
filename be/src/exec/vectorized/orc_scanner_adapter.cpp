@@ -1201,7 +1201,7 @@ Status OrcScannerAdapter::_init_cast_exprs() {
         // For example, if we assume column A is a integer column, but it's stored as string in orc file
         // then min/max of A is almost unusable. Think that there are values [10, 11, 10000, 100001]
         // min/max will be "10" and "11", and we expect min/max is 10/100001
-        if (!_broker_load_mode) {
+        if (!_broker_load_mode && !is_type_compatible(starrocks_type.type, orc_type.type)) {
             return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1",
                                                             orc_type.debug_string(), starrocks_type.debug_string()));
         }
