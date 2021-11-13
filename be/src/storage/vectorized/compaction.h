@@ -57,7 +57,7 @@ protected:
     // return others on error
     Status merge_rowsets(int64_t mem_limit, Statistics* stats_output);
 
-    void modify_rowsets();
+    Status modify_rowsets();
 
     Status construct_output_rowset_writer();
 

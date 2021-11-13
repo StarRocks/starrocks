@@ -96,7 +96,33 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
 #undef CREATE_AND_START_POOL
 }
 
-AgentServer::~AgentServer() = default;
+AgentServer::~AgentServer() {
+#ifndef STOP_POOL
+#define STOP_POOL(type, pool_name) pool_name->stop();
+#endif
+
+    STOP_POOL(CREATE_TABLE, _create_tablet_workers);
+    STOP_POOL(DROP_TABLE, _drop_tablet_workers);
+    // Both PUSH and REALTIME_PUSH type use _push_workers
+    STOP_POOL(PUSH, _push_workers);
+    STOP_POOL(PUBLISH_VERSION, _publish_version_workers);
+    STOP_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers);
+    STOP_POOL(DELETE, _delete_workers);
+    STOP_POOL(ALTER_TABLE, _alter_tablet_workers);
+    STOP_POOL(CLONE, _clone_workers);
+    STOP_POOL(STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers);
+    STOP_POOL(CHECK_CONSISTENCY, _check_consistency_workers);
+    STOP_POOL(REPORT_TASK, _report_task_workers);
+    STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
+    STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
+    STOP_POOL(UPLOAD, _upload_workers);
+    STOP_POOL(DOWNLOAD, _download_workers);
+    STOP_POOL(MAKE_SNAPSHOT, _make_snapshot_workers);
+    STOP_POOL(RELEASE_SNAPSHOT, _release_snapshot_workers);
+    STOP_POOL(MOVE, _move_dir_workers);
+    STOP_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers);
+#undef STOP_POOL
+}
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
