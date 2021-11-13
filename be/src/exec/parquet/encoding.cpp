@@ -90,6 +90,8 @@ private:
 };
 
 EncodingInfoResolver::EncodingInfoResolver() {
+    // BOOL
+    _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::PLAIN>();
     // INT32
     _add_map<tparquet::Type::INT32, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::INT32, tparquet::Encoding::RLE_DICTIONARY>();
