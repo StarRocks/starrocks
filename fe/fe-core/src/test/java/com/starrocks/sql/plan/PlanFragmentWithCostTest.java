@@ -705,4 +705,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         setTableStatistics(t0, 10000);
     }
+
+    @Test
+    public void testMergeTwoAggArgTypes() throws Exception {
+        String sql = "select sum(t.int_sum) from (select sum(t1c) as int_sum from test_all_type)t";
+        String planFragment = getVerboseExplain(sql);
+        Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: sum[([3: t1c, INT, true]); args: INT; result: BIGINT;"));
+    }
 }
