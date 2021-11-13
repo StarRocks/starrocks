@@ -47,10 +47,10 @@ RESULT SINK
 25:MERGING-EXCHANGE
 cardinality: 250
 column statistics:
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-* year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
-* sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+* sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -63,20 +63,20 @@ OutPut Exchange Id: 25
 |  offset: 0
 |  cardinality: 250
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
-|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 23:AGGREGATE (merge finalize)
 |  aggregate: sum[([57: sum(56: expr), DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, INT, true]
 |  cardinality: 250
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
-|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 22:EXCHANGE
 cardinality: 297
@@ -93,10 +93,10 @@ OutPut Exchange Id: 22
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, INT, true]
 |  cardinality: 297
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
-|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 20:Project
 |  output columns:
@@ -106,10 +106,10 @@ OutPut Exchange Id: 22
 |  56 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 554645
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -119,15 +119,15 @@ OutPut Exchange Id: 22
 |  - filter_id = 3, build_expr = (50: N_NATIONKEY), remote = true
 |  cardinality: 554645
 |  column statistics:
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 |----18:EXCHANGE
 |       cardinality: 25
@@ -141,11 +141,11 @@ OutPut Exchange Id: 22
 |  46 <-> [46: N_NAME, VARCHAR, false]
 |  cardinality: 173465347
 |  column statistics:
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 15:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -154,13 +154,13 @@ OutPut Exchange Id: 22
 |  - filter_id = 2, build_expr = (1: S_SUPPKEY), remote = false
 |  cardinality: 173465347
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 |----14:EXCHANGE
 |       cardinality: 1000000
@@ -174,24 +174,24 @@ OutPut Exchange Id: 22
 |  39 <-> [39: C_NATIONKEY, INT, false]
 |  cardinality: 173465347
 |  column statistics:
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
 7:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  equal join conjunct: [9: L_ORDERKEY, INT, false] = [26: O_ORDERKEY, INT, false]
 |  cardinality: 173465347
 |  column statistics:
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
 |----6:EXCHANGE
 |       cardinality: 150000000
@@ -209,11 +209,11 @@ cardinality: 173465347
 probe runtime filters:
 - filter_id = 2, probe_expr = (11: L_SUPPKEY)
 column statistics:
-* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-* L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-* L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
-* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-* L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
+* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+* L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+* L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+* L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
 
 PLAN FRAGMENT 3(F09)
 
@@ -230,8 +230,8 @@ tabletList=10185
 actualRows=0, avgRowSize=29.0
 cardinality: 25
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 
 PLAN FRAGMENT 4(F05)
 
@@ -245,8 +245,8 @@ OutPut Exchange Id: 14
 |  46 <-> [46: N_NAME, CHAR, false]
 |  cardinality: 1000000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 12:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -255,10 +255,10 @@ OutPut Exchange Id: 14
 |  - filter_id = 1, build_expr = (45: N_NATIONKEY), remote = false
 |  cardinality: 1000000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 |----11:EXCHANGE
 |       cardinality: 25
@@ -273,8 +273,8 @@ cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (4: S_NATIONKEY)
 column statistics:
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 
 PLAN FRAGMENT 5(F06)
 
@@ -291,8 +291,8 @@ tabletList=10185
 actualRows=0, avgRowSize=29.0
 cardinality: 25
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 
 PLAN FRAGMENT 6(F01)
 
@@ -306,8 +306,8 @@ OutPut Exchange Id: 06
 |  39 <-> [39: C_NATIONKEY, INT, false]
 |  cardinality: 150000000
 |  column statistics:
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
 4:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -316,10 +316,10 @@ OutPut Exchange Id: 06
 |  - filter_id = 0, build_expr = (36: C_CUSTKEY), remote = false
 |  cardinality: 150000000
 |  column statistics:
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0]
-|  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7]
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
+|  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
 |----3:EXCHANGE
 |       cardinality: 15000000
@@ -334,8 +334,8 @@ cardinality: 150000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (27: O_CUSTKEY)
 column statistics:
-* O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-* O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0]
+* O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+* O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 
 PLAN FRAGMENT 7(F02)
 
@@ -353,8 +353,8 @@ cardinality: 15000000
 probe runtime filters:
 - filter_id = 3, probe_expr = (39: C_NATIONKEY)
 column statistics:
-* C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7]
-* C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+* C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
+* C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 [dump]
 {
   "statement": "select\n    supp_nation,\n    cust_nation,\n    l_year,\n    sum(volume) as revenue\nfrom\n    (\n        select\n            n1.n_name as supp_nation,\n            n2.n_name as cust_nation,\n            extract(year from l_shipdate) as l_year,\n            l_extendedprice * (1 - l_discount) as volume\n        from\n            supplier,\n            lineitem,\n            orders,\n            customer,\n            nation n1,\n            nation n2\n        where\n                s_suppkey \u003d l_suppkey\n          and o_orderkey \u003d l_orderkey\n          and c_custkey \u003d o_custkey\n          and s_nationkey \u003d n1.n_nationkey\n          and c_nationkey \u003d n2.n_nationkey\n          and (\n                (n1.n_name \u003d \u0027CANADA\u0027 and n2.n_name \u003d \u0027IRAN\u0027)\n                or (n1.n_name \u003d \u0027IRAN\u0027 and n2.n_name \u003d \u0027CANADA\u0027)\n            )\n          and l_shipdate between date \u00271995-01-01\u0027 and date \u00271996-12-31\u0027\n    ) as shipping\ngroup by\n    supp_nation,\n    cust_nation,\n    l_year\norder by\n    supp_nation,\n    cust_nation,\n    l_year ;\n",
@@ -384,27 +384,27 @@ column statistics:
   },
   "column_statistics": {
     "test.nation": {
-      "N_NAME": "[-Infinity, Infinity, 0.0, 25.0, 25.0]",
-      "N_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0]"
+      "N_NAME": "[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE",
+      "N_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE"
     },
     "test.lineitem": {
-      "L_SHIPDATE": "[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]",
-      "L_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0]",
-      "L_EXTENDEDPRICE": "[901.0, 104949.5, 0.0, 8.0, 932377.0]",
-      "L_DISCOUNT": "[0.0, 0.1, 0.0, 8.0, 11.0]",
-      "L_ORDERKEY": "[1.0, 6.0E8, 0.0, 8.0, 1.5E8]"
+      "L_SHIPDATE": "[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE",
+      "L_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE",
+      "L_EXTENDEDPRICE": "[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE",
+      "L_DISCOUNT": "[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE",
+      "L_ORDERKEY": "[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE"
     },
     "test.supplier": {
-      "S_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0]",
-      "S_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0]"
+      "S_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE",
+      "S_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE"
     },
     "test.customer": {
-      "C_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0]",
-      "C_CUSTKEY": "[1.0, 1.5E7, 0.0, 8.0, 1.5E7]"
+      "C_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE",
+      "C_CUSTKEY": "[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE"
     },
     "test.orders": {
-      "O_ORDERKEY": "[1.0, 6.0E8, 0.0, 8.0, 1.5E8]",
-      "O_CUSTKEY": "[1.0, 1.49999E7, 0.0, 8.0, 9999600.0]"
+      "O_ORDERKEY": "[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE",
+      "O_CUSTKEY": "[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE"
     }
   },
   "be_number": 3,
