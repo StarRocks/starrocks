@@ -75,8 +75,10 @@ void set_up() {
 }
 
 void tear_down() {
+    k_engine->stop();
     delete k_engine;
     k_engine = nullptr;
+    ExecEnv::GetInstance()->set_storage_engine(nullptr);
     system("rm -rf ./data_test");
     FileUtils::remove_all(std::string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
     delete k_tablet_meta_mem_tracker;
@@ -302,7 +304,6 @@ TEST_F(TestDeltaWriter, open) {
 
     TDropTabletReq drop_request;
     auto tablet_id = 10003;
-    auto schema_hash = 270068375;
     st = k_engine->tablet_manager()->drop_tablet(tablet_id);
     ASSERT_TRUE(st.ok()) << st.to_string();
 }

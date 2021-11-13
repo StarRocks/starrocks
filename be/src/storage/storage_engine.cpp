@@ -126,7 +126,11 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 }
 
 StorageEngine::~StorageEngine() {
-    _clear();
+#ifdef BE_TEST
+    if (_s_instance == this) {
+        _s_instance = nullptr;
+    }
+#endif
 }
 
 void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
@@ -461,24 +465,68 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
     return !tablet_info_vec.empty();
 }
 
-void StorageEngine::_clear() {
+void StorageEngine::stop() {
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& store_pair : _store_map) {
+            store_pair.second->stop_bg_worker();
+            delete store_pair.second;
+            store_pair.second = nullptr;
+        }
+        _store_map.clear();
+    }
+    _bg_worker_stopped.store(true, std::memory_order_release);
+
+    if (_update_cache_expire_thread.joinable()) {
+        _update_cache_expire_thread.join();
+    }
+    if (_unused_rowset_monitor_thread.joinable()) {
+        _unused_rowset_monitor_thread.join();
+    }
+    if (_garbage_sweeper_thread.joinable()) {
+        _garbage_sweeper_thread.join();
+    }
+    if (_disk_stat_monitor_thread.joinable()) {
+        _disk_stat_monitor_thread.join();
+    }
+    for (auto& thread : _base_compaction_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    for (auto& thread : _cumulative_compaction_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    for (auto& thread : _update_compaction_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    for (auto& thread : _tablet_checkpoint_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    if (_fd_cache_clean_thread.joinable()) {
+        _fd_cache_clean_thread.join();
+    }
+    if (config::path_gc_check) {
+        for (auto& thread : _path_scan_threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+        for (auto& thread : _path_gc_threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+    }
+
     SAFE_DELETE(_index_stream_lru_cache);
     _file_cache.reset();
-
-    std::lock_guard<std::mutex> l(_store_lock);
-    for (auto& store_pair : _store_map) {
-        store_pair.second->stop_bg_worker();
-        delete store_pair.second;
-        store_pair.second = nullptr;
-    }
-    _store_map.clear();
-
-    _stop_bg_worker = true;
-#ifdef BE_TEST
-    if (_s_instance == this) {
-        _s_instance = nullptr;
-    }
-#endif
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {

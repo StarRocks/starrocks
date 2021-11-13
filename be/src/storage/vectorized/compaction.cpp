@@ -6,6 +6,7 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/tablet_reader.h"
@@ -96,7 +97,7 @@ Status Compaction::do_compaction_impl() {
     TRACE("check correctness finished");
 
     // 4. modify rowsets in memory
-    modify_rowsets();
+    RETURN_IF_ERROR(modify_rowsets());
     TRACE("modify rowsets finished");
 
     // 5. update last success compaction time
@@ -188,49 +189,66 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
         }
 #endif
 
-        chunk->reset();
-        Status status = reader.get_next(chunk.get());
-        if (!status.ok()) {
-            if (status.is_end_of_file()) {
-                break;
-            } else {
-                return Status::InternalError("reader get_next error.");
+        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        while (!bg_worker_stopped) {
+            chunk->reset();
+            Status status = reader.get_next(chunk.get());
+            if (!status.ok()) {
+                if (status.is_end_of_file()) {
+                    break;
+                } else {
+                    return Status::InternalError("reader get_next error.");
+                }
             }
+
+            ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
+
+            OLAPStatus olap_status = _output_rs_writer->add_chunk(*chunk);
+            if (olap_status != OLAP_SUCCESS) {
+                LOG(WARNING) << "writer add_chunk error, err=" << olap_status;
+                return Status::InternalError("writer add_chunk error.");
+            }
+            output_rows += chunk->num_rows();
+
+            bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
         }
 
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
+        if (bg_worker_stopped) {
+            return Status::InternalError(
+                    "Process is going to quit. The compaction should be stopped as soon as possible.");
+        }
 
-        OLAPStatus olap_status = _output_rs_writer->add_chunk(*chunk);
+        if (stats_output != nullptr) {
+            stats_output->output_rows = output_rows;
+            stats_output->merged_rows = reader.merged_rows();
+            stats_output->filtered_rows = reader.stats().rows_del_filtered;
+        }
+
+        OLAPStatus olap_status = _output_rs_writer->flush();
         if (olap_status != OLAP_SUCCESS) {
-            LOG(WARNING) << "writer add_chunk error, err=" << olap_status;
-            return Status::InternalError("writer add_chunk error.");
+            LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " + _tablet->full_name()
+                         << ", err=" << olap_status;
+            return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
         }
-        output_rows += chunk->num_rows();
-    }
 
-    if (stats_output != nullptr) {
-        stats_output->output_rows = output_rows;
-        stats_output->merged_rows = reader.merged_rows();
-        stats_output->filtered_rows = reader.stats().rows_del_filtered;
+        return Status::OK();
     }
-
-    OLAPStatus olap_status = _output_rs_writer->flush();
-    if (olap_status != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " + _tablet->full_name()
-                     << ", err=" << olap_status;
-        return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
-    }
-
-    return Status::OK();
 }
 
-void Compaction::modify_rowsets() {
+Status Compaction::modify_rowsets() {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    if (bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The compaction should be stopped as soon as possible.");
+    }
+
     std::vector<RowsetSharedPtr> output_rowsets;
     output_rowsets.push_back(_output_rowset);
 
     std::unique_lock wrlock(_tablet->get_header_lock());
     _tablet->modify_rowsets(output_rowsets, _input_rowsets);
     _tablet->save_meta();
+
+    return Status::OK();
 }
 
 Status Compaction::check_version_continuity(const std::vector<RowsetSharedPtr>& rowsets) {
