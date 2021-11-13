@@ -399,6 +399,12 @@ Status ScalarColumnReader::_init_convert_info() {
     // but when we insert value into `col0`, the physical type in parquet file is actually `INT32`
     // so when we read `col0` from parquet file, we have to do a type conversion from int32_t to int8_t.
     switch (parquet_type) {
+    case tparquet::Type::type::BOOLEAN: {
+        if (col_type != PrimitiveType::TYPE_BOOLEAN) {
+            _need_convert = true;
+        }
+        break;
+    }
     case tparquet::Type::type::INT32: {
         if (col_type != PrimitiveType::TYPE_INT) {
             _need_convert = true;
