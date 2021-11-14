@@ -534,6 +534,12 @@ Status ScalarColumnReader::_init_convert_info() {
         }
         break;
     }
+    case tparquet::Type::BOOLEAN: {
+        if (col_type != PrimitiveType::TYPE_BOOLEAN) {
+            _need_convert = true;
+        }
+        break;
+    }
     default:
         _need_convert = true;
         break;
