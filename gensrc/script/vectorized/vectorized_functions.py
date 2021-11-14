@@ -154,6 +154,7 @@ vectorized_functions = [
     [10313, "hex", "VARCHAR", ['VARCHAR'], "StringFunctions::hex_string"],
     [10314, "unhex", "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
+    [10316, "uuid", "VARCHAR", [], "StringFunctions::uuid"],
 
     [10320, "conv", "VARCHAR", ["BIGINT", "TINYINT", "TINYINT"], "MathFunctions::conv_int"],
     [10321, "conv", "VARCHAR", ["VARCHAR", "TINYINT", "TINYINT"], "MathFunctions::conv_string"],
@@ -456,7 +457,6 @@ vectorized_functions = [
     [100012, 'version', 'VARCHAR', [], "UtilityFunctions::version"],
     [100013, 'current_version', 'VARCHAR', [], "UtilityFunctions::current_version"],
     [100014, 'last_query_id', 'VARCHAR', [], "UtilityFunctions::last_query_id"],
-    [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
 
     # json function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",

@@ -20,6 +20,7 @@
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
+#include "util/uuid_generator.h"
 
 namespace starrocks::vectorized {
 
@@ -2929,6 +2930,15 @@ ColumnPtr StringFunctions::parse_url(FunctionContext* context, const starrocks::
     }
 
     return parse_url_general(context, columns);
+}
+
+ColumnPtr StringFunctions::uuid(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    UUIDGenerator generator = UUIDGenerator.instance();
+    string uuid_string = boost::uuids::to_string(generator.next_uuid());
+    ColumnBuilder<TYPE_VARCHAR> result;
+    result.append(Slice(uuid_string.data(), uuid_string.size()));
+
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks::vectorized

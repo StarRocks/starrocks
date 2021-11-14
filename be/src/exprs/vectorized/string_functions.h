@@ -389,6 +389,13 @@ public:
      */
     DEFINE_VECTORIZED_FN(sm3);
 
+    /**
+     * @param: []
+     * @paramType columns: []
+     * @return A Column holding a Universal Unique Identifier
+     */
+    DEFINE_VECTORIZED_FN(uuid);
+
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
