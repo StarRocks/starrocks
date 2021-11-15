@@ -7,7 +7,9 @@
 #include "column/column_helper.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/sort/sort_sink_operator.h"
+#include "exec/pipeline/sort/local_merge_sort_source_operator.h"
+#include "exec/pipeline/sort/partition_sort_sink_operator.h"
+#include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/sort/sort_source_operator.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
@@ -220,39 +222,25 @@ ChunkPtr TopNNode::_materialize_chunk_before_sort(Chunk* chunk) {
 pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    // step 0: construct pipeline end with sort operator.
-    // get operators before sort operator
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
-    operators_sink_with_sort = context->maybe_interpolate_local_passthrough_exchange(operators_sink_with_sort);
 
-    static const uint SIZE_OF_CHUNK_FOR_TOPN = 3000;
-    static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;
-    std::shared_ptr<ChunksSorter> chunks_sorter;
-    if (_limit > 0) {
-        chunks_sorter = std::make_unique<vectorized::ChunksSorterTopn>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                       &_is_asc_order, &_is_null_first, _offset, _limit,
-                                                                       SIZE_OF_CHUNK_FOR_TOPN);
-    } else {
-        chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                           &_is_asc_order, &_is_null_first,
-                                                                           SIZE_OF_CHUNK_FOR_FULL_SORT);
-    }
+    auto degree_of_parallelism =
+            down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
+    auto sort_context = std::make_shared<SortContext>(_limit, degree_of_parallelism, _is_asc_order, _is_null_first);
 
-    // add SortSinkOperator to this pipeline
-    auto sort_sink_operator = std::make_shared<SortSinkOperatorFactory>(
-            context->next_operator_id(), id(), chunks_sorter, _sort_exec_exprs, _order_by_types,
-            _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
-    operators_sink_with_sort.emplace_back(std::move(sort_sink_operator));
+    auto partition_sort_sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
+            context->next_operator_id(), id(), sort_context, _sort_exec_exprs, _is_asc_order, _is_null_first, _offset,
+            _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
+    operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
     context->add_pipeline(operators_sink_with_sort);
 
     OpFactories operators_source_with_sort;
-    auto sort_source_operator =
-            std::make_shared<SortSourceOperatorFactory>(context->next_operator_id(), id(), std::move(chunks_sorter));
-    // SourceSourceOperator's instance count must be 1
-    sort_source_operator->set_degree_of_parallelism(1);
-    operators_source_with_sort.emplace_back(std::move(sort_source_operator));
+    auto local_merge_sort_source_operator = std::make_shared<LocalMergeSortSourceOperatorFactory>(
+            context->next_operator_id(), id(), std::move(sort_context));
+    // local_merge_sort_source_operator's instance count must be 1
+    local_merge_sort_source_operator->set_degree_of_parallelism(1);
+    operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
 
-    // return to the following pipeline
     return operators_source_with_sort;
 }
 

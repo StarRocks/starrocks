@@ -148,6 +148,8 @@ set(EXEC_FILES
     pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/sort_sink_operator.cpp
     pipeline/sort/sort_source_operator.cpp
+    pipeline/sort/partition_sort_sink_operator.cpp
+    pipeline/sort/local_merge_sort_source_operator.cpp
     pipeline/pipeline_driver_dispatcher.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp

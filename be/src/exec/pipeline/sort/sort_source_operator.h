@@ -5,9 +5,6 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/sort_exec_exprs.h"
-#include "gen_cpp/InternalService_types.h"
-#include "runtime/mysql_result_writer.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 class BufferControlBlock;

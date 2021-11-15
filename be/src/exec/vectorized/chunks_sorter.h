@@ -18,6 +18,14 @@ struct DataSegment {
     ChunkPtr chunk;
     Columns order_by_columns;
 
+    uint32_t _next_output_row = 0;
+    uint64_t _partitions_rows;
+
+    // used for full sort.
+    Permutation* _sorted_permutation;
+
+    bool has_next() { return _next_output_row < _partitions_rows; }
+
     DataSegment() : chunk(std::make_shared<Chunk>()) {}
 
     DataSegment(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) { init(sort_exprs, cnk); }
@@ -278,8 +286,17 @@ public:
     // get_next only works after done().
     virtual void get_next(ChunkPtr* chunk, bool* eos) = 0;
 
-    // This
+    virtual DataSegment* get_result_data_segment() = 0;
+
     Status finish(RuntimeState* state);
+
+    // used to get size of partition chunks.
+    virtual uint64_t get_partition_rows() const = 0;
+
+    // used to get permutation for partition chunks,
+    // and this is used only with full sort.
+    virtual Permutation* get_permutation() const = 0;
+
     bool sink_complete();
 
     // pull_chunk for pipeline.

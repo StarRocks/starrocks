@@ -3,17 +3,12 @@
 #include "exec/pipeline/sort/sort_source_operator.h"
 
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exprs/expr.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/exec_env.h"
-#include "runtime/mysql_result_writer.h"
-#include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
-#include "util/stack_util.h"
 
 namespace starrocks::pipeline {
 StatusOr<vectorized::ChunkPtr> SortSourceOperator::pull_chunk(RuntimeState* state) {
