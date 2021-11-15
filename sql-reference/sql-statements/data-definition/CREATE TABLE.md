@@ -508,30 +508,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     ```
 
-5. 创建一个数据文件存储在HDFS上的 broker 外部表, 数据使用 "|" 分割，"\n" 换行
-
-    ```sql
-    CREATE EXTERNAL TABLE example_db.table_broker (
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-    )
-    ENGINE=broker
-    PROPERTIES (
-        "broker_name" = "hdfs",
-        "path" = "hdfs://hdfs_host:hdfs_port/data1,hdfs://hdfs_host:hdfs_port/data2,hdfs://hdfs_host:hdfs_port/data3%2c4",
-        "column_separator" = "|",
-        "line_delimiter" = "\n"
-    )
-    BROKER PROPERTIES (
-        "username" = "hdfs_user",
-        "password" = "hdfs_password"
-    )
-    ```
-
-6. 创建一张含有HLL列的表
+5. 创建一张含有HLL列的表
 
     ```sql
     CREATE TABLE example_db.example_table
@@ -547,7 +524,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     PROPERTIES ("storage_type"="column");
     ```
 
-7. 创建一张含有BITMAP_UNION聚合类型的表（v1和v2列的原始数据类型必须是TINYINT,SMALLINT,INT）
+6. 创建一张含有BITMAP_UNION聚合类型的表（v1和v2列的原始数据类型必须是TINYINT,SMALLINT,INT）
 
     ```sql
     CREATE TABLE example_db.example_table
@@ -563,7 +540,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     PROPERTIES ("storage_type"="column");
     ```
 
-8. 创建两张支持Colocat Join的表t1 和t2
+7. 创建两张支持Colocat Join的表t1 和t2
 
     ```sql
     CREATE TABLE `t1` (
@@ -587,25 +564,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     );
     ```
 
-9. 创建一个数据文件存储在BOS上的 broker 外部表
-
-    ```sql
-    CREATE EXTERNAL TABLE example_db.table_broker (
-    k1 DATE
-    )
-    ENGINE=broker
-    PROPERTIES (
-        "broker_name" = "bos",
-        "path" = "bos://my_bucket/input/file",
-    )
-    BROKER PROPERTIES (
-        "bos_endpoint" = "http://bj.bcebos.com",
-        "bos_accesskey" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-        "bos_secret_accesskey"="yyyyyyyyyyyyyyyyyyyy"
-    )
-    ```
-
-10. 创建一个带有bitmap 索引的表
+8. 创建一个带有bitmap 索引的表
 
     ```sql
     CREATE TABLE example_db.table_hash
@@ -623,7 +582,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     PROPERTIES ("storage_type"="column");
     ```
 
-11. 创建一个动态分区表(需要在FE配置中开启动态分区功能)，该表每天提前创建3天的分区，并删除3天前的分区。例如今天为`2020-01-08`，则会创建分区名为`p20200108`, `p20200109`, `p20200110`, `p20200111`的分区. 分区范围分别为:
+9. 创建一个动态分区表(需要在FE配置中开启动态分区功能)，该表每天提前创建3天的分区，并删除3天前的分区。例如今天为`2020-01-08`，则会创建分区名为`p20200108`, `p20200109`, `p20200110`, `p20200111`的分区. 分区范围分别为:
 
     ```plain text
     [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
@@ -660,7 +619,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     );
     ```
 
-12. Create a table with rollup index
+10. Create a table with rollup index
 
     ```sql
     CREATE TABLE example_db.rolup_index_table
@@ -680,7 +639,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     PROPERTIES("replication_num" = "3");
 
-13. 创建一个内存表
+11. 创建一个内存表
 
     ```sql
     CREATE TABLE example_db.table_hash
@@ -698,7 +657,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     PROPERTIES ("in_memory"="true");
     ```
 
-14. 创建一个hive外部表
+12. 创建一个hive外部表
 
     ```SQL
     CREATE TABLE example_db.table_hive
