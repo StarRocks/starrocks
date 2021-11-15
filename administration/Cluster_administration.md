@@ -43,13 +43,13 @@ BE配置的通信端口有三个:
 |---|---|---|
 |be_port|9060|BE 上 thrift server 的端口，用于接收来自 FE 的请求|
 |webserver_port|8040|BE 上的 http server 的端口|
-|heartbeat_service_port|9050|BE 上心跳服务端口（thrift），用户接收来自 FE 的心跳|
+|heartbeat_service_port|9050|BE 上心跳服务端口（thrift），用于接收来自 FE 的心跳|
 
 ### 确认集群健康状态
 
 BE和FE启动完成之后，需要检查进程状态，以确定服务正常启动。
 
-* 运行 `http://be_host:be_http_port3/api/health`  确认BE启动状态
+* 运行 `http://be_host:be_http_port/api/health`  确认BE启动状态
 
   * 返回 {"status": "OK","msg": "To Be Added"} 表示启动正常。
 
