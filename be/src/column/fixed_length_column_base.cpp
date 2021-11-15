@@ -12,6 +12,7 @@
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/types.h"
+#include "util/int96.h"
 
 namespace starrocks::vectorized {
 
@@ -223,6 +224,37 @@ void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t 
         // date/datetime or something else.
         std::string s = _data[idx].to_string();
         buf->push_string(s.data(), s.size());
+    }
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::put_string_stream(std::stringstream* ss, size_t idx) const {
+    if constexpr (std::is_arithmetic_v<T>) {
+        if constexpr (std::is_same_v<T, float>) {
+            char buffer[MAX_FLOAT_STR_LENGTH + 2];
+            buffer[0] = ' ';
+            int length = FloatToBuffer(_data[idx], MAX_FLOAT_STR_LENGTH, buffer);
+            DCHECK(length >= 0) << "gcvt float failed, float value=" << _data[idx];
+            *ss << buffer;
+        } else if constexpr (std::is_same_v<T, double>) {
+            // To prevent loss of precision on float and double types,
+            // they are converted to strings before output.
+            // For example: For a double value 27361919854.929001,
+            // the direct output of using std::stringstream is 2.73619e+10,
+            // and after conversion to a string, it outputs 27361919854.929001
+            char buffer[MAX_DOUBLE_STR_LENGTH + 2];
+            buffer[0] = ' ';
+            int length = DoubleToBuffer(_data[idx], MAX_DOUBLE_STR_LENGTH, buffer);
+            DCHECK(length >= 0) << "gcvt double failed, double value=" << _data[idx];
+            *ss << buffer;
+        } else if constexpr (std::is_same_v<std::make_signed_t<ValueType>, __int128>) {
+            *ss << (const __int128)_data[idx];
+        } else {
+            *ss << _data[idx];
+        }
+    } else {
+        // decimal/date/datetime or something else.
+        *ss << _data[idx].to_string();
     }
 }
 

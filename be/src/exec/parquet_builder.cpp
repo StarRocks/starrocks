@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/parquet_writer.h"
+#include "parquet_builder.h"
 
 #include <arrow/array.h>
 #include <arrow/status.h>
@@ -46,7 +46,7 @@ namespace starrocks {
 // The executor query executor related codes could be deleted safely.
 // TODO: Remove old query executor related codes before 2021-09-30
 
-ParquetOutputStream::ParquetOutputStream(FileWriter* file_writer) : _file_writer(file_writer) {
+ParquetOutputStream::ParquetOutputStream(WritableFile* writable_file) : _writable_file(writable_file) {
     set_mode(arrow::io::FileMode::WRITE);
 }
 
@@ -56,7 +56,7 @@ ParquetOutputStream::~ParquetOutputStream() {
 
 arrow::Status ParquetOutputStream::Write(const void* data, int64_t nbytes) {
     size_t written_len = 0;
-    Status st = _file_writer->write(reinterpret_cast<const uint8_t*>(data), nbytes, &written_len);
+    Status st = _writable_file->write(reinterpret_cast<const uint8_t*>(data), nbytes, &written_len);
     if (!st.ok()) {
         return arrow::Status::IOError(st.get_error_msg());
     }
@@ -69,7 +69,7 @@ arrow::Result<int64_t> ParquetOutputStream::Tell() const {
 }
 
 arrow::Status ParquetOutputStream::Close() {
-    Status st = _file_writer->close();
+    Status st = _writable_file->close();
     if (!st.ok()) {
         return arrow::Status::IOError(st.get_error_msg());
     }
@@ -77,24 +77,20 @@ arrow::Status ParquetOutputStream::Close() {
     return arrow::Status::OK();
 }
 
-/// ParquetWriterWrapper
-ParquetWriterWrapper::ParquetWriterWrapper(FileWriter* file_writer, const std::vector<ExprContext*>& output_expr_ctxs)
-        : _output_expr_ctxs(output_expr_ctxs) {
-    // TODO(cmy): implement
-    _outstream = new ParquetOutputStream(file_writer);
-}
-
-Status ParquetWriterWrapper::write(const RowBatch& row_batch) {
-    // TODO(cmy): implement
-    return Status::OK();
-}
-
-void ParquetWriterWrapper::close() {
+/// ParquetBuilder
+ParquetBuilder::ParquetBuilder(WritableFile* writable_file, const std::vector<ExprContext*>& output_expr_ctxs)
+        : _outstream(new ParquetOutputStream(writable_file)), _output_expr_ctxs(output_expr_ctxs) {
     // TODO(cmy): implement
 }
 
-ParquetWriterWrapper::~ParquetWriterWrapper() {
-    close();
+ParquetBuilder::~ParquetBuilder() = default;
+
+Status ParquetBuilder::add_chunk(vectorized::Chunk* chunk) {
+    // TODO(c1oudman): implement
+}
+
+Status ParquetBuilder::finish() {
+    // TODO(cmy): implement
 }
 
 } // namespace starrocks
