@@ -41,7 +41,7 @@ public:
         return _repeat_times_last >= _repeat_times_required;
     }
     bool is_finished() const override;
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
 

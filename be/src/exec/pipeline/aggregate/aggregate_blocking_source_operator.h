@@ -16,7 +16,7 @@ public:
 
     bool has_output() const override;
     bool is_finished() const override;
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
 
     Status close(RuntimeState* state) override;
 

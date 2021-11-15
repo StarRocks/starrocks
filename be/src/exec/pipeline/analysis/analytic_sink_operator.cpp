@@ -42,7 +42,7 @@ bool AnalyticSinkOperator::is_finished() const {
     return _is_finished;
 }
 
-void AnalyticSinkOperator::finish(RuntimeState* state) {
+void AnalyticSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) {
         return;
     }

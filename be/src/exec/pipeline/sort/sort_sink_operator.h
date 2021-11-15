@@ -52,7 +52,7 @@ public:
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
 
 private:
     // This method is the same as topn node.

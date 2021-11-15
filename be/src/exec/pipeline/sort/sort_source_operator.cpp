@@ -29,7 +29,7 @@ StatusOr<vectorized::ChunkPtr> SortSourceOperator::pull_chunk(RuntimeState* stat
     }
 }
 
-void SortSourceOperator::finish(RuntimeState* state) {
+void SortSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 

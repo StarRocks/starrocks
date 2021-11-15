@@ -75,7 +75,7 @@ public:
 
     bool has_output() const override { return _index < _chunks.size(); }
     bool is_finished() const override { return !has_output(); }
-    void finish(RuntimeState* state) override {}
+    void set_finishing(RuntimeState* state) override {}
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -126,7 +126,7 @@ public:
     bool need_input() const override { return true; }
     bool has_output() const override { return _chunk != nullptr; }
     bool is_finished() const override { return _is_finished && !has_output(); }
-    void finish(RuntimeState* state) override { _is_finished = true; }
+    void set_finishing(RuntimeState* state) override { _is_finished = true; }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -174,7 +174,7 @@ public:
     bool need_input() const override { return true; }
     bool has_output() const override { return _chunk != nullptr; }
     bool is_finished() const override { return _is_finished; }
-    void finish(RuntimeState* state) override { _is_finished = true; }
+    void set_finishing(RuntimeState* state) override { _is_finished = true; }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;

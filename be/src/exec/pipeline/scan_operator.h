@@ -38,7 +38,7 @@ public:
 
     bool is_finished() const override;
 
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
