@@ -4,13 +4,11 @@
 
 #include <memory>
 
+#include "column/chunk.h"
 #include "column/schema.h"
 #include "storage/vectorized/row_source_mask.h"
 #include "storage/vectorized/tablet_reader_params.h"
 #include "util/runtime_profile.h"
-#ifndef NDEBUG
-#include "column/chunk.h"
-#endif
 
 namespace starrocks {
 class Status;
