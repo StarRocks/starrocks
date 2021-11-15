@@ -14,6 +14,7 @@
 #include "column/array_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
+#include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -1533,6 +1534,24 @@ void OrcScannerAdapter::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc:
             _add_conjunct(c, builder);
         }
         builder->end();
+        return;
+    }
+
+    // handle conjuncts
+    // where (NULL) or (slot == $val)
+    // where (true) or (slot == $val)
+    // If FE can simplify this predicate, then literal processing is no longer needed here
+    if (node_type == TExprNodeType::BOOL_LITERAL || node_type == TExprNodeType::NULL_LITERAL) {
+        orc::TruthValue val = orc::TruthValue::NO;
+        if (node_type == TExprNodeType::BOOL_LITERAL) {
+            Expr* literal = const_cast<Expr*>(conjunct);
+            ColumnPtr ptr = literal->evaluate(nullptr, nullptr);
+            const Datum& datum = ptr->get(0);
+            if (datum.get_int8()) {
+                val = orc::TruthValue::YES;
+            }
+        }
+        builder->literal(val);
         return;
     }
 
