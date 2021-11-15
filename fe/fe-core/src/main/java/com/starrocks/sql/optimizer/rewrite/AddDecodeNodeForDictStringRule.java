@@ -360,36 +360,36 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
                     newStringToDicts.put(stringColumn.getId(), dictColumn.getId());
                 }
-            } else if (operator instanceof CallOperator) {
-                CallOperator callOperator = (CallOperator) operator;
-                if (!couldApplyDictOptimize(callOperator)) {
-                    return;
-                }
+                return;
+            }
 
-                int stringColumnId = callOperator.getUsedColumns().getFirstId();
-                if (context.stringColumnIdToDictColumnIds.containsKey(stringColumnId)) {
-                    ColumnRefOperator oldStringArgColumn = context.columnRefFactory.getColumnRef(stringColumnId);
-                    Integer columnId =
-                            context.stringColumnIdToDictColumnIds.get(callOperator.getUsedColumns().getFirstId());
-                    ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
+            if (!couldApplyDictOptimize(operator)) {
+                return;
+            }
 
-                    ColumnRefOperator newDictColumn = context.columnRefFactory.create(
-                            oldStringColumn.getName(), ID_TYPE, oldStringColumn.isNullable());
+            int stringColumnId = operator.getUsedColumns().getFirstId();
+            if (context.stringColumnIdToDictColumnIds.containsKey(stringColumnId)) {
+                ColumnRefOperator oldStringArgColumn = context.columnRefFactory.getColumnRef(stringColumnId);
+                Integer columnId =
+                        context.stringColumnIdToDictColumnIds.get(operator.getUsedColumns().getFirstId());
+                ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
 
-                    Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMapWithExpectedSize(1);
-                    rewriteMap.put(oldStringArgColumn, dictColumn);
-                    ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
-                    // will modify the operator, must use clone
-                    ScalarOperator newCallOperator = callOperator.clone().accept(rewriter, null);
-                    newCallOperator.setType(ID_TYPE);
+                ColumnRefOperator newDictColumn = context.columnRefFactory.create(
+                        oldStringColumn.getName(), ID_TYPE, oldStringColumn.isNullable());
 
-                    newProjectMap.put(newDictColumn, newCallOperator);
-                    newProjectMap.remove(oldStringColumn);
+                Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMapWithExpectedSize(1);
+                rewriteMap.put(oldStringArgColumn, dictColumn);
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
+                // Will modify the operator, must use clone
+                ScalarOperator newCallOperator = operator.clone().accept(rewriter, null);
+                newCallOperator.setType(ID_TYPE);
 
-                    context.stringFunctions.put(newDictColumn, newCallOperator);
+                newProjectMap.put(newDictColumn, newCallOperator);
+                newProjectMap.remove(oldStringColumn);
 
-                    newStringToDicts.put(oldStringColumn.getId(), newDictColumn.getId());
-                }
+                context.stringFunctions.put(newDictColumn, newCallOperator);
+
+                newStringToDicts.put(oldStringColumn.getId(), newDictColumn.getId());
             }
         }
 
@@ -656,7 +656,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         return result;
     }
 
-    private static class CouldApplyDictOptimizeVisitor extends ScalarOperatorVisitor<Boolean, Void> {
+    public static class CouldApplyDictOptimizeVisitor extends ScalarOperatorVisitor<Boolean, Void> {
 
         public CouldApplyDictOptimizeVisitor() {
         }
