@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "common/status.h"
 #if defined(__i386) || defined(__x86_64__)
 #include "storage/bhp_lib.h"
 #endif
@@ -71,10 +72,10 @@ private:
 #define ADLER32_INIT adler32(0L, Z_NULL, 0)
 uint32_t olap_adler32(uint32_t adler, const char* buf, size_t len);
 
-OLAPStatus gen_timestamp_string(std::string* out_string);
+Status gen_timestamp_string(std::string* out_string);
 
 // move file to storage_root/trash, file can be a directory
-OLAPStatus move_to_trash(const std::filesystem::path& schema_hash_root, const std::filesystem::path& file_path);
+Status move_to_trash(const std::filesystem::path& tablet_id_path);
 
 OLAPStatus copy_file(const std::string& src, const std::string& dest);
 
