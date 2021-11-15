@@ -186,11 +186,11 @@ public:
 
     void TearDown() override {
         if (_tablet2) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id(), false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id());
             _tablet2.reset();
         }
         if (_tablet) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
         }
     }
@@ -946,8 +946,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_ver
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1010,8 +1010,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_mismatched_tablet_id) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1061,8 +1061,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_data_file_not_exist) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1114,8 +1114,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1170,8 +1170,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_full) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1207,8 +1207,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_file_not_exist) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1267,8 +1267,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_mismatched_tablet_id) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1319,8 +1319,8 @@ TEST_F(TabletUpdatesTest, test_issue_4193) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1360,8 +1360,8 @@ TEST_F(TabletUpdatesTest, test_issue_4181) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1402,7 +1402,7 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
     });
 
@@ -1420,7 +1420,7 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
 
     DeferOp defer2([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
