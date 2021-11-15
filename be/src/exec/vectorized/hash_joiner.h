@@ -40,9 +40,10 @@ enum HashJoinPhase {
 class HashJoiner {
 public:
     HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id, TPlanNodeType::type node_type, int64_t limit,
-               std::vector<bool>&& is_null_safes, std::vector<ExprContext*>&& build_expr_ctxs,
-               std::vector<ExprContext*>&& probe_expr_ctxs, std::vector<ExprContext*>&& other_join_conjunct_ctxs,
-               std::vector<ExprContext*>&& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
+               const std::vector<bool>& is_null_safes, const std::vector<ExprContext*>& build_expr_ctxs,
+               const std::vector<ExprContext*>& probe_expr_ctxs,
+               const std::vector<ExprContext*>& other_join_conjunct_ctxs,
+               const std::vector<ExprContext*>& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
                const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor);
 
     ~HashJoiner() = default;
@@ -219,14 +220,14 @@ private:
     ChunkPtr _buffered_probe_output_chunk;
     ChunkPtr _probe_output_chunk;
 
-    std::vector<bool> _is_null_safes;
-    std::vector<ExprContext*> _build_expr_ctxs;
-    std::vector<ExprContext*> _probe_expr_ctxs;
-    std::vector<ExprContext*> _other_join_conjunct_ctxs;
-    std::vector<ExprContext*> _conjunct_ctxs;
-    RowDescriptor _build_row_descriptor;
-    RowDescriptor _probe_row_descriptor;
-    RowDescriptor _row_descriptor;
+    const std::vector<bool>& _is_null_safes;
+    const std::vector<ExprContext*>& _build_expr_ctxs;
+    const std::vector<ExprContext*>& _probe_expr_ctxs;
+    const std::vector<ExprContext*>& _other_join_conjunct_ctxs;
+    const std::vector<ExprContext*>& _conjunct_ctxs;
+    const RowDescriptor& _build_row_descriptor;
+    const RowDescriptor& _probe_row_descriptor;
+    const RowDescriptor& _row_descriptor;
 
     std::list<ExprContext*> _runtime_in_filters;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;

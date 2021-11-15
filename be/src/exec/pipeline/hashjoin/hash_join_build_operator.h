@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #pragma once
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/vectorized/hash_joiner.h"
@@ -12,10 +13,10 @@ namespace pipeline {
 using HashJoiner = starrocks::vectorized::HashJoiner;
 class HashJoinBuildOperator final : public Operator {
 public:
-    HashJoinBuildOperator(int32_t id, const string& name, int32_t plan_node_id, HashJoiner* hash_joiner);
+    HashJoinBuildOperator(int32_t id, const string& name, int32_t plan_node_id, HashJoinerPtr hash_joiner);
     ~HashJoinBuildOperator() = default;
-    Status prepare(RuntimeState* state) override { return Operator::prepare(state); };
-    Status close(RuntimeState* state) override { return Operator::close(state); };
+    Status prepare(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override {
         CHECK(false) << "has_output not supported in HashJoinBuildOperator";
@@ -31,19 +32,19 @@ public:
     void set_finishing(RuntimeState* state) override;
 
 private:
-    HashJoiner* _hash_joiner;
+    HashJoinerPtr _hash_joiner;
     bool _is_finished = false;
 };
 class HashJoinBuildOperatorFactory final : public OperatorFactory {
 public:
-    HashJoinBuildOperatorFactory(int32_t id, int32_t plan_node_id, HashJoiner* hash_joiner);
+    HashJoinBuildOperatorFactory(int32_t id, int32_t plan_node_id, HashJoinerFactoryPtr hash_joiner_factory);
     ~HashJoinBuildOperatorFactory() = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
-    HashJoiner* _hash_joiner;
+    HashJoinerFactoryPtr _hash_joiner_factory;
 };
 } // namespace pipeline
 } // namespace starrocks
