@@ -275,7 +275,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
 std::string SnapshotManager::_calc_snapshot_id_path(const TabletSharedPtr& tablet, int64_t timeout_s) {
     // get current timestamp string
     string time_str;
-    if (gen_timestamp_string(&time_str) != OLAP_SUCCESS) {
+    if (!gen_timestamp_string(&time_str).ok()) {
         LOG(WARNING) << "Fail to gen_timestamp_string";
         return "";
     }
