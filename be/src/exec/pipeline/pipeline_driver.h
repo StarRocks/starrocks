@@ -99,6 +99,17 @@ private:
     int64_t accumulated_chunk_moved{0};
 };
 
+// OperatorExecState is used to guarantee that some hooks of operator
+// is called exactly one time during whole operator
+enum OperatorStage {
+    INIT = 0,
+    PREPARED = 4,
+    PROCESSING = 8,
+    FINISHING = 12,
+    FINISHED = 16,
+    CLOSED = 20,
+};
+
 class PipelineDriver {
     friend class PipelineDriverPoller;
 
@@ -116,6 +127,9 @@ public:
               _yield_max_chunks_moved(config::pipeline_yield_max_chunks_moved),
               _yield_max_time_spent(config::pipeline_yield_max_time_spent) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
+        for (auto& op : _operators) {
+            _operator_stages[op->get_id()] = OperatorStage::INIT;
+        }
     }
 
     PipelineDriver(const PipelineDriver& driver)
@@ -138,9 +152,10 @@ public:
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
 
+    void dispatch_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
-    void finish_operators(RuntimeState* state);
+    void finish_operators(RuntimeState* runtime_state);
 
     Operator* sink_operator() { return _operators.back().get(); }
     bool is_finished() {
@@ -176,6 +191,10 @@ public:
 private:
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
+    void _finishing_operator(OperatorPtr& op, RuntimeState* runtime_state);
+    void _finish_operator(OperatorPtr& op, RuntimeState* runtime_state);
+    void _close_operator(OperatorPtr& op, RuntimeState* runtime_state);
+    void _close_operators(RuntimeState* runtime_state);
 
     Operators _operators;
     DriverDependencies _dependencies;
@@ -194,6 +213,8 @@ private:
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     const size_t _yield_max_chunks_moved;
     const int64_t _yield_max_time_spent;
+
+    std::unordered_map<int32_t, OperatorStage> _operator_stages;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

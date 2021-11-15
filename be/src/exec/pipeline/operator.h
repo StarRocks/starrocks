@@ -25,8 +25,37 @@ public:
     Operator(int32_t id, const std::string& name, int32_t plan_node_id);
     virtual ~Operator() = default;
 
+    // prepare is used to do the initialization work
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // This method will be exactly invoked once in the whole life cycle
     virtual Status prepare(RuntimeState* state);
 
+    // Notifies the operator that no more input chunk will be added.
+    // The operator should finish processing.
+    // The method should be idempotent, because it may be triggered
+    // multiple times in the entire life cycle
+    // finish function is used to finish the following operator of the current operator that encounters its EOS
+    // and has no data to push into its following operator, but the operator is not finished until its buffered
+    // data inside is processed.
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // This method will be exactly invoked once in the whole life cycle
+    virtual void set_finishing(RuntimeState* state) = 0;
+
+    // set_finished is used to shutdown both input and output stream of a operator and after its invocation
+    // buffered data inside the operator is cleared.
+    // This function is used to shutdown preceding operators of the current operator if it is finished in advance,
+    // when the query or fragment instance is canceled, set_finished is also called to shutdown unfinished operators.
+    // A complex source operator that interacts with the corresponding sink operator in its preceding drivers via
+    // an implementation-specific context should override set_finished function, such as LocalExchangeSourceOperator.
+    // For an ordinary operator, set_finished function is trivial and just has the same implementation with
+    // set_finishing function.
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // This method will be exactly invoked once in the whole life cycle
+    virtual void set_finished(RuntimeState* state) {}
+
+    // close is used to do the cleanup work
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // This method will be exactly invoked once in the whole life cycle
     virtual Status close(RuntimeState* state);
 
     // Whether we could pull chunk from this operator
@@ -38,25 +67,6 @@ public:
     // Is this operator completely finished processing and no more
     // output chunks will be produced
     virtual bool is_finished() const = 0;
-
-    // Notifies the operator that no more input chunk will be added.
-    // The operator should finish processing.
-    // The method should be idempotent, because it may be triggered
-    // multiple times in the entire life cycle
-    // finish function is used to finish the following operator of the current operator that encounters its EOS
-    // and has no data to push into its following operator, but the operator is not finished until its buffered
-    // data inside is processed.
-    virtual void set_finishing(RuntimeState* state) = 0;
-
-    // set_finished is used to shutdown both input and output stream of a operator and after its invocation
-    // buffered data inside the operator is cleared.
-    // This function is used to shutdown preceding operators of the current operator if it is finished in advance,
-    // when the query or fragment instance is canceled, set_finished is also called to shutdown unfinished operators.
-    // A complex source operator that interacts with the corresponding sink operator in its preceding drivers via
-    // an implementation-specific context should override set_finished function, such as LocalExchangeSourceOperator.
-    // For an ordinary operator, set_finished function is trivial and just has the same implementation with
-    // set_finishing function.
-    virtual void set_finished(RuntimeState* state) { set_finishing(state); }
 
     // Pull chunk from this operator
     // Use shared_ptr, because in some cases (local broadcast exchange),

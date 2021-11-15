@@ -37,9 +37,6 @@ bool ExchangeMergeSortSourceOperator::is_finished() const {
 }
 
 void ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {
-    if (_is_finished) {
-        return;
-    }
     _is_finished = true;
     return _stream_recvr->close();
 }
