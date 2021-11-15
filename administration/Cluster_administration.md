@@ -444,6 +444,8 @@ BE、FE启动顺序不能颠倒。因为如果升级导致新旧 FE、BE 不兼�
 
 #### 升级环境
 
+> 注意：当前只支持从apache doris的0.13.15（不包括）版本以前升级。0.13.15版本在升级fe时需要修改源码处理，具体方法见升级Fe的部分。0.14及以后的版本暂时不支持升级。
+
 1. 获取原有集群信息
 
     如果原有集群 FE/BE/broker 信息未给出，可以通过 MySQL 连接到 FE 的方式，并使用以下 SQL 命令查看并确认清楚：
@@ -639,6 +641,28 @@ BE、FE启动顺序不能颠倒。因为如果升级导致新旧 FE、BE 不兼�
 4. 升级FE
 
     > 注意：FE升级采用先升级Observer，再升级Follower，最后升级Master的逻辑。
+    > 如果是从apache doris 0.13.15版本升级，先要修改starrocks的fe模块的源码，并重新编译fe模块。如果没有编译过fe模块，可以找官方技术支持提供帮助。
+
+    * 修改fe源码(如果不是从apache doris 0.13.15版本升级，跳过此步骤)
+        * 下载源码patch
+
+        ```bash
+        wget "http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/upgrade_from_apache_0.13.15.patch"
+        ```
+
+        * git命令合入patch
+
+        ```bash
+        git apply --reject upgrade_from_apache_0.13.15.patch
+        ```
+
+        * 如果本地代码没有在git环境中，也可以根据patch的内容手动合入。
+
+        * 编译fe模块
+
+        ```bash
+        ./build.sh --fe --clean
+        ```
 
     * 登录集群，确定Master和Follower，如果IsMaster为true，代表是Master。其他的都是Follower/Observer。
     * 升级Follower或者Master之前确保备份元数据，这一步非常重要，因为要确保没有问题。
@@ -690,6 +714,8 @@ BE、FE启动顺序不能颠倒。因为如果升级导致新旧 FE、BE 不兼�
         * 如果fe.log始终是UNKNOWN状态， 没有变成Follower、Observer，说明有问题。
         * fe.out报各种Exception，也有问题。
     （注意要先升级 Observer ，再升级Follower ）
+
+    * 如果是修改源码升级的，需要等元数据产生新image之后(meta/image目录下有image.xxx的新文件产生)，将fe的lib包替换回发布包。
 
 5. 部署 DorisDBManager
     观察一段时间以后，再部署企业版的管理页面来管理集群。
