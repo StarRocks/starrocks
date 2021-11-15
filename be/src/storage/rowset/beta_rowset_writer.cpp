@@ -291,8 +291,7 @@ Status BetaRowsetWriter::_final_merge() {
                 auto old_path =
                         BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
                 auto new_path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-                auto st = _context.env->rename_file(old_path, new_path);
-                RETURN_IF_ERROR_WITH_WARN(st, "Fail to rename file");
+                RETURN_IF_ERROR_WITH_WARN(_context.env->rename_file(old_path, new_path), "Fail to rename file");
             }
             _context.write_tmp = false;
             return Status::OK();

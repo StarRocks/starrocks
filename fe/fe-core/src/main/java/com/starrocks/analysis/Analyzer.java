@@ -315,7 +315,6 @@ public class Analyzer {
         }
     }
 
-    ;
     private final GlobalState globalState;
 
     // An analyzer stores analysis state for a single select block. A select block can be

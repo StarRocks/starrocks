@@ -483,7 +483,6 @@ public final class SparkDpp implements java.io.Serializable {
                                 abnormalRowAcc.add(1);
                                 return result.iterator();
                             }
-                            ;
                             keyColumns.add(columnObject);
                         }
 
@@ -495,7 +494,6 @@ public final class SparkDpp implements java.io.Serializable {
                                 abnormalRowAcc.add(1);
                                 return result.iterator();
                             }
-                            ;
                             valueColumns.add(columnObject);
                             loadEstimateSizeAcc.add(SizeEstimator.estimate(columnObject));
                         }

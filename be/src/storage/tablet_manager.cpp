@@ -376,7 +376,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, bool keep_state
     }
 
     // Check whether the tablet we want to delete is in schema-change state
-    bool is_schema_change_finished = (alter_state == ALTER_FINISHED || alter_state == ALTER_FAILED);
+    bool is_schema_change_finished = alter_state == ALTER_FINISHED || alter_state == ALTER_FAILED;
 
     // Check whether the tablet we want to delete is base-tablet
     bool is_dropping_base_tablet = false;
@@ -1090,7 +1090,7 @@ void TabletManager::_build_tablet_stat() {
 Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet) {
     Status st;
     if (request.version < 1) {
-        LOG(WARNING) << "init version of tablet should at least 1. req.ver=" << request.version;
+        LOG(WARNING) << "init version of tablet should at least 1. request.version=" << request.version;
         return Status::InvalidArgument("invalid version");
     } else {
         Version version(0, request.version);
@@ -1104,28 +1104,27 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.partition_id = tablet->partition_id();
             context.tablet_schema_hash = tablet->schema_hash();
             context.rowset_type = RowsetTypePB::BETA_ROWSET;
-
             context.rowset_path_prefix = tablet->schema_hash_path();
-            context.tablet_schema = &(tablet->tablet_schema());
+            context.tablet_schema = &tablet->tablet_schema();
             context.rowset_state = VISIBLE;
             context.version = version;
             context.version_hash = request.version_hash;
             // there is no data in init rowset, so overlapping info is unknown.
             context.segments_overlap = OVERLAP_UNKNOWN;
 
-            std::unique_ptr<RowsetWriter> builder;
-            st = RowsetFactory::create_rowset_writer(context, &builder);
+            std::unique_ptr<RowsetWriter> rowset_writer;
+            st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
             if (!st.ok()) {
                 LOG(WARNING) << "failed to init rowset writer for tablet " << tablet->full_name() << ": " << st;
                 break;
             }
-            if (builder->flush() != OLAP_SUCCESS) {
+            if (rowset_writer->flush() != OLAP_SUCCESS) {
                 LOG(WARNING) << "failed to flush rowset writer for tablet " << tablet->full_name();
                 st = Status::InternalError("flush rowset failed");
                 break;
             }
 
-            new_rowset = builder->build();
+            new_rowset = rowset_writer->build();
             st = tablet->add_rowset(new_rowset, false);
             if (!st.ok()) {
                 LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name();
@@ -1184,16 +1183,14 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     }
     LOG(INFO) << "creating tablet meta. next_unique_id=" << next_unique_id;
 
-    // We generate a new tablet_uid for this new tablet.
     uint64_t shard_id = 0;
     if (store->get_shard(&shard_id) != OLAP_SUCCESS) {
         LOG(WARNING) << "Fail to get root path shard";
         return Status::InternalError("fail to get root path shard");
     }
-
-    RowsetTypePB rowset_type = RowsetTypePB::BETA_ROWSET;
+    // We generate a new tablet_uid for this new tablet.
     return TabletMeta::create(request, TabletUid::gen_uid(), shard_id, next_unique_id, col_idx_to_unique_id,
-                              rowset_type, tablet_meta);
+                              RowsetTypePB::BETA_ROWSET, tablet_meta);
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_state) {

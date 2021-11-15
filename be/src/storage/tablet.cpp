@@ -49,12 +49,6 @@
 
 namespace starrocks {
 
-using std::pair;
-using std::nothrow;
-using std::sort;
-using std::string;
-using std::vector;
-
 TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir) {
     return std::make_shared<Tablet>(tablet_meta, data_dir);
 }
@@ -134,7 +128,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     Status st;
     do {
         // load new local tablet_meta to operate on
-        TabletMetaSharedPtr new_tablet_meta(new (nothrow) TabletMeta());
+        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta());
         generate_tablet_meta_copy_unlocked(new_tablet_meta);
         // Segment store the pointer of TabletSchema, so don't release the TabletSchema of old TabletMeta
         // Shared the pointer of TabletSchema to the new TabletMeta
@@ -206,7 +200,7 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     CHECK(!_updates) << "updatable tablet should not call add_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
-    // If the rowset already exist, just return directly.  The rowset_id is an unique-id,
+    // If the rowset already exist, just return directly. The rowset_id is an unique-id,
     // we can use it to check this situation.
     if (_contains_rowset(rowset->rowset_id())) {
         return Status::OK();
@@ -232,8 +226,8 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete);
 
     if (need_persist) {
-        auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-        Status res = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset->rowset_id(), rowset_meta_pb);
+        Status res = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset->rowset_id(),
+                                             rowset->rowset_meta()->get_meta_pb());
         LOG_IF(FATAL, !res.ok()) << "failed to save rowset " << rowset->rowset_id() << " to local meta store: " << res;
     }
     ++_newly_created_rowset_num;
@@ -312,7 +306,7 @@ const RowsetSharedPtr Tablet::rowset_with_max_version() const {
         return nullptr;
     }
     auto iter = _rs_version_map.find(max_version);
-    DCHECK(_rs_version_map.find(max_version) != _rs_version_map.end()) << "invalid version:" << max_version;
+    DCHECK(iter != _rs_version_map.end()) << "invalid version:" << max_version;
     return iter->second;
 }
 
@@ -383,7 +377,7 @@ void Tablet::_delete_stale_rowset_by_version(const Version& version) {
 
 void Tablet::delete_expired_inc_rowsets() {
     int64_t now = UnixSeconds();
-    std::vector<pair<Version, VersionHash>> expired_versions;
+    std::vector<std::pair<Version, VersionHash>> expired_versions;
     std::unique_lock wrlock(_meta_lock);
     for (auto& rs_meta : _tablet_meta->all_inc_rs_metas()) {
         double diff = ::difftime(now, rs_meta->creation_time());
@@ -409,7 +403,7 @@ void Tablet::delete_expired_inc_rowsets() {
 
 void Tablet::delete_expired_stale_rowset() {
     int64_t now = UnixSeconds();
-    std::vector<pair<Version, VersionHash>> expired_versions;
+    std::vector<std::pair<Version, VersionHash>> expired_versions;
     // Compute the end time to delete rowsets, when a expired rowset createtime less then this time, it will be deleted.
     double expired_stale_sweep_endtime = ::difftime(now, config::tablet_rowset_stale_sweep_time_sec);
 
@@ -477,8 +471,7 @@ Status Tablet::capture_consistent_versions(const Version& spec_version, std::vec
         LOG(ERROR) << "should not call capture_consistent_versions on updatable tablet";
         return Status::NotSupported("updatable tablet does not support capture_consistent_versions");
     }
-    if (auto ost = _timestamped_version_tracker.capture_consistent_versions(spec_version, version_path);
-        ost != OLAP_SUCCESS) {
+    if (_timestamped_version_tracker.capture_consistent_versions(spec_version, version_path) != OLAP_SUCCESS) {
         std::vector<Version> missed_versions;
         calc_missed_versions_unlocked(spec_version.second, &missed_versions);
         if (missed_versions.empty()) {
@@ -762,14 +755,14 @@ Version Tablet::_max_continuous_version_from_beginning_unlocked() const {
     if (_updates != nullptr) {
         return Version{0, _updates->max_version()};
     }
-    std::vector<pair<Version, VersionHash>> existing_versions;
+    std::vector<std::pair<Version, VersionHash>> existing_versions;
     for (auto& rs : _tablet_meta->all_rs_metas()) {
         existing_versions.emplace_back(rs->version(), rs->version_hash());
     }
 
     // sort the existing versions in ascending order
     std::sort(existing_versions.begin(), existing_versions.end(),
-              [](const pair<Version, VersionHash>& left, const pair<Version, VersionHash>& right) {
+              [](const std::pair<Version, VersionHash>& left, const std::pair<Version, VersionHash>& right) {
                   // simple because 2 versions are certainly not overlapping
                   return left.first.first < right.first.first;
               });
@@ -895,7 +888,6 @@ Status Tablet::_contains_version(const Version& version) {
             return Status::AlreadyExist("push version already exist");
         }
     }
-
     return Status::OK();
 }
 
