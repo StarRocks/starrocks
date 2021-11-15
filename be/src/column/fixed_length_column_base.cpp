@@ -16,6 +16,8 @@
 
 namespace starrocks::vectorized {
 
+using starrocks::operator<<;
+
 template <typename T>
 void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
     const auto& num_src = down_cast<const FixedLengthColumnBase<T>&>(src);
@@ -247,8 +249,6 @@ void FixedLengthColumnBase<T>::put_string_stream(std::stringstream* ss, size_t i
             int length = DoubleToBuffer(_data[idx], MAX_DOUBLE_STR_LENGTH, buffer);
             DCHECK(length >= 0) << "gcvt double failed, double value=" << _data[idx];
             *ss << buffer;
-        } else if constexpr (std::is_same_v<std::make_signed_t<ValueType>, __int128>) {
-            *ss << (const __int128)_data[idx];
         } else {
             *ss << _data[idx];
         }
