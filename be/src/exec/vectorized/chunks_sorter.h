@@ -284,7 +284,7 @@ public:
                                                               const SortExecExprs& sort_exec_exprs,
                                                               const std::vector<OrderByType>& order_by_types);
 
-    void setup_runtime(RuntimeProfile* profile, const std::string& parent_timer);
+    virtual void setup_runtime(RuntimeProfile* profile, const std::string& parent_timer);
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;

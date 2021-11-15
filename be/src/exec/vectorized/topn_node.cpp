@@ -10,6 +10,7 @@
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 #include "exec/pipeline/sort/sort_context.h"
+#include "exec/vectorized/chunk_sorter_heapsorter.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
@@ -142,9 +143,16 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
 
     ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
     if (_limit > 0) {
-        _chunks_sorter =
-                std::make_unique<ChunksSorterTopn>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
-                                                   &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+        if (_limit <= 1024) {
+            _chunks_sorter =
+                    std::make_unique<HeapChunkSorter>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
+                                                      &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+        } else {
+            _chunks_sorter =
+                    std::make_unique<ChunksSorterTopn>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
+                                                       &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+        }
+
     } else {
         _chunks_sorter =
                 std::make_unique<ChunksSorterFullSort>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
