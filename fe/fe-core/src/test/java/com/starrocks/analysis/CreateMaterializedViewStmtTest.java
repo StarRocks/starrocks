@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
@@ -161,8 +160,8 @@ public class CreateMaterializedViewStmtTest {
         Deencapsulation.setField(slotRef2, "desc", slotDescriptor);
         FunctionParams functionParams = new FunctionParams(true, fnChildren);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.COUNT, functionParams);
-        functionCallExpr.setFn(AggregateFunction.createBuiltin(FunctionSet.COUNT,
-                new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
+        functionCallExpr.setFn(Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
+                Function.CompareMode.IS_IDENTICAL));
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem2);
 
@@ -226,8 +225,8 @@ public class CreateMaterializedViewStmtTest {
         Deencapsulation.setField(slotRef2, "desc", slotDescriptor);
         FunctionParams functionParams = new FunctionParams(true, fnChildren);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.SUM, functionParams);
-        functionCallExpr.setFn(AggregateFunction.createBuiltin(FunctionSet.SUM,
-                new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
+        functionCallExpr.setFn(Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
+                Function.CompareMode.IS_IDENTICAL));
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem2);
 

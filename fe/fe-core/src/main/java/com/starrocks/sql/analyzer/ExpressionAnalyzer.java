@@ -44,6 +44,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -542,6 +543,11 @@ public class ExpressionAnalyzer {
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
             }
+
+            if (fn instanceof TableFunction) {
+                throw unsupportedException("Table function cannot be used in expression");
+            }
+
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
