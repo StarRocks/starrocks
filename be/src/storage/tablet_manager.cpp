@@ -87,9 +87,9 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
         RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), true));
         RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
     } else {
-        if (old_tablet->tablet_path() == new_tablet->tablet_path()) {
+        if (old_tablet->schema_hash_path() == new_tablet->schema_hash_path()) {
             LOG(WARNING) << "add the same tablet twice! tablet_id=" << new_tablet->tablet_id()
-                         << " tablet_path=" << new_tablet->tablet_path();
+                         << " schema_hash_path=" << new_tablet->schema_hash_path();
             return Status::InternalError("tablet already exists");
         }
         if (old_tablet->data_dir() == new_tablet->data_dir()) {
@@ -109,8 +109,8 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
             RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), false));
             RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
             LOG(INFO) << "Added duplicated tablet. tablet_id=" << new_tablet->tablet_id()
-                      << " old_tablet_path=" << old_tablet->tablet_path()
-                      << " new_tablet_path=" << new_tablet->tablet_path();
+                      << " old_tablet_path=" << old_tablet->schema_hash_path()
+                      << " new_tablet_path=" << new_tablet->schema_hash_path();
         } else {
             return Status::InternalError("tablet already exists");
         }
@@ -729,8 +729,8 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     // For case 2, If a tablet has just been copied to local BE,
     // it may be cleared by gc-thread(see perform_path_gc_by_tablet) because the tablet meta may not be loaded to memory.
     // So clone task should check path and then failed and retry in this case.
-    if (check_path && !Env::Default()->path_exists(tablet->tablet_path()).ok()) {
-        LOG(WARNING) << "Fail to create table, tablet path not exists, path=" << tablet->tablet_path();
+    if (check_path && !Env::Default()->path_exists(tablet->schema_hash_path()).ok()) {
+        LOG(WARNING) << "Fail to create table, tablet path not exists, path=" << tablet->schema_hash_path();
         return Status::NotFound("tablet path not exists");
     }
     if (Status st = tablet->init(); !st.ok()) {
@@ -918,7 +918,7 @@ Status TabletManager::start_trash_sweep() {
                         continue;
                     }
                 } else {
-                    auto meta_file_path = fmt::format("{}/{}.hdr", tablet->tablet_path(), tablet->tablet_id());
+                    auto meta_file_path = fmt::format("{}/{}.hdr", tablet->schema_hash_path(), tablet->tablet_id());
                     tablet->tablet_meta()->save(meta_file_path);
                 }
                 if (st = move_to_trash(tablet_id_path); st.ok()) {
@@ -997,10 +997,10 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
     TabletMeta tablet_meta;
     Status st = TabletMetaManager::get_tablet_meta(data_dir, tablet_id, schema_hash, &tablet_meta);
     if (st.ok()) {
-        LOG(INFO) << "Cannot remove tablet_path=" << tablet_id_path << ", tablet meta exist in meta store";
+        LOG(INFO) << "Cannot remove schema_hash_path=" << tablet_id_path << ", tablet meta exist in meta store";
     } else if (st.is_not_found()) {
         if (shard.tablets_under_clone.count(tablet_id) > 0) {
-            LOG(INFO) << "Cannot move tablet_path=" << tablet_id_path << " to trash, tablet is under clone";
+            LOG(INFO) << "Cannot move schema_hash_path=" << tablet_id_path << " to trash, tablet is under clone";
             return;
         }
 
@@ -1113,7 +1113,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.tablet_schema_hash = tablet->schema_hash();
             context.rowset_type = RowsetTypePB::BETA_ROWSET;
 
-            context.rowset_path_prefix = tablet->tablet_path();
+            context.rowset_path_prefix = tablet->schema_hash_path();
             context.tablet_schema = &(tablet->tablet_schema());
             context.rowset_state = VISIBLE;
             context.version = version;
@@ -1345,7 +1345,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     // NOTE: do NOT touch snapshot_meta->tablet_meta since here, it has been modified by
     // `Tablet::create_tablet_from_meta`.
 
-    if (!Env::Default()->path_exists(tablet->tablet_path()).ok()) {
+    if (!Env::Default()->path_exists(tablet->schema_hash_path()).ok()) {
         return Status::NotFound("tablet path not exists");
     }
 

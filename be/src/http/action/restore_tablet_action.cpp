@@ -120,7 +120,7 @@ Status RestoreTabletAction::_reload_tablet(const std::string& key, const std::st
         // remove tablet data path in data path
         // path: /root_path/data/shard/tablet_id
         std::string tablet_path = strings::Substitute("$0/$1/$2", shard_path, tablet_id, schema_hash);
-        LOG(INFO) << "remove tablet_path:" << tablet_path;
+        LOG(INFO) << "remove schema_hash_path:" << tablet_path;
         if (!FileUtils::remove_all(tablet_path).ok()) {
             LOG(WARNING) << "remove invalid tablet schema hash path:" << tablet_path << " failed";
         }
