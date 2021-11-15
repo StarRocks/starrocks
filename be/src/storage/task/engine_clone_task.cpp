@@ -101,7 +101,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                   << " schema_hash=" << _clone_req.schema_hash << " committed_version=" << _clone_req.committed_version
                   << " keys_type=" << tablet->keys_type();
 
-        string download_path = tablet->tablet_path() + CLONE_PREFIX;
+        string download_path = tablet->schema_hash_path() + CLONE_PREFIX;
         DeferOp defer([&]() { (void)FileUtils::remove_all(download_path); });
 
         std::vector<Version> missed_versions;
@@ -502,7 +502,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         }
 
         std::set<string> local_files;
-        std::string tablet_dir = tablet->tablet_path();
+        std::string tablet_dir = tablet->schema_hash_path();
         res = FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files, Env::Default());
         if (!res.ok()) {
             LOG(WARNING) << "Fail to list tablet directory " << tablet_dir << ": " << res;
@@ -676,7 +676,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     // but some rowset is useless, so that remove them here
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
-        if (auto s = RowsetFactory::create_rowset(&(cloned_tablet_meta->tablet_schema()), tablet->tablet_path(),
+        if (auto s = RowsetFactory::create_rowset(&(cloned_tablet_meta->tablet_schema()), tablet->schema_hash_path(),
                                                   rs_meta_ptr, &rowset_to_remove);
             !s.ok()) {
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
@@ -710,7 +710,7 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
     clone_files.erase("meta");
 
     std::set<std::string> local_files;
-    const std::string& tablet_dir = tablet->tablet_path();
+    const std::string& tablet_dir = tablet->schema_hash_path();
     RETURN_IF_ERROR(FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files, Env::Default()));
 
     // Files that are found in both |clone_files| and |local_files|.
