@@ -437,7 +437,7 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(const TabletSharedPtr& tabl
     for (const auto& snapshot_rowset : snapshot_rowsets) {
         snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
     }
-    std::string meta_path = tablet->tablet_path();
+    std::string meta_path = tablet->schema_hash_path();
     (void)FileUtils::remove_all(meta_path);
     RETURN_IF_ERROR(FileUtils::create_dir(meta_path));
     auto st = make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, meta_path, tablet, snapshot_rowset_metas,

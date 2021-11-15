@@ -41,7 +41,7 @@ public:
         writer_context.tablet_schema_hash = tablet->schema_hash();
         writer_context.partition_id = 0;
         writer_context.rowset_type = BETA_ROWSET;
-        writer_context.rowset_path_prefix = tablet->tablet_path();
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
         writer_context.tablet_schema = &tablet->tablet_schema();
         writer_context.version.first = 0;
@@ -171,7 +171,7 @@ public:
 
         for (const auto& f : files) {
             std::string src = meta_dir + "/" + f;
-            std::string dst = dest_tablet->tablet_path() + "/" + f;
+            std::string dst = dest_tablet->schema_hash_path() + "/" + f;
             st = Env::Default()->link_file(src, dst);
             if (st.ok()) {
                 LOG(INFO) << "Linked " << src << " to " << dst;
@@ -768,8 +768,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -798,7 +798,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
-        std::string dst = tablet1->tablet_path() + "/" + f;
+        std::string dst = tablet1->schema_hash_path() + "/" + f;
         st = Env::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
@@ -832,8 +832,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_ver
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -862,7 +862,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_ver
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
-        std::string dst = tablet1->tablet_path() + "/" + f;
+        std::string dst = tablet1->schema_hash_path() + "/" + f;
         st = Env::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
@@ -896,8 +896,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_mismatched_tablet_id) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -926,7 +926,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_mismatched_tablet_id) {
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
-        std::string dst = tablet1->tablet_path() + "/" + f;
+        std::string dst = tablet1->schema_hash_path() + "/" + f;
         st = Env::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
@@ -947,8 +947,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_data_file_not_exist) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1000,8 +1000,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1030,7 +1030,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version) {
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
-        std::string dst = tablet1->tablet_path() + "/" + f;
+        std::string dst = tablet1->schema_hash_path() + "/" + f;
         st = Env::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
@@ -1056,8 +1056,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_full) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1093,8 +1093,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_file_not_exist) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1153,8 +1153,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_mismatched_tablet_id) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1183,7 +1183,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_mismatched_tablet_id) {
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
-        std::string dst = tablet1->tablet_path() + "/" + f;
+        std::string dst = tablet1->schema_hash_path() + "/" + f;
         st = Env::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
@@ -1205,8 +1205,8 @@ TEST_F(TabletUpdatesTest, test_issue_4193) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1246,8 +1246,8 @@ TEST_F(TabletUpdatesTest, test_issue_4181) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1287,7 +1287,7 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)FileUtils::remove_all(tablet0->tablet_path());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1305,7 +1305,7 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
     DeferOp defer2([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
-        (void)FileUtils::remove_all(tablet1->tablet_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
     ASSERT_EQ(12, tablet1->updates()->max_version());

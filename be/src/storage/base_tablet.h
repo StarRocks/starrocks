@@ -54,11 +54,9 @@ public:
     // structure has been kept.
     // Since StarRocks is built on earlier work on Doris, this directory structure has been kept in StarRocks too.
     //
-    // `tablet_path()` returns the full path of the directory ${schema_hash}.
+    // `schema_hash_path()` returns the full path of the directory ${schema_hash}.
     // `tablet_id_path()` returns the full path of the directory ${tablet_id}.
-    //
-    // TODO: rename `tablet_path()` to `schema_hash_path()`.
-    const std::string& tablet_path() const;
+    const std::string& schema_hash_path() const;
 
     std::string tablet_id_path() const;
 
@@ -93,7 +91,7 @@ protected:
     TabletMetaSharedPtr _tablet_meta;
 
     DataDir* _data_dir;
-    std::string _tablet_path;
+    std::string _tablet_path; // TODO: remove this variable for less memory occupation
 
 private:
     BaseTablet(const BaseTablet&) = delete;
@@ -104,7 +102,7 @@ inline DataDir* BaseTablet::data_dir() const {
     return _data_dir;
 }
 
-inline const std::string& BaseTablet::tablet_path() const {
+inline const std::string& BaseTablet::schema_hash_path() const {
     return _tablet_path;
 }
 
