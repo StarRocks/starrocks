@@ -42,7 +42,25 @@ public:
     virtual ~BaseTablet() = default;
 
     inline DataDir* data_dir() const;
+
+    // A tablet's data are stored in disk files under a directory with structure like:
+    //   ${storage_root_path}/${shard_number}/${tablet_id}/${schema_hash}
+    //
+    // The reason why create a directory ${schema_hash} under the directory ${tablet_id} is that in some very
+    // earlier versions of Doris(https://github.com/apache/incubator-doris), it's possible to have multiple
+    // tablets with the same tablet id but different schema hash, therefore the schema hash is constructed as
+    // part of the data path of a tablet to distinguish each other.
+    // The design that multiple tablets can share the same tablet id has been dropped by Doris, but the directory
+    // structure has been kept.
+    // Since StarRocks is built on earlier work on Doris, this directory structure has been kept in StarRocks too.
+    //
+    // `tablet_path()` returns the full path of the directory ${schema_hash}.
+    // `tablet_id_path()` returns the full path of the directory ${tablet_id}.
+    //
+    // TODO: rename `tablet_path()` to `schema_hash_path()`.
     const std::string& tablet_path() const;
+
+    std::string tablet_id_path() const;
 
     TabletState tablet_state() const { return _state; }
     OLAPStatus set_tablet_state(TabletState state);
