@@ -95,7 +95,7 @@ vectorized::ChunkPtr SortSinkOperator::_materialize_chunk_before_sort(vectorized
     return materialize_chunk;
 }
 
-void SortSinkOperator::finish(RuntimeState* state) {
+void SortSinkOperator::set_finishing(RuntimeState* state) {
     _chunks_sorter->finish(state);
     _is_finished = true;
 }

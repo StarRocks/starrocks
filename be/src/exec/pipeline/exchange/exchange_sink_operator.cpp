@@ -419,7 +419,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     return Status::OK();
 }
 
-void ExchangeSinkOperator::finish(RuntimeState* state) {
+void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) {
         return;
     }

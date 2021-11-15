@@ -14,7 +14,7 @@ bool AggregateBlockingSourceOperator::is_finished() const {
     return _aggregator->is_sink_complete() && _aggregator->is_ht_eos();
 }
 
-void AggregateBlockingSourceOperator::finish(RuntimeState* state) {
+void AggregateBlockingSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 

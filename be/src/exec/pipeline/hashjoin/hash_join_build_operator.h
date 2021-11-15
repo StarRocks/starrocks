@@ -28,7 +28,7 @@ public:
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
 
 private:
     HashJoiner* _hash_joiner;

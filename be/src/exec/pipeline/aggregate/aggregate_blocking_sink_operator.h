@@ -19,7 +19,7 @@ public:
     bool has_output() const override { return false; }
     bool need_input() const override { return true; }
     bool is_finished() const override;
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
 

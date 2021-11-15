@@ -37,7 +37,7 @@ public:
 
     bool is_finished() const override { return _is_finished; }
 
-    void finish(RuntimeState* state) override {
+    void set_finishing(RuntimeState* state) override {
         if (!_is_finished) {
             _is_finished = true;
             _except_ctx->finish_build_ht();

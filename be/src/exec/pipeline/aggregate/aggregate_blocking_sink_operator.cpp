@@ -16,7 +16,7 @@ bool AggregateBlockingSinkOperator::is_finished() const {
     return _is_finished;
 }
 
-void AggregateBlockingSinkOperator::finish(RuntimeState* state) {
+void AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) {
         return;
     }

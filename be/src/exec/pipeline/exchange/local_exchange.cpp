@@ -53,7 +53,7 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
 PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, bool is_shuffle,
                                        const std::vector<ExprContext*>& partition_expr_ctxs, const size_t num_sinks)
-        : LocalExchanger(memory_manager), _source(source) {
+        : LocalExchanger(memory_manager, source) {
     _partitioners.reserve(num_sinks);
     for (size_t i = 0; i < num_sinks; i++) {
         _partitioners.emplace_back(source, is_shuffle, partition_expr_ctxs);
@@ -65,8 +65,6 @@ Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk, const int32
     if (num_rows == 0) {
         return Status::OK();
     }
-
-    _memory_manager->update_row_count(static_cast<int32_t>(num_rows));
 
     auto& partitioner = _partitioners[sink_driver_sequence];
 
@@ -95,16 +93,13 @@ Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk, const int32
 }
 
 Status BroadcastExchanger::accept(const vectorized::ChunkPtr& chunk, const int32_t sink_driver_sequence) {
-    _memory_manager->update_row_count(chunk->num_rows());
-    for (auto* buffer : _source->get_sources()) {
-        buffer->add_chunk(chunk);
+    for (auto* source : _source->get_sources()) {
+        source->add_chunk(chunk);
     }
     return Status::OK();
 }
 
 Status PassthroughExchanger::accept(const vectorized::ChunkPtr& chunk, const int32_t sink_driver_sequence) {
-    _memory_manager->update_row_count(chunk->num_rows());
-
     size_t sources_num = _source->get_sources().size();
     if (sources_num == 1) {
         _source->get_sources()[0]->add_chunk(chunk);
@@ -116,6 +111,6 @@ Status PassthroughExchanger::accept(const vectorized::ChunkPtr& chunk, const int
 }
 
 bool LocalExchanger::need_input() const {
-    return !_memory_manager->is_full();
+    return !_memory_manager->is_full() && !is_all_sources_finished();
 }
 } // namespace starrocks::pipeline
