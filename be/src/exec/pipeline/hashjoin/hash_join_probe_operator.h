@@ -23,7 +23,7 @@ public:
     bool is_finished() const override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk);
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
     bool is_ready() const override;
 
 private:

@@ -83,7 +83,7 @@ bool ScanOperator::is_finished() const {
     return _is_finished;
 }
 
-void ScanOperator::finish(RuntimeState* state) {
+void ScanOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 

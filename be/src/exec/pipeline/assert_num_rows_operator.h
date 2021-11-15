@@ -39,7 +39,7 @@ public:
     bool need_input() const override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
     bool is_finished() const override;
 
 private:

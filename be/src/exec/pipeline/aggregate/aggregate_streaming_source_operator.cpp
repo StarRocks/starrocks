@@ -43,7 +43,7 @@ bool AggregateStreamingSourceOperator::is_finished() const {
     return _is_finished;
 }
 
-void AggregateStreamingSourceOperator::finish(RuntimeState* state) {
+void AggregateStreamingSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 
