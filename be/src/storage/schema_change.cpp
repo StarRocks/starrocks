@@ -1474,7 +1474,7 @@ bool SchemaChangeWithSorting::_internal_sorting(const std::vector<RowBlock*>& ro
     context.partition_id = new_tablet->partition_id();
     context.tablet_schema_hash = new_tablet->schema_hash();
     context.rowset_type = new_rowset_type;
-    context.rowset_path_prefix = new_tablet->tablet_path();
+    context.rowset_path_prefix = new_tablet->schema_hash_path();
     context.tablet_schema = &(new_tablet->tablet_schema());
     context.rowset_state = VISIBLE;
     context.version = version;
@@ -1887,7 +1887,7 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
             // And in this case, linked schema change will not be used.
             writer_context.rowset_type = BETA_ROWSET;
         }
-        writer_context.rowset_path_prefix = new_tablet->tablet_path();
+        writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
         writer_context.tablet_schema = &(new_tablet->tablet_schema());
         writer_context.rowset_state = VISIBLE;
         writer_context.version = rs_reader->version();

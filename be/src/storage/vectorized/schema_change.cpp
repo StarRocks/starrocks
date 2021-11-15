@@ -1201,7 +1201,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         writer_context.partition_id = new_tablet->partition_id();
         writer_context.tablet_schema_hash = new_tablet->schema_hash();
         writer_context.rowset_type = sc_params.new_tablet->tablet_meta()->preferred_rowset_type();
-        writer_context.rowset_path_prefix = new_tablet->tablet_path();
+        writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
         writer_context.tablet_schema = &(new_tablet->tablet_schema());
         writer_context.rowset_state = VISIBLE;
         writer_context.version = sc_params.rowsets_to_change[i]->version();

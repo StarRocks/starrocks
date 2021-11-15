@@ -265,7 +265,7 @@ OLAPStatus PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetShared
         context.partition_id = _request.partition_id;
         context.tablet_schema_hash = cur_tablet->schema_hash();
         context.rowset_type = BETA_ROWSET;
-        context.rowset_path_prefix = cur_tablet->tablet_path();
+        context.rowset_path_prefix = cur_tablet->schema_hash_path();
         context.tablet_schema = &cur_tablet->tablet_schema();
         context.rowset_state = PREPARED;
         context.txn_id = _request.transaction_id;
@@ -328,7 +328,7 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
         context.partition_id = _request.partition_id;
         context.tablet_schema_hash = cur_tablet->schema_hash();
         context.rowset_type = BETA_ROWSET;
-        context.rowset_path_prefix = cur_tablet->tablet_path();
+        context.rowset_path_prefix = cur_tablet->schema_hash_path();
         context.tablet_schema = &cur_tablet->tablet_schema();
         context.rowset_state = PREPARED;
         context.txn_id = _request.transaction_id;
