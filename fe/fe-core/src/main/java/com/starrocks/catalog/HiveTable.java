@@ -441,7 +441,7 @@ public class HiveTable extends Table {
             case "BINARY":
                 return Sets.newHashSet(PrimitiveType.VARCHAR);
             case "CHAR":
-                return Sets.newHashSet(PrimitiveType.CHAR);
+                return Sets.newHashSet(PrimitiveType.CHAR, PrimitiveType.VARCHAR);
             case "BOOLEAN":
                 return Sets.newHashSet(PrimitiveType.BOOLEAN);
             default:
