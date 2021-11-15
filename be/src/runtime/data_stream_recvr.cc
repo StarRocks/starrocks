@@ -234,6 +234,10 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
     _chunk_queue.pop_front();
 
     if (!_pending_closures.empty()) {
+        // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
+        // the execution thread will hold done and will not return, block brpc from sending packets,
+        // and the execution thread will call run() to let brpc continue to send packets,
+        // and there will be memory release
 #ifndef BE_TEST
         MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
         DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
