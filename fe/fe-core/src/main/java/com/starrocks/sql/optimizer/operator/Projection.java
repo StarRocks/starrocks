@@ -3,11 +3,9 @@ package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,18 +69,14 @@ public class Projection {
         return false;
     }
 
+    private static boolean couldApplyDictOptimize(ScalarOperator operator) {
+        return operator.accept(new AddDecodeNodeForDictStringRule.CouldApplyDictOptimizeVisitor(), null);
+    }
+
     private boolean couldApplyStringDict(ScalarOperator operator, ColumnRefSet dictSet) {
         ColumnRefSet usedColumns = operator.getUsedColumns();
         if (usedColumns.isIntersect(dictSet)) {
-            if (usedColumns.cardinality() > 1) {
-                return false;
-            }
-            if (operator instanceof ColumnRefOperator) {
-                return true;
-            }  else if (operator instanceof CallOperator) {
-                CallOperator callOperator = (CallOperator) operator;
-                return callOperator.getFunction().isCouldApplyDictOptimize();
-            }
+            return couldApplyDictOptimize(operator);
         }
         return false;
     }
@@ -98,16 +92,8 @@ public class Projection {
     }
 
     private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet) {
-        if (operator instanceof CallOperator) {
-            CallOperator callOperator = (CallOperator) operator;
-            if (callOperator instanceof CaseWhenOperator ||
-                    callOperator instanceof CastOperator) {
-                columnRefSet.union(callOperator.getUsedColumns());
-            } else if (!callOperator.getFunction().isCouldApplyDictOptimize()) {
-                columnRefSet.union(callOperator.getUsedColumns());
-            } else if (operator.getUsedColumns().cardinality() > 1) {
-                columnRefSet.union(callOperator.getUsedColumns());
-            }
+        if (!couldApplyDictOptimize(operator)) {
+            columnRefSet.union(operator.getUsedColumns());
         }
     }
 
