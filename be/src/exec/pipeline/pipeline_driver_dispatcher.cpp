@@ -156,7 +156,8 @@ void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, co
     auto report_task = [=]() {
         auto status = ExecStateReporter::report_exec_status(params, exec_env, fe_addr);
         if (!status.ok()) {
-            LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id);
+            LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
+                         << ", status: " << status.to_string();
         } else {
             LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id);
         }
