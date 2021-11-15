@@ -671,6 +671,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine;
     }
 
+    public void setEnablePipelineEngine(boolean enablePipelineEngine) {
+        this.enablePipelineEngine = enablePipelineEngine;
+    }
+
     public boolean isEnableReplicationJoin() {
         return enableReplicationJoin;
     }
