@@ -111,8 +111,9 @@ public class MergeTwoAggRule extends TransformationRule {
 
             CallOperator newFn;
             if (aggCallMapBelow.containsKey(ref)) {
-                newFn = new CallOperator(fn.getFnName(), fn.getType(), aggCallMapBelow.get(ref).getChildren(),
-                        fn.getFunction(), fn.isDistinct());
+                CallOperator belowOp = aggCallMapBelow.get(ref);
+                newFn = new CallOperator(fn.getFnName(), fn.getType(), belowOp.getChildren(),
+                        belowOp.getFunction(), fn.isDistinct());
             } else {
                 newFn = new CallOperator(fn.getFnName(), fn.getType(), Lists.newArrayList(ref), fn.getFunction(),
                         fn.isDistinct());
