@@ -97,7 +97,7 @@ public:
     void finish(RuntimeState* state) override {
         if (decrement_sink_number() == 1) {
             for (auto* source : _source->get_sources()) {
-                source->finish(state);
+                source->set_finishing(state);
             }
         }
     }
@@ -121,7 +121,7 @@ public:
     void finish(RuntimeState* state) override {
         if (decrement_sink_number() == 1) {
             for (auto* source : _source->get_sources()) {
-                source->finish(state);
+                source->set_finishing(state);
             }
         }
     }
@@ -139,7 +139,7 @@ public:
     void finish(RuntimeState* state) override {
         if (decrement_sink_number() == 1) {
             for (auto* source : _source->get_sources()) {
-                source->finish(state);
+                source->set_finishing(state);
             }
         }
     }

@@ -40,8 +40,8 @@ public:
 
     bool is_finished() const override;
 
-    void finish_backward(RuntimeState* state) override;
-    void finish(RuntimeState* state) override {
+    void set_finished(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override {
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_finished = true;
     }

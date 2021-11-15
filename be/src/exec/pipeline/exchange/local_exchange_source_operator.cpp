@@ -49,7 +49,7 @@ bool LocalExchangeSourceOperator::has_output() const {
            (_is_finished && _partition_rows_num > 0);
 }
 
-void LocalExchangeSourceOperator::finish_backward(RuntimeState* state) {
+void LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return;

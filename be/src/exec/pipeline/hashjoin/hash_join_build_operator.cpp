@@ -18,7 +18,7 @@ StatusOr<vectorized::ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* s
     return Status::NotSupported(msg);
 }
 
-void HashJoinBuildOperator::finish(RuntimeState* state) {
+void HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     if (!_is_finished) {
         _hash_joiner->build_ht(state);
         _is_finished = true;

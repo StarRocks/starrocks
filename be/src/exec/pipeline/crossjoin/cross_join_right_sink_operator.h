@@ -26,7 +26,7 @@ public:
 
     bool is_finished() const override { return _is_finished; }
 
-    void finish(RuntimeState* state) override {
+    void set_finishing(RuntimeState* state) override {
         if (!_is_finished) {
             _is_finished = true;
             // Used to notify cross_join_left_operator.

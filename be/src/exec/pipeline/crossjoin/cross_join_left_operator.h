@@ -63,7 +63,7 @@ public:
         return _is_finished && _is_curr_probe_chunk_finished();
     }
 
-    void finish(RuntimeState* state) override { _is_finished = true; }
+    void set_finishing(RuntimeState* state) override { _is_finished = true; }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

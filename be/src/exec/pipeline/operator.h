@@ -44,12 +44,19 @@ public:
     // The method should be idempotent, because it may be triggered
     // multiple times in the entire life cycle
     // finish function is used to finish the following operator of the current operator that encounters its EOS
-    // and has no data to push into its following operator.
-    virtual void finish(RuntimeState* state) = 0;
+    // and has no data to push into its following operator, but the operator is not finished until its buffered
+    // data inside is processed.
+    virtual void set_finishing(RuntimeState* state) = 0;
 
-    // finish_backward is used to finish the preceding operator of the current operator that finishes in advance
-    // and never need input data to consume.
-    virtual void finish_backward(RuntimeState* state) { finish(state); }
+    // set_finished is used to shutdown both input and output stream of a operator and after its invocation
+    // buffered data inside the operator is cleared.
+    // This function is used to shutdown preceding operators of the current operator if it is finished in advance,
+    // when the query or fragment instance is canceled, set_finished is also called to shutdown unfinished operators.
+    // A complex source operator that interacts with the corresponding sink operator in its preceding drivers via
+    // an implementation-specific context should override set_finished function, such as LocalExchangeSourceOperator.
+    // For an ordinary operator, set_finished function is trivial and just has the same implementation with
+    // set_finishing function.
+    virtual void set_finished(RuntimeState* state) { set_finishing(state); }
 
     // Pull chunk from this operator
     // Use shared_ptr, because in some cases (local broadcast exchange),

@@ -40,7 +40,7 @@ public:
 
     bool is_finished() const override { return _is_finished && !_fetch_data_result; }
 
-    void finish(RuntimeState* state) override { _is_finished = true; }
+    void set_finishing(RuntimeState* state) override { _is_finished = true; }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
