@@ -32,6 +32,8 @@ public class StatisticUtils {
         context.getSessionVariable().setReportSuccess(false);
         // Always use 1 parallel to avoid affect normal query
         context.getSessionVariable().setParallelExecInstanceNum(1);
+        // TODO(kks): remove this if pipeline support STATISTIC result sink type
+        context.getSessionVariable().setEnablePipelineEngine(false);
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         context.setDatabase(Constants.StatisticsDBName);
         context.setCatalog(Catalog.getCurrentCatalog());
