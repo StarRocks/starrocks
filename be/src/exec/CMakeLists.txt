@@ -172,6 +172,7 @@ set(EXEC_FILES
     pipeline/set/union_const_source_operator.cpp
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
+    pipeline/hashjoin/hash_joiner_factory.cpp
     pipeline/set/except_context.cpp
     pipeline/set/except_build_sink_operator.cpp
     pipeline/set/except_probe_sink_operator.cpp

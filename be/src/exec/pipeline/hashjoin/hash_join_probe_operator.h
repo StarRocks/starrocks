@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -11,7 +12,7 @@ namespace pipeline {
 using HashJoiner = starrocks::vectorized::HashJoiner;
 class HashJoinProbeOperator final : public OperatorWithDependency {
 public:
-    HashJoinProbeOperator(int32_t id, const string& name, int32_t plan_node_id, HashJoiner* hash_joiner);
+    HashJoinProbeOperator(int32_t id, const string& name, int32_t plan_node_id, HashJoinerPtr hash_joiner);
     ~HashJoinProbeOperator() = default;
 
     Status prepare(RuntimeState* state) override { return OperatorWithDependency::prepare(state); }
@@ -27,13 +28,13 @@ public:
     bool is_ready() const override;
 
 private:
-    HashJoiner* _hash_joiner;
+    HashJoinerPtr _hash_joiner;
     bool _is_finished = false;
 };
 
 class HashJoinProbeOperatorFactory final : public OperatorFactory {
 public:
-    HashJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id, std::unique_ptr<HashJoiner>&& hash_joiner);
+    HashJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id, HashJoinerFactoryPtr hash_joiner);
 
     ~HashJoinProbeOperatorFactory() = default;
 
@@ -43,7 +44,7 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
-    std::unique_ptr<HashJoiner> _hash_joiner;
+    HashJoinerFactoryPtr _hash_joiner_factory;
 };
 } // namespace pipeline
 } // namespace starrocks
