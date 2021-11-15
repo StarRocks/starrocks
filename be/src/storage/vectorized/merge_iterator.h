@@ -10,7 +10,7 @@
 namespace starrocks::vectorized {
 
 // new_heap_merge_iterator create a sorted iterator based on merge-sort algorithm.
-// the order of rows is determinate by the key columns.
+// the order of rows is determined by the key columns.
 // if two rows compared equal, their order is determinate by the index of the source iterator
 // in the vector |children|. the one with a lower index will come first.
 // if |children| has only one element, the element will be returned directly.
@@ -25,7 +25,7 @@ namespace starrocks::vectorized {
 ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children);
 
 // new_mask_merge_iterator create an iterator based on source masks.
-// the order of rows is determinate by mask sequence.
+// the order of rows is determined by mask sequence.
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
                                          RowSourceMaskBuffer* mask_buffer);
 

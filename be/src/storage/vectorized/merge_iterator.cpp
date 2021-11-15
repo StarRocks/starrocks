@@ -26,6 +26,8 @@ inline int compare_chunk(size_t key_columns, const Chunk& lhs, size_t m, const C
     return 0;
 }
 
+static const size_t max_merge_chunk_size = 65536;
+
 // MergeChunk contains a chunk for merge and an index of compared row.
 class MergeChunk {
 public:
@@ -42,6 +44,7 @@ protected:
     friend class MaskMergeIterator;
 
     Chunk* _chunk = nullptr;
+    // use uint16_t for better heap merge performance
     uint16_t _compared_row = 0;
 };
 
@@ -231,7 +234,12 @@ inline Status HeapMergeIterator::fill(size_t child) {
 
     Status st = _children[child]->get_next(chunk);
     if (st.ok()) {
-        DCHECK_GT(chunk->num_rows(), 0u);
+        size_t num_rows = chunk->num_rows();
+        DCHECK_GT(num_rows, 0u);
+        if (num_rows > max_merge_chunk_size) {
+            return Status::InternalError(strings::Substitute(
+                    "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
+        }
         _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields()});
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.
@@ -355,7 +363,12 @@ inline Status MaskMergeIterator::fill(size_t child) {
 
     Status st = _children[child]->get_next(chunk);
     if (st.ok()) {
-        DCHECK_GT(chunk->num_rows(), 0u);
+        size_t num_rows = chunk->num_rows();
+        DCHECK_GT(num_rows, 0u);
+        if (num_rows > max_merge_chunk_size) {
+            return Status::InternalError(strings::Substitute(
+                    "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
+        }
         _chunks[child] = MergeChunk(chunk);
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.

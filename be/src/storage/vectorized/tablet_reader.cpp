@@ -22,20 +22,22 @@
 namespace starrocks::vectorized {
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
-        : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version), _is_vertical_merge(false) {
-    _delete_predicates_version = version;
-}
+        : ChunkIterator(std::move(schema)),
+          _tablet(tablet),
+          _version(version),
+          _delete_predicates_version(version),
+          _is_vertical_merge(false) {}
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet(tablet),
           _version(version),
+          _delete_predicates_version(version),
           _is_vertical_merge(true),
           _is_key(is_key),
           _mask_buffer(mask_buffer) {
     DCHECK(_mask_buffer);
-    _delete_predicates_version = version;
 }
 
 void TabletReader::close() {
