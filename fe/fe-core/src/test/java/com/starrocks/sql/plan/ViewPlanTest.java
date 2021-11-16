@@ -1177,8 +1177,10 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql257() throws Exception {
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
         String sql = "select v1 as v2 from t0 group by v1, v2;";
         testView(sql);
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(false);
     }
 
     @Test
