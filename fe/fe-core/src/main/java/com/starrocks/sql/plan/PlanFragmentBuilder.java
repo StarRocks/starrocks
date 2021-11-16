@@ -1757,7 +1757,7 @@ public class PlanFragmentBuilder {
 
             //RepeatSlotIdList
             List<Set<Integer>> repeatSlotIdList = new ArrayList<>();
-            for (Set<ColumnRefOperator> repeat : repeatOperator.getRepeatColumnRef()) {
+            for (List<ColumnRefOperator> repeat : repeatOperator.getRepeatColumnRef()) {
                 repeatSlotIdList.add(
                         repeat.stream().map(ColumnRefOperator::getId).collect(Collectors.toSet()));
             }

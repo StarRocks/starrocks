@@ -949,13 +949,8 @@ public class QueryAnalyzer {
                     List<List<Expr>> groupingSets = new ArrayList<>();
                     Set<Expr> groupBySet = new HashSet<>();
                     for (ArrayList<Expr> g : groupByClause.getGroupingSetList()) {
-                        List<Expr> rewriteGrouping = g.stream().map(e -> {
-                            RewriteAliasVisitor visitor =
-                                    new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
-                            Expr rewrite = e.accept(visitor, null);
-                            analyzeExpression(rewrite, analyzeState, sourceScope);
-                            return rewrite;
-                        }).collect(Collectors.toList());
+                        List<Expr> rewriteGrouping = rewriteGroupByAlias(g, analyzeState,
+                                sourceScope, outputScope, outputExpressions);
 
                         groupingSets.add(rewriteGrouping);
                         groupBySet.addAll(rewriteGrouping);
@@ -964,34 +959,28 @@ public class QueryAnalyzer {
                     groupByExpressions.addAll(groupBySet);
                     analyzeState.setGroupingSetsList(groupingSets);
                 } else if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.CUBE)) {
-                    List<Expr> rewriteGrouping = groupByClause.getGroupingExprs().stream().map(e -> {
-                        RewriteAliasVisitor visitor =
-                                new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
-                        Expr rewrite = e.accept(visitor, null);
-                        analyzeExpression(rewrite, analyzeState, sourceScope);
-                        return rewrite;
-                    }).collect(Collectors.toList());
-                    groupByExpressions.addAll(rewriteGrouping);
+                    groupByExpressions.addAll(rewriteGroupByAlias(groupByClause.getGroupingExprs(), analyzeState,
+                            sourceScope, outputScope, outputExpressions));
+                    List<Expr> rewriteOriGrouping =
+                            rewriteGroupByAlias(groupByClause.getOriGroupingExprs(), analyzeState,
+                                    sourceScope, outputScope, outputExpressions);
 
-                    Set<Set<Expr>> cube = Sets.powerSet(new HashSet<>(rewriteGrouping));
-                    List<List<Expr>> groupingSets = new ArrayList<>();
-                    for (Set<Expr> s : cube) {
-                        groupingSets.add(new ArrayList<>(s));
-                    }
+                    List<List<Expr>> groupingSets =
+                            Sets.powerSet(IntStream.range(0, rewriteOriGrouping.size())
+                                            .boxed().collect(Collectors.toSet())).stream()
+                                    .map(l -> l.stream().map(rewriteOriGrouping::get).collect(Collectors.toList()))
+                                    .collect(Collectors.toList());
 
                     analyzeState.setGroupingSetsList(groupingSets);
                 } else if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.ROLLUP)) {
-                    List<Expr> rewriteGrouping = groupByClause.getGroupingExprs().stream().map(e -> {
-                        RewriteAliasVisitor visitor =
-                                new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
-                        Expr rewrite = e.accept(visitor, null);
-                        analyzeExpression(rewrite, analyzeState, sourceScope);
-                        return rewrite;
-                    }).collect(Collectors.toList());
-                    groupByExpressions.addAll(rewriteGrouping);
+                    groupByExpressions.addAll(rewriteGroupByAlias(groupByClause.getGroupingExprs(), analyzeState,
+                            sourceScope, outputScope, outputExpressions));
+                    List<Expr> rewriteOriGrouping =
+                            rewriteGroupByAlias(groupByClause.getOriGroupingExprs(), analyzeState, sourceScope,
+                                    outputScope, outputExpressions);
 
-                    List<List<Expr>> groupingSets = IntStream.rangeClosed(0, rewriteGrouping.size())
-                            .mapToObj(i -> rewriteGrouping.subList(0, i)).collect(Collectors.toList());
+                    List<List<Expr>> groupingSets = IntStream.rangeClosed(0, rewriteOriGrouping.size())
+                            .mapToObj(i -> rewriteOriGrouping.subList(0, i)).collect(Collectors.toList());
 
                     analyzeState.setGroupingSetsList(groupingSets);
                 } else {
@@ -1001,6 +990,17 @@ public class QueryAnalyzer {
         }
         analyzeState.setGroupBy(groupByExpressions);
         return groupByExpressions;
+    }
+
+    List<Expr> rewriteGroupByAlias(List<Expr> groupingExprs, AnalyzeState analyzeState, Scope sourceScope,
+                                   Scope outputScope, List<Expr> outputExpressions) {
+        return groupingExprs.stream().map(e -> {
+            RewriteAliasVisitor visitor =
+                    new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
+            Expr rewrite = e.accept(visitor, null);
+            analyzeExpression(rewrite, analyzeState, sourceScope);
+            return rewrite;
+        }).collect(Collectors.toList());
     }
 
     private void analyzeHaving(SelectStmt node, AnalyzeState analyzeState,
