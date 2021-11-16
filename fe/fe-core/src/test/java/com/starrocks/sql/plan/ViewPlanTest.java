@@ -1183,8 +1183,10 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql257() throws Exception {
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
         String sql = "select v1 as v2 from t0 group by v1, v2;";
         testView(sql);
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(false);
     }
 
     @Test
@@ -1562,5 +1564,25 @@ public class ViewPlanTest extends PlanTestBase {
         String viewPlan = getFragmentPlan("select * from test_view15");
         Assert.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("test_view15");
+    }
+
+    @Test
+    public void testGroupByView() throws  Exception {
+        String sql = "select case  when c1=1 then 1 end from " +
+                        "(select '1' c1  union  all select '2') a group by case  when c1=1 then 1 end;";
+        testView(sql);
+
+        sql = "select case  when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a group by rollup(case  when c1=1 then 1 end, a.c1);";
+        testView(sql);
+
+        sql = "select case  when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a group by cube(case when c1=1 then 1 end, a.c1);";
+        testView(sql);
+
+        sql = "select case when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a " +
+                "group by grouping sets((case when c1=1 then 1 end, c1), (case  when c1=1 then 1 end));";
+        testView(sql);
     }
 }
