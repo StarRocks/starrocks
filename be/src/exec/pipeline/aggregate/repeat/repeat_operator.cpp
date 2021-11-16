@@ -3,6 +3,7 @@
 #include "exec/pipeline/aggregate/repeat/repeat_operator.h"
 
 #include "column/chunk.h"
+#include "exec/exec_node.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::pipeline {
@@ -32,6 +33,7 @@ StatusOr<vectorized::ChunkPtr> RepeatOperator::pull_chunk(RuntimeState* state) {
     ChunkPtr curr_chunk = _curr_chunk->clone_empty(_curr_chunk->num_rows());
     curr_chunk->append_safe(*_curr_chunk, 0, _curr_chunk->num_rows());
     extend_and_update_columns(&curr_chunk);
+    ExecNode::eval_conjuncts(_conjunct_ctxs, curr_chunk.get());
     return curr_chunk;
 }
 
