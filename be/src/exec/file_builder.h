@@ -1,6 +1,4 @@
-//
-// Created by 郑志铨 on 2021/11/13.
-//
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #pragma once
 
@@ -22,4 +20,4 @@ public:
     virtual Status finish() = 0;
 };
 
-}
+} // namespace starrocks
