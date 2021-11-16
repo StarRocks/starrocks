@@ -67,4 +67,12 @@ std::size_t hash_value(__int128 const& value) {
 
 } // namespace starrocks
 
+namespace std {
+
+std::string to_string(__int128 value) {
+    return starrocks::LargeIntValue::to_string(value);
+}
+
+}
+
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

@@ -78,9 +78,7 @@ std::size_t hash_value(LargeIntValue const& value);
 
 namespace std {
 
-std::string to_string(__int128 value) {
-    return starrocks::LargeIntValue::to_string(value);
-}
+std::string to_string(__int128 value);
 
 }
 
