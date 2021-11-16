@@ -18,8 +18,7 @@ using namespace starrocks::vectorized;
 
 namespace starrocks::pipeline {
 Status SortSinkOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
-    return Status::OK();
+    return Operator::prepare(state);
 }
 
 Status SortSinkOperator::close(RuntimeState* state) {
@@ -95,7 +94,7 @@ vectorized::ChunkPtr SortSinkOperator::_materialize_chunk_before_sort(vectorized
     return materialize_chunk;
 }
 
-void SortSinkOperator::finish(RuntimeState* state) {
+void SortSinkOperator::set_finishing(RuntimeState* state) {
     _chunks_sorter->finish(state);
     _is_finished = true;
 }

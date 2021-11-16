@@ -65,8 +65,8 @@ import java.util.stream.Collectors;
 
 public class Explain {
     public static String toString(OptExpression root, List<ColumnRefOperator> outputColumns) {
-        String outputBuilder = "- Output => " + outputColumns.stream().map(c -> new ExpressionPrinter().print(c))
-                .collect(Collectors.joining(", "));
+        String outputBuilder = "- Output => [" + outputColumns.stream().map(c -> new ExpressionPrinter().print(c))
+                .collect(Collectors.joining(", ")) + "]";
 
         OperatorStr optStrings = new OperatorPrinter().visit(root, new OperatorPrinter.ExplainContext(1));
         OperatorStr rootOperatorStr = new OperatorStr(outputBuilder, 0, Lists.newArrayList(optStrings));
@@ -243,8 +243,8 @@ public class Explain {
             OperatorStr child = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
             PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- AGGREGATE(").append(aggregate.getType()).append(") ");
-            sb.append(aggregate.getGroupBys().stream().map(c -> new ExpressionPrinter().print(c))
-                    .collect(Collectors.joining(", ")));
+            sb.append("[").append(aggregate.getGroupBys().stream().map(c -> new ExpressionPrinter().print(c))
+                    .collect(Collectors.joining(", "))).append("]");
 
             sb.append(buildOutputColumns(aggregate, ""));
             sb.append("\n");
@@ -359,31 +359,22 @@ public class Explain {
         @Override
         public OperatorStr visitPhysicalRepeat(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             PhysicalRepeatOperator repeat = (PhysicalRepeatOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("- REPEAT");
+            StringBuilder sb = new StringBuilder("- REPEAT ");
+            sb.append("[");
+            sb.append(repeat.getRepeatColumnRef().stream().map(groupingSets -> "[" +
+                    groupingSets.stream().map(new ExpressionPrinter()::print).collect(Collectors.joining(", ")) + "]"
+            ).collect(Collectors.joining(", ")));
+            sb.append("]");
 
             Set<ColumnRefOperator> outputColumnRef = new HashSet<>(repeat.getOutputGrouping());
             for (Set<ColumnRefOperator> s : repeat.getRepeatColumnRef()) {
                 outputColumnRef.addAll(s);
             }
-            sb.append(buildOutputColumns(repeat, outputColumnRef.toString()));
+            sb.append(buildOutputColumns(repeat, "[" + outputColumnRef.stream().map(new ExpressionPrinter()::print)
+                    .collect(Collectors.joining(", ")) + "]"));
             sb.append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);
-
-            StringBuilder groupingSets = new StringBuilder("grouping_sets: {");
-            for (Set<ColumnRefOperator> grouping : repeat.getRepeatColumnRef()) {
-                groupingSets.append(grouping.toString());
-                groupingSets.append(", ");
-            }
-            groupingSets.delete(groupingSets.length() - 2, groupingSets.length());
-            groupingSets.append("}");
-            buildOperatorProperty(sb, groupingSets.toString(), context.step);
-
-            for (int i = 0; i < repeat.getOutputGrouping().size(); ++i) {
-                String groupingIds = repeat.getOutputGrouping().get(i) + " := " +
-                        repeat.getGroupingIds().get(i);
-                buildOperatorProperty(sb, groupingIds, context.step);
-            }
 
             buildCommonProperty(sb, repeat, context.step);
             return new OperatorStr(sb.toString(), context.step, buildChildOperatorStr(optExpression, context.step));

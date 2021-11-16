@@ -20,11 +20,12 @@
 namespace starrocks::vectorized {
 
 HashJoiner::HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id, TPlanNodeType::type node_type,
-                       int64_t limit, std::vector<bool>&& is_null_safes, std::vector<ExprContext*>&& build_expr_ctxs,
-                       std::vector<ExprContext*>&& probe_expr_ctxs,
-                       std::vector<ExprContext*>&& other_join_conjunct_ctxs, std::vector<ExprContext*>&& conjunct_ctxs,
-                       const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
-                       const RowDescriptor& row_descriptor)
+                       int64_t limit, const std::vector<bool>& is_null_safes,
+                       const std::vector<ExprContext*>& build_expr_ctxs,
+                       const std::vector<ExprContext*>& probe_expr_ctxs,
+                       const std::vector<ExprContext*>& other_join_conjunct_ctxs,
+                       const std::vector<ExprContext*>& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
+                       const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor)
         : _join_type(hash_join_node.join_op),
           _limit(limit),
           _num_rows_returned(0),
@@ -84,15 +85,6 @@ Status HashJoiner::prepare(RuntimeState* state) {
     _avg_input_probe_chunk_size = ADD_COUNTER(_runtime_profile, "AvgInputProbeChunkSize", TUnit::UNIT);
     _avg_output_chunk_size = ADD_COUNTER(_runtime_profile, "AvgOutputChunkSize", TUnit::UNIT);
     _runtime_profile->add_info_string("JoinType", _get_join_type_str(_join_type));
-
-    RETURN_IF_ERROR(Expr::prepare(_build_expr_ctxs, state, _build_row_descriptor));
-    RETURN_IF_ERROR(Expr::prepare(_probe_expr_ctxs, state, _probe_row_descriptor));
-    RETURN_IF_ERROR(Expr::prepare(_other_join_conjunct_ctxs, state, _row_descriptor));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_descriptor));
-    RETURN_IF_ERROR(Expr::open(_build_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_probe_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_other_join_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
     HashTableParam param;
     _init_hash_table_param(&param);
@@ -261,10 +253,6 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 void HashJoiner::close(RuntimeState* state) {
     if (!_is_closed) {
         _ht.close();
-        Expr::close(_conjunct_ctxs, state);
-        Expr::close(_other_join_conjunct_ctxs, state);
-        Expr::close(_probe_expr_ctxs, state);
-        Expr::close(_build_expr_ctxs, state);
         _is_closed = true;
     }
 }

@@ -52,6 +52,7 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
 
     RowDescriptor row_desc;
     RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc));
+    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
 
     const auto& global_dict = state->get_global_dict_map();
     _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());

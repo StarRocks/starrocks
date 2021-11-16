@@ -11,6 +11,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
@@ -349,21 +350,22 @@ Status HashJoinNode::close(RuntimeState* state) {
 }
 
 pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    auto hash_joiner = std::make_unique<HashJoiner>(_hash_join_node, _id, _type, limit(), std::move(_is_null_safes),
-                                                    std::move(_build_expr_ctxs), std::move(_probe_expr_ctxs),
-                                                    std::move(_other_join_conjunct_ctxs), std::move(_conjunct_ctxs),
-                                                    child(1)->row_desc(), child(0)->row_desc(), _row_descriptor);
+    auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(
+            _hash_join_node, _id, _type, limit(), std::move(_is_null_safes), _build_expr_ctxs, _probe_expr_ctxs,
+            std::move(_other_join_conjunct_ctxs), std::move(_conjunct_ctxs), child(1)->row_desc(), child(0)->row_desc(),
+            _row_descriptor, context->degree_of_parallelism());
+
     auto build_op = std::make_shared<pipeline::HashJoinBuildOperatorFactory>(context->next_operator_id(), id(),
-                                                                             hash_joiner.get());
+                                                                             hash_joiner_factory);
     // HashJoinProbeOperatorFactory holds the ownership of HashJoiner object.
     auto probe_op = std::make_shared<pipeline::HashJoinProbeOperatorFactory>(context->next_operator_id(), id(),
-                                                                             std::move(hash_joiner));
+                                                                             hash_joiner_factory);
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
-    // Up to now, both HashJoin{Build, Probe}Operator is not parallelized, so add LocalExchangeOperator
-    // to merge multi-stream into one stream then pipe into HashJoin{Build, Probe}Operator.
-    auto operators_with_build_op = context->maybe_interpolate_local_passthrough_exchange(rhs_operators);
-    auto operators_with_probe_op = context->maybe_interpolate_local_passthrough_exchange(lhs_operators);
+    // both HashJoin{Build, Probe}Operator are parallelized, so add LocalExchangeOperator
+    // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
+    auto operators_with_build_op = context->maybe_interpolate_local_shuffle_exchange(rhs_operators, _build_expr_ctxs);
+    auto operators_with_probe_op = context->maybe_interpolate_local_shuffle_exchange(lhs_operators, _probe_expr_ctxs);
     // add build-side pipeline to context and return probe-side pipeline.
     operators_with_build_op.emplace_back(std::move(build_op));
     context->add_pipeline(operators_with_build_op);

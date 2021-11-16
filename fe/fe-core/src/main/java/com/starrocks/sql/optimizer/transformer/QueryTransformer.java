@@ -62,8 +62,6 @@ class QueryTransformer {
         builder = filter(builder, queryBlock.getHaving());
         builder = window(builder, queryBlock.getOutputAnalytic());
 
-        List<Expr> outputExpressions = queryBlock.getOutputExpr();
-
         if (queryBlock.hasOrderBy()) {
             if (!queryBlock.hasAggregation()) {
                 //requires both output and source fields to be visible if there are no aggregations
@@ -300,8 +298,10 @@ class QueryTransformer {
         boolean groupAllConst = groupByExpressions.stream().allMatch(Expr::isConstant);
 
         for (Expr groupingItem : groupByExpressions) {
-            // grouping columns save one least
-            if (groupingItem.isConstant() && !(groupAllConst && groupByColumnRefs.isEmpty())) {
+            //Grouping columns save one least
+            //Grouping set type aggregation cannot delete constant aggregation columns
+            if (groupingItem.isConstant() && !(groupAllConst && groupByColumnRefs.isEmpty()) &&
+                    groupingSetsList == null) {
                 continue;
             }
 

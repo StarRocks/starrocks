@@ -1003,4 +1003,127 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(AggregateIteratorTest, gen_source_masks) {
+    config::vector_chunk_size = 2;
+
+    auto k1 = std::make_shared<Field>(0, "k1", OLAP_FIELD_TYPE_BIGINT, false);
+    k1->set_is_key(true);
+    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
+
+    Schema schema({k1});
+
+    auto pk = std::vector<int64_t>{1, 1, 2, 3, 3, 3, 4, 5, 5};
+    auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_BIGINT(pk));
+    child_iter->chunk_size(1024);
+    std::vector<RowSourceMask> source_masks{1, 1, 1, 2, 2, 2, 3, 3, 3};
+    auto agg_iter = new_aggregate_iterator(child_iter, true);
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    Status st;
+    while (true) {
+        chunk->reset();
+        st = agg_iter->get_next(chunk.get(), &source_masks);
+        if (!st.ok()) {
+            break;
+        }
+    }
+    ASSERT_TRUE(st.is_end_of_file());
+
+    // check agg flag
+    std::vector<bool> expected{false, true, false, false, true, true, false, false, true};
+    for (size_t i = 0; i < source_masks.size(); ++i) {
+        ASSERT_EQ(expected[i], source_masks[i].get_agg_flag());
+    }
+
+    agg_iter->close();
+}
+
+// NOLINTNEXTLINE
+TEST_F(AggregateIteratorTest, sum_from_source_masks) {
+    config::vector_chunk_size = 2;
+
+    auto c1 = std::make_shared<Field>(1, "c1", OLAP_FIELD_TYPE_SMALLINT, false);
+    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
+
+    Schema schema({c1});
+
+    auto v1 = std::vector<int16_t>{1, 2, 3, 4, 5, 6, 7, 8, 9};
+    auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_SMALLINT(v1));
+    child_iter->chunk_size(1024);
+    // pk is {1, 1, 2, 3, 3, 3, 4, 5, 5}
+    // only last 9 masks are used to represent pk.
+    std::vector<RowSourceMask> source_masks{{1, false}, {2, false}, {1, false}, {1, true},  {1, false}, {2, false},
+                                            {2, true},  {2, true},  {3, false}, {3, false}, {3, true}};
+    auto agg_iter = new_aggregate_iterator(child_iter, false);
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    Status st;
+    std::vector<int16_t> values;
+    while (true) {
+        chunk->reset();
+        st = agg_iter->get_next(chunk.get(), &source_masks);
+        if (!st.ok()) {
+            break;
+        }
+        auto& c = chunk->get_column_by_index(0);
+        // std::vector<int16_t>
+        auto& v = std::dynamic_pointer_cast<FixedLengthColumn<int16_t>>(c)->get_data();
+        values.insert(values.end(), v.begin(), v.end());
+    }
+    ASSERT_TRUE(st.is_end_of_file());
+
+    // check agg result
+    ASSERT_EQ(5, values.size());
+    ASSERT_EQ(3, values[0]);
+    ASSERT_EQ(3, values[1]);
+    ASSERT_EQ(15, values[2]);
+    ASSERT_EQ(7, values[3]);
+    ASSERT_EQ(17, values[4]);
+    agg_iter->close();
+}
+
+// NOLINTNEXTLINE
+TEST_F(AggregateIteratorTest, max_from_source_masks) {
+    config::vector_chunk_size = 2;
+
+    auto c1 = std::make_shared<Field>(1, "c1", OLAP_FIELD_TYPE_SMALLINT, false);
+    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+
+    Schema schema({c1});
+
+    auto v1 = std::vector<int16_t>{2, 1, 3, 4, 6, 5, 7, 8, 9};
+    auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_SMALLINT(v1));
+    child_iter->chunk_size(1024);
+    // pk is {1, 1, 2, 3, 3, 3, 4, 5, 5}
+    std::vector<RowSourceMask> source_masks{{1, false}, {1, true},  {1, false}, {2, false}, {2, true},
+                                            {2, true},  {3, false}, {3, false}, {3, true}};
+    auto agg_iter = new_aggregate_iterator(child_iter, false);
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    Status st;
+    std::vector<int16_t> values;
+    while (true) {
+        chunk->reset();
+        st = agg_iter->get_next(chunk.get(), &source_masks);
+        if (!st.ok()) {
+            break;
+        }
+        auto& c = chunk->get_column_by_index(0);
+        // std::vector<int16_t>
+        auto& v = std::dynamic_pointer_cast<FixedLengthColumn<int16_t>>(c)->get_data();
+        values.insert(values.end(), v.begin(), v.end());
+    }
+    ASSERT_TRUE(st.is_end_of_file());
+
+    // check agg result
+    ASSERT_EQ(5, values.size());
+    ASSERT_EQ(2, values[0]);
+    ASSERT_EQ(3, values[1]);
+    ASSERT_EQ(6, values[2]);
+    ASSERT_EQ(7, values[3]);
+    ASSERT_EQ(9, values[4]);
+    agg_iter->close();
+}
+
 } // namespace starrocks::vectorized

@@ -48,7 +48,7 @@ Status AssertNumRowsOperator::push_chunk(RuntimeState* state, const vectorized::
     return Status::OK();
 }
 
-void AssertNumRowsOperator::finish(RuntimeState* state) {
+void AssertNumRowsOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 

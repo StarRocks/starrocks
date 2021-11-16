@@ -16,10 +16,7 @@ bool AggregateDistinctBlockingSinkOperator::is_finished() const {
     return _is_finished;
 }
 
-void AggregateDistinctBlockingSinkOperator::finish(RuntimeState* state) {
-    if (_is_finished) {
-        return;
-    }
+void AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());

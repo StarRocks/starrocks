@@ -40,14 +40,14 @@ using std::string;
 namespace starrocks {
 
 // TODO(yingchun): should be more graceful in the future refactor.
-#define SLEEP_IN_BG_WORKER(seconds)                \
-    int64_t left_seconds = (seconds);              \
-    while (!_stop_bg_worker && left_seconds > 0) { \
-        sleep(1);                                  \
-        --left_seconds;                            \
-    }                                              \
-    if (_stop_bg_worker) {                         \
-        break;                                     \
+#define SLEEP_IN_BG_WORKER(seconds)                                                   \
+    int64_t left_seconds = (seconds);                                                 \
+    while (!_bg_worker_stopped.load(std::memory_order_consume) && left_seconds > 0) { \
+        sleep(1);                                                                     \
+        --left_seconds;                                                               \
+    }                                                                                 \
+    if (_bg_worker_stopped.load(std::memory_order_consume)) {                         \
+        break;                                                                        \
     }
 
 // number of running SCHEMA-CHANGE threads
@@ -58,17 +58,14 @@ Status StorageEngine::start_bg_threads() {
     LOG(INFO) << "update cache expire thread started";
 
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
-    _unused_rowset_monitor_thread.detach();
     LOG(INFO) << "unused rowset monitor thread started";
 
     // start thread for monitoring the snapshot and trash folder
     _garbage_sweeper_thread = std::thread([this] { _garbage_sweeper_thread_callback(nullptr); });
-    _garbage_sweeper_thread.detach();
     LOG(INFO) << "garbage sweeper thread started";
 
     // start thread for monitoring the tablet with io error
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
-    _disk_stat_monitor_thread.detach();
     LOG(INFO) << "disk stat monitor thread started";
 
     // convert store map to vector
@@ -99,9 +96,6 @@ Status StorageEngine::start_bg_threads() {
             _base_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
         });
     }
-    for (auto& thread : _base_compaction_threads) {
-        thread.detach();
-    }
     LOG(INFO) << "base compaction threads started. number: " << base_compaction_num_threads;
 
     _cumulative_compaction_threads.reserve(cumulative_compaction_num_threads);
@@ -109,9 +103,6 @@ Status StorageEngine::start_bg_threads() {
         _cumulative_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
             _cumulative_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
         });
-    }
-    for (auto& thread : _cumulative_compaction_threads) {
-        thread.detach();
     }
     LOG(INFO) << "cumulative compaction threads started. number: " << cumulative_compaction_num_threads;
 
@@ -124,23 +115,16 @@ Status StorageEngine::start_bg_threads() {
             _update_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
         });
     }
-    for (auto& thread : _update_compaction_threads) {
-        thread.detach();
-    }
     LOG(INFO) << "update compaction threads started. number: " << update_compaction_num_threads;
 
     // tablet checkpoint thread
     for (auto data_dir : data_dirs) {
         _tablet_checkpoint_threads.emplace_back([this, data_dir] { _tablet_checkpoint_callback((void*)data_dir); });
     }
-    for (auto& thread : _tablet_checkpoint_threads) {
-        thread.detach();
-    }
     LOG(INFO) << "tablet checkpoint thread started";
 
     // fd cache clean thread
     _fd_cache_clean_thread = std::thread([this] { _fd_cache_clean_callback(nullptr); });
-    _fd_cache_clean_thread.detach();
     LOG(INFO) << "fd cache clean thread started";
 
     // path scan and gc thread
@@ -149,12 +133,6 @@ Status StorageEngine::start_bg_threads() {
             _path_scan_threads.emplace_back([this, data_dir] { _path_scan_thread_callback((void*)data_dir); });
 
             _path_gc_threads.emplace_back([this, data_dir] { _path_gc_thread_callback((void*)data_dir); });
-        }
-        for (auto& thread : _path_scan_threads) {
-            thread.detach();
-        }
-        for (auto& thread : _path_gc_threads) {
-            thread.detach();
         }
         LOG(INFO) << "path scan/gc threads started. number:" << get_stores().size();
     }
@@ -167,7 +145,7 @@ void* StorageEngine::_fd_cache_clean_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t interval = config::file_descriptor_cache_clean_interval;
         if (interval <= 0) {
             LOG(WARNING) << "config of file descriptor clean interval is illegal: " << interval << "force set to 3600";
@@ -188,7 +166,7 @@ void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_d
     //string last_base_compaction_fs;
     //TTabletId last_base_compaction_tablet_id = -1;
     Status status = Status::OK();
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
             status = _perform_base_compaction(data_dir);
@@ -213,7 +191,7 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
     ProfilerRegisterThread();
 #endif
     Status status = Status::OK();
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
             status = _perform_update_compaction(data_dir);
@@ -250,7 +228,7 @@ void* StorageEngine::_garbage_sweeper_thread_callback(void* arg) {
 
     const double pi = 4 * std::atan(1);
     double usage = 1.0;
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         usage *= 100.0;
         // when disk usage is less than 60%, ratio is about 1;
         // when disk usage is between [60%, 75%], ratio drops from 0.87 to 0.27;
@@ -281,7 +259,7 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         _start_disk_stat_monitor();
 
         int32_t interval = config::disk_stat_monitor_interval;
@@ -302,7 +280,7 @@ void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* 
     LOG(INFO) << "try to start cumulative compaction process!";
 
     Status status = Status::OK();
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
             status = _perform_cumulative_compaction(data_dir);
@@ -327,7 +305,7 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t expire_sec = config::update_cache_expire_sec;
         if (expire_sec <= 0) {
             LOG(WARNING) << "update_cache_expire_sec config is illegal: " << expire_sec << ", force set to 360";
@@ -346,7 +324,7 @@ void* StorageEngine::_unused_rowset_monitor_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         start_delete_unused_rowset();
 
         int32_t interval = config::unused_rowset_monitor_interval;
@@ -367,7 +345,7 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
 
     LOG(INFO) << "try to start path gc thread!";
 
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to perform path gc by tablet!";
         ((DataDir*)arg)->perform_path_gc_by_tablet();
 
@@ -393,13 +371,13 @@ void* StorageEngine::_path_scan_thread_callback(void* arg) {
 #endif
 
     LOG(INFO) << "wait 10min to start path scan thread";
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(600);
         break;
     }
     LOG(INFO) << "try to start path scan thread!";
 
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to perform path scan!";
         ((DataDir*)arg)->perform_path_scan();
 
@@ -420,7 +398,7 @@ void* StorageEngine::_tablet_checkpoint_callback(void* arg) {
     ProfilerRegisterThread();
 #endif
     LOG(INFO) << "try to start tablet meta checkpoint thread!";
-    while (!_stop_bg_worker) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "begin to do tablet meta checkpoint:" << ((DataDir*)arg)->path();
         int64_t start_time = UnixMillis();
         _tablet_manager->do_tablet_meta_checkpoint((DataDir*)arg);

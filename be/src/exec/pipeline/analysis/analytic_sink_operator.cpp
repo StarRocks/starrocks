@@ -42,11 +42,7 @@ bool AnalyticSinkOperator::is_finished() const {
     return _is_finished;
 }
 
-void AnalyticSinkOperator::finish(RuntimeState* state) {
-    if (_is_finished) {
-        return;
-    }
-
+void AnalyticSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     _analytor->input_eos() = true;
     _process_by_partition_if_necessary();

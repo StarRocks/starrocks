@@ -29,7 +29,7 @@ bool AggregateDistinctStreamingSourceOperator::is_finished() const {
     return _aggregator->is_sink_complete() && _aggregator->is_chunk_buffer_empty() && _aggregator->is_ht_eos();
 }
 
-void AggregateDistinctStreamingSourceOperator::finish(RuntimeState* state) {
+void AggregateDistinctStreamingSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 

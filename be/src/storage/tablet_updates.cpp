@@ -136,7 +136,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& updates) {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         CHECK(rowset_meta->init(rowset_meta_data)) << "Corrupted rowset meta";
         RowsetSharedPtr rowset;
-        st = RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.tablet_path(), rowset_meta, &rowset);
+        st = RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.schema_hash_path(), rowset_meta, &rowset);
         if (st.ok()) {
             _pending_commits.emplace(version, rowset);
         } else {
@@ -158,7 +158,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& updates) {
     // them on demand.
     auto rowset_iterate_func = [&](const RowsetMetaSharedPtr& rowset_meta) -> bool {
         RowsetSharedPtr rowset;
-        st = RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.tablet_path(), rowset_meta, &rowset);
+        st = RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.schema_hash_path(), rowset_meta, &rowset);
         if (st.ok()) {
             _rowsets[rowset_meta->get_rowset_seg_id()] = std::move(rowset);
         } else {
@@ -942,7 +942,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
     context.partition_id = _tablet.partition_id();
     context.tablet_schema_hash = _tablet.schema_hash();
     context.rowset_type = BETA_ROWSET;
-    context.rowset_path_prefix = _tablet.tablet_path();
+    context.rowset_path_prefix = _tablet.schema_hash_path();
     context.tablet_schema = &(_tablet.tablet_schema());
     context.rowset_state = COMMITTED;
     context.segments_overlap = NONOVERLAPPING;
@@ -1720,7 +1720,7 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
     for (int i = 0; i < rowsets.size(); i++) {
         auto& src_rowset = *rowsets[i];
         RowsetId rid = StorageEngine::instance()->next_rowset_id();
-        auto st = src_rowset.link_files_to(_tablet.tablet_path(), rid);
+        auto st = src_rowset.link_files_to(_tablet.schema_hash_path(), rid);
         if (!st.ok()) {
             return st;
         }
@@ -1898,7 +1898,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         for (int seg_id = 0; seg_id < rowset.num_segments(); seg_id++) {
             RowsetId rowset_id;
             rowset_id.init(rowset.rowset_id_v2());
-            auto path = BetaRowset::segment_file_path(_tablet.tablet_path(), rowset_id, seg_id);
+            auto path = BetaRowset::segment_file_path(_tablet.schema_hash_path(), rowset_id, seg_id);
             auto st = Env::Default()->path_exists(path);
             if (!st.ok()) {
                 return Status::InternalError("segment file does not exist: " + st.to_string());
@@ -1907,7 +1907,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         for (int del_id = 0; del_id < rowset.num_delete_files(); del_id++) {
             RowsetId rowset_id;
             rowset_id.init(rowset.rowset_id_v2());
-            auto path = BetaRowset::segment_del_file_path(_tablet.tablet_path(), rowset_id, del_id);
+            auto path = BetaRowset::segment_del_file_path(_tablet.schema_hash_path(), rowset_id, del_id);
             auto st = Env::Default()->path_exists(path);
             if (!st.ok()) {
                 return Status::InternalError("delete file does not exist: " + st.to_string());
@@ -1928,8 +1928,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
             if (rowset_meta->tablet_id() != _tablet.tablet_id()) {
                 return Status::InternalError("mismatched tablet id");
             }
-            RETURN_IF_ERROR(RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.tablet_path(), rowset_meta,
-                                                         &rowset));
+            RETURN_IF_ERROR(RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.schema_hash_path(),
+                                                         rowset_meta, &rowset));
             if (rowset->start_version() != rowset->end_version()) {
                 return Status::InternalError("mismatched start and end version");
             }
@@ -1991,8 +1991,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
                     std::max<uint32_t>(new_next_rowset_id, new_id + std::max(1L, rowset_meta_pb.num_segments()));
             rowset_meta->set_rowset_seg_id(new_id);
             RowsetSharedPtr* rowset = &new_rowsets[new_id];
-            RETURN_IF_ERROR(
-                    RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.tablet_path(), rowset_meta, rowset));
+            RETURN_IF_ERROR(RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.schema_hash_path(),
+                                                         rowset_meta, rowset));
             VLOG(2) << "add a new rowset " << tablet_id << "@" << new_id << "@" << rowset_meta->rowset_id();
         }
 

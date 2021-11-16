@@ -17,7 +17,7 @@ bool AggregateDistinctStreamingSinkOperator::is_finished() const {
     return _is_finished;
 }
 
-void AggregateDistinctStreamingSinkOperator::finish(RuntimeState* state) {
+void AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     _aggregator->sink_complete();
 }

@@ -230,7 +230,7 @@ Status ExecEnv::_init_mem_tracker() {
     return Status::OK();
 }
 
-void ExecEnv::_destory() {
+void ExecEnv::_destroy() {
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;
@@ -254,10 +254,6 @@ void ExecEnv::_destory() {
     if (_stream_load_executor) {
         delete _stream_load_executor;
         _stream_load_executor = nullptr;
-    }
-    if (_storage_engine) {
-        delete _storage_engine;
-        _storage_engine = nullptr;
     }
     if (_brpc_stub_cache) {
         delete _brpc_stub_cache;
@@ -391,7 +387,7 @@ void ExecEnv::_destory() {
 }
 
 void ExecEnv::destroy(ExecEnv* env) {
-    env->_destory();
+    env->_destroy();
 }
 
 void ExecEnv::set_storage_engine(StorageEngine* storage_engine) {

@@ -283,9 +283,9 @@ Status BetaRowsetWriter::_final_merge() {
     // merge them and create final segment files if _context.write_tmp is true
     if (_context.write_tmp) {
         if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS) {
-            itr = new_merge_iterator(seg_iterators);
+            itr = new_heap_merge_iterator(seg_iterators);
         } else if (_context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
-            itr = new_aggregate_iterator(new_merge_iterator(seg_iterators), 0);
+            itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
         } else {
             for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
                 auto old_path =
@@ -299,7 +299,7 @@ Status BetaRowsetWriter::_final_merge() {
         }
         _context.write_tmp = false;
     } else {
-        itr = new_aggregate_iterator(new_merge_iterator(seg_iterators), 0);
+        itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
     }
 
     auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);

@@ -30,10 +30,17 @@ public class ViewPlanTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
-        sqlPlan = sqlPlan.replaceAll("bitmap_union_count\\(", "count(distinct ");
-        viewPlan = viewPlan.replaceAll("bitmap_union_count\\(", "count(distinct ");
-        sqlPlan = sqlPlan.replaceAll("hll_union_agg\\(", "count(distinct ");
-        viewPlan = viewPlan.replaceAll("hll_union_agg\\(", "count(distinct ");
+        System.out.println(sqlPlan);
+        System.out.println(viewPlan);
+
+        sqlPlan = sqlPlan.replaceAll("bitmap_union_count\\(", "count");
+        viewPlan = viewPlan.replaceAll("bitmap_union_count\\(", "count");
+        sqlPlan = sqlPlan.replaceAll("bitmap_union_count", "count");
+        viewPlan = viewPlan.replaceAll("bitmap_union_count", "count");
+        sqlPlan = sqlPlan.replaceAll("hll_union_agg\\(", "count");
+        viewPlan = viewPlan.replaceAll("hll_union_agg\\(", "count");
+        sqlPlan = sqlPlan.replaceAll("hll_union_agg", "count");
+        viewPlan = viewPlan.replaceAll("hll_union_agg", "count");
         Assert.assertEquals(sqlPlan, viewPlan);
     }
 
