@@ -884,19 +884,8 @@ public class PlanFragmentBuilder {
                     aggregationNode =
                             new AggregationNode(context.getPlanCtx().getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
-                    if ((aggregationNode.getChild(0) instanceof OlapScanNode ||
-                            (aggregationNode.getChild(0) instanceof ProjectNode &&
-                                    aggregationNode.getChild(0).getChild(0) instanceof OlapScanNode))) {
-                        ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
-                        OlapScanNode scanNode;
-                        if (aggregationNode.getChild(0) instanceof ProjectNode) {
-                            scanNode = (OlapScanNode) aggregationNode.getChild(0).getChild(0);
-                        } else {
-                            scanNode = (OlapScanNode) aggregationNode.getChild(0);
-                        }
-                        if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
-                            aggregationNode.setColocate(true);
-                        }
+                    if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                        aggregationNode.setColocate(true);
                     }
                 } else {
                     aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
@@ -960,6 +949,25 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;
+        }
+
+        // Check whether colocate Table exists in the same Fragment
+        public boolean hasColocateOlapScanChildInFragment(PlanNode node) {
+            if (node instanceof OlapScanNode) {
+                ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+                OlapScanNode scanNode = (OlapScanNode) node;
+                if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
+                    return true;
+                }
+            }
+            if (node instanceof  ExchangeNode) {
+                return false;
+            }
+            boolean hasOlapScanChild = false;
+            for (PlanNode child : node.getChildren()) {
+                hasOlapScanChild |= hasColocateOlapScanChildInFragment(child);
+            }
+            return hasOlapScanChild;
         }
 
         public void rewriteAggDistinctFirstStageFunction(Analyzer analyzer, List<FunctionCallExpr> aggregateExprList) {
