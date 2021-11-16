@@ -22,7 +22,7 @@ order by
     l_linestatus ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum(5: L_QUANTITY) | 21: sum(6: L_EXTENDEDPRICE) | 22: sum(18: expr) | 23: sum(19: expr) | 24: avg(5: L_QUANTITY) | 25: avg(6: L_EXTENDEDPRICE) | 26: avg(7: L_DISCOUNT) | 27: count()
+OUTPUT EXPRS:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum | 21: sum | 22: sum | 23: sum | 24: avg | 25: avg | 26: avg | 27: count
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -44,7 +44,7 @@ UNPARTITIONED
 |  use vectorized: true
 |
 4:AGGREGATE (merge finalize)
-|  output: sum(20: sum(5: L_QUANTITY)), sum(21: sum(6: L_EXTENDEDPRICE)), sum(22: sum(18: expr)), sum(23: sum(19: expr)), avg(24: avg(5: L_QUANTITY)), avg(25: avg(6: L_EXTENDEDPRICE)), avg(26: avg(7: L_DISCOUNT)), count(27: count())
+|  output: sum(20: sum), sum(21: sum), sum(22: sum), sum(23: sum), avg(24: avg), avg(25: avg), avg(26: avg), count(27: count)
 |  group by: 9: L_RETURNFLAG, 10: L_LINESTATUS
 |  use vectorized: true
 |
@@ -92,7 +92,7 @@ numNodes=0
 use vectorized: true
 [fragment statistics]
 PLAN FRAGMENT 0(F02)
-Output Exprs:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum(5: L_QUANTITY) | 21: sum(6: L_EXTENDEDPRICE) | 22: sum(18: expr) | 23: sum(19: expr) | 24: avg(5: L_QUANTITY) | 25: avg(6: L_EXTENDEDPRICE) | 26: avg(7: L_DISCOUNT) | 27: count()
+Output Exprs:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum | 21: sum | 22: sum | 23: sum | 24: avg | 25: avg | 26: avg | 27: count
 Input Partition: UNPARTITIONED
 RESULT SINK
 
@@ -101,14 +101,14 @@ cardinality: 3
 column statistics:
 * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-* sum(5: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-* sum(6: L_EXTENDEDPRICE)-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* sum(18: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* sum(19: expr)-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-* avg(5: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-* avg(6: L_EXTENDEDPRICE)-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* avg(7: L_DISCOUNT)-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-* count()-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
+* sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+* sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
+* avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+* avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+* count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
 
 PLAN FRAGMENT 1(F01)
 
@@ -123,30 +123,30 @@ OutPut Exchange Id: 06
 |  column statistics:
 |  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-|  * sum(5: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * sum(6: L_EXTENDEDPRICE)-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum(18: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum(19: expr)-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg(5: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * avg(6: L_EXTENDEDPRICE)-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg(7: L_DISCOUNT)-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * count()-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
 |
 4:AGGREGATE (merge finalize)
-|  aggregate: sum[([20: sum(5: L_QUANTITY), DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([21: sum(6: L_EXTENDEDPRICE), DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([22: sum(18: expr), DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([23: sum(19: expr), DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([24: avg(5: L_QUANTITY), VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([25: avg(6: L_EXTENDEDPRICE), VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([26: avg(7: L_DISCOUNT), VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], count[([27: count(), BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
+|  aggregate: sum[([20: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([21: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([22: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([23: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([24: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([25: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([26: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], count[([27: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
 |  group by: [9: L_RETURNFLAG, VARCHAR, false], [10: L_LINESTATUS, VARCHAR, false]
 |  cardinality: 3
 |  column statistics:
 |  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-|  * sum(5: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * sum(6: L_EXTENDEDPRICE)-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum(18: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum(19: expr)-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg(5: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * avg(6: L_EXTENDEDPRICE)-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg(7: L_DISCOUNT)-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * count()-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
 |
 3:EXCHANGE
 cardinality: 3
@@ -165,14 +165,14 @@ OutPut Exchange Id: 03
 |  column statistics:
 |  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-|  * sum(5: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * sum(6: L_EXTENDEDPRICE)-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum(18: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum(19: expr)-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg(5: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * avg(6: L_EXTENDEDPRICE)-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg(7: L_DISCOUNT)-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * count()-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
 |
 1:Project
 |  output columns:

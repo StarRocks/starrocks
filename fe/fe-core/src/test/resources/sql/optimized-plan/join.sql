@@ -1,13 +1,13 @@
 [sql]
 select * from (select sum(v1) as v, sum(v2) from t0) a left semi join (select v1,v2 from t0 order by v3) b on a.v = b.v2;
 [result]
-RIGHT SEMI JOIN (join-predicate [7: v2 = 4: sum(1: v1)] post-join-predicate [null])
+RIGHT SEMI JOIN (join-predicate [7: v2 = 4: sum] post-join-predicate [null])
     EXCHANGE SHUFFLE[7]
         SCAN (columns[7: v2] predicate[null])
     EXCHANGE SHUFFLE[4]
-        AGGREGATE ([GLOBAL] aggregate [{4: sum(1: v1)=sum(4: sum(1: v1)), 5: sum(2: v2)=sum(5: sum(2: v2))}] group by [[]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum), 5: sum=sum(5: sum)}] group by [[]] having [null]
             EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{4: sum(1: v1)=sum(1: v1), 5: sum(2: v2)=sum(2: v2)}] group by [[]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1), 5: sum=sum(2: v2)}] group by [[]] having [null]
                     SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
 
@@ -127,13 +127,13 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
 [sql]
 select * from (select sum(v1) as v, sum(v2) from t0) a left semi join (select v1,v2,v3 from t0 order by v3) b on a.v = b.v3;
 [result]
-RIGHT SEMI JOIN (join-predicate [8: v3 = 4: sum(1: v1)] post-join-predicate [null])
+RIGHT SEMI JOIN (join-predicate [8: v3 = 4: sum] post-join-predicate [null])
     EXCHANGE SHUFFLE[8]
         SCAN (columns[8: v3] predicate[null])
     EXCHANGE SHUFFLE[4]
-        AGGREGATE ([GLOBAL] aggregate [{4: sum(1: v1)=sum(4: sum(1: v1)), 5: sum(2: v2)=sum(5: sum(2: v2))}] group by [[]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum), 5: sum=sum(5: sum)}] group by [[]] having [null]
             EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{4: sum(1: v1)=sum(1: v1), 5: sum(2: v2)=sum(2: v2)}] group by [[]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1), 5: sum=sum(2: v2)}] group by [[]] having [null]
                     SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
 
@@ -257,9 +257,9 @@ FULL OUTER JOIN (join-predicate [1: v1 = 4: v4 AND false] post-join-predicate [n
 [sql]
 SELECT COUNT(*) FROM  t0 LEFT JOIN t1 ON v1 = v4 AND ((NULL)-(NULL)) >= ((NULL)%(NULL))
 [result]
-AGGREGATE ([GLOBAL] aggregate [{7: count()=count(7: count())}] group by [[]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{7: count=count(7: count)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{7: count()=count()}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{7: count=count()}] group by [[]] having [null]
             LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
                 SCAN (columns[1: v1] predicate[null])
                 VALUES

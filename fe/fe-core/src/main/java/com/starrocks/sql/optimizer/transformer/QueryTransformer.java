@@ -324,7 +324,7 @@ class QueryTransformer {
             CallOperator aggOperator = (CallOperator) aggCallOperator;
 
             ColumnRefOperator colRef =
-                    columnRefFactory.create(aggOperator.toString(), aggregate.getType(), aggregate.isNullable());
+                    columnRefFactory.create(aggOperator.getFnName(), aggregate.getType(), aggregate.isNullable());
             aggregationsMap.put(colRef, aggOperator);
             groupingTranslations.put(aggregate, colRef);
         }

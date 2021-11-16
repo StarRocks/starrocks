@@ -126,8 +126,8 @@ UNION
 select v1,sum(v2) from t0 group by v1 union all select v4,v5 from t1;
 [result]
 UNION
-    AGGREGATE ([GLOBAL] aggregate [{4: sum(2: v2)=sum(4: sum(2: v2))}] group by [[1: v1]] having [null]
-        AGGREGATE ([LOCAL] aggregate [{4: sum(2: v2)=sum(2: v2)}] group by [[1: v1]] having [null]
+    AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[1: v1]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[1: v1]] having [null]
             SCAN (columns[1: v1, 2: v2] predicate[null])
     SCAN (columns[7: v4, 8: v5] predicate[null])
 [end]
@@ -135,12 +135,12 @@ UNION
 [sql]
 select v1,sum(v2) from t0 group by v1 union select v4,v5 from t1;
 [result]
-AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v1, 6: sum(2: v2)]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v1, 6: sum]] having [null]
     EXCHANGE SHUFFLE[5, 6]
-        AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v1, 6: sum(2: v2)]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v1, 6: sum]] having [null]
             UNION
-                AGGREGATE ([GLOBAL] aggregate [{4: sum(2: v2)=sum(4: sum(2: v2))}] group by [[1: v1]] having [null]
-                    AGGREGATE ([LOCAL] aggregate [{4: sum(2: v2)=sum(2: v2)}] group by [[1: v1]] having [null]
+                AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[1: v1]] having [null]
+                    AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[1: v1]] having [null]
                         SCAN (columns[1: v1, 2: v2] predicate[null])
                 SCAN (columns[7: v4, 8: v5] predicate[null])
 [end]
@@ -148,12 +148,12 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v1, 6: sum(2: v2)]] having [nul
 [sql]
 select a,b from (select v1 as a,sum(v2) as b from t0 group by v1 union all select v4,v5 from t1) t group by a,b;
 [result]
-AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v1, 6: sum(2: v2)]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v1, 6: sum]] having [null]
     EXCHANGE SHUFFLE[5, 6]
-        AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v1, 6: sum(2: v2)]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v1, 6: sum]] having [null]
             UNION
-                AGGREGATE ([GLOBAL] aggregate [{4: sum(2: v2)=sum(4: sum(2: v2))}] group by [[1: v1]] having [null]
-                    AGGREGATE ([LOCAL] aggregate [{4: sum(2: v2)=sum(2: v2)}] group by [[1: v1]] having [null]
+                AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[1: v1]] having [null]
+                    AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[1: v1]] having [null]
                         SCAN (columns[1: v1, 2: v2] predicate[null])
                 SCAN (columns[7: v4, 8: v5] predicate[null])
 [end]
@@ -166,9 +166,9 @@ EXCEPT
         EXCHANGE SHUFFLE[6]
             AGGREGATE ([LOCAL] aggregate [{}] group by [[6: cast]] having [null]
                 UNION
-                    AGGREGATE ([GLOBAL] aggregate [{4: sum(1: v1)=sum(4: sum(1: v1))}] group by [[]] having [null]
+                    AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[]] having [null]
                         EXCHANGE GATHER
-                            AGGREGATE ([LOCAL] aggregate [{4: sum(1: v1)=sum(1: v1)}] group by [[]] having [null]
+                            AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1)}] group by [[]] having [null]
                                 SCAN (columns[1: v1] predicate[null])
                     SCAN (columns[7: v4] predicate[null])
     SCAN (columns[12: v1] predicate[null])
@@ -196,13 +196,13 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: v1]] having [null]
 [sql]
 select v from (select sum(v1) as v from t0 union select v4 from t1) a where v = 1
 [result]
-AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: sum(1: v1)]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: sum]] having [null]
     EXCHANGE SHUFFLE[5]
-        AGGREGATE ([LOCAL] aggregate [{}] group by [[5: sum(1: v1)]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[5: sum]] having [null]
             UNION
-                AGGREGATE ([GLOBAL] aggregate [{4: sum(1: v1)=sum(4: sum(1: v1))}] group by [[]] having [4: sum(1: v1) = 1]
+                AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[]] having [4: sum = 1]
                     EXCHANGE GATHER
-                        AGGREGATE ([LOCAL] aggregate [{4: sum(1: v1)=sum(1: v1)}] group by [[]] having [null]
+                        AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1)}] group by [[]] having [null]
                             SCAN (columns[1: v1] predicate[null])
                 SCAN (columns[6: v4] predicate[6: v4 = 1])
 [end]

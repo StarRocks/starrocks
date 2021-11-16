@@ -41,7 +41,7 @@ order by
 [plan-1]
 TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
     TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{57: sum(56: expr)=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{57: sum=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
             EXCHANGE SHUFFLE[46, 51, 55]
                 INNER JOIN (join-predicate [39: C_NATIONKEY = 50: N_NATIONKEY] post-join-predicate [46: N_NAME = CANADA AND 51: N_NAME = IRAN OR 46: N_NAME = IRAN AND 51: N_NAME = CANADA])
                     INNER JOIN (join-predicate [27: O_CUSTKEY = 36: C_CUSTKEY] post-join-predicate [null])
@@ -64,7 +64,7 @@ TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: ye
 [plan-2]
 TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
     TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{57: sum(56: expr)=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{57: sum=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
             EXCHANGE SHUFFLE[46, 51, 55]
                 INNER JOIN (join-predicate [39: C_NATIONKEY = 50: N_NATIONKEY] post-join-predicate [46: N_NAME = CANADA AND 51: N_NAME = IRAN OR 46: N_NAME = IRAN AND 51: N_NAME = CANADA])
                     INNER JOIN (join-predicate [27: O_CUSTKEY = 36: C_CUSTKEY] post-join-predicate [null])
@@ -88,7 +88,7 @@ TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: ye
 [plan-3]
 TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
     TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{57: sum(56: expr)=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{57: sum=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
             EXCHANGE SHUFFLE[46, 51, 55]
                 INNER JOIN (join-predicate [39: C_NATIONKEY = 50: N_NATIONKEY] post-join-predicate [46: N_NAME = CANADA AND 51: N_NAME = IRAN OR 46: N_NAME = IRAN AND 51: N_NAME = CANADA])
                     INNER JOIN (join-predicate [27: O_CUSTKEY = 36: C_CUSTKEY] post-join-predicate [null])
@@ -112,7 +112,7 @@ TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: ye
 [plan-4]
 TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
     TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{57: sum(56: expr)=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{57: sum=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
             EXCHANGE SHUFFLE[46, 51, 55]
                 INNER JOIN (join-predicate [39: C_NATIONKEY = 50: N_NATIONKEY] post-join-predicate [46: N_NAME = CANADA AND 51: N_NAME = IRAN OR 46: N_NAME = IRAN AND 51: N_NAME = CANADA])
                     INNER JOIN (join-predicate [27: O_CUSTKEY = 36: C_CUSTKEY] post-join-predicate [null])
@@ -137,7 +137,7 @@ TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: ye
 [plan-5]
 TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
     TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{57: sum(56: expr)=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{57: sum=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
             EXCHANGE SHUFFLE[46, 51, 55]
                 INNER JOIN (join-predicate [39: C_NATIONKEY = 50: N_NATIONKEY] post-join-predicate [46: N_NAME = CANADA AND 51: N_NAME = IRAN OR 46: N_NAME = IRAN AND 51: N_NAME = CANADA])
                     INNER JOIN (join-predicate [27: O_CUSTKEY = 36: C_CUSTKEY] post-join-predicate [null])
@@ -159,7 +159,7 @@ TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: ye
 [plan-6]
 TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
     TOP-N (order by [[46: N_NAME ASC NULLS FIRST, 51: N_NAME ASC NULLS FIRST, 55: year ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{57: sum(56: expr)=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{57: sum=sum(56: expr)}] group by [[46: N_NAME, 51: N_NAME, 55: year]] having [null]
             EXCHANGE SHUFFLE[46, 51, 55]
                 INNER JOIN (join-predicate [39: C_NATIONKEY = 50: N_NATIONKEY] post-join-predicate [46: N_NAME = CANADA AND 51: N_NAME = IRAN OR 46: N_NAME = IRAN AND 51: N_NAME = CANADA])
                     INNER JOIN (join-predicate [27: O_CUSTKEY = 36: C_CUSTKEY] post-join-predicate [null])

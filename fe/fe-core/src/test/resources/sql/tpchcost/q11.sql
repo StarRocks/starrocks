@@ -28,7 +28,7 @@ order by
     value desc ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:1: PS_PARTKEY | 21: sum(20: expr)
+OUTPUT EXPRS:1: PS_PARTKEY | 21: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -45,18 +45,18 @@ EXCHANGE ID: 29
 UNPARTITIONED
 
 28:SORT
-|  order by: <slot 21> 21: sum(20: expr) DESC
+|  order by: <slot 21> 21: sum DESC
 |  offset: 0
 |  use vectorized: true
 |
 27:Project
 |  <slot 1> : 1: PS_PARTKEY
-|  <slot 21> : 21: sum(20: expr)
+|  <slot 21> : 21: sum
 |  use vectorized: true
 |
 26:CROSS JOIN
 |  cross join:
-|  predicates: 21: sum(20: expr) > 43: expr
+|  predicates: 21: sum > 43: expr
 |  use vectorized: true
 |
 |----25:EXCHANGE
@@ -103,11 +103,11 @@ EXCHANGE ID: 25
 UNPARTITIONED
 
 24:Project
-|  <slot 43> : 42: sum(41: expr) * 1.0E-4
+|  <slot 43> : 42: sum * 1.0E-4
 |  use vectorized: true
 |
 23:AGGREGATE (merge finalize)
-|  output: sum(42: sum(41: expr))
+|  output: sum(42: sum)
 |  group by:
 |  use vectorized: true
 |
