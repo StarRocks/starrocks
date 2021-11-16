@@ -36,10 +36,11 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private static final MysqlCapability CAPABILITY = MysqlCapability.DEFAULT_CAPABILITY;
     // status flags not supported in StarRocks
     private static final int STATUS_FLAGS = 0;
-    private static final String DEFAULT_AUTH_PLUGIN_NAME = "mysql_native_password";
+    private static final String NATIVE_AUTH_PLUGIN_NAME = "mysql_native_password";
+    private static final String CLEAR_PASSWORD_PLUGIN_NAME = "mysql_clear_password";
     private static final ImmutableMap<String, Boolean> supportedPlugins = new ImmutableMap.Builder<String, Boolean>()
-            .put(DEFAULT_AUTH_PLUGIN_NAME, true)
-            .put("mysql_clear_password", true)
+            .put(NATIVE_AUTH_PLUGIN_NAME, true)
+            .put(CLEAR_PASSWORD_PLUGIN_NAME, true)
             .build();
 
     // connection id used in KILL statement.
@@ -87,7 +88,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
             serializer.writeInt1(0);
         }
         if (capability.isPluginAuth()) {
-            serializer.writeNulTerminateString(DEFAULT_AUTH_PLUGIN_NAME);
+            serializer.writeNulTerminateString(NATIVE_AUTH_PLUGIN_NAME);
         }
     }
 
@@ -99,7 +100,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
     // it will create a AuthSwitchRequest
     public void buildAuthSwitchRequest(MysqlSerializer serializer) {
         serializer.writeInt1((byte) 0xfe);
-        serializer.writeNulTerminateString(DEFAULT_AUTH_PLUGIN_NAME);
+        serializer.writeNulTerminateString(NATIVE_AUTH_PLUGIN_NAME);
         serializer.writeBytes(authPluginData);
         serializer.writeInt1(0);
     }
