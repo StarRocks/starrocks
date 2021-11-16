@@ -38,7 +38,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private static final int STATUS_FLAGS = 0;
     private static final String DEFAULT_AUTH_PLUGIN_NAME = "mysql_native_password";
     private static final ImmutableMap<String, Boolean> supportedPlugins = new ImmutableMap.Builder<String, Boolean>()
-            .put("mysql_native_password", true)
+            .put(DEFAULT_AUTH_PLUGIN_NAME, true)
             .put("mysql_clear_password", true)
             .build();
 
