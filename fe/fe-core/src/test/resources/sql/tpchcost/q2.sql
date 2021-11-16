@@ -401,16 +401,16 @@ RESULT SINK
 limit: 100
 cardinality: 100
 column statistics:
-* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-* P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
-* S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
-* S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
-* S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
-* S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
-* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+* P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+* S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
+* S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
+* S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
+* S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
+* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
 
@@ -424,16 +424,16 @@ OutPut Exchange Id: 38
 |  limit: 100
 |  cardinality: 100
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
-|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
-|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
+|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
+|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 36:Project
 |  output columns:
@@ -447,14 +447,14 @@ OutPut Exchange Id: 38
 |  26 <-> [26: N_NAME, VARCHAR, false]
 |  cardinality: 57600
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
-|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
-|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
+|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
+|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 35:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -463,16 +463,16 @@ OutPut Exchange Id: 38
 |  - filter_id = 8, build_expr = (20: PS_SUPPKEY), remote = false
 |  cardinality: 57600
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
-|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
-|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
+|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
+|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 |----34:EXCHANGE
 |       cardinality: 288000
@@ -488,13 +488,13 @@ OutPut Exchange Id: 38
 |  26 <-> [26: N_NAME, VARCHAR, false]
 |  cardinality: 200000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
-|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
-|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
+|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
+|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -503,15 +503,15 @@ OutPut Exchange Id: 38
 |  - filter_id = 1, build_expr = (25: N_NATIONKEY), remote = false
 |  cardinality: 200000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
-|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
-|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
-|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
+|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
+|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 |----7:EXCHANGE
 |       cardinality: 5
@@ -527,13 +527,13 @@ probe runtime filters:
 - filter_id = 1, probe_expr = (14: S_NATIONKEY)
 - filter_id = 8, probe_expr = (11: S_SUPPKEY)
 column statistics:
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
-* S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
-* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-* S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
-* S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
-* S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
+* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+* S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
+* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+* S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
+* S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
+* S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
 
 PLAN FRAGMENT 2(F05)
 
@@ -548,9 +548,9 @@ OutPut Exchange Id: 34
 |  20 <-> [20: PS_SUPPKEY, INT, false]
 |  cardinality: 288000
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 |
 32:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -561,12 +561,12 @@ OutPut Exchange Id: 34
 |  - filter_id = 7, build_expr = (1: P_PARTKEY), remote = false
 |  cardinality: 288000
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
-|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0]
-|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0]
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
+|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----31:EXCHANGE
 |       cardinality: 80000
@@ -582,9 +582,9 @@ probe runtime filters:
 - filter_id = 6, probe_expr = (22: PS_SUPPLYCOST)
 - filter_id = 7, probe_expr = (19: PS_PARTKEY)
 column statistics:
-* PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
-* PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0]
+* PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+* PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 
 PLAN FRAGMENT 3(F06)
 
@@ -599,9 +599,9 @@ OutPut Exchange Id: 31
 |  57 <-> [57: min(37: PS_SUPPLYCOST), DOUBLE, true]
 |  cardinality: 80000
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
-|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0]
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 29:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -610,10 +610,10 @@ OutPut Exchange Id: 31
 |  - filter_id = 5, build_expr = (1: P_PARTKEY), remote = false
 |  cardinality: 80000
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0]
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----28:EXCHANGE
 |       cardinality: 100000
@@ -623,8 +623,8 @@ OutPut Exchange Id: 31
 |  group by: [34: PS_PARTKEY, INT, false]
 |  cardinality: 16000000
 |  column statistics:
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0]
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 24:Project
 |  output columns:
@@ -632,8 +632,8 @@ OutPut Exchange Id: 31
 |  37 <-> [37: PS_SUPPLYCOST, DOUBLE, false]
 |  cardinality: 16000000
 |  column statistics:
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0]
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 23:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -642,10 +642,10 @@ OutPut Exchange Id: 31
 |  - filter_id = 4, build_expr = (40: S_SUPPKEY), remote = false
 |  cardinality: 16000000
 |  column statistics:
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
-|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0]
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 |----22:EXCHANGE
 |       cardinality: 200000
@@ -661,9 +661,9 @@ probe runtime filters:
 - filter_id = 4, probe_expr = (35: PS_SUPPKEY)
 - filter_id = 5, probe_expr = (34: PS_PARTKEY)
 column statistics:
-* PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
-* PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0]
+* PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+* PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 
 PLAN FRAGMENT 4(F13)
 
@@ -677,8 +677,8 @@ OutPut Exchange Id: 28
 |  3 <-> [3: P_MFGR, CHAR, false]
 |  cardinality: 100000
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 26:OlapScanNode
 table: part, rollup: part
@@ -689,10 +689,10 @@ tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 actualRows=0, avgRowSize=62.0
 cardinality: 100000
 column statistics:
-* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
-* P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
-* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0]
-* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 50.0]
+* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+* P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
+* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 50.0] ESTIMATE
 
 PLAN FRAGMENT 5(F07)
 
@@ -705,7 +705,7 @@ OutPut Exchange Id: 22
 |  40 <-> [40: S_SUPPKEY, INT, false]
 |  cardinality: 200000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 20:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -714,9 +714,9 @@ OutPut Exchange Id: 22
 |  - filter_id = 3, build_expr = (48: N_NATIONKEY), remote = false
 |  cardinality: 200000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
 |----19:EXCHANGE
 |       cardinality: 5
@@ -731,8 +731,8 @@ cardinality: 1000000
 probe runtime filters:
 - filter_id = 3, probe_expr = (43: S_NATIONKEY)
 column statistics:
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
-* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 
 PLAN FRAGMENT 6(F08)
 
@@ -745,7 +745,7 @@ OutPut Exchange Id: 19
 |  48 <-> [48: N_NATIONKEY, INT, false]
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
 17:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -754,9 +754,9 @@ OutPut Exchange Id: 19
 |  - filter_id = 2, build_expr = (53: R_REGIONKEY), remote = false
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
-|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 |
 |----16:EXCHANGE
 |       cardinality: 1
@@ -771,8 +771,8 @@ cardinality: 25
 probe runtime filters:
 - filter_id = 2, probe_expr = (50: N_REGIONKEY)
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-* N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+* N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 7(F09)
 
@@ -785,7 +785,7 @@ OutPut Exchange Id: 16
 |  53 <-> [53: R_REGIONKEY, INT, false]
 |  cardinality: 1
 |  column statistics:
-|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 |
 14:OlapScanNode
 table: region, rollup: region
@@ -796,8 +796,8 @@ tabletList=10106
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
-* R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
-* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
+* R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 8(F01)
 
@@ -811,8 +811,8 @@ OutPut Exchange Id: 07
 |  26 <-> [26: N_NAME, CHAR, false]
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 5:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -821,10 +821,10 @@ OutPut Exchange Id: 07
 |  - filter_id = 0, build_expr = (30: R_REGIONKEY), remote = false
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
-|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 |
 |----4:EXCHANGE
 |       cardinality: 1
@@ -839,9 +839,9 @@ cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (27: N_REGIONKEY)
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-* N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 9(F02)
 
@@ -854,7 +854,7 @@ OutPut Exchange Id: 04
 |  30 <-> [30: R_REGIONKEY, INT, false]
 |  cardinality: 1
 |  column statistics:
-|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 |
 2:OlapScanNode
 table: region, rollup: region
@@ -865,7 +865,7 @@ tabletList=10106
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
-* R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
-* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
+* R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 [end]
 
