@@ -2097,16 +2097,9 @@ opt_default_value ::=
     {:
         RESULT = ColumnDef.DefaultValue.NULL_DEFAULT_VALUE;
     :}
-    | KW_DEFAULT function_name:fn_name LPAREN RPAREN
-    {:
-        FunctionCallExpr fn = new FunctionCallExpr(fn_name, new ArrayList<>());
-        RESULT = new ColumnDef.DefaultValue(fn);
-    :}
     | KW_DEFAULT KW_CURRENT_TIMESTAMP
     {:
-        FunctionName fn_name = new FunctionName("now");
-        FunctionCallExpr fn = new FunctionCallExpr(fn_name, new ArrayList<>());
-        RESULT = new ColumnDef.DefaultValue(fn);
+        RESULT = ColumnDef.DefaultValue.CURRENT_TIMESTAMP_VALUE;
     :}
     ;
 
