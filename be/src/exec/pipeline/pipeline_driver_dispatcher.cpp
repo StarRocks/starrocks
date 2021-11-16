@@ -145,6 +145,7 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
     } else {
         this->_driver_queue->put_back(driver);
     }
+    driver->dispatch_operators();
 }
 
 void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {

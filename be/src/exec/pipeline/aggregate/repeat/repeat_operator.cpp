@@ -18,9 +18,6 @@ bool RepeatOperator::is_finished() const {
 }
 
 void RepeatOperator::set_finishing(RuntimeState* state) {
-    if (_is_finished) {
-        return;
-    }
     _is_finished = true;
 }
 

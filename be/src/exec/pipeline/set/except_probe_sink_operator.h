@@ -29,10 +29,8 @@ public:
     }
 
     void set_finishing(RuntimeState* state) override {
-        if (!_is_finished) {
-            _is_finished = true;
-            _except_ctx->finish_probe_ht();
-        }
+        _is_finished = true;
+        _except_ctx->finish_probe_ht();
     }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
