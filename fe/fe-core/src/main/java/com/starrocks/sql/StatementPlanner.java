@@ -7,7 +7,9 @@ import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlannerContext;
+import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
@@ -43,7 +45,9 @@ public class StatementPlanner {
             try {
                 lock(dbs);
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-                return createQueryPlan(relation, session);
+                ExecPlan plan = createQueryPlan(relation, session);
+
+                setOutfileSink(queryStmt, plan);
             } finally {
                 unLock(dbs);
             }
@@ -107,5 +111,20 @@ public class StatementPlanner {
         for (Database db : dbs.values()) {
             db.readUnlock();
         }
+    }
+
+    // if query stmt has OUTFILE clause, set info into ResultSink.
+    // this should be done after fragments are generated.
+    private void setOutfileSink(QueryStmt queryStmt, ExecPlan plan) {
+        if (!queryStmt.hasOutFileClause()) {
+            return;
+        }
+        PlanFragment topFragment = plan.getFragments().get(0);
+        if (!(topFragment.getSink() instanceof ResultSink)) {
+            return;
+        }
+
+        ResultSink resultSink = (ResultSink) topFragment.getSink();
+        resultSink.setOutfileInfo(queryStmt.getOutFileClause());
     }
 }
