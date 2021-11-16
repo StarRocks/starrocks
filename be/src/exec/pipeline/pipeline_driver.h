@@ -14,6 +14,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/source_operator.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 namespace pipeline {
@@ -214,7 +215,7 @@ private:
     const size_t _yield_max_chunks_moved;
     const int64_t _yield_max_time_spent;
 
-    std::unordered_map<int32_t, OperatorStage> _operator_stages;
+    phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
