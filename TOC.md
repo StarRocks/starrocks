@@ -10,7 +10,7 @@
   + [Data flow and control flow](/quick_start/Data_flow_and_control_flow.md)
   + [Import and query](/quick_start/Import_and_query.md)
   + [Test FAQs](/quick_start/Test_faq.md)
-+ Table design
++ Table Design
   + [StarRocks table design](/table_design/StarRocks_table_design.md)
   + [Data model](/table_design/Data_model.md)
   + [Data distribution](/table_design/Data_distribution.md)
@@ -18,6 +18,17 @@
   + [Materialized view](/table_design/Materialized_view.md)
   + [Bitmap indexing](/table_design/Bitmap_index.md)
   + [Bloomfilter indexing](/table_design/Bloomfilter_index.md)
++ Data Loading
+  + [Loading intro](/loading/Loading_intro.md)
+  + [Stream Load](/loading/StreamLoad.md)
+  + [Broker Load](/loading/BrokerLoad.md)
+  + [Routine Load](/loading/RoutineLoad.md)
+  + [Spark Load](/loading/SparkLoad.md)
+  + [Insert Into](/loading/InsertInto.md)
+  + [ETL in Loading](/loading/Etl_in_loading.md)
+  + [Json Loading](/loading/Json_loading.md)
+  + [Flink connector](/loading/Flink-connector-starrocks.md)
+  + [DataX writer](/loading/DataX-starrocks-writer.md)
 + Development
   + [Build in docker](/development/Build_in_docker.md)
 + Release Notes
