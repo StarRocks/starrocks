@@ -60,7 +60,7 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const vectorized::RuntimeFilterProbeCollector& _runtime_filters;
     PriorityThreadPool* _io_threads = nullptr;
-    std::vector<std::string> _filtered_output_columns;
+    std::vector<std::string> _unused_output_columns;
 };
 
 class ScanOperatorFactory final : public SourceOperatorFactory {

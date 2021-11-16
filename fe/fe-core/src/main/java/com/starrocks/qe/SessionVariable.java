@@ -121,6 +121,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // disable join reorder
     public static final String DISABLE_JOIN_REORDER = "disable_join_reorder";
 
+    public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE = "enable_filter_unused_columns_in_scan_stage";
+
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
     // If the time exceeded but the transaction state is not VISIBLE, the transaction will
@@ -340,6 +342,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
+    private boolean enableFilterUnusedColumnsInScanStage = false;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -579,13 +584,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isDisableJoinReorder() {
         return disableJoinReorder;
     }
-
+    
     public void disableJoinReorder() {
         this.disableJoinReorder = true;
     }
 
     public void enableJoinReorder() {
         this.disableJoinReorder = false;
+    }
+
+    public boolean isAbleFilterUnusedColumnsInScanStage() {
+        return enableFilterUnusedColumnsInScanStage; 
+    }
+    
+    public void disableTrimOnlyFilteredColumnsInScanStage() {
+        this.enableFilterUnusedColumnsInScanStage = true;
+    }
+
+    public void enableTrimOnlyFilteredColumnsInScanStage() {
+        this.enableFilterUnusedColumnsInScanStage = false;
     }
 
     public boolean isCboEnableDPJoinReorder() {

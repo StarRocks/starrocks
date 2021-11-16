@@ -38,6 +38,11 @@ public:
         ChunkIterator::init_encoded_schema(dict_maps);
         return Status::OK();
     }
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        _inner_iter->init_output_schema(unused_output_column_ids);
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        return Status::OK();
+    }
 
 protected:
     Status do_get_next(Chunk* chunk) override;

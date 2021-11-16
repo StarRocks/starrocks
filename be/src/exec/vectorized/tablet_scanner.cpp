@@ -29,6 +29,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
 
     RETURN_IF_ERROR(Expr::clone_if_not_exists(*params.conjunct_ctxs, runtime_state, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
+    RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
     RETURN_IF_ERROR(_init_return_columns());
     RETURN_IF_ERROR(_init_global_dicts());
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
@@ -48,8 +49,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
 
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
-
-    RETURN_IF_ERROR(_prj_iter->init_filter_output_columns(*params.filtered_output_columns));
+    RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
 
     Status st = _reader->prepare();
     if (!st.ok()) {
@@ -183,7 +183,9 @@ Status TabletScanner::_init_return_columns() {
             return Status::InternalError(ss.str());
         }
         _scanner_columns.push_back(index);
-        _query_slots.push_back(slot);
+        if (!_unused_output_column_ids.count(index)) {
+            _query_slots.push_back(slot);
+        }
     }
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
@@ -191,6 +193,21 @@ Status TabletScanner::_init_return_columns() {
     if (_scanner_columns.empty()) {
         return Status::InternalError("failed to build storage scanner, no materialized slot!");
     }
+    return Status::OK();
+}
+
+Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
+    for (const auto& col_name : unused_output_columns) {
+        int32_t index = _tablet->field_index(col_name);
+        if (index < 0) {
+            std::stringstream ss;
+            ss << "invalid field name: " << col_name;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+        _unused_output_column_ids.insert(index);
+    }
+    _params.unused_output_column_ids = &_unused_output_column_ids;
     return Status::OK();
 }
 
@@ -225,6 +242,7 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
         if (Status status = _prj_iter->get_next(chunk); !status.ok()) {
             return status;
         }
+
         for (auto slot : _query_slots) {
             size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
             chunk->set_slot_id_to_index(slot->id(), column_index);
@@ -244,6 +262,7 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             DCHECK_CHUNK(chunk);
         }
     } while (chunk->num_rows() == 0);
+
     _update_realtime_counter();
     return Status::OK();
 }

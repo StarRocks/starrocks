@@ -34,8 +34,8 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     DCHECK(!tnode.olap_scan_node.__isset.sort_column) << "sorted result not supported any more";
 
     // init filtered_ouput_columns
-    for (const auto& col_name : tnode.olap_scan_node.filtered_output_column_name) {
-        _filtered_output_columns.emplace_back(col_name);
+    for (const auto& col_name : tnode.olap_scan_node.unused_output_column_name) {
+        _unused_output_columns.emplace_back(col_name);
     }
 
     return Status::OK();
@@ -486,7 +486,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             scanner_params.conjunct_ctxs = &conjunct_ctxs;
             scanner_params.skip_aggregation = _olap_scan_node.is_preaggregation;
             scanner_params.need_agg_finalize = true;
-            scanner_params.filtered_output_columns = &_filtered_output_columns;
+            scanner_params.unused_output_columns = &_unused_output_columns;
             auto* scanner = _obj_pool.add(new TabletScanner(this));
             RETURN_IF_ERROR(scanner->init(state, scanner_params));
             // Assume all scanners have the same schema.

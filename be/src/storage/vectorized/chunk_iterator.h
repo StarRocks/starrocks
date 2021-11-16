@@ -82,17 +82,27 @@ public:
         return Status::OK();
     }
 
-    virtual Status init_filter_output_columns(const std::vector<std::string>& filtered_output_columns) {
-        for (const auto& col_name : filtered_output_columns) {
-            size_t idx  = _encoded_schema.get_field_index_by_name(col_name);
-            DCHECK(idx != -1);
-            _filtered_output_columns_indexes.push_back(idx);
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) {
+        if (_is_init_output_schema) {
+            return Status::OK();
         }
+        for (const auto& field : encoded_schema().fields()) {
+            const auto cid = field->id();
+            if (!unused_output_column_ids.count(cid)) {
+                _output_schema.append(field);
+            }
+        }
+        DCHECK(_output_schema.num_fields() > 0);
+        _is_init_output_schema = true;
         return Status::OK();
     }
 
-    const std::vector<size_t>& filtered_output_columns_indexes() const {
-        return _filtered_output_columns_indexes;
+    const Schema& output_schema() const {
+        if (_is_init_output_schema) {
+            return _output_schema;
+        } else {
+            return _schema;
+        }
     }
 
     int chunk_size() const { return _chunk_size; }
@@ -108,8 +118,8 @@ protected:
 
     vectorized::Schema _schema;
     vectorized::Schema _encoded_schema;
-
-    std::vector<size_t> _filtered_output_columns_indexes;
+    vectorized::Schema _output_schema;
+    bool _is_init_output_schema = false;
 
     int _chunk_size = DEFAULT_CHUNK_SIZE;
 };
@@ -134,6 +144,12 @@ public:
     virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         ChunkIterator::init_encoded_schema(dict_maps);
         _iter->init_encoded_schema(dict_maps);
+        return Status::OK();
+    }
+
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        _iter->init_output_schema(unused_output_column_ids);
         return Status::OK();
     }
 
