@@ -78,7 +78,6 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
 
 class SlotDescriptor {
 public:
-    // virtual ~SlotDescriptor() {};
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
     TypeDescriptor& type() { return _type; }
@@ -275,6 +274,7 @@ public:
     const std::vector<SlotDescriptor*>& slots() const { return _slots; }
     std::vector<SlotDescriptor*>& slots() { return _slots; }
     const std::vector<SlotDescriptor*>& decoded_slots() const { return _decoded_slots; }
+    std::vector<SlotDescriptor*>& decoded_slots() { return _decoded_slots; }
     bool has_varlen_slots() const { return _has_varlen_slots; }
     const TableDescriptor* table_desc() const { return _table_desc; }
     void set_table_desc(TableDescriptor* table_desc) { _table_desc = table_desc; }

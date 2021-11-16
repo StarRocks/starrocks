@@ -83,9 +83,9 @@ public:
     // For global dictionary optimized columns,
     // the type at the execution level is INT but at the storage level is TYPE_STRING/TYPE_CHAR,
     // so we need to pass the real type to the Table Scanner.
-    static void rewrite_descriptor(RuntimeState* runtime_state, std::vector<SlotDescriptor*> slot_descs,
-                                   std::vector<ExprContext*>& conjunct_ctxs,
-                                   const std::map<int32_t, int32_t>& dict_slots_mapping);
+    static void rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,
+                                   const std::map<int32_t, int32_t>& dict_slots_mapping,
+                                   std::vector<SlotDescriptor*>* slot_descs);
 
 private:
     template <bool is_predicate>

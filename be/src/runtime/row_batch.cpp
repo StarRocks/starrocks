@@ -196,8 +196,6 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch)
         TupleRow* row = get_row(i);
         std::vector<TupleDescriptor*>::const_iterator desc = tuple_descs.begin();
         for (int j = 0; desc != tuple_descs.end(); ++desc, ++j) {
-
-
             Tuple* tuple = row->get_tuple(j);
             if (tuple == nullptr) {
                 continue;
