@@ -336,7 +336,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
 
             if (new_type == ref_type && (!is_decimalv3_field_type(new_type) ||
                                          (reftype_precision == newtype_precision && reftype_scale == newtype_scale))) {
-                if (new_type == OLAP_FIELD_TYPE_CHAR) {
+                if (new_type == OLAP_FIELD_TYPE_CHAR || (new_col->is_nullable() ^ base_col->is_nullable())) {
                     for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                         Datum base_datum = base_col->get(row_index);
                         Datum new_datum;
