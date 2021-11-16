@@ -54,13 +54,12 @@ ParquetOutputStream::~ParquetOutputStream() {
     Close();
 }
 
-arrow::Status ParquetOutputStream::Write(const void* data, int64_t nbytes) {
-    size_t written_len = 0;
-    Status st = _writable_file->write(reinterpret_cast<const uint8_t*>(data), nbytes, &written_len);
+arrow::Status ParquetOutputStream::Write(const void* data, size_t nbytes) {
+    Status st = _writable_file->append({reinterpret_cast<const uint8_t*>(data), nbytes});
     if (!st.ok()) {
         return arrow::Status::IOError(st.get_error_msg());
     }
-    _cur_pos += written_len;
+    _cur_pos += nbytes;
     return arrow::Status::OK();
 }
 
@@ -87,10 +86,12 @@ ParquetBuilder::~ParquetBuilder() = default;
 
 Status ParquetBuilder::add_chunk(vectorized::Chunk* chunk) {
     // TODO(c1oudman): implement
+    return Status::NotSupported("Parquest builder not supported yet");
 }
 
 Status ParquetBuilder::finish() {
     // TODO(cmy): implement
+    return Status::NotSupported("Parquest builder not supported yet");
 }
 
 } // namespace starrocks
