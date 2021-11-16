@@ -53,7 +53,7 @@ Status JsonScanner::open() {
         RETURN_IF_ERROR(_parse_json_paths(range.jsonpaths, &_json_paths));
     }
     if (range.__isset.json_root) {
-        JsonFunctions::parse_json_paths(range.json_root, &_root_paths);
+        return Status::InvalidArgument(strings::Substitute("Use json path to instead json root"));
     }
     if (range.__isset.strip_outer_array) {
         _strip_outer_array = range.strip_outer_array;
@@ -296,6 +296,12 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         switch (doc.type()) {
         case simdjson::ondemand::json_type::array: {
             // Expand array.
+            if(!_scanner->_strip_outer_array) {
+                std::string err_msg("JSON data is an array, strip_outer_array must be set true");
+                _state->append_error_msg_to_file(simdjson::to_string(doc), err_msg);
+                _counter->num_rows_filtered++;
+                return Status::DataQualityError(err_msg.c_str());
+            }
             auto arr = doc.get_array().value();
             if (_scanner->_json_paths.empty()) {
                 RETURN_IF_ERROR(_process_array(chunk, slot_descs, arr));
@@ -306,6 +312,12 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         }
 
         case simdjson::ondemand::json_type::object: {
+            if(!_scanner->_strip_outer_array) {
+                std::string err_msg("JSON data is an object, strip_outer_array must be set false");
+                _state->append_error_msg_to_file(simdjson::to_string(doc), err_msg);
+                _counter->num_rows_filtered++;
+                return Status::DataQualityError(err_msg.c_str());
+            }
             auto obj = doc.get_object().value();
             if (_scanner->_json_paths.empty()) {
                 RETURN_IF_ERROR(_process_object(chunk, slot_descs, obj));
