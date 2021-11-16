@@ -10,6 +10,11 @@ namespace starrocks {
 namespace pipeline {
 class SortContext;
 
+/*
+ * LocalMergeSortSourceOperator is used to merge multiple sorted datas from partion sort sink operator.
+ * It is one instance and Execute in single threaded mode,  
+ * It completely depends on SortContext with a heap to Dynamically filter out the smallest or largest data.
+ */
 class LocalMergeSortSourceOperator final : public SourceOperator {
 public:
     LocalMergeSortSourceOperator(int32_t id, int32_t plan_node_id, SortContext* sort_context)
@@ -45,6 +50,7 @@ public:
     }
 
 private:
+    // share data with multiple partition sort sink opeartor through _sort_context.
     std::shared_ptr<SortContext> _sort_context;
 };
 

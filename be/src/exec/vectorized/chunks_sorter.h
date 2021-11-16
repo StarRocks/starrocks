@@ -3,7 +3,9 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "exec/sort_exec_exprs.h"
 #include "exprs/expr_context.h"
+#include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -276,6 +278,11 @@ public:
     ChunksSorter(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                  const std::vector<bool>* is_null_first, size_t size_of_chunk_batch = 1000);
     virtual ~ChunksSorter();
+
+    static vectorized::ChunkPtr materialize_chunk_before_sort(vectorized::Chunk* chunk,
+                                                              TupleDescriptor* materialized_tuple_desc,
+                                                              const SortExecExprs& sort_exec_exprs,
+                                                              const std::vector<OrderByType>& order_by_types);
 
     void setup_runtime(RuntimeProfile* profile, const std::string& parent_timer);
 

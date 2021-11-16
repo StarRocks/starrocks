@@ -62,8 +62,6 @@ public:
     void set_finishing(RuntimeState* state) override;
 
 private:
-    // This method is the same as topn node.
-    vectorized::ChunkPtr _materialize_chunk_before_sort(vectorized::Chunk* chunk);
     bool _is_finished = false;
 
     std::shared_ptr<vectorized::ChunksSorter> _chunks_sorter;
