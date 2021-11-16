@@ -210,7 +210,9 @@ private:
             // _sorted_permutation is just used for full sort to index data,
             // and topn is needn't it.
             data_segment->_sorted_permutation = _chunks_sorter_partions[i]->get_permutation();
-            _data_segment_heaps.emplace_back(data_segment);
+            if (data_segment->_partitions_rows > 0) {
+                _data_segment_heaps.emplace_back(data_segment);
+            }
         }
 
         // _data_segment_heaps[0] is the toppest entry.
