@@ -135,8 +135,12 @@ void AggregateIterator::close() {
     _aggregator.close();
 }
 
-ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, int factor, bool is_vertical_merge, bool is_key) {
-    return std::make_shared<AggregateIterator>(std::move(child), factor, is_vertical_merge, is_key);
+ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, int factor) {
+    return std::make_shared<AggregateIterator>(std::move(child), factor, false, false);
+}
+
+ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, bool is_key) {
+    return std::make_shared<AggregateIterator>(std::move(child), 0, true, is_key);
 }
 
 } // namespace starrocks::vectorized

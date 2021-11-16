@@ -1017,7 +1017,7 @@ TEST_F(AggregateIteratorTest, gen_source_masks) {
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_BIGINT(pk));
     child_iter->chunk_size(1024);
     std::vector<RowSourceMask> source_masks{1, 1, 1, 2, 2, 2, 3, 3, 3};
-    auto agg_iter = new_aggregate_iterator(child_iter, 0, true, true);
+    auto agg_iter = new_aggregate_iterator(child_iter, true);
 
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
@@ -1055,7 +1055,7 @@ TEST_F(AggregateIteratorTest, sum_from_source_masks) {
     // only last 9 masks are used to represent pk.
     std::vector<RowSourceMask> source_masks{{1, false}, {2, false}, {1, false}, {1, true},  {1, false}, {2, false},
                                             {2, true},  {2, true},  {3, false}, {3, false}, {3, true}};
-    auto agg_iter = new_aggregate_iterator(child_iter, 0, true, false);
+    auto agg_iter = new_aggregate_iterator(child_iter, false);
 
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
@@ -1098,7 +1098,7 @@ TEST_F(AggregateIteratorTest, max_from_source_masks) {
     // pk is {1, 1, 2, 3, 3, 3, 4, 5, 5}
     std::vector<RowSourceMask> source_masks{{1, false}, {1, true},  {1, false}, {2, false}, {2, true},
                                             {2, true},  {3, false}, {3, false}, {3, true}};
-    auto agg_iter = new_aggregate_iterator(child_iter, 0, true, false);
+    auto agg_iter = new_aggregate_iterator(child_iter, false);
 
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;

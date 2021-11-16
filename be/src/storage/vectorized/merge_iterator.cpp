@@ -28,11 +28,11 @@ inline int compare_chunk(size_t key_columns, const Chunk& lhs, size_t m, const C
 
 static const size_t max_merge_chunk_size = 65536;
 
-// MergeChunk contains a chunk for merge and an index of compared row.
-class MergeChunk {
+// MergingChunk contains a chunk for merge and an index of compared row.
+class MergingChunk {
 public:
-    MergeChunk() {}
-    explicit MergeChunk(Chunk* chunk) : _chunk(chunk) {}
+    MergingChunk() {}
+    explicit MergingChunk(Chunk* chunk) : _chunk(chunk) {}
 
     size_t compared_row() const { return _compared_row; }
 
@@ -49,10 +49,10 @@ protected:
 };
 
 // Compare two chunks by the one specific row of each other.
-class ComparableChunk : public MergeChunk {
+class ComparableChunk : public MergingChunk {
 public:
     explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns)
-            : MergeChunk(chunk), _order(order), _key_columns(key_columns) {}
+            : MergingChunk(chunk), _order(order), _key_columns(key_columns) {}
 
     bool operator>(const ComparableChunk& rhs) const {
         DCHECK_EQ(_key_columns, rhs._key_columns);
@@ -289,7 +289,7 @@ protected:
     Status fill(size_t child) override;
 
 private:
-    std::vector<MergeChunk> _chunks;
+    std::vector<MergingChunk> _chunks;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
 };
 
@@ -369,7 +369,7 @@ inline Status MaskMergeIterator::fill(size_t child) {
             return Status::InternalError(strings::Substitute(
                     "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
         }
-        _chunks[child] = MergeChunk(chunk);
+        _chunks[child] = MergingChunk(chunk);
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.
         close_child(child);

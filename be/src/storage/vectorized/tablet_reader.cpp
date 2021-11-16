@@ -184,7 +184,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
             if (!_is_vertical_merge) {
                 _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
             } else {
-                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0, true, _is_key);
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), _is_key);
             }
             _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
@@ -196,7 +196,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
             if (!_is_vertical_merge) {
                 _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
             } else {
-                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0, true, _is_key);
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), _is_key);
             }
         }
     } else if (keys_type == AGG_KEYS) {
