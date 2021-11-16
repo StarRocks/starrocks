@@ -350,12 +350,18 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                         Slice slice;
                         slice.size = new_tablet->tablet_meta()->tablet_schema().column(i).length();
                         slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
+                        if (slice.data == nullptr) {
+                            LOG(WARNING) << "failed to allocate memory in mem_pool";
+                            return false;
+                        }
                         memset(slice.data, 0, slice.size);
                         size_t copy_size = slice.size < base_slice.size ? slice.size : base_slice.size;
                         memcpy(slice.data, base_slice.data, copy_size);
                         new_datum.set(slice);
                         new_col->append_datum(new_datum);
                     }
+                } else if (new_col->is_nullable() != base_col->is_nullable()) {
+                    new_col->append(*base_col.get());
                 } else {
                     new_col = base_col;
                 }
