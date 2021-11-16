@@ -19,6 +19,7 @@
 
 namespace starrocks {
 
+const std::string PlainTextBuilder::NULL_IN_CSV = "\\N";
 const size_t PlainTextBuilder::OUTSTREAM_BUFFER_SIZE_BYTES = 1024 * 1024;
 
 Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
@@ -29,14 +30,14 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
     for (int i = 0; i < num_columns; ++i) {
         ColumnPtr column = _output_expr_ctxs[i]->evaluate(chunk);
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
-                         ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column.get())
-                         : column;
+                 ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column.get())
+                 : column;
         result_columns.emplace_back(std::move(column));
     }
 
     for (int i = 0; i < num_rows; ++i) {
         for (auto& result_column : result_columns) {
-            result_column->put_csv_stringstream(&_plain_text_outstream, i);
+            _plain_text_outstream << result_column->to_string(i, NULL_IN_CSV);
             if (i < num_columns - 1) {
                 _plain_text_outstream << _options.column_terminated_by;
             }
@@ -45,8 +46,6 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
 
         _flush_plain_text_outstream(false);
     }
-
-    _flush_plain_text_outstream(true);
 
     return Status::OK();
 }
@@ -70,6 +69,10 @@ Status PlainTextBuilder::_flush_plain_text_outstream(bool eos) {
     _plain_text_outstream.clear();
 
     return Status::OK();
+}
+
+Status PlainTextBuilder::finish() {
+    _flush_plain_text_outstream(true);
 }
 
 } // namespace starrocks

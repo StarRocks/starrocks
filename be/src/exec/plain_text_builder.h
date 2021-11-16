@@ -34,9 +34,11 @@ public:
 
     uint64_t file_size() override;
 
-    Status finish() override {}
+    Status finish() override;
 
 private:
+    static const std::string NULL_IN_CSV;
+
     const PlainTextBuilderOptions _options;
 
     const std::vector<ExprContext*>& _output_expr_ctxs;
@@ -53,7 +55,7 @@ private:
     static const size_t OUTSTREAM_BUFFER_SIZE_BYTES;
 
     // current written bytes, used for split data
-    int64_t _current_written_bytes = 0;
+    std::size_t _current_written_bytes = 0;
 
     // if buffer exceed the limit, write the data buffered in _plain_text_outstream via file_writer
     // if eos, write the data even if buffer is not full.
