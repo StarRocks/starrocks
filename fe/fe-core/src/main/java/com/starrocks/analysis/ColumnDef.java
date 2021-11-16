@@ -346,7 +346,7 @@ public class ColumnDef {
         return "";
     }
 
-    public boolean existBatchConstDefaultValue() {
+    public boolean hasDefaultValue() {
         if (defaultValue.value != null) {
             return true;
         }
