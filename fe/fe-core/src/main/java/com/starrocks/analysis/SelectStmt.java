@@ -370,6 +370,9 @@ public class SelectStmt extends QueryStmt {
 
         fromClause_.setNeedToSql(needToSql);
         fromClause_.analyze(analyzer);
+        if (groupByClause != null) {
+            groupByClause.setNeedToSql(needToSql);
+        }
 
         // Generate !empty() predicates to filter out empty collections.
         // Skip this step when analyzing a WITH-clause because CollectionTableRefs

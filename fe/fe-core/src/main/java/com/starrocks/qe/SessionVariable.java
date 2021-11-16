@@ -707,6 +707,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableGroupbyUseOutputAlias;
     }
 
+    public void setEnableGroupbyUseOutputAlias(boolean enableGroupbyUseOutputAlias) {
+        this.enableGroupbyUseOutputAlias = enableGroupbyUseOutputAlias;
+    }
+
     public boolean getEnableQueryDump() {
         return enable_query_dump;
     }
