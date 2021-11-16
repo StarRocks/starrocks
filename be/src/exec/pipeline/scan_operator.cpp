@@ -146,7 +146,7 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
-    vectorized::DictOptimizeParser::rewrite_descriptor(state, tuple_desc->slots(), _conjunct_ctxs,
+    vectorized::DictOptimizeParser::rewrite_descriptor(state, tuple_desc->decoded_slots(), _conjunct_ctxs,
                                                        _olap_scan_node.dict_string_id_to_int_ids);
     return Status::OK();
 }
