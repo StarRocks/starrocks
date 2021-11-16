@@ -191,9 +191,9 @@ public:
 private:
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
-    void _finishing_operator(OperatorPtr& op, RuntimeState* runtime_state);
-    void _finish_operator(OperatorPtr& op, RuntimeState* runtime_state);
-    void _close_operator(OperatorPtr& op, RuntimeState* runtime_state);
+    void _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
+    void _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
+    void _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
     Operators _operators;
