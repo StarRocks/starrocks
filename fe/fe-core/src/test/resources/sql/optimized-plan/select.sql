@@ -290,7 +290,7 @@ select sum(v1) from t0 limit 0
 VALUES
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:4: sum(1: v1)
+OUTPUT EXPRS:4: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -302,19 +302,19 @@ use vectorized: true
 [sql]
 select sum(a) from (select v1 as a from t0 limit 0) t
 [result]
-AGGREGATE ([GLOBAL] aggregate [{4: sum(1: v1)=sum(4: sum(1: v1))}] group by [[]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{4: sum(1: v1)=sum(1: v1)}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1)}] group by [[]] having [null]
             VALUES
 [fragment]
 PLAN FRAGMENT 0
- OUTPUT EXPRS:4: sum(1: v1)
+ OUTPUT EXPRS:4: sum
   PARTITION: UNPARTITIONED
 
   RESULT SINK
 
 3:AGGREGATE (merge finalize)
-  |  output: sum(4: sum(1: v1))
+  |  output: sum(4: sum)
   |  group by:
   |  use vectorized: true
   |
@@ -375,7 +375,7 @@ SCAN (columns[1: v4, 2: v5, 3: v6] predicate[null])
 [sql]
 select count(*) from (select v1 from t0 order by v2 limit 10,20) t
 [result]
-AGGREGATE ([GLOBAL] aggregate [{4: count()=count()}] group by [[]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{4: count=count()}] group by [[]] having [null]
     TOP-N (order by [[2: v2 ASC NULLS FIRST]])
         TOP-N (order by [[2: v2 ASC NULLS FIRST]])
             SCAN (columns[2: v2] predicate[null])

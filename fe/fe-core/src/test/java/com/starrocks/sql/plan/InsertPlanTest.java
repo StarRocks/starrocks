@@ -243,7 +243,7 @@ public class InsertPlanTest extends PlanTestBase {
 
         sql = "insert into test.bitmap_table select id, bitmap_union(id2) from test.bitmap_table_2 group by id;";
         plan = getInsertExecPlan(sql);
-        containsKeywords(plan, "OUTPUT EXPRS:1: id | 3: bitmap_union(2: id2)",
+        containsKeywords(plan, "OUTPUT EXPRS:1: id | 3: bitmap_union",
                 "OLAP TABLE SINK", "1:AGGREGATE (update finalize)", "output: bitmap_union(2: id2)", "0:OlapScanNode");
 
         sql = "insert into test.bitmap_table select id, id2 from test.bitmap_table_2;";

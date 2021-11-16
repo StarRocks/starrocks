@@ -40,7 +40,7 @@ order by
     s_name limit 100;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:2: S_NAME | 77: count()
+OUTPUT EXPRS:2: S_NAME | 77: count
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -58,7 +58,7 @@ EXCHANGE ID: 27
 UNPARTITIONED
 
 26:TOP-N
-|  order by: <slot 77> 77: count() DESC, <slot 2> 2: S_NAME ASC
+|  order by: <slot 77> 77: count DESC, <slot 2> 2: S_NAME ASC
 |  offset: 0
 |  limit: 100
 |  use vectorized: true

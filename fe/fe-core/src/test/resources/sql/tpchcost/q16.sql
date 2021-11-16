@@ -31,7 +31,7 @@ order by
     p_size ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:10: P_BRAND | 11: P_TYPE | 12: P_SIZE | 26: count(distinct 2: PS_SUPPKEY)
+OUTPUT EXPRS:10: P_BRAND | 11: P_TYPE | 12: P_SIZE | 26: count
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -48,12 +48,12 @@ EXCHANGE ID: 14
 UNPARTITIONED
 
 13:SORT
-|  order by: <slot 26> 26: count(distinct 2: PS_SUPPKEY) DESC, <slot 10> 10: P_BRAND ASC, <slot 11> 11: P_TYPE ASC, <slot 12> 12: P_SIZE ASC
+|  order by: <slot 26> 26: count DESC, <slot 10> 10: P_BRAND ASC, <slot 11> 11: P_TYPE ASC, <slot 12> 12: P_SIZE ASC
 |  offset: 0
 |  use vectorized: true
 |
 12:AGGREGATE (merge finalize)
-|  output: multi_distinct_count(26: count(distinct 2: PS_SUPPKEY))
+|  output: multi_distinct_count(26: count)
 |  group by: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
 |  use vectorized: true
 |

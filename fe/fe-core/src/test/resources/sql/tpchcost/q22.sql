@@ -38,7 +38,7 @@ order by
     cntrycode ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:32: substring | 33: count() | 34: sum(6: C_ACCTBAL)
+OUTPUT EXPRS:32: substring | 33: count | 34: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -82,14 +82,14 @@ HASH_PARTITIONED: 32: substring
 |
 12:CROSS JOIN
 |  cross join:
-|  predicates: 6: C_ACCTBAL > 19: avg(15: C_ACCTBAL)
+|  predicates: 6: C_ACCTBAL > 19: avg
 |  use vectorized: true
 |
 |----11:EXCHANGE
 |       use vectorized: true
 |
 4:AGGREGATE (merge finalize)
-|  output: avg(19: avg(15: C_ACCTBAL))
+|  output: avg(19: avg)
 |  group by:
 |  use vectorized: true
 |
