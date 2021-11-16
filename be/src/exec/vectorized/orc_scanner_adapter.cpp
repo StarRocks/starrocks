@@ -33,7 +33,7 @@ const static std::unordered_map<orc::TypeKind, PrimitiveType> g_orc_starrocks_ty
         {orc::DOUBLE, TYPE_DOUBLE},   {orc::DECIMAL, TYPE_DECIMALV2},
         {orc::DATE, TYPE_DATE},       {orc::TIMESTAMP, TYPE_DATETIME},
         {orc::STRING, TYPE_VARCHAR},  {orc::BINARY, TYPE_VARCHAR},
-        {orc::CHAR, TYPE_VARCHAR},    {orc::VARCHAR, TYPE_VARCHAR},
+        {orc::CHAR, TYPE_CHAR},       {orc::VARCHAR, TYPE_VARCHAR},
 };
 
 // NOLINTNEXTLINE
@@ -52,6 +52,13 @@ const static std::set<PrimitiveType> g_starrocks_decimal_type = {TYPE_DECIMAL32,
 
 const static cctz::time_point<cctz::sys_seconds> CCTZ_UNIX_EPOCH =
         std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+// Hive ORC char type will pad trailing spaces.
+// https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
+static inline size_t remove_trailing_spaces(const char* s, size_t size) {
+    while (size > 0 && s[size - 1] == ' ') size--;
+    return size;
+}
 
 static void fill_boolean_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                 const TypeDescriptor& type_desc, void* ctx) {
@@ -542,9 +549,19 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
     auto& vb = values->get_bytes();
     auto& vo = values->get_offset();
     int pos = from;
-    for (int i = col_start; i < col_start + size; ++i, ++pos) {
-        vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-        vo.emplace_back(vb.size());
+
+    if (type_desc.type == TYPE_CHAR) {
+        // Possibly there are some zero padding characters in value, we have to strip them off.
+        for (int i = col_start; i < col_start + size; ++i, ++pos) {
+            size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+            vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+            vo.emplace_back(vb.size());
+        }
+    } else {
+        for (int i = col_start; i < col_start + size; ++i, ++pos) {
+            vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+            vo.emplace_back(vb.size());
+        }
     }
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
@@ -594,26 +611,50 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
 
     auto& vb = values->get_bytes();
     auto& vo = values->get_offset();
+
+    int pos = from;
     if (cvb->hasNulls) {
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
-            nulls[i] = !cvb->notNull[from];
-            if (cvb->notNull[from]) {
-                vb.insert(vb.end(), data->data[from], data->data[from] + data->length[from]);
-                vo.emplace_back(vb.size());
-            } else {
-                vo.emplace_back(vb.size());
+        if (type_desc.type == TYPE_CHAR) {
+            // Possibly there are some zero padding characters in value, we have to strip them off.
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                nulls[i] = !cvb->notNull[pos];
+                if (cvb->notNull[pos]) {
+                    size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                    vo.emplace_back(vb.size());
+                } else {
+                    vo.emplace_back(vb.size());
+                }
+            }
+        } else {
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                nulls[i] = !cvb->notNull[pos];
+                if (cvb->notNull[pos]) {
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                    vo.emplace_back(vb.size());
+                } else {
+                    vo.emplace_back(vb.size());
+                }
             }
         }
     } else {
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
-            vb.insert(vb.end(), data->data[from], data->data[from] + data->length[from]);
-            vo.emplace_back(vb.size());
+        if (type_desc.type == TYPE_CHAR) {
+            // Possibly there are some zero padding characters in value, we have to strip them off.
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                vo.emplace_back(vb.size());
+            }
+        } else {
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                vo.emplace_back(vb.size());
+            }
         }
     }
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
     // otherwise `broker_load_filter` does not work.
-    from -= size; // move back
     if (adapter->get_broker_load_mode() && from == 0 && col_start == 0) {
         auto* filter = adapter->get_broker_load_fiter()->data();
         auto strict_mode = adapter->get_strict_mode();
@@ -1443,7 +1484,13 @@ bool OrcScannerAdapter::_ok_to_add_conjunct(const Expr* conjunct) {
         ColumnRef* ref = down_cast<ColumnRef*>(c);
         SlotId slot_id = ref->slot_id();
         // slot can not be found.
-        if (_slot_id_to_desc.find(slot_id) == _slot_id_to_desc.end()) {
+        auto iter = _slot_id_to_desc.find(slot_id);
+        if (iter == _slot_id_to_desc.end()) {
+            return false;
+        }
+        SlotDescriptor* slot_desc = iter->second;
+        // It's unsafe to do eval on char type because of padding problems.
+        if (slot_desc->type().type == TYPE_CHAR) {
             return false;
         }
 
@@ -1840,8 +1887,16 @@ static Status decode_string_min_max(PrimitiveType ptype, const orc::proto::Colum
     if (colStats.has_stringstatistics() && colStats.stringstatistics().has_minimum() &&
         colStats.stringstatistics().has_maximum()) {
         const auto& stats = colStats.stringstatistics();
-        const Slice& min = Slice(stats.minimum());
-        const Slice& max = Slice(stats.maximum());
+        const std::string& min_value = stats.minimum();
+        const std::string& max_value = stats.minimum();
+        size_t min_value_size = min_value.size();
+        size_t max_value_size = max_value.size();
+        if (ptype == TYPE_CHAR) {
+            min_value_size = remove_trailing_spaces(min_value.c_str(), min_value_size);
+            max_value_size = remove_trailing_spaces(max_value.c_str(), max_value_size);
+        }
+        const Slice min(min_value.c_str(), min_value_size);
+        const Slice max(max_value.c_str(), max_value_size);
         switch (ptype) {
         case PrimitiveType::TYPE_VARCHAR:
             DOWN_CAST_ASSIGN_MIN_MAX(PrimitiveType::TYPE_VARCHAR);
@@ -2006,7 +2061,7 @@ void OrcScannerAdapter::report_error_message(const std::string& reason, const st
     _state->append_error_msg_to_file(error_msg, reason);
 }
 
-int OrcScannerAdapter::get_column_id_by_name(const std::string& name) {
+int OrcScannerAdapter::get_column_id_by_name(const std::string& name) const {
     const auto& it = _name_to_column_id.find(name);
     if (it != _name_to_column_id.end()) {
         return it->second;
