@@ -55,6 +55,8 @@ private:
         return ConstColumn::create(column, num_rows);
     }
 
+    void extend_and_update_columns(vectorized::ChunkPtr* curr_chunk);
+
     /*
      * _curr_chunk
      * _curr_columns
@@ -62,8 +64,6 @@ private:
      */
     // accessing chunk.
     ChunkPtr _curr_chunk;
-    // original columns for accessing chunk.
-    Columns _curr_columns;
 
     /*
      * _slot_id_set_list
