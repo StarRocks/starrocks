@@ -19,6 +19,11 @@ bool AggregateDistinctStreamingSinkOperator::is_finished() const {
 
 void AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+
+    if (_aggregator->hash_set_variant().size() == 0) {
+        _aggregator->set_ht_eos();
+    }
+
     _aggregator->sink_complete();
 }
 

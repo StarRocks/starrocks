@@ -19,6 +19,11 @@ bool AggregateStreamingSinkOperator::is_finished() const {
 
 void AggregateStreamingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+
+    if (_aggregator->hash_map_variant().size() == 0) {
+        _aggregator->set_ht_eos();
+    }
+
     _aggregator->sink_complete();
 }
 
