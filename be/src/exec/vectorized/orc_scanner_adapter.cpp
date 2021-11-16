@@ -55,9 +55,8 @@ const static cctz::time_point<cctz::sys_seconds> CCTZ_UNIX_EPOCH =
 // Hive ORC char type will pad trailing spaces.
 // https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
 static inline size_t remove_trailing_spaces(const char* s, size_t size) {
-    size -= 1;
-    while (size >= 0 && s[size] == ' ') size--;
-    return size + 1;
+    while (size > 0 && s[size - 1] == ' ') size--;
+    return size;
 }
 
 static void fill_boolean_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
