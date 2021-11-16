@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #pragma once
+
 #include <cstdint>
 #include <map>
 #include <string>
@@ -15,11 +16,11 @@ class FileWriter;
 class RowBatch;
 
 struct PlainTextBuilderOptions {
-    int character;
+//    int character;
     std::string column_terminated_by;
-    std::string column_optionally_enclosed_by;
-    std::string column_escaped_by;
-    std::string line_starting_by;
+//    std::string column_optionally_enclosed_by;
+//    std::string column_escaped_by;
+//    std::string line_starting_by;
     std::string line_terminated_by;
 };
 
