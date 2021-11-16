@@ -518,7 +518,7 @@ StarRocks支持支持单分区和复合分区两种建表方式。
 2. 建立单分区表建立一个名字为table1的逻辑表。使用全hash分桶，分桶列为siteid，桶数为10。这个表的schema如下：
 
 * siteid：类型是INT（4字节）, 默认值为10
-* cidy_code：类型是SMALLINT（2字节）
+* city_code：类型是SMALLINT（2字节）
 * username：类型是VARCHAR, 最大长度为32, 默认值为空字符串
 * pv：类型是BIGINT（8字节）, 默认值是0; 这是一个指标列, StarRocks内部会对指标列做聚合操作, 这个列的聚合方法是求和（SUM）。这里采用了聚合模型，除此之外StarRocks还支持明细模型和更新模型，具体参考[数据模型介绍](../table_design/Data_model.md)。
 
@@ -544,7 +544,7 @@ PROPERTIES("replication_num" = "1");
 
 * event_day：类型是DATE，无默认值
 * siteid：类型是INT（4字节）, 默认值为10
-* cidy_code：类型是SMALLINT（2字节）
+* city_code：类型是SMALLINT（2字节）
 * username：类型是VARCHAR, 最大长度为32, 默认值为空字符串
 * pv：类型是BIGINT（8字节）, 默认值是0; 这是一个指标列, StarRocks 内部会对指标列做聚合操作, 这个列的聚合方法是求和（SUM）
 
