@@ -30,7 +30,7 @@ order by
 [plan-1]
 TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
     TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{30: sum(28: case)=sum(28: case), 31: sum(29: case)=sum(29: case)}] group by [[25: L_SHIPMODE]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{30: sum=sum(28: case), 31: sum=sum(29: case)}] group by [[25: L_SHIPMODE]] having [null]
             EXCHANGE SHUFFLE[25]
                 INNER JOIN (join-predicate [1: O_ORDERKEY = 11: L_ORDERKEY] post-join-predicate [null])
                     SCAN (columns[1: O_ORDERKEY, 6: O_ORDERPRIORITY] predicate[null])
@@ -40,7 +40,7 @@ TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
 [plan-2]
 TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
     TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{30: sum(28: case)=sum(28: case), 31: sum(29: case)=sum(29: case)}] group by [[25: L_SHIPMODE]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{30: sum=sum(28: case), 31: sum=sum(29: case)}] group by [[25: L_SHIPMODE]] having [null]
             EXCHANGE SHUFFLE[25]
                 INNER JOIN (join-predicate [1: O_ORDERKEY = 11: L_ORDERKEY] post-join-predicate [null])
                     SCAN (columns[1: O_ORDERKEY, 6: O_ORDERPRIORITY] predicate[null])
@@ -50,9 +50,9 @@ TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
 [plan-3]
 TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
     TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{30: sum(28: case)=sum(30: sum(28: case)), 31: sum(29: case)=sum(31: sum(29: case))}] group by [[25: L_SHIPMODE]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{30: sum=sum(30: sum), 31: sum=sum(31: sum)}] group by [[25: L_SHIPMODE]] having [null]
             EXCHANGE SHUFFLE[25]
-                AGGREGATE ([LOCAL] aggregate [{30: sum(28: case)=sum(28: case), 31: sum(29: case)=sum(29: case)}] group by [[25: L_SHIPMODE]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{30: sum=sum(28: case), 31: sum=sum(29: case)}] group by [[25: L_SHIPMODE]] having [null]
                     INNER JOIN (join-predicate [1: O_ORDERKEY = 11: L_ORDERKEY] post-join-predicate [null])
                         SCAN (columns[1: O_ORDERKEY, 6: O_ORDERPRIORITY] predicate[null])
                         EXCHANGE BROADCAST
@@ -61,9 +61,9 @@ TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
 [plan-4]
 TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
     TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{30: sum(28: case)=sum(30: sum(28: case)), 31: sum(29: case)=sum(31: sum(29: case))}] group by [[25: L_SHIPMODE]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{30: sum=sum(30: sum), 31: sum=sum(31: sum)}] group by [[25: L_SHIPMODE]] having [null]
             EXCHANGE SHUFFLE[25]
-                AGGREGATE ([LOCAL] aggregate [{30: sum(28: case)=sum(28: case), 31: sum(29: case)=sum(29: case)}] group by [[25: L_SHIPMODE]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{30: sum=sum(28: case), 31: sum=sum(29: case)}] group by [[25: L_SHIPMODE]] having [null]
                     INNER JOIN (join-predicate [1: O_ORDERKEY = 11: L_ORDERKEY] post-join-predicate [null])
                         SCAN (columns[1: O_ORDERKEY, 6: O_ORDERPRIORITY] predicate[null])
                         EXCHANGE SHUFFLE[11]

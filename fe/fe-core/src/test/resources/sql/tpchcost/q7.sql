@@ -40,7 +40,7 @@ order by
     l_year ;
 [fragment statistics]
 PLAN FRAGMENT 0(F12)
-Output Exprs:46: N_NAME | 51: N_NAME | 55: year | 57: sum(56: expr)
+Output Exprs:46: N_NAME | 51: N_NAME | 55: year | 57: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
@@ -50,7 +50,7 @@ column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
-* sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -66,17 +66,17 @@ OutPut Exchange Id: 25
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
-|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 23:AGGREGATE (merge finalize)
-|  aggregate: sum[([57: sum(56: expr), DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, INT, true]
 |  cardinality: 250
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
-|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 22:EXCHANGE
 cardinality: 297
@@ -96,7 +96,7 @@ OutPut Exchange Id: 22
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
-|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 20:Project
 |  output columns:

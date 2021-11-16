@@ -20,11 +20,11 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 9:Project
-|  <slot 32> : 100.0 * 30: sum(28: case) / 31: sum(29: expr)
+|  <slot 32> : 100.0 * 30: sum / 31: sum
 |  use vectorized: true
 |
 8:AGGREGATE (merge finalize)
-|  output: sum(30: sum(28: case)), sum(31: sum(29: expr))
+|  output: sum(30: sum), sum(31: sum)
 |  group by:
 |  use vectorized: true
 |

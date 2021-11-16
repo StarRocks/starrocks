@@ -103,9 +103,9 @@ RIGHT SEMI JOIN (join-predicate [6: v5 = 2: v2] post-join-predicate [null])
     EXCHANGE SHUFFLE[6]
         SCAN (columns[6: v5] predicate[null])
     EXCHANGE SHUFFLE[2]
-        AGGREGATE ([GLOBAL] aggregate [{4: min(1: v1)=min(4: min(1: v1))}] group by [[2: v2]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
             EXCHANGE SHUFFLE[2]
-                AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[2: v2]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[2: v2]] having [null]
                     SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
 
@@ -116,9 +116,9 @@ RIGHT SEMI JOIN (join-predicate [6: v5 = 2: v2 AND 2: v2 < 7: v6] post-join-pred
     EXCHANGE SHUFFLE[6]
         SCAN (columns[6: v5, 7: v6] predicate[null])
     EXCHANGE SHUFFLE[2]
-        AGGREGATE ([GLOBAL] aggregate [{4: min(1: v1)=min(4: min(1: v1))}] group by [[2: v2]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
             EXCHANGE SHUFFLE[2]
-                AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[2: v2]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[2: v2]] having [null]
                     SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
 
@@ -126,9 +126,9 @@ RIGHT SEMI JOIN (join-predicate [6: v5 = 2: v2 AND 2: v2 < 7: v6] post-join-pred
 select v3, min(v1) from t0 group by v3 having exists (select v4 from t1 where v5 = v6);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    AGGREGATE ([GLOBAL] aggregate [{4: min(1: v1)=min(4: min(1: v1))}] group by [[3: v3]] having [null]
+    AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[3: v3]] having [null]
         EXCHANGE SHUFFLE[3]
-            AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[3: v3]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         EXCHANGE GATHER
@@ -139,9 +139,9 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
 select v3, min(v1) from t0 group by v3 having exists (select max(v4) from t1 where v5 = 5 group by v6);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    AGGREGATE ([GLOBAL] aggregate [{4: min(1: v1)=min(4: min(1: v1))}] group by [[3: v3]] having [null]
+    AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[3: v3]] having [null]
         EXCHANGE SHUFFLE[3]
-            AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[3: v3]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         EXCHANGE GATHER
@@ -158,9 +158,9 @@ RIGHT ANTI JOIN (join-predicate [6: v5 = 2: v2] post-join-predicate [null])
     EXCHANGE SHUFFLE[6]
         SCAN (columns[6: v5] predicate[null])
     EXCHANGE SHUFFLE[2]
-        AGGREGATE ([GLOBAL] aggregate [{4: min(1: v1)=min(4: min(1: v1))}] group by [[2: v2]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
             EXCHANGE SHUFFLE[2]
-                AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[2: v2]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[2: v2]] having [null]
                     SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
 
@@ -168,9 +168,9 @@ RIGHT ANTI JOIN (join-predicate [6: v5 = 2: v2] post-join-predicate [null])
 select v3, min(v1) from t0 group by v3 having not exists (select v4 from t1 where v5 = v6);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    AGGREGATE ([GLOBAL] aggregate [{4: min(1: v1)=min(4: min(1: v1))}] group by [[3: v3]] having [null]
+    AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[3: v3]] having [null]
         EXCHANGE SHUFFLE[3]
-            AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[3: v3]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{9: count=count(9: count)}] group by [[]] having [9: count = 0]
@@ -183,9 +183,9 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
 select v3, min(v1) from t0 group by v3 having not exists (select max(v4) from t1 where v5 = 5 group by v6);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    AGGREGATE ([GLOBAL] aggregate [{4: min(1: v1)=min(4: min(1: v1))}] group by [[3: v3]] having [null]
+    AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[3: v3]] having [null]
         EXCHANGE SHUFFLE[3]
-            AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[3: v3]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{10: count=count(10: count)}] group by [[]] having [10: count = 0]
@@ -225,9 +225,9 @@ select v3, v1 from t0 where exists (select v6, sum(v4) from t1 where v5 = v1 gro
 LEFT SEMI JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
     SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE SHUFFLE[5]
-        AGGREGATE ([GLOBAL] aggregate [{8: count()=count(8: count())}] group by [[5: v5, 6: v6]] having [8: count() > 1]
+        AGGREGATE ([GLOBAL] aggregate [{8: count=count(8: count)}] group by [[5: v5, 6: v6]] having [8: count > 1]
             EXCHANGE SHUFFLE[5, 6]
-                AGGREGATE ([LOCAL] aggregate [{8: count()=count()}] group by [[5: v5, 6: v6]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{8: count=count()}] group by [[5: v5, 6: v6]] having [null]
                     SCAN (columns[5: v5, 6: v6] predicate[null])
 [end]
 

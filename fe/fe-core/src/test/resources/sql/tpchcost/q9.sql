@@ -33,7 +33,7 @@ order by
         o_year desc ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:53: N_NAME | 57: year | 59: sum(58: expr)
+OUTPUT EXPRS:53: N_NAME | 57: year | 59: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -55,7 +55,7 @@ UNPARTITIONED
 |  use vectorized: true
 |
 25:AGGREGATE (merge finalize)
-|  output: sum(59: sum(58: expr))
+|  output: sum(59: sum)
 |  group by: 53: N_NAME, 57: year
 |  use vectorized: true
 |

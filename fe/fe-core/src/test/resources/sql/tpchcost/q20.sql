@@ -181,7 +181,7 @@ OutPut Exchange Id: 14
 |  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [32: L_PARTKEY, INT, false] = [14: PS_PARTKEY, INT, false]
 |  equal join conjunct: [33: L_SUPPKEY, INT, false] = [15: PS_SUPPKEY, INT, false]
-|  other join predicates: cast([16: PS_AVAILQTY, INT, false] as DOUBLE) > 0.5 * [48: sum(35: L_QUANTITY), DOUBLE, true]
+|  other join predicates: cast([16: PS_AVAILQTY, INT, false] as DOUBLE) > 0.5 * [48: sum, DOUBLE, true]
 |  cardinality: 39029703
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
@@ -189,7 +189,7 @@ OutPut Exchange Id: 14
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum(35: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |
 |----11:EXCHANGE
 |       cardinality: 20000000
@@ -281,7 +281,7 @@ OutPut Exchange Id: 04
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum(35: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |
 2:EXCHANGE
 cardinality: 86732673

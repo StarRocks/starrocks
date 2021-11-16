@@ -61,11 +61,11 @@ UNPARTITIONED
 |
 34:Project
 |  <slot 69> : 69: year
-|  <slot 74> : 72: sum(71: case) / 73: sum(70: expr)
+|  <slot 74> : 72: sum / 73: sum
 |  use vectorized: true
 |
 33:AGGREGATE (merge finalize)
-|  output: sum(72: sum(71: case)), sum(73: sum(70: expr))
+|  output: sum(72: sum), sum(73: sum)
 |  group by: 69: year
 |  use vectorized: true
 |

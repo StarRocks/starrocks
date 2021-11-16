@@ -36,13 +36,13 @@ where
     ) ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:29: sum(28: expr)
+OUTPUT EXPRS:29: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
 
 9:AGGREGATE (merge finalize)
-|  output: sum(29: sum(28: expr))
+|  output: sum(29: sum)
 |  group by:
 |  use vectorized: true
 |

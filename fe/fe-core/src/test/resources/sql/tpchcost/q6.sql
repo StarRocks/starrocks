@@ -10,13 +10,13 @@ where
   and l_quantity < 24 ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:19: sum(18: expr)
+OUTPUT EXPRS:19: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
 
 4:AGGREGATE (merge finalize)
-|  output: sum(19: sum(18: expr))
+|  output: sum(19: sum)
 |  group by:
 |  use vectorized: true
 |

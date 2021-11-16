@@ -33,7 +33,7 @@ order by
     o_orderdate limit 100;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:2: C_NAME | 1: C_CUSTKEY | 10: O_ORDERKEY | 14: O_ORDERDATE | 13: O_TOTALPRICE | 56: sum(24: L_QUANTITY)
+OUTPUT EXPRS:2: C_NAME | 1: C_CUSTKEY | 10: O_ORDERKEY | 14: O_ORDERDATE | 13: O_TOTALPRICE | 56: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -193,7 +193,7 @@ UNPARTITIONED
 4:AGGREGATE (update finalize)
 |  output: sum(41: L_QUANTITY)
 |  group by: 37: L_ORDERKEY
-|  having: 54: sum(41: L_QUANTITY) > 315.0
+|  having: 54: sum > 315.0
 |  use vectorized: true
 |
 3:OlapScanNode

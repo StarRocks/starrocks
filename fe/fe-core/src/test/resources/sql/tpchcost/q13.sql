@@ -21,7 +21,7 @@ order by
     c_count desc ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:20: count(10: O_ORDERKEY) | 21: count()
+OUTPUT EXPRS:20: count | 21: count
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -31,20 +31,20 @@ use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 20: count(10: O_ORDERKEY)
+PARTITION: HASH_PARTITIONED: 20: count
 
 STREAM DATA SINK
 EXCHANGE ID: 14
 UNPARTITIONED
 
 13:SORT
-|  order by: <slot 21> 21: count() DESC, <slot 20> 20: count(10: O_ORDERKEY) DESC
+|  order by: <slot 21> 21: count DESC, <slot 20> 20: count DESC
 |  offset: 0
 |  use vectorized: true
 |
 12:AGGREGATE (update finalize)
 |  output: count(*)
-|  group by: 20: count(10: O_ORDERKEY)
+|  group by: 20: count
 |  use vectorized: true
 |
 11:EXCHANGE
@@ -56,14 +56,14 @@ PARTITION: HASH_PARTITIONED: 1: C_CUSTKEY
 
 STREAM DATA SINK
 EXCHANGE ID: 11
-HASH_PARTITIONED: 20: count(10: O_ORDERKEY)
+HASH_PARTITIONED: 20: count
 
 10:Project
-|  <slot 20> : 20: count(10: O_ORDERKEY)
+|  <slot 20> : 20: count
 |  use vectorized: true
 |
 9:AGGREGATE (merge finalize)
-|  output: count(20: count(10: O_ORDERKEY))
+|  output: count(20: count)
 |  group by: 1: C_CUSTKEY
 |  use vectorized: true
 |

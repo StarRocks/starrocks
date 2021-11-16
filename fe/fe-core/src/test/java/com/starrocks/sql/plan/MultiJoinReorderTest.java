@@ -211,7 +211,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 12: v5 = 10: count(2: v5)\n" +
+                "  |  equal join conjunct: 12: v5 = 10: count\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----18:EXCHANGE\n" +
@@ -239,7 +239,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  13:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(10: count(2: v5))\n" +
+                "  |  output: count(10: count)\n" +
                 "  |  group by: \n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
@@ -451,14 +451,14 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 10: count(2: v5) = 12: v5\n" +
+                "  |  equal join conjunct: 10: count = 12: v5\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----22:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  20:Project\n" +
-                "  |  <slot 10> : 10: count(2: v5)\n" +
+                "  |  <slot 10> : 10: count\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  19:CROSS JOIN\n" +
@@ -487,7 +487,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "    UNPARTITIONED\n" +
                 "\n" +
                 "  17:Project\n" +
-                "  |  <slot 10> : 10: count(2: v5)\n" +
+                "  |  <slot 10> : 10: count\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  16:CROSS JOIN\n" +
@@ -499,7 +499,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  13:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(10: count(2: v5))\n" +
+                "  |  output: count(10: count)\n" +
                 "  |  group by: \n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
