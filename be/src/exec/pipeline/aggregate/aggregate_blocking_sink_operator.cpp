@@ -17,9 +17,6 @@ bool AggregateBlockingSinkOperator::is_finished() const {
 }
 
 void AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
-    if (_is_finished) {
-        return;
-    }
     _is_finished = true;
 
     if (!_aggregator->is_none_group_by_exprs()) {
