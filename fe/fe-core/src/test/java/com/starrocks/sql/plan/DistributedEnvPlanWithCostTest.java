@@ -593,4 +593,13 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
     }
+
+
+    @Test
+    public void testColumnNotEqualsConstant() throws Exception {
+        String sql = "select S_SUPPKEY,S_NAME from supplier where s_name <> 'Supplier#000000050' and s_name >= 'Supplier#000000086'";
+        String plan = getCostExplain(sql);
+        // check cardinality not 0
+        Assert.assertTrue(plan.contains("cardinality: 500000"));
+    }
 }
