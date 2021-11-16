@@ -7,8 +7,9 @@
 #include "column/column_helper.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/sort/sort_sink_operator.h"
-#include "exec/pipeline/sort/sort_source_operator.h"
+#include "exec/pipeline/sort/local_merge_sort_source_operator.h"
+#include "exec/pipeline/sort/partition_sort_sink_operator.h"
+#include "exec/pipeline/sort/sort_context.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
@@ -157,7 +158,8 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         }
         timer.start();
         if (chunk != nullptr && chunk->num_rows() > 0) {
-            ChunkPtr materialize_chunk = _materialize_chunk_before_sort(chunk.get());
+            ChunkPtr materialize_chunk = ChunksSorter::materialize_chunk_before_sort(
+                    chunk.get(), _materialized_tuple_desc, _sort_exec_exprs, _order_by_types);
             RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk));
         }
     } while (!eos);
@@ -165,94 +167,28 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     return Status::OK();
 }
 
-ChunkPtr TopNNode::_materialize_chunk_before_sort(Chunk* chunk) {
-    ChunkPtr materialize_chunk = std::make_shared<Chunk>();
-
-    // materialize all sorting columns: replace old columns with evaluated columns
-    const size_t row_num = chunk->num_rows();
-    const auto& slots_in_row_descriptor = _materialized_tuple_desc->slots();
-    const auto& slots_in_sort_exprs = _sort_exec_exprs.sort_tuple_slot_expr_ctxs();
-
-    DCHECK_EQ(slots_in_row_descriptor.size(), slots_in_sort_exprs.size());
-
-    for (size_t i = 0; i < slots_in_sort_exprs.size(); ++i) {
-        ExprContext* expr_ctx = slots_in_sort_exprs[i];
-        ColumnPtr col = expr_ctx->evaluate(chunk);
-        if (col->is_constant()) {
-            if (col->is_nullable()) {
-                // Constant null column doesn't have original column data type information,
-                // so replace it by a nullable column of original data type filled with all NULLs.
-                ColumnPtr new_col = ColumnHelper::create_column(_order_by_types[i].type_desc, true);
-                new_col->append_nulls(row_num);
-                materialize_chunk->append_column(new_col, slots_in_row_descriptor[i]->id());
-            } else {
-                // Case 1: an expression may generate a constant column which will be reused by
-                // another call of evaluate(). We clone its data column to resize it as same as
-                // the size of the chunk, so that Chunk::num_rows() can return the right number
-                // if this ConstColumn is the first column of the chunk.
-                // Case 2: an expression may generate a constant column for one Chunk, but a
-                // non-constant one for another Chunk, we replace them all by non-constant columns.
-                auto* const_col = down_cast<ConstColumn*>(col.get());
-                const auto& data_col = const_col->data_column();
-                auto new_col = data_col->clone_empty();
-                new_col->append(*data_col, 0, 1);
-                new_col->assign(row_num, 0);
-                if (_order_by_types[i].is_nullable) {
-                    ColumnPtr null_col =
-                            NullableColumn::create(ColumnPtr(new_col.release()), NullColumn::create(row_num, 0));
-                    materialize_chunk->append_column(null_col, slots_in_row_descriptor[i]->id());
-                } else {
-                    materialize_chunk->append_column(ColumnPtr(new_col.release()), slots_in_row_descriptor[i]->id());
-                }
-            }
-        } else {
-            // When get a non-null column, but it should be nullable, we wrap it with a NullableColumn.
-            if (!col->is_nullable() && _order_by_types[i].is_nullable) {
-                col = NullableColumn::create(col, NullColumn::create(col->size(), 0));
-            }
-            materialize_chunk->append_column(col, slots_in_row_descriptor[i]->id());
-        }
-    }
-
-    return materialize_chunk;
-}
-
 pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    // step 0: construct pipeline end with sort operator.
-    // get operators before sort operator
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
-    operators_sink_with_sort = context->maybe_interpolate_local_passthrough_exchange(operators_sink_with_sort);
 
-    static const uint SIZE_OF_CHUNK_FOR_TOPN = 3000;
-    static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;
-    std::shared_ptr<ChunksSorter> chunks_sorter;
-    if (_limit > 0) {
-        chunks_sorter = std::make_unique<vectorized::ChunksSorterTopn>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                       &_is_asc_order, &_is_null_first, _offset, _limit,
-                                                                       SIZE_OF_CHUNK_FOR_TOPN);
-    } else {
-        chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                           &_is_asc_order, &_is_null_first,
-                                                                           SIZE_OF_CHUNK_FOR_FULL_SORT);
-    }
+    auto degree_of_parallelism =
+            down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
+    auto sort_context = std::make_shared<SortContext>(_limit, degree_of_parallelism, _is_asc_order, _is_null_first);
 
-    // add SortSinkOperator to this pipeline
-    auto sort_sink_operator = std::make_shared<SortSinkOperatorFactory>(
-            context->next_operator_id(), id(), chunks_sorter, _sort_exec_exprs, _order_by_types,
-            _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
-    operators_sink_with_sort.emplace_back(std::move(sort_sink_operator));
+    auto partition_sort_sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
+            context->next_operator_id(), id(), sort_context, _sort_exec_exprs, _is_asc_order, _is_null_first, _offset,
+            _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
+    operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
     context->add_pipeline(operators_sink_with_sort);
 
     OpFactories operators_source_with_sort;
-    auto sort_source_operator =
-            std::make_shared<SortSourceOperatorFactory>(context->next_operator_id(), id(), std::move(chunks_sorter));
-    // SourceSourceOperator's instance count must be 1
-    sort_source_operator->set_degree_of_parallelism(1);
-    operators_source_with_sort.emplace_back(std::move(sort_source_operator));
+    auto local_merge_sort_source_operator = std::make_shared<LocalMergeSortSourceOperatorFactory>(
+            context->next_operator_id(), id(), std::move(sort_context));
+    // local_merge_sort_source_operator's instance count must be 1
+    local_merge_sort_source_operator->set_degree_of_parallelism(1);
+    operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
 
-    // return to the following pipeline
     return operators_source_with_sort;
 }
 
