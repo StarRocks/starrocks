@@ -299,8 +299,9 @@ public:
 
     // Push one row to MysqlRowBuffer
     virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
-    virtual void put_string_stream(std::stringstream* ss, size_t idx) const {
-        *ss << "";
+    virtual void put_csv_stringstream(std::stringstream* ss, size_t idx) const {
+        const std::string NULL_IN_CSV = "\\N";
+        *ss << NULL_IN_CSV;
     }
 
     void set_delete_state(DelCondSatisfied delete_state) { _delete_state = delete_state; }

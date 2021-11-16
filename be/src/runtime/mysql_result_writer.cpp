@@ -306,41 +306,11 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk
     int num_columns = _output_expr_ctxs.size();
     result_columns.reserve(num_columns);
 
-    using vectorized::DoubleColumn;
-    using vectorized::BinaryColumn;
-    using vectorized::NullableColumn;
-
-    auto get_binary_column = [](DoubleColumn* data_column, size_t size) -> ColumnPtr {
-        auto new_data_column = BinaryColumn::create();
-        new_data_column->reserve(size);
-
-        for (int row = 0; row < size; ++row) {
-            auto time = data_column->get_data()[row];
-            std::string time_str = time_str_from_double(time);
-            new_data_column->append(time_str);
-        }
-
-        return new_data_column;
-    };
-
     for (int i = 0; i < num_columns; ++i) {
         ColumnPtr column = _output_expr_ctxs[i]->evaluate(chunk);
         auto size = column->size();
         if (_output_expr_ctxs[i]->root()->type().type == TYPE_TIME) {
-            if (column->only_null()) {
-                // not handle
-            } else if (column->is_nullable()) {
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                auto* data_column = down_cast<DoubleColumn*>(nullable_column->mutable_data_column());
-                column = NullableColumn::create(get_binary_column(data_column, size), nullable_column->null_column());
-            } else if (column->is_constant()) {
-                auto* const_column = down_cast<vectorized::ConstColumn*>(column.get());
-                string time_str = time_str_from_double(const_column->get(i).get_double());
-                column = vectorized::ColumnHelper::create_const_column<TYPE_VARCHAR>(time_str, size);
-            } else {
-                auto* data_column = down_cast<DoubleColumn*>(column.get());
-                column = get_binary_column(data_column, size);
-            }
+            column = vectorized::ColumnHelper::convert_time_column_from_double_to_str(column.get());
         }
         result_columns.emplace_back(std::move(column));
     }
