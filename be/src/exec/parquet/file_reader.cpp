@@ -423,6 +423,7 @@ Status FileReader::_init_group_reader() {
 Status FileReader::_get_next_internal(vectorized::ChunkPtr* chunk) {
     if (_is_only_partition_scan) {
         RETURN_IF_ERROR(_exec_only_partition_scan(chunk));
+        DCHECK_CHUNK(*chunk);
         return Status::OK();
     }
 
@@ -431,9 +432,13 @@ Status FileReader::_get_next_internal(vectorized::ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
+                DCHECK_EQ((*chunk)->num_columns(), _row_group_readers[_cur_row_group_idx]->c_size() +
+                                                           _empty_chunk_slot_ids.size() +
+                                                           _param.partition_columns.size());
                 _append_not_exist_column_to_chunk(chunk, row_count);
                 _append_partition_column_to_chunk(chunk, row_count);
 
+                DCHECK_CHUNK(*chunk);
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
@@ -471,6 +476,7 @@ void FileReader::_append_not_exist_column_to_chunk(vectorized::ChunkPtr* chunk, 
 void FileReader::_append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
     for (size_t i = 0; i < _param.partition_columns.size(); i++) {
         SlotId partition_col_slot_id = _param.partition_columns[i].slot_id;
+        DCHECK(_param.partition_values[i]->is_constant());
         if (_param.partition_values[i]->is_constant()) {
             auto* const_column =
                     vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(_param.partition_values[i]);

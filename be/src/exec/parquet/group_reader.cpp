@@ -277,6 +277,8 @@ void GroupReader::_init_read_chunk() {
 }
 
 Status GroupReader::_read(size_t* row_count) {
+    bool first = false;
+    size_t tmp_count = 0;
     size_t count = *row_count;
 
     for (const auto& column : _dict_filter_columns) {
@@ -287,6 +289,12 @@ Status GroupReader::_read(size_t* row_count) {
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
+        if (first == false) {
+            tmp_count = count;
+            first = true;
+        } else {
+            DCHECK_EQ(tmp_count, count);
+        }
     }
 
     for (const auto& column : _direct_read_columns) {
@@ -296,6 +304,12 @@ Status GroupReader::_read(size_t* row_count) {
                                                              _read_chunk->get_column_by_slot_id(slot_id).get());
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
+        }
+        if (first == false) {
+            tmp_count = count;
+            first = true;
+        } else {
+            DCHECK_EQ(tmp_count, count);
         }
     }
 

@@ -59,6 +59,10 @@ public:
     Status init(const GroupReaderParam& _param);
     Status get_next(vectorized::ChunkPtr* chunk, size_t* row_count);
 
+    size_t c_size() {
+        return _dict_filter_columns.size() + _direct_read_columns.size();
+    }
+
 private:
     using SlotIdExprContextsMap = std::unordered_map<int, std::vector<ExprContext*>>;
 
