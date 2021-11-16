@@ -47,7 +47,9 @@ TEST_F(MergeIteratorTest, heap_merge_overlapping) {
     auto sub2 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v2));
     auto sub3 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v3));
 
-    auto iter = new_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3});
+    std::vector<RowSourceMask> source_masks;
+
+    auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3});
 
     std::vector<int32_t> expected;
     expected.insert(expected.end(), v1.begin(), v1.end());
@@ -57,7 +59,7 @@ TEST_F(MergeIteratorTest, heap_merge_overlapping) {
 
     std::vector<int32_t> real;
     ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
-    while (iter->get_next(chunk.get()).ok()) {
+    while (iter->get_next(chunk.get(), &source_masks).ok()) {
         ColumnPtr& c = chunk->get_column_by_index(0);
         for (size_t i = 0; i < c->size(); i++) {
             real.push_back(c->get(i).get_int32());
@@ -69,7 +71,13 @@ TEST_F(MergeIteratorTest, heap_merge_overlapping) {
         EXPECT_EQ(expected[i], real[i]);
     }
     chunk->reset();
-    ASSERT_TRUE(iter->get_next(chunk.get()).is_end_of_file());
+    ASSERT_TRUE(iter->get_next(chunk.get(), &source_masks).is_end_of_file());
+
+    // check source masks
+    std::vector<uint16_t> expected_sources{0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 2, 2, 1, 1, 1, 1, 2, 2};
+    for (size_t i = 0; i < expected_sources.size(); i++) {
+        EXPECT_EQ(expected_sources[i], source_masks.at(i).get_source_num());
+    }
 }
 
 // NOLINTNEXTLINE
@@ -81,7 +89,7 @@ TEST_F(MergeIteratorTest, heap_merge_no_overlapping) {
     auto sub2 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v2));
     auto sub3 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v3));
 
-    auto iter = new_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3});
+    auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3});
 
     std::vector<int32_t> expected;
     expected.insert(expected.end(), v1.begin(), v1.end());
@@ -108,7 +116,7 @@ TEST_F(MergeIteratorTest, heap_merge_no_overlapping) {
 // NOLINTNEXTLINE
 TEST_F(MergeIteratorTest, merge_one) {
     auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT({1, 1, 2, 3, 4, 5}));
-    auto iter = new_merge_iterator(std::vector<ChunkIteratorPtr>{sub1});
+    auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1});
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
         auto c = std::dynamic_pointer_cast<FixedLengthColumn<int32_t>>(chunk->get_column_by_index(0));
@@ -134,8 +142,58 @@ TEST_F(MergeIteratorTest, merge_one) {
 TEST_F(MergeIteratorTest, test_issue_DSDB_2715) {
     auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT({1, 1, 2, 3, 4, 5}));
     auto sub2 = std::make_shared<VectorChunkIterator>(_schema, COL_INT({1, 1, 2, 3, 4, 5}));
-    auto iter = new_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2});
+    auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2});
     iter->close();
+}
+
+// NOLINTNEXTLINE
+TEST_F(MergeIteratorTest, mask_merge) {
+    std::vector<int32_t> v1{1, 1, 2, 3, 4, 5};
+    std::vector<int32_t> v2{10, 11, 13, 15, 15, 16, 17};
+    std::vector<int32_t> v3{12, 13, 14, 18, 19};
+    auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v1));
+    auto sub2 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v2));
+    auto sub3 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v3));
+
+    std::vector<RowSourceMask> source_masks;
+    std::vector<uint16_t> expected_sources{0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 2, 2, 1, 1, 1, 1, 2, 2};
+    for (size_t i = 0; i < expected_sources.size(); ++i) {
+        source_masks.emplace_back(RowSourceMask(expected_sources[i], false));
+    }
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    mask_buffer.write(source_masks);
+    mask_buffer.flush();
+    mask_buffer.flip();
+    source_masks.clear();
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3}, &mask_buffer);
+
+    std::vector<int32_t> expected;
+    expected.insert(expected.end(), v1.begin(), v1.end());
+    expected.insert(expected.end(), v2.begin(), v2.end());
+    expected.insert(expected.end(), v3.begin(), v3.end());
+    std::sort(expected.begin(), expected.end());
+
+    std::vector<int32_t> real;
+    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    while (iter->get_next(chunk.get(), &source_masks).ok()) {
+        ColumnPtr& c = chunk->get_column_by_index(0);
+        for (size_t i = 0; i < c->size(); i++) {
+            real.push_back(c->get(i).get_int32());
+        }
+        chunk->reset();
+    }
+    ASSERT_EQ(expected.size(), real.size());
+    for (size_t i = 0; i < expected.size(); i++) {
+        ASSERT_EQ(expected[i], real[i]);
+    }
+    chunk->reset();
+    ASSERT_TRUE(iter->get_next(chunk.get(), &source_masks).is_end_of_file());
+
+    // check source masks
+    for (size_t i = 0; i < expected_sources.size(); i++) {
+        ASSERT_EQ(expected_sources[i], source_masks.at(i).get_source_num());
+    }
 }
 
 } // namespace starrocks::vectorized
