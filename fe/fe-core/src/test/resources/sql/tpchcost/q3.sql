@@ -32,10 +32,10 @@ RESULT SINK
 limit: 10
 cardinality: 10
 column statistics:
-* O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
-* O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
-* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-* sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+* O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+* O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
+* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+* sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 
 PLAN FRAGMENT 1(F05)
 
@@ -49,20 +49,20 @@ OutPut Exchange Id: 15
 |  limit: 10
 |  cardinality: 10
 |  column statistics:
-|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
-|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 13:AGGREGATE (merge finalize)
 |  aggregate: sum[([38: sum(37: expr), DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [20: L_ORDERKEY, INT, false], [14: O_ORDERDATE, DATE, false], [17: O_SHIPPRIORITY, INT, false]
 |  cardinality: 5576432
 |  column statistics:
-|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
-|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 12:EXCHANGE
 cardinality: 13218209
@@ -79,10 +79,10 @@ OutPut Exchange Id: 12
 |  group by: [20: L_ORDERKEY, INT, false], [14: O_ORDERDATE, DATE, false], [17: O_SHIPPRIORITY, INT, false]
 |  cardinality: 13218209
 |  column statistics:
-|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
-|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 10:Project
 |  output columns:
@@ -92,10 +92,10 @@ OutPut Exchange Id: 12
 |  14 <-> [14: O_ORDERDATE, DATE, false]
 |  cardinality: 31332052
 |  column statistics:
-|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
-|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 9:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -104,11 +104,11 @@ OutPut Exchange Id: 12
 |  - filter_id = 1, build_expr = (10: O_ORDERKEY), remote = false
 |  cardinality: 31332052
 |  column statistics:
-|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
-|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
+|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 |----8:EXCHANGE
 |       cardinality: 14532225
@@ -120,9 +120,9 @@ OutPut Exchange Id: 12
 |  26 <-> [26: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 323405941
 |  column statistics:
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 0:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -135,10 +135,10 @@ cardinality: 323405941
 probe runtime filters:
 - filter_id = 1, probe_expr = (20: L_ORDERKEY)
 column statistics:
-* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-* L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
-* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-* L_SHIPDATE-->[7.948512E8, 9.124416E8, 0.0, 4.0, 2526.0]
+* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+* L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+* L_SHIPDATE-->[7.948512E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE
 
 PLAN FRAGMENT 3(F01)
 
@@ -153,9 +153,9 @@ OutPut Exchange Id: 08
 |  14 <-> [14: O_ORDERDATE, DATE, false]
 |  cardinality: 14532225
 |  column statistics:
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
-|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 6:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -164,9 +164,9 @@ OutPut Exchange Id: 08
 |  - filter_id = 0, build_expr = (1: C_CUSTKEY), remote = false
 |  cardinality: 14532225
 |  column statistics:
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
-|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----5:EXCHANGE
 |       cardinality: 3000000
@@ -182,10 +182,10 @@ cardinality: 72661123
 probe runtime filters:
 - filter_id = 0, probe_expr = (11: O_CUSTKEY)
 column statistics:
-* O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
-* O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0]
-* O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
-* O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
+* O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+* O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
+* O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
+* O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 4(F02)
 
@@ -198,7 +198,7 @@ OutPut Exchange Id: 05
 |  1 <-> [1: C_CUSTKEY, INT, false]
 |  cardinality: 3000000
 |  column statistics:
-|  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7]
+|  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
 |
 3:OlapScanNode
 table: customer, rollup: customer
@@ -209,6 +209,6 @@ tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
 actualRows=0, avgRowSize=18.0
 cardinality: 3000000
 column statistics:
-* C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7]
-* C_MKTSEGMENT-->[-Infinity, Infinity, 0.0, 10.0, 5.0]
+* C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
+* C_MKTSEGMENT-->[-Infinity, Infinity, 0.0, 10.0, 5.0] ESTIMATE
 [end]

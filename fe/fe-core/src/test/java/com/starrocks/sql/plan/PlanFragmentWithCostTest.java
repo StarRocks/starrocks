@@ -508,8 +508,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("cardinality: 10000"));
         // check repeat node
         Assert.assertTrue(plan.contains("cardinality: 40000"));
-        Assert.assertTrue(plan.contains(" * GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 4.0]\n" +
-                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 4.0]"));
+        Assert.assertTrue(plan.contains(" * GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE\n" +
+                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE"));
 
         sql = "select v1, v2, grouping_id(v1,v2), SUM(v3) from t0 group by rollup(v1, v2)";
         plan = getCostExplain(sql);
@@ -517,8 +517,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("cardinality: 10000"));
         // check repeat node
         Assert.assertTrue(plan.contains("cardinality: 30000"));
-        Assert.assertTrue(plan.contains("* GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 3.0]\n" +
-                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 3.0]"));
+        Assert.assertTrue(plan.contains("* GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 3.0] ESTIMATE\n" +
+                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 3.0] ESTIMATE"));
     }
 
     @Test
