@@ -533,6 +533,8 @@ OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, i
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         RowDescriptor row_desc;
