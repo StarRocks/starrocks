@@ -19,4 +19,4 @@ ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, int factor = 0);
 // |is_key| chunk schema is key columns or value columns.
 ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, bool is_key);
 
-}
+} // namespace starrocks::vectorized
