@@ -138,7 +138,7 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 20: PS_SUPPKEY
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
-|  equal join conjunct: 22: PS_SUPPLYCOST = 57: min(37: PS_SUPPLYCOST)
+|  equal join conjunct: 22: PS_SUPPLYCOST = 57: min
 |  equal join conjunct: 19: PS_PARTKEY = 1: P_PARTKEY
 |  use vectorized: true
 |
@@ -168,7 +168,7 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 1: P_PARTKEY
 30:Project
 |  <slot 1> : 1: P_PARTKEY
 |  <slot 3> : 3: P_MFGR
-|  <slot 57> : 57: min(37: PS_SUPPLYCOST)
+|  <slot 57> : 57: min
 |  use vectorized: true
 |
 29:HASH JOIN
@@ -554,10 +554,10 @@ OutPut Exchange Id: 34
 |
 32:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  equal join conjunct: [22: PS_SUPPLYCOST, DOUBLE, false] = [57: min(37: PS_SUPPLYCOST), DOUBLE, true]
+|  equal join conjunct: [22: PS_SUPPLYCOST, DOUBLE, false] = [57: min, DOUBLE, true]
 |  equal join conjunct: [19: PS_PARTKEY, INT, false] = [1: P_PARTKEY, INT, false]
 |  build runtime filters:
-|  - filter_id = 6, build_expr = (57: min(37: PS_SUPPLYCOST)), remote = false
+|  - filter_id = 6, build_expr = (57: min), remote = false
 |  - filter_id = 7, build_expr = (1: P_PARTKEY), remote = false
 |  cardinality: 288000
 |  column statistics:
@@ -566,7 +566,7 @@ OutPut Exchange Id: 34
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----31:EXCHANGE
 |       cardinality: 80000
@@ -596,12 +596,12 @@ OutPut Exchange Id: 31
 |  output columns:
 |  1 <-> [1: P_PARTKEY, INT, false]
 |  3 <-> [3: P_MFGR, VARCHAR, false]
-|  57 <-> [57: min(37: PS_SUPPLYCOST), DOUBLE, true]
+|  57 <-> [57: min, DOUBLE, true]
 |  cardinality: 80000
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 29:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -613,7 +613,7 @@ OutPut Exchange Id: 31
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
-|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----28:EXCHANGE
 |       cardinality: 100000
@@ -624,7 +624,7 @@ OutPut Exchange Id: 31
 |  cardinality: 16000000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
-|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 24:Project
 |  output columns:

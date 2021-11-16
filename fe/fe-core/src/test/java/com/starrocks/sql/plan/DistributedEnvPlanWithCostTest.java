@@ -39,7 +39,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  STREAMING\n"
                 + "  |  output: multi_distinct_count(5: P_TYPE)"));
         Assert.assertTrue(planFragment.contains("3:AGGREGATE (merge finalize)\n"
-                + "  |  output: multi_distinct_count(11: count(distinct 5: P_TYPE))"));
+                + "  |  output: multi_distinct_count(11: count)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -52,7 +52,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  STREAMING\n"
                 + "  |  output: multi_distinct_count(1: P_PARTKEY)"));
         Assert.assertTrue(planFragment.contains("3:AGGREGATE (merge finalize)\n"
-                + "  |  output: multi_distinct_count(11: count(distinct 1: P_PARTKEY))"));
+                + "  |  output: multi_distinct_count(11: count)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -95,7 +95,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "SELECT COUNT (DISTINCT l_partkey) FROM lineitem";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(18: count(distinct 2: L_PARTKEY))"));
+                "  |  output: multi_distinct_count(18: count"));
         Assert.assertTrue(planFragment.contains("1:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(2: L_PARTKEY)"));
     }

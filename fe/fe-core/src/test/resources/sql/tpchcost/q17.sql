@@ -24,11 +24,11 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 14:Project
-|  <slot 49> : 48: sum(6: L_EXTENDEDPRICE) / 7.0
+|  <slot 49> : 48: sum / 7.0
 |  use vectorized: true
 |
 13:AGGREGATE (merge finalize)
-|  output: sum(48: sum(6: L_EXTENDEDPRICE))
+|  output: sum(48: sum)
 |  group by:
 |  use vectorized: true
 |
@@ -57,7 +57,7 @@ UNPARTITIONED
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: L_PARTKEY = 18: P_PARTKEY
-|  other join predicates: 5: L_QUANTITY < 0.2 * 45: avg(32: L_QUANTITY)
+|  other join predicates: 5: L_QUANTITY < 0.2 * 45: avg
 |  use vectorized: true
 |
 |----8:EXCHANGE

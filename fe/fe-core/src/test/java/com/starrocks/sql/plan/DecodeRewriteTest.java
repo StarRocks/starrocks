@@ -169,7 +169,7 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
                 "  |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE\n" +
-                "  |  * count(3: S_ADDRESS)-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE"));
+                "  |  * count-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE"));
     }
 
     @Test
@@ -235,7 +235,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("  3:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(9: count())\n" +
+                "  |  output: count(9: count)\n" +
                 "  |  group by: 10: S_ADDRESS"));
 
         sql = "select count(*) from supplier group by S_ADDRESS";
@@ -341,7 +341,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         sql = "select count(*) as b from supplier group by S_ADDRESS having b > 3";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  group by: 10: S_ADDRESS\n" +
-                "  |  having: 9: count() > 3"));
+                "  |  having: 9: count > 3"));
     }
 
     @Test
