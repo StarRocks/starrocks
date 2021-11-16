@@ -91,7 +91,7 @@ public:
     const SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
     void report_error_message(const std::string& reason, const std::string& raw_data);
-    int get_column_id_by_name(const std::string& name);
+    int get_column_id_by_name(const std::string& name) const;
 
 private:
     bool _ok_to_add_conjunct(const Expr* conjunct);
