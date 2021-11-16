@@ -11,14 +11,11 @@
 
 namespace starrocks::pipeline {
 Status ProjectOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
-
-    return Status::OK();
+    return Operator::prepare(state);
 }
 
 Status ProjectOperator::close(RuntimeState* state) {
-    Operator::close(state);
-    return Status::OK();
+    return Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) {

@@ -18,8 +18,7 @@ using namespace starrocks::vectorized;
 
 namespace starrocks::pipeline {
 Status SortSinkOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
-    return Status::OK();
+    return Operator::prepare(state);
 }
 
 Status SortSinkOperator::close(RuntimeState* state) {
