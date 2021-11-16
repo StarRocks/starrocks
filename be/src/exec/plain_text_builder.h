@@ -16,11 +16,7 @@ class FileWriter;
 class RowBatch;
 
 struct PlainTextBuilderOptions {
-//    int character;
     std::string column_terminated_by;
-//    std::string column_optionally_enclosed_by;
-//    std::string column_escaped_by;
-//    std::string line_starting_by;
     std::string line_terminated_by;
 };
 
