@@ -31,6 +31,11 @@ public:
     Status done(RuntimeState* state) override;
     // get_next only works after done().
     void get_next(ChunkPtr* chunk, bool* eos) override;
+    DataSegment* get_result_data_segment() override;
+
+    uint64_t get_partition_rows() const override;
+    Permutation* get_permutation() const override;
+
     // pull_chunk for pipeline.
     bool pull_chunk(ChunkPtr* chunk) override;
 

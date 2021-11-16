@@ -92,7 +92,8 @@ public class ColumnStatistic {
                 + maxValue + separator
                 + nullsFraction + separator
                 + averageRowSize + separator
-                + distinctValuesCount + "]";
+                + distinctValuesCount + "] "
+                + type;
     }
 
     public static Builder buildFrom(ColumnStatistic other) {
@@ -101,14 +102,19 @@ public class ColumnStatistic {
     }
 
     public static Builder buildFrom(String columnStatistic) {
-        String valueString = columnStatistic.substring(1, columnStatistic.length() - 1);
+        int endIndex = columnStatistic.indexOf(']');
+        String valueString = columnStatistic.substring(1, endIndex);
+        String typeString = endIndex == columnStatistic.length() - 1 ? "" : columnStatistic.substring(endIndex + 2);
+
         String[] valueArray = valueString.split(",");
         Preconditions.checkState(valueArray.length == 5);
 
         Builder builder = new Builder(Double.parseDouble(valueArray[0]), Double.parseDouble(valueArray[1]),
                 Double.parseDouble(valueArray[2]), Double.parseDouble(valueArray[3]),
                 Double.parseDouble(valueArray[4]));
-        if (builder.build().isUnknownValue()) {
+        if (!typeString.isEmpty()) {
+            builder.setType(StatisticType.valueOf(typeString));
+        } else if (builder.build().isUnknownValue()) {
             builder.setType(StatisticType.UNKNOWN);
         }
         return builder;
