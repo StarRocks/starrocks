@@ -57,7 +57,7 @@ public:
     ParquetOutputStream(WritableFile* _writable_file);
     ~ParquetOutputStream() override;
 
-    arrow::Status Write(const void* data, size_t nbytes) override;
+    arrow::Status Write(const void* data, int64_t nbytes) override;
     // return the current write position of the stream
     arrow::Result<int64_t> Tell() const override;
     arrow::Status Close() override;

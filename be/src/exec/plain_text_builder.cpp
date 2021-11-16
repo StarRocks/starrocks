@@ -72,7 +72,7 @@ Status PlainTextBuilder::_flush_plain_text_outstream(bool eos) {
 }
 
 Status PlainTextBuilder::finish() {
-    _flush_plain_text_outstream(true);
+    return _flush_plain_text_outstream(true);
 }
 
 } // namespace starrocks

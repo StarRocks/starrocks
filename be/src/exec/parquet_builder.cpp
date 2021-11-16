@@ -54,8 +54,8 @@ ParquetOutputStream::~ParquetOutputStream() {
     Close();
 }
 
-arrow::Status ParquetOutputStream::Write(const void* data, size_t nbytes) {
-    Status st = _writable_file->append({reinterpret_cast<const uint8_t*>(data), nbytes});
+arrow::Status ParquetOutputStream::Write(const void* data, int64_t nbytes) {
+    Status st = _writable_file->append({reinterpret_cast<const uint8_t*>(data), static_cast<std::size_t>(nbytes)});
     if (!st.ok()) {
         return arrow::Status::IOError(st.get_error_msg());
     }
