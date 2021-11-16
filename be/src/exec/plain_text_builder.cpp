@@ -23,40 +23,31 @@ const size_t PlainTextBuilder::OUTSTREAM_BUFFER_SIZE_BYTES = 1024 * 1024;
 
 Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
     auto num_rows = chunk->num_rows();
-    auto result = std::make_unique<TFetchDataResult>();
-
     vectorized::Columns result_columns;
-    // Step 1: compute expr
     auto num_columns = _output_expr_ctxs.size();
     result_columns.reserve(num_columns);
-
     for (int i = 0; i < num_columns; ++i) {
         ColumnPtr column = _output_expr_ctxs[i]->evaluate(chunk);
-        auto size = column->size();
-        if (_output_expr_ctxs[i]->root()->type().type == TYPE_TIME) {
-            column = vectorized::ColumnHelper::convert_time_column_from_double_to_str(column.get());
-        }
+        column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
+                         ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column.get())
+                         : column;
         result_columns.emplace_back(std::move(column));
     }
 
-    // Step 2: convert chunk to mysql row format row by row
-    {
-        for (int i = 0; i < num_rows; ++i) {
-            for (auto& result_column : result_columns) {
-                result_column->put_csv_stringstream(&_plain_text_outstream, i);
-                if (i < num_columns - 1) {
-                    _plain_text_outstream << _column_format.terminated_by;
-                }
+    for (int i = 0; i < num_rows; ++i) {
+        for (auto& result_column : result_columns) {
+            result_column->put_csv_stringstream(&_plain_text_outstream, i);
+            if (i < num_columns - 1) {
+                _plain_text_outstream << _options.column_terminated_by;
             }
-            _plain_text_outstream << _line_format.terminated_by;
-
-            // write one line to file_builder
-            return _flush_plain_text_outstream(false);
         }
+        _plain_text_outstream << _options.line_terminated_by;
+
+        _flush_plain_text_outstream(false);
     }
 
-    // Step 3
     _flush_plain_text_outstream(true);
+
     return Status::OK();
 }
 

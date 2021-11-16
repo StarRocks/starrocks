@@ -230,31 +230,29 @@ void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t 
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::put_string_stream(std::stringstream* ss, size_t idx) const {
+std::string FixedLengthColumnBase<T>::to_string(size_t idx, const std::string& null_value) const {
     if constexpr (std::is_arithmetic_v<T>) {
+        // To prevent loss of precision on float and double types,
+        // they are converted to strings before output.
+        // For example: For a double value 27361919854.929001,
+        // the direct output of using std::to_string is 2.73619e+10,
+        // and after conversion to a string, it outputs 27361919854.929001
         if constexpr (std::is_same_v<T, float>) {
             char buffer[MAX_FLOAT_STR_LENGTH + 2];
-            buffer[0] = ' ';
-            int length = FloatToBuffer(_data[idx], MAX_FLOAT_STR_LENGTH, buffer);
-            DCHECK(length >= 0) << "gcvt float failed, float value=" << _data[idx];
-            *ss << buffer;
+            buffer[0] = '\0';
+            FloatToBuffer(_data[idx], MAX_FLOAT_STR_LENGTH, buffer);
+            return buffer;
         } else if constexpr (std::is_same_v<T, double>) {
-            // To prevent loss of precision on float and double types,
-            // they are converted to strings before output.
-            // For example: For a double value 27361919854.929001,
-            // the direct output of using std::stringstream is 2.73619e+10,
-            // and after conversion to a string, it outputs 27361919854.929001
             char buffer[MAX_DOUBLE_STR_LENGTH + 2];
-            buffer[0] = ' ';
-            int length = DoubleToBuffer(_data[idx], MAX_DOUBLE_STR_LENGTH, buffer);
-            DCHECK(length >= 0) << "gcvt double failed, double value=" << _data[idx];
-            *ss << buffer;
+            buffer[0] = '\0';
+            DoubleToBuffer(_data[idx], MAX_DOUBLE_STR_LENGTH, buffer);
+            return buffer;
         } else {
-            *ss << _data[idx];
+            return std::to_string(_data[idx]);
         }
     } else {
         // decimal/date/datetime or something else.
-        *ss << _data[idx].to_string();
+        return _data[idx].to_string();
     }
 }
 

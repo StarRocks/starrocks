@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <utility>
 
 #include "file_builder.h"
 
@@ -14,8 +15,6 @@ class FileWriter;
 class RowBatch;
 
 struct PlainTextBuilderOptions {
-    PlainTextBuilderOptions() {}
-
     int character;
     std::string column_terminated_by;
     std::string column_optionally_enclosed_by;
@@ -27,9 +26,9 @@ struct PlainTextBuilderOptions {
 class PlainTextBuilder : public FileBuilder {
 public:
     PlainTextBuilder(WritableFile* writable_file, const std::vector<ExprContext*>& output_expr_ctxs,
-                     const PlainTextBuilderOptions& options)
-            : _writable_file(writable_file), _output_expr_ctxs(output_expr_ctxs) {}
-    ~PlainTextBuilder() override {}
+                     PlainTextBuilderOptions options)
+            : _options(std::move(options)), _output_expr_ctxs(output_expr_ctxs), _writable_file(writable_file) {}
+    ~PlainTextBuilder() override = default;
 
     Status add_chunk(vectorized::Chunk* chunk) override;
 
@@ -38,7 +37,7 @@ public:
     Status finish() override {}
 
 private:
-    int _character;
+    const PlainTextBuilderOptions _options;
 
     const std::vector<ExprContext*>& _output_expr_ctxs;
 
