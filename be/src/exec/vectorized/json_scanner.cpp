@@ -283,7 +283,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         RETURN_IF_ERROR(_read_and_parse_json());
     }
 
-    for (; _doc_stream_itr != _doc_stream.end(); ++_doc_stream_itr) {
+    for (; _doc_stream_itr != _doc_stream.end() && rows_to_read > 0; ++_doc_stream_itr, --rows_to_read) {
         auto doc = (*_doc_stream_itr);
         if (doc.error()) {
             std::string err_msg = strings::Substitute("Failed to parse string to json. code=$0, error=$1", doc.error(),
@@ -296,9 +296,9 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         switch (doc.type()) {
         case simdjson::ondemand::json_type::array: {
             // Expand array.
-            if(!_scanner->_strip_outer_array) {
+            if (!_scanner->_strip_outer_array) {
                 std::string err_msg("JSON data is an array, strip_outer_array must be set true");
-                _state->append_error_msg_to_file(simdjson::to_string(doc), err_msg);
+                _state->append_error_msg_to_file("", err_msg);
                 _counter->num_rows_filtered++;
                 return Status::DataQualityError(err_msg.c_str());
             }
@@ -312,9 +312,9 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         }
 
         case simdjson::ondemand::json_type::object: {
-            if(!_scanner->_strip_outer_array) {
+            if (!_scanner->_strip_outer_array) {
                 std::string err_msg("JSON data is an object, strip_outer_array must be set false");
-                _state->append_error_msg_to_file(simdjson::to_string(doc), err_msg);
+                _state->append_error_msg_to_file("", err_msg);
                 _counter->num_rows_filtered++;
                 return Status::DataQualityError(err_msg.c_str());
             }
@@ -434,13 +434,13 @@ Status JsonReader::_read_and_parse_json() {
 #else
     size_t length = 0;
     StreamPipeSequentialFile* stream_file = reinterpret_cast<StreamPipeSequentialFile*>(_file.get());
-    RETURN_IF_ERROR(stream_file->read_one_message(&json_binary_ptr_, &length));
+    RETURN_IF_ERROR(stream_file->read_one_message(&_json_binary_ptr, &length));
     if (length == 0) {
         return Status::EndOfFile("EOF of reading file");
     }
 
     //TODO: Pre-allocate 200MB memory. We could process big array in stream.
-    auto err = _parser.iterate_many(json_binary_ptr_.get(), length, 200 * 1024 * 1024).get(_doc_stream);
+    auto err = _parser.iterate_many(_json_binary_ptr.get(), length, 200 * 1024 * 1024).get(_doc_stream);
 #endif
 
     if (err) {

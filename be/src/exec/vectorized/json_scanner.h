@@ -103,7 +103,7 @@ private:
     std::vector<std::vector<JsonPath>> _json_paths;
     std::vector<JsonPath> _root_paths;
 
-    std::unique_ptr<uint8_t[]> json_binary_ptr_;
+    std::unique_ptr<uint8_t[]> _json_binary_ptr;
 
     simdjson::ondemand::parser _parser;
     simdjson::ondemand::document_stream _doc_stream;
