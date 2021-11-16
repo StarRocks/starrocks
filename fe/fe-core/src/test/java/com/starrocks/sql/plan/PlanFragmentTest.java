@@ -3800,9 +3800,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
                 "  |  cardinality: 0\n" +
                 "  |  column statistics: \n" +
-                "  |  * O_CUSTKEY-->[1.0, 149999.0, 0.0, 8.0, 99996.0]\n" +
-                "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]\n" +
-                "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]\n" +
+                "  |  * O_CUSTKEY-->[1.0, 149999.0, 0.0, 8.0, 99996.0] ESTIMATE\n" +
+                "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
+                "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE\n" +
                 "  |  \n" +
                 "  7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -3811,9 +3811,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  - filter_id = 0, build_expr = (10: O_ORDERKEY), remote = false\n" +
                 "  |  cardinality: 0\n" +
                 "  |  column statistics: \n" +
-                "  |  * O_CUSTKEY-->[1.0, 149999.0, 0.0, 8.0, 99996.0]\n" +
-                "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]\n" +
-                "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]"));
+                "  |  * O_ORDERKEY-->[1.0, 6000000.0, 0.0, 8.0, 1500000.0] ESTIMATE\n" +
+                "  |  * O_CUSTKEY-->[1.0, 149999.0, 0.0, 8.0, 99996.0] ESTIMATE\n" +
+                "  |  * L_ORDERKEY-->[1.0, 6000000.0, 0.0, 8.0, 1500000.0] ESTIMATE\n" +
+                "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
+                "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE"));
     }
 
     @Test

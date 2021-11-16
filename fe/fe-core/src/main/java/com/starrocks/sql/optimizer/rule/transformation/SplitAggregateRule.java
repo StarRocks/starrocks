@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -58,7 +59,7 @@ public class SplitAggregateRule extends TransformationRule {
         // Must do one stage aggregate If the child contains limit,
         // the aggregation must be a single node to ensure correctness.
         // eg. select count(*) from (select * table limit 2) t
-        if (input.inputAt(0).getOp().hasLimit()) {
+        if (((LogicalOperator) input.inputAt(0).getOp()).hasLimit()) {
             return false;
         }
         return true;
