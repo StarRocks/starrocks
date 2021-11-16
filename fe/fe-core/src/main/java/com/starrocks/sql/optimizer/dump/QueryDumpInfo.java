@@ -91,10 +91,7 @@ public class QueryDumpInfo implements DumpInfo {
 
     @Override
     public void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic) {
-        if (!tableStatisticsMap.containsKey(getTableName(table.getId()))) {
-            tableStatisticsMap.put(getTableName(table.getId()), new HashMap<>());
-        }
-        tableStatisticsMap.get(getTableName(table.getId())).put(column, columnStatistic);
+        addTableStatistics(getTableName(table.getId()), column, columnStatistic);
     }
 
     public void addTableStatistics(String tableName, String column, ColumnStatistic columnStatistic) {
