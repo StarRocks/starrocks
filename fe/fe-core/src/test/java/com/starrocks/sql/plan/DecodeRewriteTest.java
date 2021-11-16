@@ -168,8 +168,8 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
-                "  |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]\n" +
-                "  |  * count(3: S_ADDRESS)-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]"));
+                "  |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE\n" +
+                "  |  * count(3: S_ADDRESS)-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE"));
     }
 
     @Test

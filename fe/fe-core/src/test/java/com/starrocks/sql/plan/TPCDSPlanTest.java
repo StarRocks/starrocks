@@ -181,8 +181,8 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
         Assert.assertTrue(planFragment.contains("hasNullableGenerateChild: true"));
         String costPlanFragment = getCostExplain(sql);
         Assert.assertTrue(costPlanFragment.contains(" column statistics: \n" +
-                "     * i_item_sk-->[-Infinity, Infinity, 0.0, 1.0, 1.0]\n" +
-                "     * i_brand_id-->[-Infinity, Infinity, 0.0, 1.0, 1.0]"));
+                "     * i_item_sk-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "     * i_brand_id-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
     }
 
     @Test
