@@ -244,6 +244,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
 
+    RETURN_IF_ERROR(_prj_iter->init_filter_output_columns(*_filtered_output_columns));
+
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
     return Status::OK();

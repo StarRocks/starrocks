@@ -331,6 +331,7 @@ struct TOlapScanNode {
   21: optional string sql_predicates
   22: optional bool enable_column_expr_predicate
   23: optional map<i32, i32> dict_string_id_to_int_ids
+  24: optional list<string> filtered_output_column_name
 }
 struct TEqJoinCondition {
   // left-hand side of "<a> = <b>"

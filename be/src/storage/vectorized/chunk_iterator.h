@@ -82,6 +82,19 @@ public:
         return Status::OK();
     }
 
+    virtual Status init_filter_output_columns(const std::vector<std::string>& filtered_output_columns) {
+        for (const auto& col_name : filtered_output_columns) {
+            size_t idx  = _encoded_schema.get_field_index_by_name(col_name);
+            DCHECK(idx != -1);
+            _filtered_output_columns_indexes.push_back(idx);
+        }
+        return Status::OK();
+    }
+
+    const std::vector<size_t>& filtered_output_columns_indexes() const {
+        return _filtered_output_columns_indexes;
+    }
+
     int chunk_size() const { return _chunk_size; }
 
 protected:
@@ -95,6 +108,8 @@ protected:
 
     vectorized::Schema _schema;
     vectorized::Schema _encoded_schema;
+
+    std::vector<size_t> _filtered_output_columns_indexes;
 
     int _chunk_size = DEFAULT_CHUNK_SIZE;
 };

@@ -27,14 +27,16 @@ class OlapChunkSource final : public ChunkSource {
 public:
     OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, std::vector<ExprContext*> conjunct_ctxs,
                     RuntimeProfile* runtime_profile, const vectorized::RuntimeFilterProbeCollector& runtime_filters,
-                    std::vector<std::string> key_column_names, bool skip_aggregation)
+                    std::vector<std::string> key_column_names, bool skip_aggregation,
+                    std::vector<std::string>* filtered_output_columns)
             : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _runtime_filters(runtime_filters),
               _key_column_names(std::move(key_column_names)),
               _skip_aggregation(skip_aggregation),
-              _runtime_profile(runtime_profile) {
+              _runtime_profile(runtime_profile),
+              _filtered_output_columns(filtered_output_columns) {
         OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
         _scan_range = olap_morsel->get_scan_range();
     }
@@ -98,6 +100,8 @@ private:
     std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
+
+    const std::vector<std::string>* _filtered_output_columns = nullptr;
 
     // For release memory.
     using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;

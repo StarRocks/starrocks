@@ -134,6 +134,8 @@ private:
     std::atomic<int32_t> _running_threads{0};
     std::atomic<int32_t> _closed_scanners{0};
 
+    std::vector<std::string> _filtered_output_columns;
+
     // profile
     RuntimeProfile* _scan_profile = nullptr;
 

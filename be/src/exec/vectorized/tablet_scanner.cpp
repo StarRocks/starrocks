@@ -49,6 +49,8 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
 
+    RETURN_IF_ERROR(_prj_iter->init_filter_output_columns(*params.filtered_output_columns));
+
     Status st = _reader->prepare();
     if (!st.ok()) {
         std::string msg = strings::Substitute("[$0] fail to prepare tablet reader $1: $2",

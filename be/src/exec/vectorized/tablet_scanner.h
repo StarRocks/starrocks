@@ -27,6 +27,8 @@ struct TabletScannerParams {
     const std::vector<OlapScanRange*>* key_ranges = nullptr;
     const std::vector<ExprContext*>* conjunct_ctxs = nullptr;
 
+    const std::vector<std::string>* filtered_output_columns = nullptr;
+
     bool skip_aggregation = false;
     bool need_agg_finalize = true;
 };

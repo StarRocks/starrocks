@@ -693,6 +693,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
     }
 
+    // trim the columns which only be used for filter in this stage,
+    // will redude the number of column for next stage
+    chunk->remove_columns_by_index(_filtered_output_columns_indexes);
+
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
