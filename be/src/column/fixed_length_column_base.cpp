@@ -10,9 +10,9 @@
 #include "storage/uint24.h"
 #include "util/coding.h"
 #include "util/hash_util.hpp"
+#include "util/int96.h"
 #include "util/mysql_row_buffer.h"
 #include "util/types.h"
-#include "util/int96.h"
 
 namespace starrocks::vectorized {
 
