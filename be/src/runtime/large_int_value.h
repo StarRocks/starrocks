@@ -80,6 +80,6 @@ namespace std {
 
 std::string to_string(__int128 value);
 
-}
+} // namespace std
 
 #endif

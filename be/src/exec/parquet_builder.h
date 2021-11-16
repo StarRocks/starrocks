@@ -66,7 +66,7 @@ public:
 
 private:
     WritableFile* _writable_file; // not owned
-    int64_t _cur_pos = 0;     // current write position
+    int64_t _cur_pos = 0;         // current write position
     bool _is_closed = false;
 };
 
@@ -76,11 +76,9 @@ public:
     ParquetBuilder(WritableFile* _writable_file, const std::vector<ExprContext*>& output_expr_ctxs);
     ~ParquetBuilder() override;
 
-    Status add_chunk(vectorized::Chunk *chunk) override;
+    Status add_chunk(vectorized::Chunk* chunk) override;
 
-    uint64_t file_size() override {
-        return 0;
-    }
+    uint64_t file_size() override { return 0; }
 
     Status finish() override;
 

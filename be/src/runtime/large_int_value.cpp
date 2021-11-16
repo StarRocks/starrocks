@@ -73,6 +73,6 @@ std::string to_string(__int128 value) {
     return starrocks::LargeIntValue::to_string(value);
 }
 
-}
+} // namespace std
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
