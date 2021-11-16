@@ -395,7 +395,7 @@ public class InsertStmt extends DdlStmt {
             if (mentionedCols.contains(col.getName())) {
                 continue;
             }
-            if (!col.existBatchConstDefaultValue() && !col.isAllowNull()) {
+            if (!col.hasDefaultValue() && !col.isAllowNull()) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_COL_NOT_MENTIONED, col.getName());
             }
         }
@@ -644,7 +644,7 @@ public class InsertStmt extends DdlStmt {
             }
 
             if (expr instanceof DefaultValueExpr) {
-                if (!targetColumns.get(i).existBatchConstDefaultValue()) {
+                if (!targetColumns.get(i).hasDefaultValue()) {
                     throw new AnalysisException(
                             "Column has no default value, column=" + targetColumns.get(i).getName());
                 }
@@ -739,7 +739,7 @@ public class InsertStmt extends DdlStmt {
             if (exprByName.containsKey(col.getName())) {
                 resultExprs.add(exprByName.get(col.getName()));
             } else {
-                if (!col.existBatchConstDefaultValue()) {
+                if (!col.hasDefaultValue()) {
                     /*
                     The import stmt has been filtered in function checkColumnCoverage when
                         the default value of column is null and column is not nullable.

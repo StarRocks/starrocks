@@ -280,7 +280,7 @@ public class Load {
             if (columnExprMap.containsKey(columnName)) {
                 continue;
             }
-            if (column.existBatchConstDefaultValue() || column.isAllowNull()) {
+            if (column.hasDefaultValue() || column.isAllowNull()) {
                 continue;
             }
             throw new DdlException("Column has no default value. column: " + columnName);
@@ -619,7 +619,7 @@ public class Load {
                     if (funcExpr.hasChild(1)) {
                         exprs.add(funcExpr.getChild(1));
                     } else {
-                        if (column.existBatchConstDefaultValue()) {
+                        if (column.hasDefaultValue()) {
                             exprs.add(new StringLiteral(column.getCalculatedDefaultValue()));
                         } else {
                             if (column.isAllowNull()) {
@@ -638,7 +638,7 @@ public class Load {
                     if (funcExpr.hasChild(1)) {
                         innerIfExprs.add(funcExpr.getChild(1));
                     } else {
-                        if (column.existBatchConstDefaultValue()) {
+                        if (column.hasDefaultValue()) {
                             innerIfExprs.add(new StringLiteral(column.getCalculatedDefaultValue()));
                         } else {
                             if (column.isAllowNull()) {

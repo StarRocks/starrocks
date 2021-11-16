@@ -80,6 +80,8 @@ public class Column implements Writable {
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
+    private boolean isEvaluate = false;    // mark default value is evaluate
+    private String evaluatedDefaultValue;   // cache the defaultExpr after evaluate value
 
     public Column() {
         this.name = "";
@@ -255,7 +257,7 @@ public class Column implements Writable {
 
     // if the value or expr calculated is the same for each row of a batch like now(). return true
     // else for a batch of every row different like uuid(). return null
-    public boolean existBatchConstDefaultValue() {
+    public boolean hasDefaultValue() {
         if (defaultValue != null) {
             return true;
         }
@@ -271,10 +273,14 @@ public class Column implements Writable {
         if (defaultValue != null) {
             return defaultValue;
         }
-        if ("now()".equalsIgnoreCase(defaultExpr)) {
-            return DateTime.now().toString();
+
+        if (!isEvaluate) {
+            if ("now()".equalsIgnoreCase(defaultExpr)) {
+                evaluatedDefaultValue = DateTime.now().toString();
+            }
+            isEvaluate = true;
         }
-        return null;
+        return evaluatedDefaultValue;
     }
 
     public void setDefaultValue(String defaultValue) {

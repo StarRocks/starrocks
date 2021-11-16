@@ -215,7 +215,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                     expr = new SlotRef(srcSlotDesc);
                 } else {
                     Column column = dstSlotDesc.getColumn();
-                    if (column.existBatchConstDefaultValue()) {
+                    if (column.hasDefaultValue()) {
                         expr = new StringLiteral(dstSlotDesc.getColumn().getCalculatedDefaultValue());
                     } else {
                         if (column.isAllowNull()) {

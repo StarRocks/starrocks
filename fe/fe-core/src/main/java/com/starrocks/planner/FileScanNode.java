@@ -305,7 +305,7 @@ public class FileScanNode extends LoadScanNode {
                     expr = new SlotRef(srcSlotDesc);
                 } else {
                     Column column = destSlotDesc.getColumn();
-                    if (column.existBatchConstDefaultValue()) {
+                    if (column.hasDefaultValue()) {
                         expr = new StringLiteral(destSlotDesc.getColumn().getCalculatedDefaultValue());
                     } else {
                         if (column.isAllowNull()) {

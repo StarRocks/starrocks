@@ -171,7 +171,7 @@ public class InsertPlanner {
                 int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName());
                 if (idx == -1) {
                     ScalarOperator scalarOperator;
-                    if (!targetColumn.existBatchConstDefaultValue()) {
+                    if (!targetColumn.hasDefaultValue()) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                     } else {
                         scalarOperator = ConstantOperator.createVarchar(targetColumn.getCalculatedDefaultValue());
@@ -247,7 +247,7 @@ public class InsertPlanner {
                         targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
                 outputColumns.add(columnRefOperator);
 
-                if (!targetColumn.existBatchConstDefaultValue()) {
+                if (!targetColumn.hasDefaultValue()) {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
                 } else {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(targetColumn.getCalculatedDefaultValue()));
