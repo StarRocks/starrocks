@@ -22,11 +22,11 @@ order by
     revenue desc,
     o_orderdate limit 10;
 [result]
-TOP-N (order by [[38: sum(37: expr) DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
-    TOP-N (order by [[38: sum(37: expr) DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{38: sum(37: expr)=sum(38: sum(37: expr))}] group by [[20: L_ORDERKEY, 14: O_ORDERDATE, 17: O_SHIPPRIORITY]] having [null]
+TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{38: sum=sum(38: sum)}] group by [[20: L_ORDERKEY, 14: O_ORDERDATE, 17: O_SHIPPRIORITY]] having [null]
             EXCHANGE SHUFFLE[20, 14, 17]
-                AGGREGATE ([LOCAL] aggregate [{38: sum(37: expr)=sum(37: expr)}] group by [[20: L_ORDERKEY, 14: O_ORDERDATE, 17: O_SHIPPRIORITY]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{38: sum=sum(37: expr)}] group by [[20: L_ORDERKEY, 14: O_ORDERDATE, 17: O_SHIPPRIORITY]] having [null]
                     INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                         SCAN (columns[20: L_ORDERKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT, 30: L_SHIPDATE] predicate[30: L_SHIPDATE > 1995-03-11])
                         EXCHANGE SHUFFLE[10]

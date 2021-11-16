@@ -24,7 +24,7 @@ order by
 
 [fragment statistics]
 PLAN FRAGMENT 0(F06)
-Output Exprs:20: L_ORDERKEY | 38: sum(37: expr) | 14: O_ORDERDATE | 17: O_SHIPPRIORITY
+Output Exprs:20: L_ORDERKEY | 38: sum | 14: O_ORDERDATE | 17: O_SHIPPRIORITY
 Input Partition: UNPARTITIONED
 RESULT SINK
 
@@ -35,7 +35,7 @@ column statistics:
 * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
 * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
-* sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 
 PLAN FRAGMENT 1(F05)
 
@@ -52,17 +52,17 @@ OutPut Exchange Id: 15
 |  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
 |  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
-|  * sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 13:AGGREGATE (merge finalize)
-|  aggregate: sum[([38: sum(37: expr), DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([38: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [20: L_ORDERKEY, INT, false], [14: O_ORDERDATE, DATE, false], [17: O_SHIPPRIORITY, INT, false]
 |  cardinality: 5576432
 |  column statistics:
 |  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
 |  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
-|  * sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 12:EXCHANGE
 cardinality: 13218209
@@ -82,7 +82,7 @@ OutPut Exchange Id: 12
 |  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
 |  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
-|  * sum(37: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 10:Project
 |  output columns:

@@ -24,11 +24,11 @@ group by
 order by
     revenue desc ;
 [result]
-TOP-N (order by [[55: sum(54: expr) DESC NULLS LAST]])
-    TOP-N (order by [[55: sum(54: expr) DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{55: sum(54: expr)=sum(55: sum(54: expr))}] group by [[46: N_NAME]] having [null]
+TOP-N (order by [[55: sum DESC NULLS LAST]])
+    TOP-N (order by [[55: sum DESC NULLS LAST]])
+        AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(55: sum)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
-                AGGREGATE ([LOCAL] aggregate [{55: sum(54: expr)=sum(54: expr)}] group by [[46: N_NAME]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
                     INNER JOIN (join-predicate [50: R_REGIONKEY = 47: N_REGIONKEY] post-join-predicate [null])
                         SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
                         EXCHANGE BROADCAST
