@@ -21,11 +21,11 @@ namespace starrocks::vectorized {
  */
 class AggregateIterator final : public ChunkIterator {
 public:
-    explicit AggregateIterator(ChunkIteratorPtr child, int factor)
+    explicit AggregateIterator(ChunkIteratorPtr child, int factor, bool is_vertical_merge, bool is_key)
             : ChunkIterator(child->schema(), child->chunk_size()),
               _child(std::move(child)),
               _pre_aggregate_factor(factor),
-              _aggregator(&_schema, _chunk_size, _pre_aggregate_factor / 100),
+              _aggregator(&_schema, _chunk_size, _pre_aggregate_factor / 100, is_vertical_merge, is_key),
               _fetch_finish(false) {
         CHECK_LT(_schema.num_key_fields(), std::numeric_limits<uint16_t>::max());
 
@@ -56,7 +56,8 @@ public:
     }
 
 protected:
-    Status do_get_next(Chunk* chunk) override;
+    Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
 
 private:
     int _agg_chunk_nums = 0;
@@ -75,13 +76,13 @@ private:
     bool _fetch_finish;
 };
 
-Status AggregateIterator::do_get_next(Chunk* chunk) {
+Status AggregateIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
     while (!_fetch_finish) {
         // fetch chunk
         if (_aggregator.source_exhausted()) {
             _curr_chunk->reset();
 
-            Status st = _child->get_next(_curr_chunk.get());
+            Status st = _child->get_next(_curr_chunk.get(), source_masks);
 
             if (st.is_end_of_file()) {
                 _fetch_finish = true;
@@ -93,7 +94,7 @@ Status AggregateIterator::do_get_next(Chunk* chunk) {
             DCHECK(_curr_chunk->num_rows() != 0);
 
             _chunk_nums++;
-            _aggregator.update_source(_curr_chunk);
+            _aggregator.update_source(_curr_chunk, source_masks);
 
             if (!_aggregator.is_do_aggregate()) {
                 chunk->swap_chunk(*_curr_chunk);
@@ -135,7 +136,11 @@ void AggregateIterator::close() {
 }
 
 ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, int factor) {
-    return std::make_shared<AggregateIterator>(std::move(child), factor);
+    return std::make_shared<AggregateIterator>(std::move(child), factor, false, false);
+}
+
+ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, bool is_key) {
+    return std::make_shared<AggregateIterator>(std::move(child), 0, true, is_key);
 }
 
 } // namespace starrocks::vectorized
