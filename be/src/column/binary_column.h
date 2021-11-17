@@ -206,7 +206,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
-    virtual std::string to_string(size_t idx, const std::string& null_value) const {
+    std::string to_string(size_t idx, const std::string& null_value) const override {
         return get_slice(idx).to_string();
     }
 

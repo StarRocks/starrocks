@@ -189,6 +189,14 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
+    std::string to_string(size_t idx, const std::string& null_value) const override {
+        if (_has_null && _null_column->get_data()[idx]) {
+            return null_value
+        } else {
+            return _data_column->to_string(idx, null_value);
+        }
+    }
+
     std::string get_name() const override { return "nullable-" + _data_column->get_name(); }
 
     NullData& null_column_data() { return _null_column->get_data(); }
