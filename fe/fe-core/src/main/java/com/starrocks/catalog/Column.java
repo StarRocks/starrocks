@@ -27,7 +27,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
@@ -589,7 +588,7 @@ public class Column implements Writable {
             String json = Text.readString(in);
             Column column = GsonUtils.GSON.fromJson(json, Column.class);
             if (column.defaultExpr != null && column.defaultExpr.isExpr) {
-                if ("now()".equalsIgnoreCase(column.defaultExpr.value)){
+                if ("now()".equalsIgnoreCase(column.defaultExpr.value)) {
                     column.defaultExpr = CURRENT_TIMESTAMP_VALUE;
                 }
             }
