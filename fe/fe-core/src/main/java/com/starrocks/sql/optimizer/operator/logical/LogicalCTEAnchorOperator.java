@@ -6,6 +6,12 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+/*
+ * This operator denotes where a particular CTE is defined in the query.
+ * It defines the scope of that CTE. A CTE can be referenced only in the
+ * subtree rooted by the corresponding CTEAnchor operator
+ *
+ * */
 public class LogicalCTEAnchorOperator extends LogicalOperator {
     private String cteId;
 

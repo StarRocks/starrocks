@@ -6,6 +6,13 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+/*
+ * This operator is initially set as the root of a separate logical tree which corresponds to
+ * the CTE definition. There is one such tree – and one such CTEProducer operator – for every
+ * CTE defined in the query. These trees are not initially connected to the main logical query
+ * tree. Each CTEProducer has a unique id.
+ *
+ * */
 public class LogicalCTEProduceOperator extends LogicalOperator {
     private String cteId;
 

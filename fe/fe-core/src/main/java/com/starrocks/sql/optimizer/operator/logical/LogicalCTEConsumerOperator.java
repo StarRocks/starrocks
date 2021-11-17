@@ -11,6 +11,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
 
+/*
+ * This operator denotes the place in the query where a CTE is referenced. The number of CTEConsumer
+ * nodes is the same as the number of references to CTEs in the query. The id in the CTEConsumer
+ * operator corresponds to the CTEProducer to which it refers. There can be multiple CTEConsumers
+ * referring to the same CTEProducer.
+ * */
 public class LogicalCTEConsumerOperator extends LogicalOperator {
     private String cteId;
 
