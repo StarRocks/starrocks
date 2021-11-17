@@ -49,7 +49,7 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
 }
 
 uint64_t PlainTextBuilder::file_size() {
-    return _current_written_bytes;
+    return _writable_file->size();
 }
 
 Status PlainTextBuilder::_flush_plain_text_outstream(bool eos) {
@@ -59,7 +59,6 @@ Status PlainTextBuilder::_flush_plain_text_outstream(bool eos) {
     }
 
     const std::string& buf = _plain_text_outstream.str();
-    _current_written_bytes += buf.size();
     RETURN_IF_ERROR(_writable_file->append({reinterpret_cast<const uint8_t*>(buf.c_str()), buf.size()}));
 
     // clear the stream

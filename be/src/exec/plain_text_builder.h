@@ -51,9 +51,6 @@ private:
     std::stringstream _plain_text_outstream;
     static const size_t OUTSTREAM_BUFFER_SIZE_BYTES;
 
-    // current written bytes, used for split data
-    std::size_t _current_written_bytes = 0;
-
     // if buffer exceed the limit, write the data buffered in _plain_text_outstream via file_writer
     // if eos, write the data even if buffer is not full.
     Status _flush_plain_text_outstream(bool eos);
