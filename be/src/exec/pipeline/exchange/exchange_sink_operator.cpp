@@ -178,7 +178,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
         _chunk_request->set_eos(eos);
         butil::IOBuf attachment;
         _parent->construct_brpc_attachment(_chunk_request, attachment);
-        TransmitChunkInfo info = {this->_channel_id, _brpc_stub, std::move(_chunk_request), attachment};
+        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment};
         _parent->_buffer->add_request(info);
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -196,7 +196,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
 
-    TransmitChunkInfo info = {this->_channel_id, _brpc_stub, std::move(chunk_request), attachment};
+    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment};
     _parent->_buffer->add_request(info);
 
     return Status::OK();
