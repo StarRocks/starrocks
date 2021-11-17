@@ -18,9 +18,14 @@ const size_t PlainTextBuilder::OUTSTREAM_BUFFER_SIZE_BYTES = 1024 * 1024;
 
 Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
     auto num_rows = chunk->num_rows();
-    vectorized::Columns result_columns;
     auto num_columns = _output_expr_ctxs.size();
+    if (num_rows <= 0 || num_columns <= 0) {
+        return Status::OK();
+    }
+
+    vectorized::Columns result_columns;
     result_columns.reserve(num_columns);
+
     for (int i = 0; i < num_columns; ++i) {
         ColumnPtr column = _output_expr_ctxs[i]->evaluate(chunk);
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
@@ -30,11 +35,10 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
     }
 
     for (int i = 0; i < num_rows; ++i) {
-        for (auto& result_column : result_columns) {
-            _plain_text_outstream << result_column->to_string(i, NULL_IN_CSV);
-            if (i < num_columns - 1) {
-                _plain_text_outstream << _options.column_terminated_by;
-            }
+        _plain_text_outstream << result_columns[0]->to_string(i, NULL_IN_CSV);
+        for (int j = 1; j < result_columns.size(); j++) {
+            _plain_text_outstream << _options.column_terminated_by;
+            _plain_text_outstream << result_columns[j]->to_string(i, NULL_IN_CSV);
         }
         _plain_text_outstream << _options.line_terminated_by;
 
