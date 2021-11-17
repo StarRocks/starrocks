@@ -11,12 +11,16 @@ namespace starrocks::pipeline {
 class AggregateStreamingSourceOperator : public SourceOperator {
 public:
     AggregateStreamingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_streaming_source", plan_node_id), _aggregator(std::move(aggregator)) {}
+            : SourceOperator(id, "aggregate_streaming_source", plan_node_id), _aggregator(std::move(aggregator)) {
+        _aggregator->create_one_operator();
+    }
+
     ~AggregateStreamingSourceOperator() override = default;
 
     bool has_output() const override;
     bool is_finished() const override;
     void set_finishing(RuntimeState* state) override;
+    void set_finished(RuntimeState* state) override;
 
     Status close(RuntimeState* state) override;
 

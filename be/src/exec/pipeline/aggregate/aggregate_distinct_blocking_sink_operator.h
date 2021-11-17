@@ -13,15 +13,17 @@ public:
     AggregateDistinctBlockingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : Operator(id, "aggregate_distinct_blocking_sink", plan_node_id), _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase2);
+        _aggregator->create_one_operator();
     }
     ~AggregateDistinctBlockingSinkOperator() override = default;
 
     bool has_output() const override { return false; }
     bool need_input() const override { return !is_finished(); }
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
     void set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;

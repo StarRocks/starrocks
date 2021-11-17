@@ -11,12 +11,17 @@ namespace starrocks::pipeline {
 class AggregateBlockingSourceOperator : public SourceOperator {
 public:
     AggregateBlockingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_blocking_source", plan_node_id), _aggregator(std::move(aggregator)) {}
+            : SourceOperator(id, "aggregate_blocking_source", plan_node_id), _aggregator(std::move(aggregator)) {
+        _aggregator->create_one_operator();
+    }
+
     ~AggregateBlockingSourceOperator() override = default;
 
     bool has_output() const override;
     bool is_finished() const override;
-    void set_finishing(RuntimeState* state) override;
+    // set_finishing does nothing.
+    void set_finishing(RuntimeState* state) override {}
+    void set_finished(RuntimeState* state) override;
 
     Status close(RuntimeState* state) override;
 
@@ -26,8 +31,6 @@ private:
     // It is used to perform aggregation algorithms
     // shared by AggregateBlockingSinkOperator
     AggregatorPtr _aggregator = nullptr;
-    // Whether prev operator has no output
-    bool _is_finished = false;
 };
 
 class AggregateBlockingSourceOperatorFactory final : public SourceOperatorFactory {
