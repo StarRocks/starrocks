@@ -210,6 +210,16 @@ private:
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
 };
 
+class IcebergTableDescriptor : public TableDescriptor {
+public:
+    IcebergTableDescriptor(const TTableDescriptor& tdesc);
+    ~IcebergTableDescriptor() override = default;
+
+private:
+    std::string _table_location;
+    std::vector<TColumn> _columns;
+};
+
 class OlapTableDescriptor : public TableDescriptor {
 public:
     OlapTableDescriptor(const TTableDescriptor& tdesc);

@@ -217,6 +217,9 @@ struct THdfsScanRange {
 
     // text file desc
     7: optional Descriptors.TTextFileDesc text_file_desc
+    
+    // for iceberg table scanrange should contains the full path of file
+    8: optional string full_path
 }
 
 // Specification of an individual data range which is held in its entirety

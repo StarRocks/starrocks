@@ -106,6 +106,7 @@ public enum RuleType {
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
+    IMP_ICEBERG_LSCAN_TO_PSCAN,
     IMP_SCHEMA_LSCAN_TO_PSCAN,
     IMP_MYSQL_LSCAN_TO_PSCAN,
     IMP_ES_LSCAN_TO_PSCAN,

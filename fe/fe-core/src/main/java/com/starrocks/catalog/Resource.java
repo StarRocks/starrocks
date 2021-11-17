@@ -39,6 +39,7 @@ public abstract class Resource implements Writable {
         UNKNOWN,
         SPARK,
         HIVE,
+        ICEBERG,
         ODBC_CATALOG;
 
         public static ResourceType fromString(String resourceType) {
@@ -70,6 +71,9 @@ public abstract class Resource implements Writable {
                 break;
             case HIVE:
                 resource = new HiveResource(stmt.getResourceName());
+                break;
+            case ICEBERG:
+                resource = new IcebergResource(stmt.getResourceName());
                 break;
             case ODBC_CATALOG:
                 resource = new OdbcCatalogResource(stmt.getResourceName());

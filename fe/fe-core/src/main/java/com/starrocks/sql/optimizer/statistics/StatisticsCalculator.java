@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
@@ -73,6 +74,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -220,6 +222,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         builder.setOutputRowCount(tableRowCount);
         // 4. estimate cardinality
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalIcebergScan(LogicalIcebergScanOperator node, ExpressionContext context) {
+        return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
+        return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
+                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        // TODO: get statistics from iceberg catalog or metadata
+        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        builder.setOutputRowCount(1);
         context.setStatistics(builder.build());
         return visitOperator(node, context);
     }

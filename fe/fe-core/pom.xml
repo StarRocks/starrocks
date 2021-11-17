@@ -38,6 +38,7 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <starrocks.thridparty>${basedir}/../../thirdparty</starrocks.thridparty>
+        <iceberg.version>0.12.0</iceberg.version>
     </properties>
 
     <profiles>
@@ -222,6 +223,12 @@ under the License.
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-mr</artifactId>
+            <version>${iceberg.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->

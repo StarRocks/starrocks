@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -791,6 +792,15 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalHiveScan(PhysicalHiveScanOperator node, ExpressionContext context) {
+        if (getRequiredLocalDesc().isPresent()) {
+            return visitOperator(node, context);
+        }
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
