@@ -233,9 +233,13 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
     PageHandle handle;
     Slice page_body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer));
+    // if enable page cache, bitshuffle encoding page will be decoded after read
+    // otherwise bitshuffle encoding page will be decoded in page_decoder init
+    size_t type = _reader->encoding_info()->encoding();
+    bool is_decoded = _opts.use_page_cache && (type == EncodingTypePB::DICT_ENCODING ||  type == EncodingTypePB::BIT_SHUFFLE);
+    RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer, true));
     RETURN_IF_ERROR(parse_page(&_page, std::move(handle), page_body, footer.data_page_footer(),
-                               _reader->encoding_info(), iter.page(), iter.page_index()));
+                               _reader->encoding_info(), iter.page(), iter.page_index(), is_decoded));
 
     // dictionary page is read when the first data page that uses it is read,
     // this is to optimize the memory usage: when there is no query on one column, we could

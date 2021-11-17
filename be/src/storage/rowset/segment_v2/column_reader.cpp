@@ -179,7 +179,7 @@ Status ColumnReader::new_bitmap_index_iterator(BitmapIndexIterator** iterator) {
 }
 
 Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const PagePointer& pp, PageHandle* handle,
-                               Slice* page_body, PageFooterPB* footer) {
+                               Slice* page_body, PageFooterPB* footer, bool is_data_page) {
     iter_opts.sanity_check();
     PageReadOptions opts;
     opts.rblock = iter_opts.rblock;
@@ -189,6 +189,9 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     opts.verify_checksum = _opts.verify_checksum;
     opts.use_page_cache = iter_opts.use_page_cache;
     opts.kept_in_memory = _opts.kept_in_memory;
+    if (is_data_page) {
+        opts.encoding_type = _encoding_info->encoding();
+    }
 
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
 }

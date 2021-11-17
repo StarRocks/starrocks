@@ -79,7 +79,7 @@ Status IndexedColumnReader::load_index_page(fs::ReadableBlock* rblock, const Pag
 }
 
 Status IndexedColumnReader::read_page(fs::ReadableBlock* rblock, const PagePointer& pp, PageHandle* handle, Slice* body,
-                                      PageFooterPB* footer) const {
+                                      PageFooterPB* footer, bool is_data_page) const {
     PageReadOptions opts;
     opts.rblock = rblock;
     opts.page_pointer = pp;
@@ -88,6 +88,9 @@ Status IndexedColumnReader::read_page(fs::ReadableBlock* rblock, const PagePoint
     opts.stats = &tmp_stats;
     opts.use_page_cache = _use_page_cache;
     opts.kept_in_memory = _kept_in_memory;
+    if (is_data_page) {
+        opts.encoding_type = _encoding_info->encoding();
+    }
 
     return PageIO::read_and_decompress_page(opts, handle, body, footer);
 }
@@ -114,10 +117,12 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
     PageHandle handle;
     Slice body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(_reader->read_page(_rblock.get(), pp, &handle, &body, &footer));
+    size_t type = _reader->encoding_info()->encoding();
+    bool is_decoded = _reader->use_page_cache() && (type == EncodingTypePB::DICT_ENCODING ||  type == EncodingTypePB::BIT_SHUFFLE);
+    RETURN_IF_ERROR(_reader->read_page(_rblock.get(), pp, &handle, &body, &footer, true));
     // parse data page
     // note that page_index is not used in IndexedColumnIterator, so we pass 0
-    return parse_page(&_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0);
+    return parse_page(&_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0, is_decoded);
 }
 
 Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {

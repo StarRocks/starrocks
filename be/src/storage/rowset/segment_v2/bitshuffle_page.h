@@ -248,7 +248,7 @@ public:
         }
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _compressed_size = decode_fixed32_le((const uint8_t*)&_data[4]);
-        if (_compressed_size != _data.size) {
+        if (_compressed_size != _data.size && !_options.is_decoded) {
             std::stringstream ss;
             ss << "Size information unmatched, _compressed_size:" << _compressed_size
                << ", _num_elements:" << _num_elements << ", data size:" << _data.size;
@@ -288,6 +288,14 @@ public:
             std::stringstream ss;
             ss << "invalid size info. size of element:" << _size_of_element << ", SIZE_OF_TYPE:" << SIZE_OF_TYPE;
             return Status::InternalError(ss.str());
+        }
+        if (_options.is_decoded) {
+            if (_data.size != _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE) {
+                std::stringstream ss;
+                ss << "Size information unmatched, _data.size:" << _data.size
+                   << ", _num_elements:" << _num_elements << ", expected size is " << _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE;
+                return Status::InternalError(ss.str());
+            }
         }
 
         _parsed = true;
@@ -377,7 +385,7 @@ private:
             _decoded.resize(_num_element_after_padding * _size_of_element);
             RETURN_IF_ERROR(_decode_to(_decoded.data()));
             // release original memory
-            if (_options.page_handle) {
+            if (_options.page_handle && !_options.is_decoded) {
                 _options.page_handle->release_memory();
             }
         }
@@ -387,13 +395,16 @@ private:
 
     Status _decode_to(uint8_t* to) {
         char* in = const_cast<char*>(&_data[BITSHUFFLE_PAGE_HEADER_SIZE]);
-        int64_t bytes = bitshuffle::decompress_lz4(in, to, _num_element_after_padding, _size_of_element, 0);
-        if (PREDICT_FALSE(bytes < 0)) {
-            // Ideally, this should not happen.
-            LOG(ERROR) << "bitshuffle decompress failed: " << bitshuffle_error_msg(bytes);
-            return Status::RuntimeError("Unshuffle Process failed");
+        if (!_options.is_decoded) {
+            int64_t bytes = bitshuffle::decompress_lz4(in, to, _num_element_after_padding, _size_of_element, 0);
+            if (PREDICT_FALSE(bytes < 0)) {
+                // Ideally, this should not happen.
+                LOG(ERROR) << "bitshuffle decompress failed: " << bitshuffle_error_msg(bytes);
+                return Status::RuntimeError("Unshuffle Process failed");
+            }
+        } else {
+            memcpy(to, in, _data.size - BITSHUFFLE_PAGE_HEADER_SIZE);
         }
-
         return Status::OK();
     }
 

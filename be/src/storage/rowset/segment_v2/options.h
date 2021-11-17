@@ -40,6 +40,7 @@ class PageDecoderOptions {
 public:
     PageHandle* page_handle = nullptr;
     bool enable_direct_copy = false;
+    bool is_decoded = false;
 };
 
 } // namespace segment_v2
