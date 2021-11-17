@@ -34,7 +34,7 @@ public:
     Status finish() override;
 
 private:
-    static const std::string NULL_IN_CSV;
+    static const char* NULL_IN_CSV;
 
     const PlainTextBuilderOptions _options;
 

@@ -139,10 +139,14 @@ Status FileResultWriter::_create_new_file_if_exceed_size() {
 }
 
 Status FileResultWriter::_close_file_writer(bool done) {
-    RETURN_IF_ERROR(_file_builder->finish());
-    _file_builder.reset();
-    RETURN_IF_ERROR(_writable_file->close());
-    _writable_file.reset();
+    if (_file_builder != nullptr) {
+        RETURN_IF_ERROR(_file_builder->finish());
+        _file_builder.reset();
+    }
+    if (_writable_file != nullptr) {
+        RETURN_IF_ERROR(_writable_file->close());
+        _writable_file.reset();
+    }
 
     if (!done) {
         // not finished, create new file writer for next file

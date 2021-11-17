@@ -13,7 +13,7 @@
 
 namespace starrocks {
 
-const std::string PlainTextBuilder::NULL_IN_CSV = "\\N";
+const char* PlainTextBuilder::NULL_IN_CSV = "\\N";
 const size_t PlainTextBuilder::OUTSTREAM_BUFFER_SIZE_BYTES = 1024 * 1024;
 
 Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
