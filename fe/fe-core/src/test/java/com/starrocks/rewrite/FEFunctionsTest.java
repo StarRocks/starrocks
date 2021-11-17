@@ -270,18 +270,6 @@ public class FEFunctionsTest {
         } catch (AnalysisException e) {
             Assert.assertEquals(e.getMessage(), "%V not supported in date format string");
         }
-        try {
-            FEFunctions.dateParse(new StringLiteral("2013-05-17"), new StringLiteral("%w"));
-            fail("Junit test dateParse fail");
-        } catch (AnalysisException e) {
-            Assert.assertEquals(e.getMessage(), "%w not supported in date format string");
-        }
-        try {
-            FEFunctions.dateParse(new StringLiteral("2013-05-17"), new StringLiteral("%X"));
-            fail("Junit test dateParse fail");
-        } catch (AnalysisException e) {
-            Assert.assertEquals(e.getMessage(), "%X not supported in date format string");
-        }
     }
 
     @Test
