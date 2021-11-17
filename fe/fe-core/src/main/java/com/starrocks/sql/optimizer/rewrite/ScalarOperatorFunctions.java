@@ -107,20 +107,17 @@ public class ScalarOperatorFunctions {
             @FEFunction(name = "date_format", argTypes = {"DATETIME", "VARCHAR"}, returnType = "VARCHAR"),
             @FEFunction(name = "date_format", argTypes = {"DATE", "VARCHAR"}, returnType = "VARCHAR")
     })
-    public static ConstantOperator dateFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
+    public static ConstantOperator dateFormat(ConstantOperator date, ConstantOperator fmtLiteral)
+            throws AnalysisException {
         String format = fmtLiteral.getVarchar();
-        try {
-            // unix style
-            if (!SUPPORT_DATETIME_FORMATTER.contains(format.trim())) {
-                DateLiteral literal = new DateLiteral(date.getDatetime().format(DATE_TIME_FORMATTER), Type.DATETIME);
-                literal.setType(date.getType());
-                return ConstantOperator.createVarchar(literal.dateFormat(fmtLiteral.getVarchar()));
-            } else {
-                String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
-                return ConstantOperator.createVarchar(result);
-            }
-        } catch (Exception e) {
-            return fmtLiteral;
+        // unix style
+        if (!SUPPORT_DATETIME_FORMATTER.contains(format.trim())) {
+            DateLiteral literal = new DateLiteral(date.getDatetime().format(DATE_TIME_FORMATTER), Type.DATETIME);
+            literal.setType(date.getType());
+            return ConstantOperator.createVarchar(literal.dateFormat(fmtLiteral.getVarchar()));
+        } else {
+            String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
+            return ConstantOperator.createVarchar(result);
         }
     }
 
