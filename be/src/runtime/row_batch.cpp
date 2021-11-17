@@ -121,25 +121,9 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch)
         TupleRow* row = get_row(i);
         std::vector<TupleDescriptor*>::const_iterator desc = tuple_descs.begin();
         for (int j = 0; desc != tuple_descs.end(); ++desc, ++j) {
-            if ((*desc)->string_slots().empty()) {
-                continue;
-            }
             Tuple* tuple = row->get_tuple(j);
             if (tuple == nullptr) {
                 continue;
-            }
-
-            for (auto slot : (*desc)->string_slots()) {
-                DCHECK(slot->type().is_string_type());
-                StringValue* string_val = tuple->get_string_slot(slot->tuple_offset());
-                int offset = reinterpret_cast<intptr_t>(string_val->ptr);
-                string_val->ptr = reinterpret_cast<char*>(tuple_data + offset);
-
-                // Why we do this mask? Field len of StringValue is changed from int to size_t in
-                // StarRocks 0.11. When upgrading, some bits of len sent from 0.10 is random value,
-                // this works fine in version 0.10, however in 0.11 this will lead to an invalid
-                // length. So we make the high bits zero here.
-                string_val->len &= 0x7FFFFFFFL;
             }
         }
     }
@@ -212,28 +196,9 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch)
         TupleRow* row = get_row(i);
         std::vector<TupleDescriptor*>::const_iterator desc = tuple_descs.begin();
         for (int j = 0; desc != tuple_descs.end(); ++desc, ++j) {
-            if ((*desc)->string_slots().empty()) {
-                continue;
-            }
-
             Tuple* tuple = row->get_tuple(j);
             if (tuple == nullptr) {
                 continue;
-            }
-
-            std::vector<SlotDescriptor*>::const_iterator slot = (*desc)->string_slots().begin();
-            for (; slot != (*desc)->string_slots().end(); ++slot) {
-                DCHECK((*slot)->type().is_string_type());
-                StringValue* string_val = tuple->get_string_slot((*slot)->tuple_offset());
-
-                int offset = reinterpret_cast<intptr_t>(string_val->ptr);
-                string_val->ptr = reinterpret_cast<char*>(tuple_data + offset);
-
-                // Why we do this mask? Field len of StringValue is changed from int to size_t in
-                // StarRocks 0.11. When upgrading, some bits of len sent from 0.10 is random value,
-                // this works fine in version 0.10, however in 0.11 this will lead to an invalid
-                // length. So we make the high bits zero here.
-                string_val->len &= 0x7FFFFFFFL;
             }
         }
     }
@@ -434,15 +399,6 @@ int RowBatch::total_byte_size() {
                 continue;
             }
             result += (*desc)->byte_size();
-            std::vector<SlotDescriptor*>::const_iterator slot = (*desc)->string_slots().begin();
-            for (; slot != (*desc)->string_slots().end(); ++slot) {
-                DCHECK((*slot)->type().is_string_type());
-                if (tuple->is_null((*slot)->null_indicator_offset())) {
-                    continue;
-                }
-                StringValue* string_val = tuple->get_string_slot((*slot)->tuple_offset());
-                result += string_val->len;
-            }
         }
     }
 
