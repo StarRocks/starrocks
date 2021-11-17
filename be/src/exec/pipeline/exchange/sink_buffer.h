@@ -18,6 +18,9 @@ namespace starrocks::pipeline {
 using PTransmitChunkParamsPtr = std::shared_ptr<PTransmitChunkParams>;
 
 struct TransmitChunkInfo {
+    // For BUCKET_SHFFULE_HASH_PARTITIONED, multiple channels may be related to
+    // a same exchange source fragment instance, so we should use fragment_instance_id
+    // of the destination as the key of destination instead of channel_id.
     TUniqueId fragment_instance_id;
     doris::PBackendService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
