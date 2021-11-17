@@ -418,19 +418,19 @@ public class DecodeRewriteTest extends PlanTestBase{
         String sql = "select count(t.a) from(select S_ADDRESS in ('kks', 'kks2') as a from supplier) as t";
         String plan = getVerboseExplain(sql);
 
-        Assert.assertTrue(plan.contains(" 11: S_ADDRESS IN ('kks', 'kks2')"));
+        Assert.assertTrue(plan.contains(" 3: S_ADDRESS IN ('kks', 'kks2')"));
 
         sql = "select count(t.a) from(select S_ADDRESS = 'kks' as a from supplier) as t";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains(" [11: S_ADDRESS, INT, false] = 'kks'"));
+        Assert.assertTrue(plan.contains("[3: S_ADDRESS, VARCHAR, false] = 'kks'"));
 
         sql = "select count(t.a) from(select S_ADDRESS is null as a from supplier) as t";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("11: S_ADDRESS IS NULL"));
+        Assert.assertTrue(plan.contains("3: S_ADDRESS IS NULL"));
 
         sql = "select count(t.a) from(select S_ADDRESS is not null as a from supplier) as t";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("11: S_ADDRESS IS NOT NULL"));
+        Assert.assertTrue(plan.contains("3: S_ADDRESS IS NOT NULL"));
 
         sql = "select count(t.a) from(select S_ADDRESS <=> 'kks' as a from supplier) as t";
         plan = getVerboseExplain(sql);
