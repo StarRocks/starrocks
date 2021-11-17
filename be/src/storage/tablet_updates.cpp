@@ -1882,7 +1882,7 @@ Status TabletUpdates::load_from_base_tablet(const TAlterTabletReqV2& request,
         writer_context.partition_id = _tablet.partition_id();
         writer_context.tablet_schema_hash = _tablet.schema_hash();
         writer_context.rowset_type = _tablet.tablet_meta()->preferred_rowset_type();
-        writer_context.rowset_path_prefix = _tablet.tablet_path();
+        writer_context.rowset_path_prefix = _tablet.schema_hash_path();
         writer_context.tablet_schema = &_tablet.tablet_schema();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = rowset->version();
