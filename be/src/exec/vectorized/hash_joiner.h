@@ -6,6 +6,7 @@
 #include "column/fixed_length_column.h"
 #include "common/statusor.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/context_base.h"
 #include "exec/vectorized/hash_join_node.h"
 #include "exec/vectorized/join_hash_map.h"
 #include "util/phmap/phmap.h"
@@ -37,7 +38,7 @@ enum HashJoinPhase {
     POST_PROBE = 2,
     EOS = 4,
 };
-class HashJoiner {
+class HashJoiner : public pipeline::ContextBase {
 public:
     HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id, TPlanNodeType::type node_type, int64_t limit,
                const std::vector<bool>& is_null_safes, const std::vector<ExprContext*>& build_expr_ctxs,
@@ -48,7 +49,7 @@ public:
 
     ~HashJoiner() = default;
     Status prepare(RuntimeState* state);
-    void close(RuntimeState* state);
+    Status close(RuntimeState* state) override;
     bool need_input() const;
     bool has_output() const;
     bool is_build_done() const { return _phase != HashJoinPhase::BUILD; }

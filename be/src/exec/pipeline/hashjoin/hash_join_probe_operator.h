@@ -17,15 +17,22 @@ public:
 
     Status prepare(RuntimeState* state) override { return OperatorWithDependency::prepare(state); }
 
-    Status close(RuntimeState* state) override { return OperatorWithDependency::close(state); }
+    Status close(RuntimeState* state) override {
+        RETURN_IF_ERROR(_hash_joiner->close_one_operator(state));
+        return OperatorWithDependency::close(state);
+    }
 
     bool has_output() const override;
     bool need_input() const override;
+
     bool is_finished() const override;
+    void set_finishing(RuntimeState* state) override;
+    void set_finished(RuntimeState* state) override;
+
+    bool is_ready() const override;
+
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk);
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
-    void set_finishing(RuntimeState* state) override;
-    bool is_ready() const override;
 
 private:
     HashJoinerPtr _hash_joiner;

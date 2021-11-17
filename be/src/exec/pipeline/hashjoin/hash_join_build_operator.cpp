@@ -7,7 +7,10 @@ namespace pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(int32_t id, const string& name, int32_t plan_node_id,
                                              HashJoinerPtr hash_joiner)
-        : Operator(id, name, plan_node_id), _hash_joiner(hash_joiner) {}
+        : Operator(id, name, plan_node_id), _hash_joiner(hash_joiner) {
+    _hash_joiner->create_one_operator();
+}
+
 Status HashJoinBuildOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     return _hash_joiner->append_chunk_to_ht(state, chunk);
 }
@@ -17,9 +20,10 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
     return _hash_joiner->prepare(state);
 }
 Status HashJoinBuildOperator::close(RuntimeState* state) {
-    _hash_joiner->close(state);
+    RETURN_IF_ERROR(_hash_joiner->close_one_operator(state));
     return Operator::close(state);
 }
+
 StatusOr<vectorized::ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* state) {
     const char* msg = "pull_chunk not supported in HashJoinBuildOperator";
     CHECK(false) << msg;
@@ -27,10 +31,8 @@ StatusOr<vectorized::ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* s
 }
 
 void HashJoinBuildOperator::set_finishing(RuntimeState* state) {
-    if (!_is_finished) {
-        _hash_joiner->build_ht(state);
-        _is_finished = true;
-    }
+    _is_finished = true;
+    _hash_joiner->build_ht(state);
 }
 
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(int32_t id, int32_t plan_node_id,
