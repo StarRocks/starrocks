@@ -716,7 +716,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Boolean visitConstant(ConstantOperator literal, Void context) {
-            return true;
+            return false;
         }
 
         @Override

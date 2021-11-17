@@ -51,8 +51,6 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
-
-        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         FeConstants.USE_MOCK_DICT_MANAGER = true;
     }
 
