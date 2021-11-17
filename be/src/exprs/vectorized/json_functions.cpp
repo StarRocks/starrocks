@@ -99,10 +99,6 @@ Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
 
 bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<JsonPath>& jsonpath,
                                         simdjson::ondemand::value& value) {
-    if (obj.is_empty()) {
-        return false;
-    }
-
     simdjson::ondemand::value tvalue;
 
     // Skip the first $.
@@ -138,7 +134,7 @@ bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const s
                     return false;
                 }
                 if (idx++ == index) {
-                    tvalue = a.value();
+                    a.get(tvalue);
                 }
             }
         }
@@ -159,6 +155,50 @@ void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector
                                                                boost::escaped_list_separator<char>("\\", ".", "\""));
     std::vector<std::string> paths(tok.begin(), tok.end());
     _get_parsed_paths(paths, parsed_paths);
+}
+
+Status JsonFunctions::minify_json_to_string(simdjson::ondemand::value& val, std::unique_ptr<char[]>& buf,
+                                            size_t& buflen) {
+    std::string_view sv;
+    auto err = simdjson::to_json_string(val).get(sv);
+    if (err) {
+        return Status::InvalidArgument(strings::Substitute("Invalid json : $0", simdjson::error_message(err)));
+    }
+
+    buf.reset(new char[sv.size()]);
+    auto error = simdjson::minify(sv.data(), sv.size(), buf.get(), buflen);
+    if (err) {
+        return Status::InvalidArgument(strings::Substitute("Invalid json : $0", simdjson::error_message(err)));
+    }
+    return Status::OK();
+}
+
+std::string JsonFunctions::minify_json_to_string(simdjson::ondemand::value& val) {
+    std::unique_ptr<char[]> buf;
+    size_t buflen;
+
+    minify_json_to_string(val, buf, buflen);
+
+    return {buf.get(), buflen};
+}
+
+std::string JsonFunctions::minify_json_to_string(simdjson::ondemand::document_reference& doc) {
+
+    simdjson::ondemand::value val;
+    auto err = doc.get_value().get(val);
+    if (err) {
+        return "";
+    }
+
+    std::unique_ptr<char[]> buf;
+    size_t buflen;
+
+    auto st = minify_json_to_string(val, buf, buflen);
+    if (st.ok()) {
+        return "";
+    }
+
+    return {buf.get(), buflen};
 }
 
 JsonFunctionType JsonTypeTraits<TYPE_INT>::JsonType = JSON_FUN_INT;
