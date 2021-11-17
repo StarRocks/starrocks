@@ -53,7 +53,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 .withTable("create table test.nocolocate3\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 10\n" +
                         "properties(\"replication_num\" = \"1\");");
-        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
     }
 
     @Test

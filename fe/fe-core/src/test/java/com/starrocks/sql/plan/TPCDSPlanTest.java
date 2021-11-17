@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -7480,5 +7481,52 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
                 "limit 100;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertFalse(planFragment.contains("cross join"));
+    }
+
+
+    @Test
+    public void testTPCDSDecodeRewrite() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        String sql = "select c_customer_id customer_id        ,c_first_name customer_first_name        " +
+                ",c_last_name customer_last_name        ,c_preferred_cust_flag customer_preferred_cust_flag        " +
+                ",c_birth_country customer_birth_country        ,d_year dyear        " +
+                ",sum(ss_ext_list_price-ss_ext_discount_amt) year_total        ,'s' sale_type  from customer      " +
+                ",store_sales      ,date_dim  where c_customer_sk = ss_customer_sk    " +
+                "and ss_sold_date_sk = d_date_sk  group by c_customer_id          ,c_first_name          ,c_last_name          " +
+                ",c_preferred_cust_flag           ,c_birth_country          ,d_year;";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
+        Assert.assertTrue(plan.contains("  13:Decode\n" +
+                "  |  <dict id 73> : <string id 15>"));
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
+    }
+
+    @Test
+    public void testTPCDSDecodeRewrite1() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        String sql = "with year_total as (\n" +
+                " select c_customer_id customer_id\n" +
+                "       ,c_birth_country customer_birth_country\n" +
+                "       ,d_year dyear\n" +
+                " from customer\n" +
+                "     ,store_sales\n" +
+                "     ,date_dim\n" +
+                " where c_customer_sk = ss_customer_sk\n" +
+                "   and ss_sold_date_sk = d_date_sk\n" +
+                " group by c_customer_id\n" +
+                "         ,c_birth_country\n" +
+                "         ,d_year \n" +
+                " )\n" +
+                " \n" +
+                " select t_s_secyear.customer_id\n" +
+                " from year_total t_s_firstyear\n" +
+                "     ,year_total t_s_secyear\n" +
+                " where t_s_secyear.customer_id = t_s_firstyear.customer_id\n" +
+                "         and t_s_firstyear.dyear = 2001\n" +
+                "         and t_s_secyear.dyear = 2001+1\n" +
+                "limit 100;";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 }
