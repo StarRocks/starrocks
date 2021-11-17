@@ -736,7 +736,7 @@ TEST_F(TabletUpdatesTest, compaction) {
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 }
 
-TEST_F(TabletUpdatesTest, load_from_base_tablet) {
+TEST_F(TabletUpdatesTest, perform_linked_schema_change) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     _tablet2 = create_tablet2(rand(), rand());
@@ -753,7 +753,7 @@ TEST_F(TabletUpdatesTest, load_from_base_tablet) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     _tablet2->set_tablet_state(TABLET_NOTREADY);
-    ASSERT_TRUE(_tablet2->updates()->load_from_base_tablet(4, _tablet.get()).ok());
+    ASSERT_TRUE(_tablet2->updates()->perform_linked_schema_change(4, _tablet.get()).ok());
 
     ASSERT_EQ(N, read_tablet(_tablet2, 4));
 }
