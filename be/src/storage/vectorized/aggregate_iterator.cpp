@@ -82,7 +82,12 @@ Status AggregateIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* 
         if (_aggregator.source_exhausted()) {
             _curr_chunk->reset();
 
-            Status st = _child->get_next(_curr_chunk.get(), source_masks);
+            Status st;
+            if (source_masks) {
+                st = _child->get_next(_curr_chunk.get(), source_masks);
+            } else {
+                st = _child->get_next(_curr_chunk.get());
+            }
 
             if (st.is_end_of_file()) {
                 _fetch_finish = true;
