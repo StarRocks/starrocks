@@ -191,7 +191,7 @@ public:
 
     std::string to_string(size_t idx, const std::string& null_value) const override {
         if (_has_null && _null_column->get_data()[idx]) {
-            return null_value
+            return null_value;
         } else {
             return _data_column->to_string(idx, null_value);
         }
