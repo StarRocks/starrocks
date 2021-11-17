@@ -48,6 +48,8 @@ public class StatementPlanner {
                 ExecPlan plan = createQueryPlan(relation, session);
 
                 setOutfileSink(queryStmt, plan);
+
+                return plan;
             } finally {
                 unLock(dbs);
             }
