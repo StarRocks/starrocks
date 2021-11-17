@@ -321,6 +321,7 @@ build_simdjson() {
 
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    target_compile_definitions(simdjson PUBLIC SIMDJSON_EXCEPTIONS=OFF)
     $CMAKE_CMD -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib && cp $TP_SOURCE_DIR/$SIMDJSON_SOURCE/$BUILD_DIR/libsimdjson.a $TP_INSTALL_DIR/lib

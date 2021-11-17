@@ -276,6 +276,11 @@ void JsonFunctions::_build_column(ColumnBuilder<primitive_type>& result, simdjso
                 result.append(value.get_uint64());
                 break;
             }
+
+            case simdjson::ondemand::number_type::floating_point_number: {
+                result.append(value.get_double());
+            }
+
             default: {
                 result.append_null();
                 break;

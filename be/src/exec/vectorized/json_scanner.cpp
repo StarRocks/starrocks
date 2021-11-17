@@ -237,6 +237,10 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::Sc
           _total_lines(0),
           _closed(false) {
     _doc_stream_itr = _doc_stream.end();
+#if BE_TEST
+    raw::RawVector<char> buf(_buf_size);
+    std::swap(buf, _buf);
+#endif
 }
 
 JsonReader::~JsonReader() {
@@ -312,7 +316,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         }
 
         case simdjson::ondemand::json_type::object: {
-            if (!_scanner->_strip_outer_array) {
+            if (_scanner->_strip_outer_array) {
                 std::string err_msg("JSON data is an object, strip_outer_array must be set false");
                 _state->append_error_msg_to_file("", err_msg);
                 _counter->num_rows_filtered++;
@@ -482,8 +486,14 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
         }
 
         case simdjson::ondemand::number_type::unsigned_integer: {
-            auto f = fmt::format_int(value.get_int64());
+            auto f = fmt::format_int(value.get_uint64());
             column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
+            break;
+        }
+
+        case simdjson::ondemand::number_type::floating_point_number: {
+            auto s = simdjson::to_json_string(value).value();
+            column->append_strings(std::vector<Slice>{Slice{s.data(), s.size()}});
             break;
         }
 
@@ -501,6 +511,27 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
         column->append_strings(std::vector<Slice>{Slice(s.data(), s.length())});
         break;
     }
+
+    case simdjson::ondemand::json_type::array: {
+        auto s = simdjson::to_json_string(value).value();
+
+        std::unique_ptr<char[]> buf{new char[s.size()]};
+        size_t new_len{};
+        auto error = simdjson::minify(s.data(), s.size(), buf.get(), new_len);
+        column->append_strings(std::vector<Slice>{Slice{buf.get(), new_len}});
+        break;
+    }
+
+    case simdjson::ondemand::json_type::object: {
+        auto s = simdjson::to_json_string(value).value();
+
+        std::unique_ptr<char[]> buf{new char[s.size()]};
+        size_t new_len{};
+        auto error = simdjson::minify(s.data(), s.size(), buf.get(), new_len);
+        column->append_strings(std::vector<Slice>{Slice{buf.get(), new_len}});
+        break;
+    }
+
     default: {
         column->append_nulls(1);
         break;
