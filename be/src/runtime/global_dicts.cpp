@@ -307,15 +307,17 @@ std::pair<std::shared_ptr<BinaryColumn>, std::vector<int32_t>> extract_column_wi
     return std::make_pair(std::move(binary_column), std::move(codes));
 }
 
-void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, std::vector<SlotDescriptor*> slot_descs,
-                                            std::vector<ExprContext*>& conjunct_ctxs,
-                                            const std::map<int32_t, int32_t>& dict_slots_mapping) {
+void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,
+                                            const std::map<int32_t, int32_t>& dict_slots_mapping,
+                                            std::vector<SlotDescriptor*>* slot_descs) {
     const auto& global_dict = runtime_state->get_global_dict_map();
     if (global_dict.empty()) return;
 
-    for (auto& slot : slot_descs) {
-        if (global_dict.count(slot->id())) {
-            slot->type().type = TYPE_VARCHAR;
+    for (size_t i = 0; i < slot_descs->size(); ++i) {
+        if (global_dict.count((*slot_descs)[i]->id())) {
+            SlotDescriptor* newSlot = runtime_state->obj_pool()->add(new SlotDescriptor(*(*slot_descs)[i]));
+            newSlot->type().type = TYPE_VARCHAR;
+            (*slot_descs)[i] = newSlot;
         }
     }
 

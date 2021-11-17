@@ -208,8 +208,6 @@ TupleDescriptor::TupleDescriptor(const TTupleDescriptor& tdesc)
           _table_desc(nullptr),
           _byte_size(tdesc.byteSize),
           _num_null_bytes(tdesc.numNullBytes),
-          _num_materialized_slots(0),
-
           _has_varlen_slots(false) {
     if (false == tdesc.__isset.numNullSlots) {
         //be compatible for existing tables with no NULL value
@@ -224,7 +222,6 @@ TupleDescriptor::TupleDescriptor(const PTupleDescriptor& pdesc)
           _table_desc(nullptr),
           _byte_size(pdesc.byte_size()),
           _num_null_bytes(pdesc.num_null_bytes()),
-          _num_materialized_slots(0),
 
           _has_varlen_slots(false) {
     if (!pdesc.has_num_null_slots()) {
@@ -237,17 +234,7 @@ TupleDescriptor::TupleDescriptor(const PTupleDescriptor& pdesc)
 
 void TupleDescriptor::add_slot(SlotDescriptor* slot) {
     _slots.push_back(slot);
-
-    if (slot->is_materialized()) {
-        ++_num_materialized_slots;
-
-        if (slot->type().is_string_type()) {
-            _string_slots.push_back(slot);
-            _has_varlen_slots = true;
-        } else {
-            _no_string_slots.push_back(slot);
-        }
-    }
+    _decoded_slots.push_back(slot);
 }
 
 std::vector<SlotDescriptor*> TupleDescriptor::slots_ordered_by_idx() const {
