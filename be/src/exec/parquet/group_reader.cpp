@@ -285,7 +285,7 @@ Status GroupReader::_read(size_t* row_count) {
         SlotId slot_id = column.slot_id;
         count = *row_count;
         Status status = _column_readers[slot_id]->next_batch(&count, ColumnContentType::DICT_CODE,
-                                                             _read_chunk->get_column_by_slot_id(slot_id).get());
+                                                             _read_chunk->get_column_by_slot_id(slot_id).get(), first, tmp_count);
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
@@ -301,7 +301,7 @@ Status GroupReader::_read(size_t* row_count) {
         SlotId slot_id = column.slot_id;
         count = *row_count;
         Status status = _column_readers[slot_id]->next_batch(&count, ColumnContentType::VALUE,
-                                                             _read_chunk->get_column_by_slot_id(slot_id).get());
+                                                             _read_chunk->get_column_by_slot_id(slot_id).get(), first, tmp_count);
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }

@@ -29,7 +29,7 @@ public:
 
     void reset() override;
 
-    Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) override;
+    Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst, bool check, size_t check_count) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         *def_levels = &_def_levels[0];
@@ -85,11 +85,11 @@ public:
     // Reset internal state and ready for next read_values
     void reset() override;
 
-    Status read_records(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
+    Status read_records(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst, bool check, size_t check_count) override {
         if (_needs_levels) {
-            return _read_records_and_levels(num_records, content_type, dst);
+            return _read_records_and_levels(num_records, content_type, dst, check, check_count);
         } else {
-            return _read_records_only(num_records, content_type, dst);
+            return _read_records_only(num_records, content_type, dst, check, check_count);
         }
     }
 
@@ -108,8 +108,8 @@ private:
     Status _next_page();
 
     void _decode_levels(size_t num_levels);
-    Status _read_records_only(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst);
-    Status _read_records_and_levels(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst);
+    Status _read_records_only(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst, bool check, size_t check_count);
+    Status _read_records_and_levels(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst, bool check, size_t check_count);
 
     StoredColumnReaderOptions _opts;
     const ParquetField* _field = nullptr;
@@ -148,7 +148,7 @@ public:
 
     void reset() override {}
 
-    Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) override;
+    Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst, bool check, size_t check_count) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) {
         *def_levels = nullptr;
@@ -181,8 +181,12 @@ void RepeatedStoredColumnReader::reset() {
 }
 
 Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnContentType content_type,
-                                                vectorized::Column* dst) {
+                                                vectorized::Column* dst, bool check, size_t check_count) {
+    size_t col_size = dst->size();
     if (_eof) {
+        if (check) {
+            DCHECK_EQ(check_count, dst->size()-col_size);
+        }
         return Status::EndOfFile("");
     }
 
@@ -229,6 +233,9 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
         _num_values_left_in_cur_page -= num_parsed_levels;
     } while (records_read < *num_records);
 
+    if (check) {
+        DCHECK_EQ(check_count, dst->size()-col_size);
+    }
     *num_records = records_read;
     return Status::OK();
 }
@@ -309,9 +316,13 @@ void OptionalStoredColumnReader::reset() {
 }
 
 Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records, ColumnContentType content_type,
-                                                            vectorized::Column* dst) {
+                                                            vectorized::Column* dst, bool check, size_t check_count) {
+    size_t col_size = dst->size();
     SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
     if (_eof) {
+        if (check) {
+            DCHECK_EQ(check_count, dst->size()-col_size);
+        }
         return Status::EndOfFile("");
     }
     size_t records_read = 0;
@@ -352,13 +363,20 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
         records_read += records_to_read;
     } while (records_read < *num_records);
     *num_records = records_read;
+    if (check) {
+        DCHECK_EQ(check_count, dst->size()-col_size);
+    }
     return Status::OK();
 }
 
 Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, ColumnContentType content_type,
-                                                      vectorized::Column* dst) {
+                                                      vectorized::Column* dst, bool check, size_t check_count) {
+    size_t col_size = dst->size();
     SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
     if (_eof) {
+        if (check) {
+            DCHECK_EQ(check_count, dst->size() - col_size);
+        }
         return Status::EndOfFile("");
     }
     size_t records_read = 0;
@@ -427,6 +445,9 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
         records_read += records_to_read;
     } while (records_read < *num_records);
     *num_records = records_read;
+    if (check) {
+        DCHECK_EQ(check_count, dst->size()-col_size);
+    }
     return Status::OK();
 }
 
@@ -461,7 +482,8 @@ void OptionalStoredColumnReader::_decode_levels(size_t num_levels) {
 }
 
 Status RequiredStoredColumnReader::read_records(size_t* num_records, ColumnContentType content_type,
-                                                vectorized::Column* dst) {
+                                                vectorized::Column* dst, bool check, size_t check_count) {
+    size_t col_size = dst->size();
     size_t records_read = 0;
     while (records_read < *num_records) {
         if (_num_values_left_in_cur_page == 0) {
@@ -480,6 +502,9 @@ Status RequiredStoredColumnReader::read_records(size_t* num_records, ColumnConte
         _num_values_left_in_cur_page -= records_to_read;
     }
     *num_records = records_read;
+    if (check) {
+        DCHECK_EQ(check_count, dst->size() - col_size);
+    }
     return Status::OK();
 }
 

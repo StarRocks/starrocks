@@ -333,22 +333,26 @@ public:
         return StoredColumnReader::create(file, field, chunk_metadata, opts, &_reader);
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
+    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst, bool check, size_t check_count) override {
+        size_t col_size = dst->size();
         if (!_need_convert) {
-            return _reader->read_records(num_records, content_type, dst);
+            return _reader->read_records(num_records, content_type, dst, check, check_count);
         } else {
             SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             auto data_column = _create_column(_field->physical_type);
             vectorized::ColumnPtr column =
                     vectorized::NullableColumn::create(data_column, vectorized::NullColumn::create());
 
-            Status status = _reader->read_records(num_records, content_type, column.get());
+            Status status = _reader->read_records(num_records, content_type, column.get(), check, check_count);
             if (!status.ok() && !status.is_end_of_file()) {
                 return status;
             }
 
             RETURN_IF_ERROR(_converter->convert(column, dst));
 
+            if (check) {
+                DCHECK_EQ(check_count, dst->size()-col_size);
+            }
             return Status::OK();
         }
     }
@@ -610,8 +614,8 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
-        return _element_reader->prepare_batch(num_records, content_type, dst);
+    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst, bool check, size_t check_count) override {
+        return _element_reader->prepare_batch(num_records, content_type, dst, check, check_count);
     }
 
     Status finish_batch() override {

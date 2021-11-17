@@ -48,7 +48,7 @@ public:
     // Try to read values that can assemble up to num_rows rows. For example if we want to read
     // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
     // this function will fill (1, 2, 3, 4, 5, 6) into 'dst'.
-    virtual Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) = 0;
+    virtual Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst, bool check, size_t check_count) = 0;
 
     // This function can only be called after calling read_values. This function returns the
     // levels for last read_values.

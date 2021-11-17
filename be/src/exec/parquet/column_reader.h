@@ -9,11 +9,11 @@
 #include "gen_cpp/parquet_types.h"
 #include "runtime/types.h"
 #include "utils.h"
+#include "column/column.h"
 
 namespace starrocks {
 class RandomAccessFile;
 namespace vectorized {
-class Column;
 struct HdfsScanStats;
 } // namespace vectorized
 } // namespace starrocks
@@ -37,11 +37,12 @@ public:
 
     virtual ~ColumnReader() = default;
 
-    virtual Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* column) = 0;
+    virtual Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* column, bool check, size_t check_count) = 0;
     virtual Status finish_batch() = 0;
 
-    Status next_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* column) {
-        RETURN_IF_ERROR(prepare_batch(num_records, content_type, column));
+    Status next_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* column, bool check, size_t check_count) {
+        DCHECK(column->is_nullable());
+        RETURN_IF_ERROR(prepare_batch(num_records, content_type, column, check, check_count));
         return finish_batch();
     }
 
