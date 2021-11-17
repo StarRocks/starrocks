@@ -125,8 +125,7 @@ Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
         bool is_input_nullable = false;
         if (fn.name.function_name == "count" || fn.name.function_name == "row_number" ||
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank") {
-            is_input_nullable = !fn.arg_types.empty() && desc.nodes[0].has_nullable_child;
-            is_input_nullable |= has_outer_join_child;
+            is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
             auto* func = get_aggregate_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), false, false};
