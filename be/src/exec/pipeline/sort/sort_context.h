@@ -205,13 +205,15 @@ private:
         auto num_chunks_sorter = _num_partition_sinkers;
         for (int i = 0; i < num_chunks_sorter; ++i) {
             auto data_segment = _chunks_sorter_partions[i]->get_result_data_segment();
-            // get size from ChunksSorter into DataSegment.
-            data_segment->_partitions_rows = _chunks_sorter_partions[i]->get_partition_rows();
-            // _sorted_permutation is just used for full sort to index data,
-            // and topn is needn't it.
-            data_segment->_sorted_permutation = _chunks_sorter_partions[i]->get_permutation();
-            if (data_segment->_partitions_rows > 0) {
-                _data_segment_heaps.emplace_back(data_segment);
+            if (data_segment != nullptr) {
+                // get size from ChunksSorter into DataSegment.
+                data_segment->_partitions_rows = _chunks_sorter_partions[i]->get_partition_rows();
+                // _sorted_permutation is just used for full sort to index data,
+                // and topn is needn't it.
+                data_segment->_sorted_permutation = _chunks_sorter_partions[i]->get_permutation();
+                if (data_segment->_partitions_rows > 0) {
+                    _data_segment_heaps.emplace_back(data_segment);
+                }
             }
         }
 
