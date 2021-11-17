@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.CaseSensibility;
@@ -71,7 +72,7 @@ public class Column implements Writable {
     private String defaultValue;
     // this handle function like now() or simple expression
     @SerializedName(value = "defaultExpr")
-    private String defaultExpr;
+    private ColumnDef.DefaultValue defaultExpr;
     @SerializedName(value = "comment")
     private String comment;
     @SerializedName(value = "stats")
@@ -80,8 +81,6 @@ public class Column implements Writable {
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
-    private boolean isEvaluate = false;    // mark default value is evaluate
-    private String evaluatedDefaultValue;   // cache the defaultExpr after evaluate value
 
     public Column() {
         this.name = "";
@@ -103,11 +102,16 @@ public class Column implements Writable {
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
                   String comment) {
+        this(name, type, isKey, aggregateType, false, new ColumnDef.DefaultValue(true, defaultValue), comment);
+    }
+
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, ColumnDef.DefaultValue defaultValue,
+                  String comment) {
         this(name, type, isKey, aggregateType, false, defaultValue, comment);
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-                  String defaultValue, String comment) {
+                  ColumnDef.DefaultValue defaultValue, String comment) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -124,7 +128,15 @@ public class Column implements Writable {
         this.isAggregationTypeImplicit = false;
         this.isKey = isKey;
         this.isAllowNull = isAllowNull;
-        this.defaultValue = defaultValue;
+        // this for compatible previous version
+        if (defaultValue != null) {
+            if (defaultValue.isExpr) {
+                this.defaultValue = null;
+            } else {
+                this.defaultValue = defaultValue.value;
+            }
+        }
+        this.defaultExpr = defaultValue;
         this.comment = comment;
 
         this.stats = new ColumnStats();
@@ -236,23 +248,15 @@ public class Column implements Writable {
 
     public String getMetaDefaultValue(List<String> extras) {
         String defaultValue = FeConstants.null_string;
-        if (this.getDefaultValue() != null) {
-            defaultValue = this.getDefaultExpr();
-        } else if (this.getDefaultExpr() != null) {
-            if ("now()".equalsIgnoreCase(this.getDefaultExpr())) {
+        if (this.defaultValue != null) {
+            return defaultValue;
+        } else if (defaultExpr.isExpr) {
+            if ("now()".equalsIgnoreCase(defaultExpr.value)) {
                 defaultValue = "CURRENT_TIMESTAMP";
                 extras.add("DEFAULT_GENERATED");
             }
         }
         return defaultValue;
-    }
-
-    public String getDefaultExpr() {
-        return defaultExpr;
-    }
-
-    public void setDefaultExpr(String defaultExpr) {
-        this.defaultExpr = defaultExpr;
     }
 
     // if the value or expr calculated is the same for each row of a batch like now(). return true
@@ -261,7 +265,7 @@ public class Column implements Writable {
         if (defaultValue != null) {
             return true;
         }
-        if ("now()".equalsIgnoreCase(defaultExpr)) {
+        if (defaultExpr.isExpr && "now()".equalsIgnoreCase(defaultExpr.value)) {
             return true;
         }
         return false;
@@ -274,13 +278,11 @@ public class Column implements Writable {
             return defaultValue;
         }
 
-        if (!isEvaluate) {
-            if ("now()".equalsIgnoreCase(defaultExpr)) {
-                evaluatedDefaultValue = DateTime.now().toString();
-            }
-            isEvaluate = true;
+        if ("now()".equalsIgnoreCase(defaultExpr.value)) {
+            return DateTime.now().toString();
         }
-        return evaluatedDefaultValue;
+
+        return null;
     }
 
     public void setDefaultValue(String defaultValue) {
@@ -437,7 +439,7 @@ public class Column implements Writable {
         } else {
             sb.append("NOT NULL ");
         }
-        if ("now()".equalsIgnoreCase(defaultExpr)) {
+        if ("now()".equalsIgnoreCase(defaultExpr.value)) {
             // compatible with mysql
             sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
         } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&

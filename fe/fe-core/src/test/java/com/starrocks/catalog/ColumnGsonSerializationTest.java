@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -74,7 +75,7 @@ public class ColumnGsonSerializationTest {
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
-        Column c1 = new Column("c1", Type.fromPrimitiveType(PrimitiveType.BIGINT), true, null, true, "1", "abc");
+        Column c1 = new Column("c1", Type.fromPrimitiveType(PrimitiveType.BIGINT), true, null, true, new ColumnDef.DefaultValue(true, "1"), "abc");
 
         String c1Json = GsonUtils.GSON.toJson(c1);
         Text.writeString(out, c1Json);
@@ -97,10 +98,10 @@ public class ColumnGsonSerializationTest {
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
-        Column c1 = new Column("c1", Type.fromPrimitiveType(PrimitiveType.BIGINT), true, null, true, "1", "abc");
+        Column c1 = new Column("c1", Type.fromPrimitiveType(PrimitiveType.BIGINT), true, null, true, new ColumnDef.DefaultValue(true, "1"), "abc");
         Column c2 =
-                new Column("c2", ScalarType.createType(PrimitiveType.VARCHAR, 32, -1, -1), true, null, true, "cmy", "");
-        Column c3 = new Column("c3", ScalarType.createDecimalV2Type(27, 9), false, AggregateType.SUM, false, "1.1",
+                new Column("c2", ScalarType.createType(PrimitiveType.VARCHAR, 32, -1, -1), true, null, true, new ColumnDef.DefaultValue(true, "cmy"), "");
+        Column c3 = new Column("c3", ScalarType.createDecimalV2Type(27, 9), false, AggregateType.SUM, false, new ColumnDef.DefaultValue(true, "1.1"),
                 "decimalv2");
 
         ColumnList columnList = new ColumnList();

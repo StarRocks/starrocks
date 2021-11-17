@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -68,20 +69,21 @@ public class MaterializedIndexMetaTest {
         String mvColumnName =
                 CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX + FunctionSet.BITMAP_UNION + "_" + "k1";
         List<Column> schema = Lists.newArrayList();
-        schema.add(new Column("k1", Type.TINYINT, true, null, true, "1", "abc"));
-        schema.add(new Column("k2", Type.SMALLINT, true, null, true, "1", "debug"));
-        schema.add(new Column("k3", Type.INT, true, null, true, "1", ""));
-        schema.add(new Column("k4", Type.BIGINT, true, null, true, "1", "**"));
+        ColumnDef.DefaultValue defaultValue1 = new ColumnDef.DefaultValue(true, "1");
+        schema.add(new Column("k1", Type.TINYINT, true, null, true, defaultValue1, "abc"));
+        schema.add(new Column("k2", Type.SMALLINT, true, null, true, defaultValue1, "debug"));
+        schema.add(new Column("k3", Type.INT, true, null, true, defaultValue1, ""));
+        schema.add(new Column("k4", Type.BIGINT, true, null, true, defaultValue1, "**"));
         schema.add(new Column("k5", Type.LARGEINT, true, null, true, null, ""));
-        schema.add(new Column("k6", Type.DOUBLE, true, null, true, "1.1", ""));
-        schema.add(new Column("k7", Type.FLOAT, true, null, true, "1", ""));
-        schema.add(new Column("k8", Type.DATE, true, null, true, "1", ""));
-        schema.add(new Column("k9", Type.DATETIME, true, null, true, "1", ""));
-        schema.add(new Column("k10", Type.VARCHAR, true, null, true, "1", ""));
-        schema.add(new Column("k11", Type.DECIMALV2, true, null, true, "1", ""));
-        schema.add(new Column("k12", Type.INT, true, null, true, "1", ""));
-        schema.add(new Column("v1", Type.INT, false, AggregateType.SUM, true, "1", ""));
-        schema.add(new Column(mvColumnName, Type.BITMAP, false, AggregateType.BITMAP_UNION, false, "1", ""));
+        schema.add(new Column("k6", Type.DOUBLE, true, null, true, new ColumnDef.DefaultValue(true, "1.1"), ""));
+        schema.add(new Column("k7", Type.FLOAT, true, null, true, defaultValue1, ""));
+        schema.add(new Column("k8", Type.DATE, true, null, true, defaultValue1, ""));
+        schema.add(new Column("k9", Type.DATETIME, true, null, true, defaultValue1, ""));
+        schema.add(new Column("k10", Type.VARCHAR, true, null, true, defaultValue1, ""));
+        schema.add(new Column("k11", Type.DECIMALV2, true, null, true, defaultValue1, ""));
+        schema.add(new Column("k12", Type.INT, true, null, true, defaultValue1, ""));
+        schema.add(new Column("v1", Type.INT, false, AggregateType.SUM, true, defaultValue1, ""));
+        schema.add(new Column(mvColumnName, Type.BITMAP, false, AggregateType.BITMAP_UNION, false, defaultValue1, ""));
         short shortKeyColumnCount = 1;
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(1, schema, 1, 1, shortKeyColumnCount,
                 TStorageType.COLUMN, KeysType.DUP_KEYS, new OriginStatement(

@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
@@ -631,9 +632,9 @@ public class LoadingTaskPlannerTest {
                                           @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("pk", Type.BIGINT, true, null, false, "123", ""));
-        columns.add(new Column("v1", Type.INT, false, null, false, "231", ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, "asdf", ""));
+        columns.add(new Column("pk", Type.BIGINT, true, null, false, new ColumnDef.DefaultValue(true, "123"), ""));
+        columns.add(new Column("v1", Type.INT, false, null, false, new ColumnDef.DefaultValue(true, "231"), ""));
+        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, new ColumnDef.DefaultValue(true, "asdf"), ""));
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
                 Type.BIGINT, true);

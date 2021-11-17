@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
@@ -58,30 +59,32 @@ public class ColumnDef {
     public static class DefaultValue {
         public boolean isSet;
         public boolean isExpr;
+        @SerializedName("value")
         public String value;
-        public Expr defaultExpr;
+        @SerializedName("expr")
+        public Expr expr;
 
         public DefaultValue(boolean isSet, String value) {
             this.isSet = isSet;
             this.value = value;
             this.isExpr = false;
+            this.expr = null;
         }
 
         public DefaultValue(Expr expr) {
             this.isSet = true;
-            this.defaultExpr = expr;
+            this.value = expr.toSql();
             this.isExpr = true;
+            this.expr = expr;
         }
 
+        private static final String ZERO = new String(new byte[] {0});
         // no default value
         public static DefaultValue NOT_SET = new DefaultValue(false, null);
         // default null
         public static DefaultValue NULL_DEFAULT_VALUE = new DefaultValue(true, null);
-        public static String ZERO = new String(new byte[] {0});
-        // default "value", "0" means empty hll
-        public static DefaultValue HLL_EMPTY_DEFAULT_VALUE = new DefaultValue(true, ZERO);
-        // default "value", "0" means empty bitmap
-        public static DefaultValue BITMAP_EMPTY_DEFAULT_VALUE = new DefaultValue(true, ZERO);
+        // default "value", "0" means empty hll or bitmap
+        public static DefaultValue ZERO_DEFAULT_VALUE = new DefaultValue(true, ZERO);
         // default value for date type CURRENT_TIMESTAMP
         public static DefaultValue CURRENT_TIMESTAMP_VALUE = new DefaultValue(
                 new FunctionCallExpr("now", new ArrayList<>()));
@@ -196,14 +199,14 @@ public class ColumnDef {
             if (defaultValue.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-            defaultValue = DefaultValue.HLL_EMPTY_DEFAULT_VALUE;
+            defaultValue = DefaultValue.ZERO_DEFAULT_VALUE;
         }
 
         if (type.isBitmapType()) {
             if (defaultValue.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-            defaultValue = DefaultValue.BITMAP_EMPTY_DEFAULT_VALUE;
+            defaultValue = DefaultValue.ZERO_DEFAULT_VALUE;
         }
 
         // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
@@ -219,7 +222,7 @@ public class ColumnDef {
             throw new AnalysisException(String.format("Invalid default value for '%s'", name));
         }
 
-        if (defaultValue.isSet && defaultValue.value != null) {
+        if (defaultValue.isSet && !defaultValue.isExpr && defaultValue.value != null) {
             try {
                 validateDefaultValue(type, defaultValue.value);
             } catch (AnalysisException e) {
@@ -227,9 +230,9 @@ public class ColumnDef {
             }
         }
 
-        if (defaultValue.isSet && defaultValue.defaultExpr != null) {
+        if (defaultValue.isSet && defaultValue.expr != null) {
             try {
-                validateDefaultExpr(type, defaultValue.defaultExpr);
+                validateDefaultExpr(type, defaultValue.expr);
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("Invalid default expr for '%s': %s", name, e.getMessage()));
             }
@@ -323,7 +326,7 @@ public class ColumnDef {
 
         if (defaultValue.isSet) {
             if(defaultValue.isExpr) {
-                sb.append("DEFAULT ").append(toDefaultExpr(defaultValue.defaultExpr)).append(" ");
+                sb.append("DEFAULT ").append(toDefaultExpr(defaultValue.expr)).append(" ");
             } else {
                 sb.append("DEFAULT \"").append(defaultValue.value).append("\" ");
             }
@@ -334,13 +337,7 @@ public class ColumnDef {
     }
 
     public Column toColumn() {
-        if (defaultValue.isExpr) {
-            Column column = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, null, comment);
-            column.setDefaultExpr(toDefaultExpr(defaultValue.defaultExpr));
-            return column;
-        } else {
-            return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue.value, comment);
-        }
+        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue, comment);
     }
 
     public String toDefaultExpr(Expr expr) {
@@ -355,7 +352,7 @@ public class ColumnDef {
         if (defaultValue.value != null) {
             return true;
         }
-        if ("now()".equalsIgnoreCase(toDefaultExpr(defaultValue.defaultExpr))) {
+        if ("now()".equalsIgnoreCase(toDefaultExpr(defaultValue.expr))) {
             return true;
         }
         return false;

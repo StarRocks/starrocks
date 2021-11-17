@@ -116,7 +116,7 @@ public class MVColumnItem {
         if (baseColumn == null) {
             Preconditions.checkNotNull(defineExpr);
             Column result = new Column(name, type, isKey, aggregationType, isAllowNull,
-                    ColumnDef.DefaultValue.ZERO, "");
+                    ColumnDef.DefaultValue.ZERO_DEFAULT_VALUE, "");
             result.setDefineExpr(defineExpr);
             return result;
         } else {
