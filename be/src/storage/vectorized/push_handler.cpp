@@ -378,10 +378,10 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
 
     Status st = Status::OK();
     if (push_type == PUSH_NORMAL_V2) {
-        st = _convert_v2(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add));
+        st = _load_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add));
     } else {
         DCHECK_EQ(push_type, PUSH_FOR_DELETE);
-        st = _convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add));
+        st = _delete_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add));
     }
 
     if (!st.ok()) {
@@ -441,7 +441,7 @@ void PushHandler::_get_tablet_infos(const std::vector<TabletVars>& tablet_vars,
     }
 }
 
-Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
+Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
     Status st = Status::OK();
     PUniqueId load_id;
     load_id.set_hi(0);
@@ -460,7 +460,7 @@ Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr*
         context.partition_id = _request.partition_id;
         context.tablet_schema_hash = cur_tablet->schema_hash();
         context.rowset_type = BETA_ROWSET;
-        context.rowset_path_prefix = cur_tablet->tablet_path();
+        context.rowset_path_prefix = cur_tablet->schema_hash_path();
         context.tablet_schema = &cur_tablet->tablet_schema();
         context.rowset_state = PREPARED;
         context.txn_id = _request.transaction_id;
@@ -502,7 +502,7 @@ Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr*
     return st;
 }
 
-Status PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
+Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
     Status st;
     uint32_t num_rows = 0;
     PUniqueId load_id;
