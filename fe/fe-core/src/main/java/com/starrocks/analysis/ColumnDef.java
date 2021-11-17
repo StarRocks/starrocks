@@ -58,10 +58,10 @@ public class ColumnDef {
      */
     public static class DefaultValue {
         public boolean isSet;
+        @SerializedName("isExpr")
         public boolean isExpr;
         @SerializedName("value")
         public String value;
-        @SerializedName("expr")
         public Expr expr;
 
         public DefaultValue(boolean isSet, String value) {

@@ -27,6 +27,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
@@ -44,6 +45,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+
+import static com.starrocks.analysis.ColumnDef.DefaultValue.CURRENT_TIMESTAMP_VALUE;
 
 /**
  * This class represents the column-related metadata.
@@ -250,7 +253,7 @@ public class Column implements Writable {
         String defaultValue = FeConstants.null_string;
         if (this.defaultValue != null) {
             return defaultValue;
-        } else if (defaultExpr.isExpr) {
+        } else if (defaultExpr != null && defaultExpr.isExpr) {
             if ("now()".equalsIgnoreCase(defaultExpr.value)) {
                 defaultValue = "CURRENT_TIMESTAMP";
                 extras.add("DEFAULT_GENERATED");
@@ -265,7 +268,7 @@ public class Column implements Writable {
         if (defaultValue != null) {
             return true;
         }
-        if (defaultExpr.isExpr && "now()".equalsIgnoreCase(defaultExpr.value)) {
+        if (defaultExpr != null && defaultExpr.isExpr && "now()".equalsIgnoreCase(defaultExpr.value)) {
             return true;
         }
         return false;
@@ -584,7 +587,13 @@ public class Column implements Writable {
             return column;
         } else {
             String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, Column.class);
+            Column column = GsonUtils.GSON.fromJson(json, Column.class);
+            if (column.defaultExpr != null && column.defaultExpr.isExpr) {
+                if ("now()".equalsIgnoreCase(column.defaultExpr.value)){
+                    column.defaultExpr = CURRENT_TIMESTAMP_VALUE;
+                }
+            }
+            return column;
         }
     }
 }
