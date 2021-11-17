@@ -1518,9 +1518,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 processDropColumn((DropColumnClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ModifyColumnClause) {
                 // modify column
-                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    throw new DdlException("Primary key table do not support modify column");
-                }
                 processModifyColumn((ModifyColumnClause) alterClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
@@ -1534,9 +1531,6 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof CreateIndexClause) {
                 processAddIndex((CreateIndexClause) alterClause, olapTable, newIndexes);
             } else if (alterClause instanceof DropIndexClause) {
-                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    throw new DdlException("Primary key table do not support drop index");
-                }
                 processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
             } else {
                 Preconditions.checkState(false);

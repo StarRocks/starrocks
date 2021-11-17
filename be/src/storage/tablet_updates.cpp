@@ -1929,10 +1929,6 @@ Status TabletUpdates::load_from_base_tablet(const TAlterTabletReqV2& request,
                  << " version=" << rowset->version().first << "-" << rowset->version().second;
     }
 
-    auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
-    index_entry->value().unload();
-    update_manager->index_cache().release(index_entry);
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
     LOG(INFO) << "load_from_base_tablet finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
               << " #pending:" << _pending_commits.size();
