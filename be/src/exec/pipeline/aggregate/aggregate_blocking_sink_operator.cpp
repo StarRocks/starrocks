@@ -12,10 +12,6 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     return _aggregator->open(state);
 }
 
-bool AggregateBlockingSinkOperator::is_finished() const {
-    return _is_finished;
-}
-
 void AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 

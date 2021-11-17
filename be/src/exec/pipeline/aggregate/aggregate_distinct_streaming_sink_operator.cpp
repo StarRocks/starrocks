@@ -13,10 +13,6 @@ Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
     return _aggregator->open(state);
 }
 
-bool AggregateDistinctStreamingSinkOperator::is_finished() const {
-    return _is_finished;
-}
-
 void AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
