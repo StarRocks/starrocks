@@ -128,13 +128,15 @@ public:
         return size;
     }
 
+    bool use_page_cache() const { return _use_page_cache; }
+
 private:
     Status load_index_page(fs::ReadableBlock* rblock, const PagePointerPB& pp, PageHandle* handle,
                            IndexPageReader* reader);
 
     // read a page specified by `pp' from `file' into `handle'
     Status read_page(fs::ReadableBlock* rblock, const PagePointer& pp, PageHandle* handle, Slice* body,
-                     PageFooterPB* footer) const;
+                     PageFooterPB* footer, bool is_data_page = false) const;
 
     fs::BlockManager* _block_mgr;
     std::string _file_name;
