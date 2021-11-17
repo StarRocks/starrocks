@@ -165,9 +165,17 @@ public:
     }
 
     Status next_batch(size_t* n, vectorized::Column* dst) override {
+        vectorized::SparseRange read_range;
+        size_t begin = current_index();
+        read_range.add(vectorized::Range(begin, begin + *n));
+        RETURN_IF_ERROR(next_batch(read_range, dst));
+        *n = current_index() - begin;
+        return Status::OK();
+    }
+
+    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override {
         DCHECK(_parsed) << "Must call init() firstly";
-        if (PREDICT_FALSE(*n == 0 || _cur_index >= _num_elements)) {
-            *n = 0;
+        if (PREDICT_FALSE(range.span_size() == 0 || _cur_index >= _num_elements)) {
             return Status::OK();
         }
 
@@ -187,14 +195,19 @@ public:
                       Type == OLAP_FIELD_TYPE_DECIMAL128,
                       "unexpected field type");
         // clang-format on
-
-        *n = std::min(*n, _num_elements - _cur_index);
-        const size_t ori_size = dst->size();
-        dst->resize(ori_size + *n);
-        auto* p = reinterpret_cast<CppType*>(dst->mutable_raw_data()) + ori_size;
-        bool r = _decoder.get_batch(p, *n);
-        DCHECK(r);
-        _cur_index += *n;
+        size_t nread = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
+        vectorized::SparseRangeIterator iter = range.new_iterator();
+        while (iter.has_more() && _cur_index < _num_elements) {
+            seek_to_position_in_page(iter.begin());
+            vectorized::Range r = iter.next(nread);
+            const size_t ori_size = dst->size();
+            dst->resize(ori_size + r.span_size());
+            auto* p = reinterpret_cast<CppType*>(dst->mutable_raw_data()) + ori_size;
+            bool res = _decoder.get_batch(p, r.span_size());
+            DCHECK(res);
+            _cur_index += r.span_size();
+            nread -= r.span_size();
+        }
         return Status::OK();
     }
 

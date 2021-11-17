@@ -3,6 +3,7 @@
 #pragma once
 
 #include "storage/rowset/segment_v2/column_iterator.h"
+#include "storage/vectorized/range.h"
 
 namespace starrocks {
 
@@ -27,6 +28,8 @@ public:
     Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override;
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
+
+    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override;
 
     Status seek_to_first() override;
 

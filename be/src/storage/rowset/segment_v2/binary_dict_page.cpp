@@ -31,6 +31,7 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "util/slice.h" // for Slice
 #include "util/unaligned_access.h"
+#include "storage/vectorized/range.h"
 
 namespace starrocks::segment_v2 {
 
@@ -248,34 +249,47 @@ Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, ColumnBlockView* dst) 
 
 template <FieldType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
+    vectorized::SparseRange read_range;
+    size_t begin = current_index();
+    read_range.add(vectorized::Range(begin, begin + *n));
+    RETURN_IF_ERROR(next_batch(read_range, dst));
+    *n = current_index() - begin;
+    return Status::OK();
+}
+
+template <FieldType Type>
+Status BinaryDictPageDecoder<Type>::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
     if (_encoding_type == PLAIN_ENCODING) {
-        return _data_page_decoder->next_batch(n, dst);
+        return _data_page_decoder->next_batch(range, dst);
     }
+
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     if (_vec_code_buf == nullptr) {
         _vec_code_buf = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
-    _vec_code_buf->reserve(*n);
+    _vec_code_buf->reserve(range.span_size());
 
-    RETURN_IF_ERROR(_data_page_decoder->next_batch(n, _vec_code_buf.get()));
+    RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
+    size_t nread = _vec_code_buf->size();
     using cast_type = CppTypeTraits<OLAP_FIELD_TYPE_INT>::CppType;
     const cast_type* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
     std::vector<Slice> slices;
-    slices.reserve(*n);
+    slices.reserve(nread);
     if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
-        for (int i = 0; i < *n; ++i) {
+        for (int i = 0; i < nread; ++i) {
             Slice element = _dict_decoder->string_at_index(codewords[i]);
             // Strip trailing '\x00'
             element.size = strnlen(element.data, element.size);
             slices.emplace_back(element);
         }
     } else {
-        for (int i = 0; i < *n; ++i) {
+        for (int i = 0; i < nread; ++i) {
             slices.emplace_back(_dict_decoder->string_at_index(codewords[i]));
         }
     }
+        
     CHECK(dst->append_strings_overflow(slices, _max_value_legth));
     return Status::OK();
 }
@@ -285,6 +299,13 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, vectorized::Colum
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(n, dst);
+}
+
+template <FieldType Type>
+Status BinaryDictPageDecoder<Type>::next_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst) {
+    DCHECK(_encoding_type == DICT_ENCODING);
+    DCHECK(_parsed);
+    return _data_page_decoder->next_batch(range, dst);
 }
 
 template class BinaryDictPageDecoder<OLAP_FIELD_TYPE_CHAR>;

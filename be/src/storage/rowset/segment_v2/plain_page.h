@@ -28,6 +28,7 @@
 #include "storage/types.h"
 #include "util/coding.h"
 #include "util/faststring.h"
+#include "storage/vectorized/range.h"
 
 namespace starrocks {
 namespace segment_v2 {
@@ -189,7 +190,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst) override {
+    Status next_batch(size_t* n, ColumnBlockView* dst) override {    
         DCHECK(_parsed);
 
         if (PREDICT_FALSE(*n == 0 || _cur_idx >= _num_elems)) {
@@ -205,19 +206,32 @@ public:
     }
 
     Status next_batch(size_t* count, vectorized::Column* dst) override {
+        vectorized::SparseRange read_range;
+        size_t begin = current_index();
+        read_range.add(vectorized::Range(begin, begin + *count));
+        RETURN_IF_ERROR(next_batch(read_range, dst));
+        *count = current_index() - begin;
+        return Status::OK();
+    }
+
+    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override {
         DCHECK(_parsed);
 
-        if (PREDICT_FALSE(*count == 0 || _cur_idx >= _num_elems)) {
-            *count = 0;
+        size_t nread = range.span_size();
+        if (PREDICT_FALSE(nread == 0 || _cur_idx >= _num_elems)) {
             return Status::OK();
         }
 
-        size_t max_fetch = std::min(*count, static_cast<size_t>(_num_elems - _cur_idx));
-        int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE], max_fetch * SIZE_OF_TYPE);
-        DCHECK_EQ(max_fetch, n);
-        _cur_idx += max_fetch;
-        *count = max_fetch;
-        return Status::OK();
+        vectorized::SparseRangeIterator iter = range.new_iterator();
+        while (iter.has_more() && _cur_idx < _num_elems) {
+            _cur_idx = iter.begin();
+            vectorized::Range r = iter.next(nread);
+            size_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
+            int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE], max_fetch * SIZE_OF_TYPE);
+            DCHECK_EQ(max_fetch, n);
+            _cur_idx += max_fetch;
+        }
+        return Status::OK();     
     }
 
     size_t count() const override {
