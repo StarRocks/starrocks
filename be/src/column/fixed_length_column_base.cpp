@@ -12,11 +12,8 @@
 #include "util/hash_util.hpp"
 #include "util/int96.h"
 #include "util/mysql_row_buffer.h"
-#include "util/types.h"
 
 namespace starrocks::vectorized {
-
-using starrocks::operator<<;
 
 template <typename T>
 void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
