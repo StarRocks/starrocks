@@ -363,7 +363,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 return;
             }
 
-            if (!couldApplyDictOptimize(operator)) {
+            if (!Projection.couldApplyDictOptimize(operator)) {
                 return;
             }
 
