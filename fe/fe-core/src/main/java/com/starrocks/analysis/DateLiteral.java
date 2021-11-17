@@ -34,6 +34,7 @@ import com.starrocks.thrift.TExprNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.joda.time.DateTime;
+import org.joda.time.DateTimeFieldType;
 import org.joda.time.DateTimeZone;
 import org.joda.time.LocalDateTime;
 import org.joda.time.format.DateTimeFormatter;
@@ -45,6 +46,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.TimeZone;
 import java.util.regex.Pattern;
@@ -553,8 +555,10 @@ public class DateLiteral extends LiteralExpr {
                     case 'y': // %y Year, numeric (two digits)
                         builder.appendTwoDigitYear(2020);
                         break;
-                    case 'f': // %f Microseconds (000000..999999)
                     case 'w': // %w Day of the week (0=Sunday..6=Saturday)
+                        builder.appendDayOfWeek(0);
+                        break;
+                    case 'f': // %f Microseconds (000000..999999)
                     case 'U': // %U Week (00..53), where Sunday is the first day of the week
                     case 'u': // %u Week (00..53), where Monday is the first day of the week
                     case 'V': // %V Week (01..53), where Sunday is the first day of the week; used with %X
