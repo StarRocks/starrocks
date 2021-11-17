@@ -485,7 +485,7 @@ Status OlapScanConjunctsManager::normalize_conjuncts() {
 
     // TODO(zhuming): if any of the normalized column range is empty, we can know that
     // no row will be selected anymore and can return EOF directly.
-    for (auto& slot : tuple_desc->slots()) {
+    for (auto& slot : tuple_desc->decoded_slots()) {
         const std::string& col_name = slot->col_name();
         PrimitiveType type = slot->type().type;
         switch (type) {
@@ -727,7 +727,7 @@ void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, st
         preds->push_back(p);
     }
 
-    const auto& slots = tuple_desc->slots();
+    const auto& slots = tuple_desc->decoded_slots();
     for (auto& iter : slot_index_to_expr_ctxs) {
         int slot_index = iter.first;
         auto& expr_ctxs = iter.second;
@@ -776,7 +776,7 @@ void OlapScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprConte
 
 void OlapScanConjunctsManager::build_column_expr_predicates() {
     std::map<SlotId, int> slot_id_to_index;
-    const auto& slots = tuple_desc->slots();
+    const auto& slots = tuple_desc->decoded_slots();
     for (int i = 0; i < slots.size(); i++) {
         const SlotDescriptor* slot_desc = slots[i];
         SlotId slot_id = slot_desc->id();
