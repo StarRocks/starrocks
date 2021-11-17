@@ -380,6 +380,10 @@ public class HiveTable extends Table {
                     throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                             "starrocks type [" + column.getPrimitiveType() + "]");
                 }
+                if (!column.isAllowNull() && !isTypeRead) {
+                    throw new DdlException(
+                            "hive extern table not support no-nullable column: [" + hiveColumn.getName() + "]");
+                }
             }
             for (FieldSchema partHiveColumn : partHiveColumns) {
                 String columnName = partHiveColumn.getName();

@@ -112,20 +112,7 @@ template <typename SliceKey, PhmapSeed seed>
 class FixedSizeSliceKeyHash {
 public:
     std::size_t operator()(const SliceKey& s) const {
-        if constexpr (sizeof(SliceKey) == 8) {
-            if constexpr (seed == PhmapSeed1) {
-                return crc_hash_uint64(s.u.value, CRC_HASH_SEED1);
-            } else {
-                return crc_hash_uint64(s.u.value, CRC_HASH_SEED2);
-            }
-        } else {
-            static_assert(sizeof(SliceKey) == 16);
-            if constexpr (seed == PhmapSeed1) {
-                return crc_hash_uint128(s.u.ui64[0], s.u.ui64[1], CRC_HASH_SEED1);
-            } else {
-                return crc_hash_uint128(s.u.ui64[0], s.u.ui64[1], CRC_HASH_SEED2);
-            }
-        }
+        return phmap_mix_with_seed<sizeof(size_t), seed>()(std::hash<decltype(s.u.value)>()(s.u.value));
     }
 };
 
