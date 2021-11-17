@@ -25,6 +25,7 @@
 #include "gen_cpp/segment_v2.pb.h"
 #include "runtime/timestamp_value.h"
 #include "storage/column_block.h" // for ColumnBlockView
+#include "storage/vectorized/range.h"
 
 namespace starrocks::vectorized {
 class Column;
@@ -95,6 +96,10 @@ public:
         return Status::NotSupported("vectorized not supported yet");
     }
 
+    virtual Status next_batch(vectorized::SparseRange& range, vectorized::Column* column) {
+        return Status::NotSupported("PageDecoder Not Support");
+    }
+
     // Return the number of elements in this page.
     virtual size_t count() const = 0;
 
@@ -109,6 +114,10 @@ public:
     virtual EncodingTypePB encoding_type() const = 0;
 
     virtual Status next_dict_codes(size_t* n, vectorized::Column* dst) {
+        return Status::NotSupported("next_dict_codes() not supported");
+    }
+
+    virtual Status next_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst) {
         return Status::NotSupported("next_dict_codes() not supported");
     }
 

@@ -366,6 +366,8 @@ public:
 
     Status next_batch(size_t* count, vectorized::Column* dst) override;
 
+    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override;
+
     size_t count() const override { return _num_elements; }
 
     size_t current_index() const override { return _cur_index; }
@@ -458,6 +460,46 @@ inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized:
     int n = dst->append_numbers(&_decoded[_cur_index * SIZE_OF_TYPE], *count * SIZE_OF_TYPE);
     DCHECK_EQ(*count, n);
     _cur_index += *count;
+    return Status::OK();
+}
+
+template <FieldType Type>
+inline Status BitShufflePageDecoder<Type>::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+    DCHECK(_parsed);
+    if (PREDICT_FALSE(_cur_index >= _num_elements)) {
+        return Status::OK();
+    }
+
+    if (range.size() == 1 && _options.enable_direct_copy && !_is_decoded && range.span_size() >= _num_elements && _cur_index <= 0 &&
+        dst->capacity() - dst->size() >= _num_element_after_padding) {
+        // if the page is not decoded and to read the whole page data
+        // decode the page directly to dst to save mem copy from _decoded to dst
+        // Now this can be used to optimize compaction
+        size_t old_size = dst->size();
+        dst->resize_uninitialized(old_size + _num_elements);
+        uint8_t* dst_buffer = dst->mutable_raw_data() + SIZE_OF_TYPE * old_size;
+        RETURN_IF_ERROR(_decode_to(dst_buffer));
+
+        if (dst->is_nullable()) {
+            // set null flag to 0
+            auto* nullable = down_cast<vectorized::NullableColumn*>(dst);
+            memset(nullable->mutable_null_column()->mutable_raw_data() + old_size, 0, _num_elements);
+        }
+
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(_decode());
+
+    size_t nread = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
+    vectorized::SparseRangeIterator iter = range.new_iterator();
+    while (iter.has_more() && nread > 0) {
+        _cur_index = iter.begin();
+        vectorized::Range r = iter.next(nread);
+        int n = dst->append_numbers(&_decoded[_cur_index * SIZE_OF_TYPE], r.span_size() * SIZE_OF_TYPE);
+        DCHECK_EQ(r.span_size(), n);
+        _cur_index += r.span_size();
+        nread -= r.span_size();
+    }
     return Status::OK();
 }
 

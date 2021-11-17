@@ -198,6 +198,44 @@ public:
         return Status::OK();
     }
 
+    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override {
+        DCHECK(_parsed) << "Must call init() firstly";
+        if (PREDICT_FALSE(range.span_size() == 0 || _cur_index >= _num_elements)) {
+            return Status::OK();
+        }
+
+        // clang-format off
+        static_assert(Type == OLAP_FIELD_TYPE_TINYINT ||
+                      Type == OLAP_FIELD_TYPE_SMALLINT ||
+                      Type == OLAP_FIELD_TYPE_INT ||
+                      Type == OLAP_FIELD_TYPE_BIGINT ||
+                      Type == OLAP_FIELD_TYPE_LARGEINT ||
+                      Type == OLAP_FIELD_TYPE_DATE ||
+                      Type == OLAP_FIELD_TYPE_DATE_V2 ||
+                      Type == OLAP_FIELD_TYPE_DATETIME ||
+                      Type == OLAP_FIELD_TYPE_TIMESTAMP ||
+                      Type == OLAP_FIELD_TYPE_DECIMAL_V2 ||
+                      Type == OLAP_FIELD_TYPE_DECIMAL32 ||
+                      Type == OLAP_FIELD_TYPE_DECIMAL64 ||
+                      Type == OLAP_FIELD_TYPE_DECIMAL128,
+                      "unexpected field type");
+        // clang-format on
+        size_t nread = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
+        vectorized::SparseRangeIterator iter = range.new_iterator();
+        while (iter.has_more() && _cur_index < _num_elements) {
+            seek_to_position_in_page(iter.begin());
+            vectorized::Range r = iter.next(nread);
+            const size_t ori_size = dst->size();
+            dst->resize(ori_size + r.span_size());
+            auto* p = reinterpret_cast<CppType*>(dst->mutable_raw_data()) + ori_size;
+            bool res = _decoder.get_batch(p, r.span_size());
+            DCHECK(res);
+            _cur_index += r.span_size();
+            nread -= r.span_size();
+        }
+        return Status::OK();
+    }
+
     size_t count() const override { return _num_elements; }
 
     size_t current_index() const override { return _cur_index; }

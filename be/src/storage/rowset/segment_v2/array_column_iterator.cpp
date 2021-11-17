@@ -122,6 +122,18 @@ Status ArrayColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     return Status::OK();
 }
 
+Status ArrayColumnIterator::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+    vectorized::SparseRangeIterator iter = range.new_iterator();
+    size_t nread = range.span_size();
+    while (iter.has_more()) {
+        vectorized::Range r = iter.next(nread);
+        size_t n = r.span_size();
+        RETURN_IF_ERROR(seek_to_ordinal(r.begin()));
+        RETURN_IF_ERROR(next_batch(&n, dst));
+    }
+    return Status::OK();
+}
+
 Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
     vectorized::ArrayColumn* array_column = nullptr;
     vectorized::NullColumn* null_column = nullptr;

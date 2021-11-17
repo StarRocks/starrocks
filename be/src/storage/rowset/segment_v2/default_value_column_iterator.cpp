@@ -125,6 +125,29 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, vectorized::Column* dst
     return Status::OK();
 }
 
+Status DefaultValueColumnIterator::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+    size_t nread = range.span_size();
+    if (_is_default_value_null) {
+        [[maybe_unused]] bool ok = dst->append_nulls(nread);
+        _current_rowid = range.end();
+        DCHECK(ok) << "cannot append null to non-nullable column";
+    } else {
+        if (_type_info->type() == OLAP_FIELD_TYPE_OBJECT || _type_info->type() == OLAP_FIELD_TYPE_HLL ||
+            _type_info->type() == OLAP_FIELD_TYPE_PERCENTILE) {
+            std::vector<Slice> slices;
+            slices.reserve(nread);
+            for (size_t i = 0; i < nread; i++) {
+                slices.emplace_back(*reinterpret_cast<const Slice*>(_mem_value));
+            }
+            dst->append_strings(slices);
+        } else {
+            dst->append_value_multiple_times(_mem_value, nread);
+        }
+        _current_rowid = range.end();
+    }
+    return Status::OK();
+}
+
 Status DefaultValueColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size,
                                                          vectorized::Column* values) {
     return next_batch(&size, values);

@@ -201,9 +201,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         size_t bitshuffle_header_size = 16;
         size_t type = EncodingTypePB::BIT_SHUFFLE;
         if (opts.encoding_type == EncodingTypePB::DICT_ENCODING) {
-            //LOG(INFO) << "page_silice size before decompress is " << page_slice.size;
             type = decode_fixed32_le((const uint8_t*)&page_slice.data[0]);
-            //LOG(INFO) << "encode type is " << encoding_type << ", decoded type is " << type;
             if (type != EncodingTypePB::DICT_ENCODING && type != EncodingTypePB::PLAIN_ENCODING) {
                 return Status::InternalError(strings::Substitute("error encoding type, expected is:$0, actual is:$1", DICT_ENCODING, type));
             }
@@ -216,7 +214,6 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
             size_t compressed_size = decode_fixed32_le((const uint8_t*)&page_slice[4 + dict_header_size]);
             size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)&page_slice[8 + dict_header_size]);
             size_t size_of_element = decode_fixed32_le((const uint8_t*)&page_slice[12 + dict_header_size]);
-            //LOG(INFO) << "num_elements is " << num_elements << ", compressed_size is " << compressed_size << ", num_element_after_padding is " << num_element_after_padding << ", size_of_element is " << size_of_element;
         
             size_t header_size = dict_header_size + bitshuffle_header_size;
             size_t data_size = num_element_after_padding * size_of_element;

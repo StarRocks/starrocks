@@ -123,6 +123,17 @@ private:
             return Status::OK();
         }
 
+        Status read_columns(Chunk* chunk, vectorized::SparseRange& range) {
+            bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
+            for (size_t i = 0; i < _column_iterators.size(); i++) {
+                const ColumnPtr& col = chunk->get_column_by_index(i);
+                RETURN_IF_ERROR(_column_iterators[i]->next_batch(range, col.get()));
+                may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+            }
+            chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+            return Status::OK();
+        }
+
         int64_t memory_usage() const {
             int64_t usage = 0;
             usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
@@ -130,6 +141,8 @@ private:
             usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
             return usage;
         }
+
+        size_t column_size() { return _column_iterators.size(); }
 
         Schema _read_schema;
         Schema _dict_decode_schema;
@@ -198,10 +211,16 @@ private:
 
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
+    Status _read_by_column(size_t n, Chunk* result, vector<rowid_t>* rowids);
+
+    Status _read_column(size_t n, rowid_t cur_rowid, uint32_t col_id, SparseRangeIterator range_iter,
+                        Chunk* result, vector<rowid_t>* rowids);
+
 private:
     std::shared_ptr<Segment> _segment;
     vectorized::SegmentReadOptions _opts;
     std::vector<ColumnIterator*> _column_iterators;
+    std::vector<size_t> _last_rowid_cur_page;
     std::vector<ColumnDecoder> _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
@@ -313,6 +332,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     const size_t n = 1 + ChunkHelper::max_column_id(schema);
     _column_iterators.resize(n, nullptr);
     _column_decoders.resize(n);
+    _last_rowid_cur_page.resize(n, 0);
 
     bool has_predicate = !_opts.predicates.empty();
     _predicate_need_rewrite.resize(n, false);
@@ -550,27 +570,48 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
 }
 
 inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowid, size_t n) {
-    Range r = _range_iter.next(n);
-    size_t nread = r.span_size();
-    if (_cur_rowid != r.begin() || _cur_rowid == 0) {
-        _cur_rowid = r.begin();
+    size_t read_num = 0;
+    SparseRange range;
+    std::vector<rowid_t> read_rowid;
+    read_rowid.reserve(n);
+    size_t chunk_rowid_start = _cur_rowid;
+    size_t cur_rowid = _cur_rowid;
+
+    if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0) {
+        _cur_rowid = _range_iter.begin();
         _opts.stats->block_seek_num += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
         RETURN_IF_ERROR(_context->seek_columns(_cur_rowid));
     }
+
+    while((read_num < n) && _range_iter.has_more()) {
+        Range r = _range_iter.next(n - read_num);
+        read_num += r.span_size();
+        chunk_rowid_start = r.begin();
+        cur_rowid = r.end();
+        range.add(r);
+    }
+
     {
         _opts.stats->blocks_load += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_fetch_ns);
-        RETURN_IF_ERROR(_context->read_columns(chunk, nread));
+        RETURN_IF_ERROR(_context->read_columns(chunk, range));
     }
-    _chunk_rowid_start = _cur_rowid;
-    if (rowid != nullptr) {
-        for (uint32_t i = _cur_rowid; i < _cur_rowid + nread; i++) {
-            rowid->push_back(i);
+
+    if (rowid !=  nullptr) {
+        rowid->reserve(range.span_size() + n);
+        vectorized::SparseRangeIterator iter = range.new_iterator();
+        while (iter.has_more()) {
+            vectorized::Range r = iter.next(n);
+            for (uint32_t i = r.begin(); i < r.end(); i++) {
+                rowid->push_back(i);
+            }
         }
     }
-    _cur_rowid += nread;
-    _opts.stats->raw_rows_read += nread;
+
+    _cur_rowid = cur_rowid;
+    _chunk_rowid_start = chunk_rowid_start;
+    _opts.stats->raw_rows_read += n;
     chunk->check_or_die();
     return Status::OK();
 }
@@ -620,6 +661,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_final_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
+
 
     while ((chunk_start < chunk_capacity) & _range_iter.has_more()) {
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
@@ -862,6 +904,7 @@ uint16_t SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_
 
 inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
     if (_opts.predicates.find(field->id()) != _opts.predicates.end()) {
+        //return _predicate_need_rewrite[field->id()] && !_opts.predicates.find(field->id())->second.empty();
         return _predicate_need_rewrite[field->id()];
     } else {
         return (_has_bitmap_index || !_opts.predicates.empty()) &&

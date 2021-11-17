@@ -43,6 +43,7 @@
 #include "storage/types.h"
 #include "util/coding.h"
 #include "util/faststring.h"
+#include "storage/vectorized/range.h"
 
 namespace starrocks::vectorized {
 class Column;
@@ -229,6 +230,8 @@ public:
     }
 
     Status next_batch(size_t* count, vectorized::Column* dst) override;
+
+    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override;
 
     size_t count() const override {
         DCHECK(_parsed);

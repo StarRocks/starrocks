@@ -26,6 +26,7 @@
 #include "storage/rowset/segment_v2/common.h" // ordinal_t
 #include "storage/rowset/segment_v2/page_decoder.h"
 #include "storage/rowset/segment_v2/page_pointer.h"
+#include "storage/vectorized/range.h"
 
 namespace starrocks {
 class ColumnBlockView;
@@ -87,6 +88,10 @@ public:
     // On error, the value of |*count| is undefined.
     virtual Status read(vectorized::Column* column, size_t* count) = 0;
 
+    virtual Status read(vectorized::Column* column, vectorized::SparseRange& range) {
+        return Status::NotSupported("ParsedPage Not Support");
+    }
+
     // Attempts to read up to |*count| records from this page into the |block|.
     // On success, `Status::OK` is returned, and the number of records read will be updated to
     // |count|, the page offset is advanced by this number too. This number is the minimum value
@@ -105,6 +110,8 @@ public:
     // dictionary page, i.e, using these codes to lookup the dictionary page is safe.
     // On error, the value of |*count| is undefined.
     virtual Status read_dict_codes(vectorized::Column* column, size_t* count) = 0;
+
+    virtual Status read_dict_codes(vectorized::Column* column, vectorized::SparseRange& range) = 0;
 
 protected:
     uint32_t _page_index{0};

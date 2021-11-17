@@ -328,6 +328,46 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* 
     return Status::OK();
 }
 
+template <FieldType Type>
+Status BinaryPrefixPageDecoder<Type>::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+    LOG(INFO) << "binary prefix page decoder";
+    DCHECK(_parsed);
+    if (PREDICT_FALSE(_cur_pos >= _num_values)) {
+        return Status::OK();
+    }
+    size_t nread = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_values - _cur_pos));
+    // FIXME: ???
+    [[maybe_unused]] bool ok = dst->append_strings({_current_value});
+    DCHECK(ok);
+    vectorized::SparseRangeIterator iter = range.new_iterator();
+    if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
+        while (iter.has_more() && nread > 0) {
+            seek_to_position_in_page(iter.begin());
+            vectorized::Range r = iter.next(nread);
+            for (size_t i = 1; i < r.span_size(); ++i) {
+                RETURN_IF_ERROR(_next_value(&_current_value));
+                size_t len = strnlen(reinterpret_cast<const char*>(_current_value.data()), _current_value.size());
+                (void)dst->append_strings({Slice(_current_value.data(), len)});
+            }
+            nread -= r.span_size();
+        }
+    } else {
+        LOG(INFO) << "binary prefix type varchar";
+        while (iter.has_more() && nread > 0) {
+            seek_to_position_in_page(iter.begin());
+            vectorized::Range r = iter.next(nread);
+            LOG(INFO) << "nread is " << nread << ", range size is " << r.span_size();
+            for (size_t i = 1; i < r.span_size(); ++i) {
+                RETURN_IF_ERROR(_next_value(&_current_value));
+                (void)dst->append_strings({_current_value});
+            }
+            nread -= r.span_size();
+        }
+    }
+    LOG(INFO) << "binary prefix page decoder next batch finish";
+    return Status::OK();
+}
+
 template class BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_CHAR>;
 template class BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_VARCHAR>;
 

@@ -35,6 +35,7 @@
 #include "util/coding.h"
 #include "util/faststring.h"
 #include "util/slice.h"
+#include "storage/vectorized/range.h"
 
 namespace starrocks {
 namespace segment_v2 {
@@ -117,6 +118,8 @@ public:
     Status next_batch(size_t* n, ColumnBlockView* dst) override;
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
+
+    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override;
 
     size_t count() const override {
         DCHECK(_parsed);

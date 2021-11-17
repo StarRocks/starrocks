@@ -99,6 +99,10 @@ public:
 
     virtual Status next_batch(size_t* n, vectorized::Column* dst) = 0;
 
+    virtual Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+        return Status::NotSupported("ColumnIterator Not Support batch read");
+    }
+
     virtual ordinal_t get_current_ordinal() const = 0;
 
     virtual Status get_row_ranges_by_zone_map(CondColumn* cond_column, CondColumn* delete_condition,
@@ -141,6 +145,8 @@ public:
     // this method can be invoked only if `all_page_dict_encoded` returns true.
     // type of |dst| must be `FixedLengthColumn<int32_t>` or `NullableColumn(FixedLengthColumn<int32_t>)`.
     virtual Status next_dict_codes(size_t* n, vectorized::Column* dst) { return Status::NotSupported(""); }
+
+    virtual Status next_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst) { return Status::NotSupported(""); }
 
     // given a list of dictionary codes, fill |dst| column with the decoded values.
     // |codes| pointer to the array of dictionary codes.
