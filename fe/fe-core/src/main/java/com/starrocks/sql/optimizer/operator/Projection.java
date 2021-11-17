@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.operator;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 
@@ -69,7 +70,11 @@ public class Projection {
         return false;
     }
 
-    private static boolean couldApplyDictOptimize(ScalarOperator operator) {
+    public static boolean couldApplyDictOptimize(ScalarOperator operator) {
+        // Predicate in projection is rare case, don't optimize it
+        if (operator instanceof PredicateOperator) {
+            return false;
+        }
         return operator.accept(new AddDecodeNodeForDictStringRule.CouldApplyDictOptimizeVisitor(), null);
     }
 
