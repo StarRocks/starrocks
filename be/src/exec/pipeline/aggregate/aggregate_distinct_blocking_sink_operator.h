@@ -13,7 +13,7 @@ public:
     AggregateDistinctBlockingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : Operator(id, "aggregate_distinct_blocking_sink", plan_node_id), _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase2);
-        _aggregator->ref_no_barrier();
+        _aggregator->ref();
     }
     ~AggregateDistinctBlockingSinkOperator() override = default;
 

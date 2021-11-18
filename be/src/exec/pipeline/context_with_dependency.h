@@ -29,16 +29,16 @@ public:
 
     // For pipeline, it is called by unref() when the last operator is unreffed.
     // For non-pipeline, it is called by close() of the exec node directly
-    // without calling ref and unref.
+    // without calling ref and unref, such as AggregateBaseNode.
     virtual Status close(RuntimeState* state) = 0;
 
-    // ref_no_barrier and unref are used to close context
+    // ref and unref are used to close context
     // when the last running related operator is closed.
-    // - ref_no_barrier is called by operator::constructor() at the preparation stage.
+    // - ref is called by operator::constructor() at the preparation stage.
     // - unref is called by operator::close() at the close stage.
     // It is the guaranteed by the dispatcher queue that the increment operations
-    // by ref_no_barrier() are visible to unref(), so we needn't barrier here.
-    void ref_no_barrier() { _num_running_operators.fetch_add(1, std::memory_order_relaxed); }
+    // by ref() are visible to unref(), so we needn't barrier here.
+    void ref() { _num_running_operators.fetch_add(1, std::memory_order_relaxed); }
 
     // Called by operator::close. Close the context when the last running operator is closed.
     Status unref(RuntimeState* state) {

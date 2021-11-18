@@ -18,7 +18,7 @@ public:
               _intersect_ctx(std::move(intersect_ctx)),
               _dst_exprs(dst_exprs),
               _dependency_index(dependency_index) {
-        _intersect_ctx->ref_no_barrier();
+        _intersect_ctx->ref();
     }
 
     bool need_input() const override {

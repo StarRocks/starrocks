@@ -32,7 +32,7 @@ public:
             : Operator(id, "intersect_build_sink", plan_node_id),
               _intersect_ctx(std::move(intersect_ctx)),
               _dst_exprs(dst_exprs) {
-        _intersect_ctx->ref_no_barrier();
+        _intersect_ctx->ref();
     }
 
     bool need_input() const override { return !is_finished(); }

@@ -17,7 +17,7 @@ public:
             : Operator(id, "cross_join_right_sink", plan_node_id),
               _driver_sequence(driver_sequence),
               _cross_join_context(cross_join_context) {
-        _cross_join_context->ref_no_barrier();
+        _cross_join_context->ref();
     }
 
     ~CrossJoinRightSinkOperator() override = default;

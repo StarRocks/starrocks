@@ -18,7 +18,7 @@ public:
             : SourceOperator(id, "intersect_output_source", plan_node_id),
               _intersect_ctx(std::move(intersect_ctx)),
               _dependency_index(dependency_index) {
-        _intersect_ctx->ref_no_barrier();
+        _intersect_ctx->ref();
     }
 
     bool has_output() const override {

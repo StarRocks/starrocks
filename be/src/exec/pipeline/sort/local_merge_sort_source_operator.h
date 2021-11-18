@@ -20,7 +20,7 @@ class LocalMergeSortSourceOperator final : public SourceOperator {
 public:
     LocalMergeSortSourceOperator(int32_t id, int32_t plan_node_id, SortContext* sort_context)
             : SourceOperator(id, "local_merge_sort_source", plan_node_id), _sort_context(sort_context) {
-        _sort_context->ref_no_barrier();
+        _sort_context->ref();
     }
 
     ~LocalMergeSortSourceOperator() override = default;

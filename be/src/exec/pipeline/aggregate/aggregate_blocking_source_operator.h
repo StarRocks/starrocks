@@ -12,7 +12,7 @@ class AggregateBlockingSourceOperator : public SourceOperator {
 public:
     AggregateBlockingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : SourceOperator(id, "aggregate_blocking_source", plan_node_id), _aggregator(std::move(aggregator)) {
-        _aggregator->ref_no_barrier();
+        _aggregator->ref();
     }
 
     ~AggregateBlockingSourceOperator() override = default;

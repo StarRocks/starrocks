@@ -28,7 +28,7 @@ public:
               _build_column_count(build_column_count),
               _conjunct_ctxs(conjunct_ctxs),
               _cross_join_context(cross_join_context) {
-        _cross_join_context->ref_no_barrier();
+        _cross_join_context->ref();
     }
 
     ~CrossJoinLeftOperator() override = default;

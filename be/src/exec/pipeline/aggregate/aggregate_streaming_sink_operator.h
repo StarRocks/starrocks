@@ -13,7 +13,7 @@ public:
     AggregateStreamingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : Operator(id, "aggregate_streaming_sink", plan_node_id), _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase1);
-        _aggregator->ref_no_barrier();
+        _aggregator->ref();
     }
     ~AggregateStreamingSinkOperator() override = default;
 

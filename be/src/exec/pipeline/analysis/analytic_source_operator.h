@@ -12,7 +12,7 @@ class AnalyticSourceOperator : public SourceOperator {
 public:
     AnalyticSourceOperator(int32_t id, int32_t plan_node_id, AnalytorPtr analytor)
             : SourceOperator(id, "analytic_source", plan_node_id), _analytor(std::move(analytor)) {
-        _analytor->ref_no_barrier();
+        _analytor->ref();
     }
     ~AnalyticSourceOperator() override = default;
 

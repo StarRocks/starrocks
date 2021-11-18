@@ -42,7 +42,7 @@ public:
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc),
               _sort_context(sort_context) {
-        _sort_context->ref_no_barrier();
+        _sort_context->ref();
     }
 
     ~PartitionSortSinkOperator() override = default;
