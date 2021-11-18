@@ -172,7 +172,7 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::vectorized::Colum
 }
 
 ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
-    auto nullable_column = NullableColumn::create(UInt8Column::create(), NullColumn::create());
+    auto nullable_column = NullableColumn::create(Int8Column::create(), NullColumn::create());
     nullable_column->append_nulls(1);
     return ConstColumn::create(nullable_column, chunk_size);
 }

@@ -239,6 +239,11 @@ void DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeConte
     temp_chunk->append_column(binary_column, need_decode_slot_id);
 
     auto result_column = conjunct->evaluate(temp_chunk.get());
+    // result always null
+    if (result_column->only_null()) {
+        dict_opt_ctx->filter.resize(DICT_DECODE_MAX_SIZE + 1);
+        return;
+    }
     // unpack result column
     result_column = ColumnHelper::unpack_and_duplicate_const_column(result_column->size(), result_column);
 
