@@ -436,4 +436,13 @@ public class DecodeRewriteTest extends PlanTestBase{
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("[3: S_ADDRESS, VARCHAR, false] <=> 'kks'"));
     }
+
+    @Test
+    public void testSubqueryWithLimit() throws Exception {
+        String sql = "select t0.S_ADDRESS from (select S_ADDRESS, S_NATIONKEY from supplier_nullable limit 10) t0" +
+                " inner join supplier on t0.S_NATIONKEY = supplier.S_NATIONKEY;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 17> : <string id 3>"));
+    }
 }
