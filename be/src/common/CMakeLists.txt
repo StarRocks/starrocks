@@ -26,7 +26,6 @@ add_library(Common STATIC
   daemon.cpp
   status.cpp
   statusor.cpp
-  resource_tls.cpp
   logconfig.cpp
   configbase.cpp
 )
