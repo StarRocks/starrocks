@@ -41,7 +41,9 @@ public:
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc),
-              _sort_context(sort_context) {}
+              _sort_context(sort_context) {
+        _sort_context->create_one_operator();
+    }
 
     ~PartitionSortSinkOperator() override = default;
 
@@ -51,9 +53,9 @@ public:
 
     bool has_output() const override { return false; }
 
-    bool need_input() const override;
+    bool need_input() const override { return !is_finished(); }
 
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _sort_context->is_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

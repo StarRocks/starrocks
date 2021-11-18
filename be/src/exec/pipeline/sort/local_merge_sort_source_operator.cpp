@@ -12,6 +12,12 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+Status LocalMergeSortSourceOperator::close(RuntimeState* state) {
+    RETURN_IF_ERROR(_sort_context->close_one_operator(state));
+    return Operator::close(state);
+}
+
 StatusOr<vectorized::ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     return _sort_context->pull_chunk();
 }
@@ -20,6 +26,10 @@ void LocalMergeSortSourceOperator::set_finishing(RuntimeState* state) {
     if (!_is_finished) {
         _is_finished = true;
     }
+}
+
+void LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
+    _sort_context->set_finished();
 }
 
 bool LocalMergeSortSourceOperator::has_output() const {

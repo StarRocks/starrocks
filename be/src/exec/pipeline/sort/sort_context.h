@@ -11,6 +11,7 @@
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
+#include "exec/pipeline/context_base.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -20,7 +21,7 @@ class ChunksSorter;
 namespace pipeline {
 using namespace vectorized;
 
-class SortContext {
+class SortContext : public ContextBase {
 public:
     explicit SortContext(int64_t limit, const int32_t num_right_sinkers, const std::vector<bool>& is_asc_order,
                          const std::vector<bool>& is_null_first)
@@ -28,6 +29,8 @@ public:
         _chunks_sorter_partions.reserve(num_right_sinkers);
         _data_segment_heaps.reserve(num_right_sinkers);
     }
+
+    Status close(RuntimeState* state) override { return Status::OK(); }
 
     void finish_partition(uint64_t partition_rows) {
         _total_rows.fetch_add(partition_rows, std::memory_order_relaxed);
