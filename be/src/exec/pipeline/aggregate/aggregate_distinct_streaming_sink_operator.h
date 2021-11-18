@@ -38,8 +38,11 @@ private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
     Status _push_chunk_by_auto(const size_t chunk_size);
 
-    // It is used to perform aggregation algorithms
-    // shared by AggregateStreamingSourceOperator
+    // It is used to perform aggregation algorithms shared by
+    // AggregateDistinctStreamingSourceOperator. It is
+    // - prepared at SinkOperator::prepare(),
+    // - reffed at constructor() of both sink and source operator,
+    // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;

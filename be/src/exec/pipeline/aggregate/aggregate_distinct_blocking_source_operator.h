@@ -28,8 +28,11 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    // It is used to perform aggregation algorithms
-    // shared by AggregateBlockingSinkOperator
+    // It is used to perform aggregation algorithms shared by
+    // AggregateDistinctBlockingSinkOperator. It is
+    // - prepared at SinkOperator::prepare(),
+    // - reffed at constructor() of both sink and source operator,
+    // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
 };
 

@@ -29,8 +29,11 @@ public:
 private:
     void _output_chunk_from_hash_map(vectorized::ChunkPtr* chunk);
 
-    // It is used to perform aggregation algorithms
-    // shared by AggregateStreamingSinkOperator
+    // It is used to perform aggregation algorithms shared by
+    // AggregateStreamingSinkOperator. It is
+    // - prepared at SinkOperator::prepare(),
+    // - reffed at constructor() of both sink and source operator,
+    // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     mutable bool _is_finished = false;

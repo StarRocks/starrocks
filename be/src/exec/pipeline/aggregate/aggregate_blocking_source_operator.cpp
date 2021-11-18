@@ -19,8 +19,6 @@ void AggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
 }
 
 Status AggregateBlockingSourceOperator::close(RuntimeState* state) {
-    // _aggregator is shared by sink operator and source operator
-    // we must only close it at source operator
     RETURN_IF_ERROR(_aggregator->unref(state));
     return SourceOperator::close(state);
 }
