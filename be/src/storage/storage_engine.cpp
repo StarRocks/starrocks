@@ -30,6 +30,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <new>
@@ -699,6 +700,8 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
 
     time_t now = time(nullptr);
     tm local_tm_now;
+    memset(&local_tm_now, 0, sizeof(tm));
+
     if (localtime_r(&now, &local_tm_now) == nullptr) {
         LOG(WARNING) << "fail to localtime_r time. time=" << now;
         return OLAP_ERR_OS_ERROR;
@@ -809,6 +812,8 @@ OLAPStatus StorageEngine::_do_sweep(const string& scan_root, const time_t& local
             string dir_name = item.path().filename().string();
             string str_time = dir_name.substr(0, dir_name.find('.'));
             tm local_tm_create;
+            memset(&local_tm_create, 0, sizeof(tm));
+
             if (strptime(str_time.c_str(), "%Y%m%d%H%M%S", &local_tm_create) == nullptr) {
                 LOG(WARNING) << "fail to strptime time. [time=" << str_time << "]";
                 res = OLAP_ERR_OS_ERROR;
