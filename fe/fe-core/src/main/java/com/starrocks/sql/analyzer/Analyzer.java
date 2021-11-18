@@ -5,6 +5,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
@@ -53,6 +54,8 @@ public class Analyzer {
             return analyzeAnalyzeStmt((AnalyzeStmt) node);
         } else if (node instanceof CreateAnalyzeJobStmt) {
             return analyzeCreateAnalyzeStmt((CreateAnalyzeJobStmt) node);
+        } else if (node instanceof CreateTableAsSelectStmt) {
+            return new CTASAnalyzer(catalog, session).transformCTASStmt((CreateTableAsSelectStmt) node);
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }

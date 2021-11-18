@@ -28,6 +28,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -149,6 +150,57 @@ public class KeysDesc implements Writable {
         int count = in.readInt();
         for (int i = 0; i < count; i++) {
             keysColumnNames.add(Text.readString(in));
+        }
+    }
+
+    public void checkColumnDefs(List<ColumnDef> cols) {
+        if (type == null) {
+            throw new SemanticException("Keys type is null.");
+        }
+
+        if (keysColumnNames == null || keysColumnNames.size() == 0) {
+            throw new SemanticException("The number of key columns is 0.");
+        }
+
+        if (keysColumnNames.size() > cols.size()) {
+            throw new SemanticException("The number of key columns should be less than the number of columns.");
+        }
+
+        for (int i = 0; i < keysColumnNames.size(); ++i) {
+            String name = cols.get(i).getName();
+            if (!keysColumnNames.get(i).equalsIgnoreCase(name)) {
+                throw new SemanticException("Key columns should be a ordered prefix of the schema.");
+            }
+
+            if (cols.get(i).getAggregateType() != null) {
+                throw new SemanticException("Key column[%s] should not specify aggregate type.", name);
+            }
+            if (type == KeysType.PRIMARY_KEYS) {
+                ColumnDef cd = cols.get(i);
+                if (cd.isAllowNull()) {
+                    throw new SemanticException("primary key column[%s] cannot be nullable", name);
+                }
+                Type t = cd.getType();
+                if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                        t.isDatetime())) {
+                    throw new SemanticException("primary key column[%s] type not supported: ", t.toSql());
+                }
+            }
+        }
+
+        // for olap table
+        for (int i = keysColumnNames.size(); i < cols.size(); ++i) {
+            if (type == KeysType.AGG_KEYS) {
+                if (cols.get(i).getAggregateType() == null) {
+                    throw new SemanticException(type.name() + " table should specify aggregate type for "
+                            + "non-key column[%s]", cols.get(i).getName());
+                }
+            } else {
+                if (cols.get(i).getAggregateType() != null && cols.get(i).getAggregateType() != AggregateType.REPLACE) {
+                    throw new SemanticException(type.name() + " table should not specify aggregate type for "
+                            + "non-key column[%s]", cols.get(i).getName());
+                }
+            }
         }
     }
 }

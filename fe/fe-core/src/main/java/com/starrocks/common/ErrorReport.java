@@ -22,6 +22,7 @@
 package com.starrocks.common;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 
 // Used to report error happened when execute SQL of user
 public class ErrorReport {
@@ -49,6 +50,14 @@ public class ErrorReport {
     public static void reportAnalysisException(ErrorCode errorCode, Object... objs)
             throws AnalysisException {
         reportAnalysisException(null, errorCode, objs);
+    }
+
+    public static void reportSemanticException(ErrorCode errorCode, Object... objs) {
+        reportSemanticException(null, errorCode, objs);
+    }
+
+    public static void reportSemanticException(String pattern, ErrorCode errorCode, Object... objs) {
+        throw new SemanticException(reportCommon(pattern, errorCode, objs));
     }
 
     public static void reportAnalysisException(String pattern, ErrorCode errorCode, Object... objs)

@@ -456,6 +456,26 @@ public class CreateTableStmt extends DdlStmt {
         }
     }
 
+    public List<ColumnDef> getColumnDefs() {
+        return columnDefs;
+    }
+
+    public List<IndexDef> getIndexDefs() {
+        return indexDefs;
+    }
+
+    public void setKeysDesc(KeysDesc keysDesc) {
+        this.keysDesc = keysDesc;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
+    public void setDistributionDesc(DistributionDesc distributionDesc) {
+        this.distributionDesc = distributionDesc;
+    }
+
     private void analyzeEngineName() throws AnalysisException {
         if (Strings.isNullOrEmpty(engineName)) {
             engineName = "olap";

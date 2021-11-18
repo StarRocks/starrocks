@@ -412,7 +412,26 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof UseStmt) {
                 handleUseStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
-                handleInsertStmt(uuid);
+                try {
+                    if (execPlanBuildByNewPlanner) {
+                        handleInsertStmtWithNewPlanner(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
+                    } else {
+                        handleInsertStmt(uuid);
+                    }
+                    if (context.getSessionVariable().isReportSucc()) {
+                        writeProfile(beginTimeInNanoSecond);
+                    }
+                    if (context.getState().getStateType() == MysqlStateType.ERR) {
+                        ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
+                    }
+                } catch (Throwable t) {
+                    LOG.warn("handle create table as select stmt fail", t);
+                    ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
+                    // the transaction of this insert may already begun, we will abort it at outer finally block.
+                    throw t;
+                } finally {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
             } else if (parsedStmt instanceof InsertStmt) { // Must ahead of DdlStmt because InsertStmt is its subclass
                 try {
                     if (execPlanBuildByNewPlanner) {
@@ -1293,7 +1312,7 @@ public class StmtExecutor {
     }
 
     private boolean supportedByNewPlanner(StatementBase statement, ConnectContext context) {
-        return statement instanceof QueryStmt || statement instanceof InsertStmt;
+        return statement instanceof QueryStmt || statement instanceof InsertStmt || statement instanceof CreateTableAsSelectStmt;
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {
