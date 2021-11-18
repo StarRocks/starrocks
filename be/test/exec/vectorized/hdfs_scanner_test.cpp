@@ -711,4 +711,116 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     EXPECT_TRUE(status.ok());
 }
 
+static SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
+                                               {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                               {""}};
+std::string padding_char_varchar_orc_file = "./be/test/exec/test_data/orc_scanner/padding_char_varchar_10k.orc";
+
+/**
+Type: struct<c0:char(100),c1:varchar(100)>
+
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 1024 hasNull: false
+    Column 1: count: 1024 hasNull: false min: hello                                                                                                max: world                                                                                                sum: 102400
+    Column 2: count: 1024 hasNull: false min: hello max: world sum: 5120
+  Stripe 2:
+    Column 0: count: 976 hasNull: false
+    Column 1: count: 976 hasNull: false min: hello                                                                                                max: world                                                                                                sum: 97600
+    Column 2: count: 976 hasNull: false min: hello max: world sum: 4880
+
+File Statistics:
+  Column 0: count: 2000 hasNull: false
+  Column 1: count: 2000 hasNull: false min: hello                                                                                                max: world                                                                                                sum: 200000
+  Column 2: count: 2000 hasNull: false min: hello max: world sum: 10000
+
+Stripes:
+  Stripe: offset: 3 data: 88 rows: 1024 tail: 75 index: 103
+    Stream: column 0 section ROW_INDEX start: 3 length 18
+    Stream: column 1 section ROW_INDEX start: 21 length 48
+    Stream: column 2 section ROW_INDEX start: 69 length 37
+    Stream: column 0 section PRESENT start: 106 length 5
+    Stream: column 1 section PRESENT start: 111 length 5
+    Stream: column 1 section DATA start: 116 length 13
+    Stream: column 1 section DICTIONARY_DATA start: 129 length 21
+    Stream: column 1 section LENGTH start: 150 length 7
+    Stream: column 2 section PRESENT start: 157 length 5
+    Stream: column 2 section DATA start: 162 length 13
+    Stream: column 2 section DICTIONARY_DATA start: 175 length 13
+    Stream: column 2 section LENGTH start: 188 length 6
+    Encoding column 0: DIRECT
+    Encoding column 1: DICTIONARY_V2[2]
+    Encoding column 2: DICTIONARY_V2[2]
+  Stripe: offset: 269 data: 90 rows: 976 tail: 77 index: 103
+    Stream: column 0 section ROW_INDEX start: 269 length 18
+    Stream: column 1 section ROW_INDEX start: 287 length 48
+    Stream: column 2 section ROW_INDEX start: 335 length 37
+    Stream: column 0 section PRESENT start: 372 length 5
+    Stream: column 1 section PRESENT start: 377 length 5
+    Stream: column 1 section DATA start: 382 length 14
+    Stream: column 1 section DICTIONARY_DATA start: 396 length 21
+    Stream: column 1 section LENGTH start: 417 length 7
+    Stream: column 2 section PRESENT start: 424 length 5
+    Stream: column 2 section DATA start: 429 length 14
+    Stream: column 2 section DICTIONARY_DATA start: 443 length 13
+    Stream: column 2 section LENGTH start: 456 length 6
+    Encoding column 0: DIRECT
+    Encoding column 1: DICTIONARY_V2[2]
+    Encoding column 2: DICTIONARY_V2[2]
+
+File length: 799 bytes
+Padding length: 0 bytes
+Padding ratio: 0%
+ */
+
+TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto access_file = _create_file_handler(padding_char_varchar_orc_file);
+    auto* range = _create_scan_range(access_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(padding_char_varchar_desc);
+    auto* param = _create_param(access_file, range, tuple_desc);
+
+    // c0 <= "hello"
+    // and we expect we can strip of ' ' in dictionary data.
+    // so return 2000 rows.
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "hello");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::LE, tuple_desc->slots()[0], TPrimitiveType::VARCHAR, lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::cout << "less&eq expr = " << ctx->root()->debug_string() << std::endl;
+        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+    }
+
+    RowDescriptor row_desc(tuple_desc, true);
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        for (auto& it2 : it.second) {
+            ExprContext* ctx = it2;
+            ctx->prepare(_runtime_state, row_desc);
+            ctx->open(_runtime_state);
+        }
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        for (auto& it2 : it.second) {
+            it2->close(_runtime_state);
+        }
+    }
+
+    // so stripe will not be filtered out by search argument
+    // and we can test dict-filtering strategy.
+    scanner->disable_use_orc_sargs();
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_ORC_ROWS(scanner, 1000);
+    // since we use dict filter eval cache, we can do filter on orc cvb
+    // so actually read rows is 1000.
+    EXPECT_EQ(scanner->raw_rows_read(), 1000);
+    status = scanner->close(_runtime_state);
+    EXPECT_TRUE(status.ok());
+}
+
 } // namespace starrocks::vectorized
