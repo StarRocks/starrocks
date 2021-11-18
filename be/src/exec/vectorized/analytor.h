@@ -2,12 +2,12 @@
 
 #pragma once
 
+#include "exec/pipeline/context_base.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
-#include "exec/pipeline/context_base.h"
 
 namespace starrocks {
 

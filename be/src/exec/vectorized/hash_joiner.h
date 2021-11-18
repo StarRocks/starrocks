@@ -38,6 +38,7 @@ enum HashJoinPhase {
     POST_PROBE = 2,
     EOS = 4,
 };
+
 class HashJoiner : public pipeline::ContextBase {
 public:
     HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id, TPlanNodeType::type node_type, int64_t limit,
