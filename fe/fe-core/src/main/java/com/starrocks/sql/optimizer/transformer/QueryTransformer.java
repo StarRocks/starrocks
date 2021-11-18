@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -34,7 +35,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -353,7 +353,7 @@ class QueryTransformer {
             List<Set<ColumnRefOperator>> repeatColumnRefList = new ArrayList<>();
 
             for (List<Expr> grouping : groupingSetsList) {
-                Set<ColumnRefOperator> repeatColumnRef = new HashSet<>();
+                Set<ColumnRefOperator> repeatColumnRef = Sets.newLinkedHashSet();
                 BitSet groupingIdBitSet = new BitSet(groupByColumnRefs.size());
                 groupingIdBitSet.set(0, groupByExpressions.size(), true);
 
@@ -404,7 +404,7 @@ class QueryTransformer {
                 groupingTranslations.put(groupingFunction, grouping);
 
                 groupingIds.add(tempGroupingIdsBitSets.stream().map(bitset ->
-                                Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
+                        Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
                         .collect(Collectors.toList()));
                 groupByColumnRefs.add(grouping);
                 repeatOutput.add(grouping);

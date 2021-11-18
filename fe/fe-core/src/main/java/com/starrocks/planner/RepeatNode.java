@@ -23,6 +23,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.GroupByClause;
@@ -44,7 +45,6 @@ import org.apache.commons.collections.CollectionUtils;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -93,7 +93,7 @@ public class RepeatNode extends PlanNode {
         this.outputTupleDesc = outputTupleDesc;
         this.repeatSlotIdList = repeatSlotIdList;
         this.groupingList = groupingList;
-        Set<Integer> allSlotId = new HashSet<>();
+        Set<Integer> allSlotId = Sets.newLinkedHashSet();
         for (Set<Integer> s : this.repeatSlotIdList) {
             allSlotId.addAll(s);
         }
@@ -104,7 +104,7 @@ public class RepeatNode extends PlanNode {
     private static List<Set<Integer>> buildIdSetList(List<Set<SlotId>> repeatSlotIdList) {
         List<Set<Integer>> slotIdList = new ArrayList<>();
         for (Set slotSet : repeatSlotIdList) {
-            Set<Integer> intSet = new HashSet<>();
+            Set<Integer> intSet = Sets.newLinkedHashSet();
             for (Object slotId : slotSet) {
                 intSet.add(((SlotId) slotId).asInt());
             }
@@ -135,7 +135,7 @@ public class RepeatNode extends PlanNode {
         }
 
         // build new BitSet List for tupleDesc
-        Set<SlotDescriptor> slotDescSet = new HashSet<>();
+        Set<SlotDescriptor> slotDescSet = Sets.newLinkedHashSet();
         for (TupleId tupleId : input.getTupleIds()) {
             TupleDescriptor tupleDescriptor = analyzer.getDescTbl().getTupleDesc(tupleId);
             slotDescSet.addAll(tupleDescriptor.getSlots());
@@ -154,9 +154,9 @@ public class RepeatNode extends PlanNode {
         List<Set<SlotId>> groupingIdList = new ArrayList<>();
         List<Expr> exprList = groupByClause.getGroupingExprs();
         Preconditions.checkState(exprList.size() >= 2);
-        allSlotId = new HashSet<>();
+        allSlotId = Sets.newLinkedHashSet();
         for (BitSet bitSet : Collections.unmodifiableList(groupingInfo.getGroupingIdList())) {
-            Set<SlotId> slotIdSet = new HashSet<>();
+            Set<SlotId> slotIdSet = Sets.newLinkedHashSet();
             for (SlotDescriptor slotDesc : slotDescSet) {
                 SlotId slotId = slotDesc.getId();
                 if (slotId == null) {
