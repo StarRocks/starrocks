@@ -4,6 +4,11 @@
 
 namespace starrocks::pipeline {
 
+Status IntersectProbeSinkOperator::close(RuntimeState* state) {
+    RETURN_IF_ERROR(_intersect_ctx->close_one_operator(state));
+    return Operator::close(state);
+}
+
 StatusOr<vectorized::ChunkPtr> IntersectProbeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from sink operator");
 }

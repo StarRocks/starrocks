@@ -15,6 +15,7 @@
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
+#include "exec/pipeline/context_base.h"
 
 namespace starrocks::pipeline {
 
@@ -25,7 +26,7 @@ class IntersectPartitionContextFactory;
 using IntersectPartitionContextFactoryPtr = std::shared_ptr<IntersectPartitionContextFactory>;
 
 // Used as the shared context for IntersectBuildSinkOperator, IntersectProbeSinkOperator, and IntersectOutputSourceOperator.
-class IntersectContext {
+class IntersectContext : public pipeline::ContextBase  {
 public:
     IntersectContext(const int dst_tuple_id, const size_t intersect_times)
             : _dst_tuple_id(dst_tuple_id), _intersect_times(intersect_times) {}
@@ -48,8 +49,8 @@ public:
     // Called in the preparation phase of IntersectBuildSinkOperator.
     Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
 
-    // Called in the close phase of IntersectOutputSourceOperator.
-    Status close(RuntimeState* state);
+    // Called in the close phase of bothe IntersectBuildSinkOperator and IntersectOutputSourceOperator.
+    Status close(RuntimeState* state) override;
 
     Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& dst_exprs);
 

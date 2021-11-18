@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+ // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #pragma once
 
@@ -31,13 +31,15 @@ public:
                                const std::vector<ExprContext*>& dst_exprs)
             : Operator(id, "intersect_build_sink", plan_node_id),
               _intersect_ctx(std::move(intersect_ctx)),
-              _dst_exprs(dst_exprs) {}
+              _dst_exprs(dst_exprs) {
+        _intersect_ctx->create_one_operator();
+    }
 
     bool need_input() const override { return !is_finished(); }
 
     bool has_output() const override { return false; }
 
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _intersect_ctx->is_finished(); }
 
     void set_finishing(RuntimeState* state) override {
         _is_finished = true;
@@ -45,6 +47,7 @@ public:
     }
 
     Status prepare(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
