@@ -130,7 +130,7 @@ public class InsertPlanner {
                 }
                 fields.getFieldByIndex(columnIdx).setType(targetColumn.getType());
             } else {
-                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName());
+                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (row.get(idx) instanceof DefaultValueExpr) {
@@ -156,7 +156,7 @@ public class InsertPlanner {
                 columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
                         logicalPlan.getOutputColumn().get(columnIdx));
             } else {
-                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName());
+                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx == -1) {
                     ScalarOperator scalarOperator;
                     if (targetColumn.getDefaultValue() == null) {
