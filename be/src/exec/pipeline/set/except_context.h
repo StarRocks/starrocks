@@ -7,6 +7,7 @@
 #include "column/type_traits.h"
 #include "common/statusor.h"
 #include "exec/olap_common.h"
+#include "exec/pipeline/context_base.h"
 #include "exec/vectorized/except_hash_set.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
@@ -14,7 +15,6 @@
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
-#include "exec/pipeline/context_base.h"
 
 namespace starrocks::pipeline {
 

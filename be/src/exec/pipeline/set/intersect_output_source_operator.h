@@ -31,9 +31,7 @@ public:
 
     // set_finishing does nothing.
     void set_finishing(RuntimeState* state) override {}
-    void set_finished(RuntimeState* state) override {
-        _intersect_ctx->set_finished();
-    }
+    void set_finished(RuntimeState* state) override { _intersect_ctx->set_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

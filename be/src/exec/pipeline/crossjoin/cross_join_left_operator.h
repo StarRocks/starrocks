@@ -72,9 +72,7 @@ public:
 
     void set_finishing(RuntimeState* state) override { _is_finished = true; }
 
-    void set_finished(RuntimeState* state) override {
-        _cross_join_context->set_finished();
-    }
+    void set_finished(RuntimeState* state) override { _cross_join_context->set_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

@@ -3,9 +3,9 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/sort_exec_exprs.h"
-#include "exec/pipeline/sort/sort_context.h"
 
 namespace starrocks {
 namespace pipeline {

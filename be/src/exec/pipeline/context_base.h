@@ -35,9 +35,7 @@ public:
     // - close_one_operator is called by operator::close() at the close stage.
     // It is the guaranteed by the dispatcher queue that the increment operations
     // by create_one_operator() are visible to close_one_operator(), so we needn't barrier here.
-    void create_one_operator() {
-        _num_running_operators.fetch_add(1, std::memory_order_relaxed);
-    }
+    void create_one_operator() { _num_running_operators.fetch_add(1, std::memory_order_relaxed); }
 
     // Called by operator::close. Close the context when the last running operator is closed.
     Status close_one_operator(RuntimeState* state) {

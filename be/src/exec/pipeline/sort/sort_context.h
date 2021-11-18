@@ -8,10 +8,10 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/context_base.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
-#include "exec/pipeline/context_base.h"
 
 namespace starrocks {
 namespace vectorized {
