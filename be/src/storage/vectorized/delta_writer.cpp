@@ -16,8 +16,8 @@
 
 namespace starrocks::vectorized {
 
-Status DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, std::shared_ptr<DeltaWriter>* writer) {
-    *writer = std::shared_ptr<DeltaWriter>(new DeltaWriter(req, mem_tracker, StorageEngine::instance()));
+Status DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, DeltaWriter** writer) {
+    *writer = new DeltaWriter(req, mem_tracker, StorageEngine::instance());
     return Status::OK();
 }
 
@@ -132,7 +132,7 @@ Status DeltaWriter::_init() {
     writer_context.partition_id = _req.partition_id;
     writer_context.tablet_schema_hash = _req.schema_hash;
     writer_context.rowset_type = BETA_ROWSET;
-    writer_context.rowset_path_prefix = _tablet->tablet_path();
+    writer_context.rowset_path_prefix = _tablet->schema_hash_path();
     writer_context.tablet_schema = &(_tablet->tablet_schema());
     writer_context.rowset_state = PREPARED;
     writer_context.txn_id = _req.txn_id;

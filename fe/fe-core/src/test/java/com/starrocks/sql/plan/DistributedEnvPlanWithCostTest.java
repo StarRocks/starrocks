@@ -1,6 +1,8 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.planner.AggregationNode;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -37,7 +39,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  STREAMING\n"
                 + "  |  output: multi_distinct_count(5: P_TYPE)"));
         Assert.assertTrue(planFragment.contains("3:AGGREGATE (merge finalize)\n"
-                + "  |  output: multi_distinct_count(11: count(distinct 5: P_TYPE))"));
+                + "  |  output: multi_distinct_count(11: count)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -50,7 +52,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  STREAMING\n"
                 + "  |  output: multi_distinct_count(1: P_PARTKEY)"));
         Assert.assertTrue(planFragment.contains("3:AGGREGATE (merge finalize)\n"
-                + "  |  output: multi_distinct_count(11: count(distinct 1: P_PARTKEY))"));
+                + "  |  output: multi_distinct_count(11: count)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -93,7 +95,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "SELECT COUNT (DISTINCT l_partkey) FROM lineitem";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(18: count(distinct 2: L_PARTKEY))"));
+                "  |  output: multi_distinct_count(18: count"));
         Assert.assertTrue(planFragment.contains("1:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(2: L_PARTKEY)"));
     }
@@ -592,5 +594,25 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains("* second-->[0.0, 59.0, 0.0, 4.0, 60.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
+    }
+
+    @Test
+    public void testColumnNotEqualsConstant() throws Exception {
+        String sql =
+                "select S_SUPPKEY,S_NAME from supplier where s_name <> 'Supplier#000000050' and s_name >= 'Supplier#000000086'";
+        String plan = getCostExplain(sql);
+        // check cardinality not 0
+        Assert.assertTrue(plan.contains("cardinality: 500000"));
+    }
+
+    @Test
+    public void testLocalAggregationUponJoin() throws Exception {
+        // check that local aggregation is set colocate which upon join with colocate table
+        String sql = "select tbl5.c2,sum(tbl5.c3) from db1.tbl5 join[broadcast] db1.tbl4 on tbl5.c2 = tbl4.c2 group by tbl5.c2;";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        ExecPlan execPlan = pair.second;
+        Assert.assertTrue(execPlan.getFragments().get(1).getPlanRoot() instanceof AggregationNode);
+        AggregationNode aggregationNode = (AggregationNode) execPlan.getFragments().get(1).getPlanRoot();
+        Assert.assertTrue(aggregationNode.isColocate());
     }
 }

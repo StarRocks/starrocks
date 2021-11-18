@@ -108,7 +108,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql = "select sum(v2) from t0 group by v2";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  3:AGGREGATE (merge finalize)\n"
-                + "  |  output: sum(4: sum(2: v2))\n"
+                + "  |  output: sum(4: sum)\n"
                 + "  |  group by: 2: v2"));
         Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update serialize)\n"
                 + "  |  STREAMING\n"
@@ -219,10 +219,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql = "select count(distinct v2), sum(v1) from t0";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  3:AGGREGATE (merge serialize)\n"
-                + "  |  output: sum(5: sum(1: v1))\n"
+                + "  |  output: sum(5: sum)\n"
                 + "  |  group by: 2: v2"));
         Assert.assertTrue(planFragment.contains("  6:AGGREGATE (merge finalize)\n"
-                + "  |  output: count(4: count(distinct 2: v2)), sum(5: sum(1: v1))\n"
+                + "  |  output: count(4: count), sum(5: sum)\n"
                 + "  |  group by: \n"
                 + "  |  use vectorized: true"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n"
@@ -482,7 +482,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testMV() throws Exception {
         String sql = "select count(distinct k7), count(distinct k8) from duplicate_table_with_null;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("OUTPUT EXPRS:16: count(distinct 7: k7) | 17: count(distinct 8: k8)"));
+        Assert.assertTrue(planFragment.contains("OUTPUT EXPRS:16: count | 17: count"));
         Assert.assertTrue(planFragment.contains("14: mv_bitmap_union_k7"));
         Assert.assertTrue(planFragment.contains("15: mv_bitmap_union_k8"));
         Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
@@ -509,7 +509,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 32: L_PARTKEY = 14: PS_PARTKEY\n" +
                 "  |  equal join conjunct: 33: L_SUPPKEY = 15: PS_SUPPKEY\n" +
-                "  |  other join predicates: CAST(16: PS_AVAILQTY AS DOUBLE) > 0.5 * 48: sum(35: L_QUANTITY)"));
+                "  |  other join predicates: CAST(16: PS_AVAILQTY AS DOUBLE) > 0.5 * 48: sum"));
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
@@ -521,8 +521,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("cardinality: 10000"));
         // check repeat node
         Assert.assertTrue(plan.contains("cardinality: 40000"));
-        Assert.assertTrue(plan.contains(" * GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 4.0]\n" +
-                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 4.0]"));
+        Assert.assertTrue(plan.contains(" * GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE\n" +
+                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE"));
 
         sql = "select v1, v2, grouping_id(v1,v2), SUM(v3) from t0 group by rollup(v1, v2)";
         plan = getCostExplain(sql);
@@ -530,8 +530,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("cardinality: 10000"));
         // check repeat node
         Assert.assertTrue(plan.contains("cardinality: 30000"));
-        Assert.assertTrue(plan.contains("* GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 3.0]\n" +
-                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 3.0]"));
+        Assert.assertTrue(plan.contains("* GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 3.0] ESTIMATE\n" +
+                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 3.0] ESTIMATE"));
     }
 
     @Test
@@ -704,5 +704,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     - filter_id = 0, probe_expr = (1: v4)"));
 
         setTableStatistics(t0, 10000);
+    }
+
+    @Test
+    public void testMergeTwoAggArgTypes() throws Exception {
+        String sql = "select sum(t.int_sum) from (select sum(t1c) as int_sum from test_all_type)t";
+        String planFragment = getVerboseExplain(sql);
+        Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: sum[([3: t1c, INT, true]); args: INT; result: BIGINT;"));
     }
 }

@@ -655,6 +655,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableGroupbyUseOutputAlias;
     }
 
+    public void setEnableGroupbyUseOutputAlias(boolean enableGroupbyUseOutputAlias) {
+        this.enableGroupbyUseOutputAlias = enableGroupbyUseOutputAlias;
+    }
+
     public boolean getEnableQueryDump() {
         return enableQueryDump;
     }
@@ -669,6 +673,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnablePipelineEngine() {
         return enablePipelineEngine;
+    }
+
+    public void setEnablePipelineEngine(boolean enablePipelineEngine) {
+        this.enablePipelineEngine = enablePipelineEngine;
     }
 
     public boolean isEnableReplicationJoin() {

@@ -101,7 +101,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                   << " schema_hash=" << _clone_req.schema_hash << " committed_version=" << _clone_req.committed_version
                   << " keys_type=" << tablet->keys_type();
 
-        string download_path = tablet->tablet_path() + CLONE_PREFIX;
+        string download_path = tablet->schema_hash_path() + CLONE_PREFIX;
         DeferOp defer([&]() { (void)FileUtils::remove_all(download_path); });
 
         std::vector<Version> missed_versions;
@@ -294,6 +294,11 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
 Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId tablet_id, TSchemaHash schema_hash,
                                        int timeout_s, const std::vector<Version>* missed_versions,
                                        std::string* snapshot_path, int32_t* snapshot_format) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    if (!bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The snapshot should be stopped as soon as possible.");
+    }
+
     TSnapshotRequest request;
     request.__set_tablet_id(tablet_id);
     request.__set_schema_hash(schema_hash);
@@ -332,6 +337,11 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
 }
 
 Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const std::string& snapshot_path) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    if (!bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The snapshot should be stopped as soon as possible.");
+    }
+
     TAgentResult result;
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<BackendServiceClient>(
             ip, port, [&snapshot_path, &result](BackendServiceConnection& client) {
@@ -342,6 +352,11 @@ Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const
 
 Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& remote_url_prefix,
                                         const std::string& local_path) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    if (!bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The download should be stopped as soon as possible.");
+    }
+
     // Check local path exist, if exist, remove it, then create the dir
     // local_file_full_path = tabletid/clone. for a specific tablet, there should be only one folder
     // if this folder exists, then should remove it
@@ -366,6 +381,11 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     // Avoid of data is not complete, we copy the header file at last.
     // The header file's name is end of .hdr.
     for (int i = 0; i < file_name_list.size() - 1; ++i) {
+        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        if (!bg_worker_stopped) {
+            return Status::InternalError(
+                    "Process is going to quit. The download should be stopped as soon as possible.");
+        }
         StringPiece sp(file_name_list[i]);
         if (sp.ends_with(".hdr")) {
             std::swap(file_name_list[i], file_name_list[file_name_list.size() - 1]);
@@ -437,6 +457,11 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
 Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, int64_t committed_version,
                                       bool incremental_clone) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    if (!bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The clone should be stopped as soon as possible.");
+    }
+
     if (tablet->updates() != nullptr) {
         return _finish_clone_primary(tablet, clone_dir);
     }
@@ -477,7 +502,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         }
 
         std::set<string> local_files;
-        std::string tablet_dir = tablet->tablet_path();
+        std::string tablet_dir = tablet->schema_hash_path();
         res = FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files, Env::Default());
         if (!res.ok()) {
             LOG(WARNING) << "Fail to list tablet directory " << tablet_dir << ": " << res;
@@ -486,6 +511,12 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
         // link files from clone dir, if file exists, skip it
         for (const string& clone_file : clone_files) {
+            bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+            if (!bg_worker_stopped) {
+                return Status::InternalError(
+                        "Process is going to quit. The clone should be stopped as soon as possible.");
+            }
+
             if (local_files.find(clone_file) != local_files.end()) {
                 VLOG(3) << "find same file when clone, skip it. "
                         << "tablet=" << tablet->full_name() << ", clone_file=" << clone_file;
@@ -528,6 +559,11 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
 Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta& cloned_tablet_meta,
                                                 int64_t committed_version) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    if (!bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The clone should be stopped as soon as possible.");
+    }
+
     LOG(INFO) << "begin to incremental clone. tablet=" << tablet->full_name()
               << ", committed_version=" << committed_version;
 
@@ -560,6 +596,11 @@ Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta
 }
 
 Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    if (!bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The clone should be stopped as soon as possible.");
+    }
+
     Version cloned_max_version = cloned_tablet_meta->max_version();
     LOG(INFO) << "begin to full clone. tablet=" << tablet->full_name()
               << ", cloned_max_version=" << cloned_max_version.first << "-" << cloned_max_version.second;
@@ -635,7 +676,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     // but some rowset is useless, so that remove them here
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
-        if (auto s = RowsetFactory::create_rowset(&(cloned_tablet_meta->tablet_schema()), tablet->tablet_path(),
+        if (auto s = RowsetFactory::create_rowset(&(cloned_tablet_meta->tablet_schema()), tablet->schema_hash_path(),
                                                   rs_meta_ptr, &rowset_to_remove);
             !s.ok()) {
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
@@ -649,6 +690,11 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
 }
 
 Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string& clone_dir) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    if (!bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The snapshot should be stopped as soon as possible.");
+    }
+
     auto meta_file = strings::Substitute("$0/meta", clone_dir);
     auto res = SnapshotManager::instance()->parse_snapshot_meta(meta_file);
     if (!res.ok()) {
@@ -664,7 +710,7 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
     clone_files.erase("meta");
 
     std::set<std::string> local_files;
-    const std::string& tablet_dir = tablet->tablet_path();
+    const std::string& tablet_dir = tablet->schema_hash_path();
     RETURN_IF_ERROR(FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files, Env::Default()));
 
     // Files that are found in both |clone_files| and |local_files|.

@@ -30,10 +30,7 @@ bool ExchangeSourceOperator::is_finished() const {
     return _stream_recvr->is_finished();
 }
 
-void ExchangeSourceOperator::finish(RuntimeState* state) {
-    if (_is_finishing) {
-        return;
-    }
+void ExchangeSourceOperator::set_finishing(RuntimeState* state) {
     _is_finishing = true;
     return _stream_recvr->close();
 }

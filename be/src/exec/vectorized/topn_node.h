@@ -32,7 +32,6 @@ public:
 
 private:
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
-    ChunkPtr _materialize_chunk_before_sort(Chunk* chunk);
 
     int64_t _offset;
 

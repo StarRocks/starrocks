@@ -31,6 +31,7 @@ public class DecimalV3FunctionAnalyzer {
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+                    .add(FunctionSet.COUNT)
                     .add("sum").add("sum_distinct").add("multi_distinct_sum").add("avg").add("variance")
                     .add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
                     .add("stddev").add("stddev_pop").add("stddev_samp").build();
@@ -102,8 +103,11 @@ public class DecimalV3FunctionAnalyzer {
 
     public static AggregateFunction rectifyAggregationFunction(AggregateFunction fn, Type argType, Type returnType) {
         if (argType.isDecimalV3()) {
-            // avg on decimal complies with Snowflake-style
-            if (fn.functionName().equalsIgnoreCase("avg")) {
+            if (fn.functionName().equals(FunctionSet.COUNT)) {
+                // count function return type always bigint
+                returnType = fn.getReturnType();
+            } else if (fn.functionName().equals(FunctionSet.AVG)) {
+                // avg on decimal complies with Snowflake-style
                 ScalarType decimal128p38s0 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
                 TypeManager.TypeTriple triple = TypeManager.getReturnTypeOfDecimal(
                         ArithmeticExpr.Operator.DIVIDE, (ScalarType) argType, decimal128p38s0);

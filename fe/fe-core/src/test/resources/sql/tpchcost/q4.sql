@@ -22,7 +22,7 @@ order by
     o_orderpriority ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:6: O_ORDERPRIORITY | 29: count()
+OUTPUT EXPRS:6: O_ORDERPRIORITY | 29: count
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -44,7 +44,7 @@ UNPARTITIONED
 |  use vectorized: true
 |
 9:AGGREGATE (merge finalize)
-|  output: count(29: count())
+|  output: count(29: count)
 |  group by: 6: O_ORDERPRIORITY
 |  use vectorized: true
 |

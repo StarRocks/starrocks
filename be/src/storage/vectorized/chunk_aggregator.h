@@ -9,18 +9,29 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/chunk_iterator.h"
 #include "storage/vectorized/column_aggregate_func.h"
+#include "storage/vectorized/row_source_mask.h"
 
 namespace starrocks::vectorized {
 
 using CompareFN = void (*)(const Column* col, uint8_t* flags);
 
 class ChunkAggregator {
+private:
+    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t aggregate_rows, double factor,
+                    bool is_vertical_merge, bool is_key);
+
 public:
     ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t aggregate_rows, double factor);
 
     ChunkAggregator(const Schema* schema, uint32_t aggregate_rows, double factor);
 
-    void update_source(ChunkPtr& chunk);
+    ChunkAggregator(const Schema* schema, uint32_t aggregate_rows, double factor, bool is_vertical_merge, bool is_key);
+
+    void update_source(ChunkPtr& chunk) { update_source(chunk, nullptr); }
+    // |source_masks| is used if |_is_vertical_merge| is true.
+    // row source mask sequence will be updated from _is_eq if _is_key is true
+    // or used to update _is_eq if _is_key is false.
+    void update_source(ChunkPtr& chunk, std::vector<RowSourceMask>* source_masks);
 
     void aggregate();
 
@@ -95,6 +106,10 @@ private:
     size_t _element_memory_usage_num_rows = 0;
     size_t _bytes_usage = 0;
     size_t _bytes_usage_num_rows = 0;
+
+    // used for vertical compaction
+    bool _is_vertical_merge = false;
+    bool _is_key = false;
 };
 
 } // namespace starrocks::vectorized

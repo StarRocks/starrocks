@@ -17,10 +17,7 @@ bool RepeatOperator::is_finished() const {
     return _is_finished && _repeat_times_last >= _repeat_times_required;
 }
 
-void RepeatOperator::finish(RuntimeState* state) {
-    if (_is_finished) {
-        return;
-    }
+void RepeatOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 

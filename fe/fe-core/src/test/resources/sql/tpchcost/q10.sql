@@ -32,7 +32,7 @@ order by
     revenue desc limit 20;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:1: C_CUSTKEY | 2: C_NAME | 43: sum(42: expr) | 6: C_ACCTBAL | 38: N_NAME | 3: C_ADDRESS | 5: C_PHONE | 8: C_COMMENT
+OUTPUT EXPRS:1: C_CUSTKEY | 2: C_NAME | 43: sum | 6: C_ACCTBAL | 38: N_NAME | 3: C_ADDRESS | 5: C_PHONE | 8: C_COMMENT
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -50,7 +50,7 @@ EXCHANGE ID: 17
 UNPARTITIONED
 
 16:TOP-N
-|  order by: <slot 43> 43: sum(42: expr) DESC
+|  order by: <slot 43> 43: sum DESC
 |  offset: 0
 |  limit: 20
 |  use vectorized: true

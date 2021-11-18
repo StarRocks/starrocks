@@ -339,11 +339,7 @@ public class UtFrameUtils {
         }
     }
 
-    public static String getPlanThriftStringForNewPlanner(ConnectContext ctx, String queryStr) throws Exception {
-        return UtFrameUtils.getThriftString(UtFrameUtils.getNewPlanAndFragment(ctx, queryStr).second.getFragments());
-    }
-
-    public static Pair<String, ExecPlan> getNewPlanAndFragment(ConnectContext connectContext, String originStmt)
+    public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
         SqlScanner input =
@@ -491,7 +487,7 @@ public class UtFrameUtils {
         return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
     }
 
-    public static String getThriftString(List<PlanFragment> fragments) {
+    private static String getThriftString(List<PlanFragment> fragments) {
         StringBuilder str = new StringBuilder();
         for (int i = 0; i < fragments.size(); ++i) {
             if (i > 0) {
@@ -503,7 +499,15 @@ public class UtFrameUtils {
         return str.toString();
     }
 
-    public static String getNewFragmentPlan(ConnectContext connectContext, String sql) throws Exception {
-        return getNewPlanAndFragment(connectContext, sql).second.getExplainString(TExplainLevel.NORMAL);
+    public static String getFragmentPlan(ConnectContext connectContext, String sql) throws Exception {
+        return getPlanAndFragment(connectContext, sql).second.getExplainString(TExplainLevel.NORMAL);
+    }
+
+    public static String getVerboseFragmentPlan(ConnectContext connectContext, String sql) throws Exception {
+        return getPlanAndFragment(connectContext, sql).second.getExplainString(TExplainLevel.VERBOSE);
+    }
+
+    public static String getPlanThriftString(ConnectContext ctx, String queryStr) throws Exception {
+        return UtFrameUtils.getThriftString(UtFrameUtils.getPlanAndFragment(ctx, queryStr).second.getFragments());
     }
 }

@@ -11,7 +11,10 @@ namespace starrocks::pipeline {
 // The input chunk is most likely full, so we don't merge it to avoid copying chunk data.
 Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk) {
     std::lock_guard<std::mutex> l(_chunk_lock);
-
+    if (_is_finished) {
+        return Status::OK();
+    }
+    _memory_manager->update_row_count(chunk->num_rows());
     _full_chunk_queue.emplace(std::move(chunk));
 
     return Status::OK();
@@ -23,7 +26,10 @@ Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk,
                                               std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from,
                                               uint32_t size) {
     std::lock_guard<std::mutex> l(_chunk_lock);
-
+    if (_is_finished) {
+        return Status::OK();
+    }
+    _memory_manager->update_row_count(size);
     _partition_chunk_queue.emplace(std::move(chunk), std::move(indexes), from, size);
     _partition_rows_num += size;
 
@@ -41,6 +47,25 @@ bool LocalExchangeSourceOperator::has_output() const {
 
     return !_full_chunk_queue.empty() || _partition_rows_num >= config::vector_chunk_size ||
            (_is_finished && _partition_rows_num > 0);
+}
+
+void LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
+    std::lock_guard<std::mutex> l(_chunk_lock);
+    _is_finished = true;
+    // Compute out the number of rows of the _full_chunk_queue.
+    size_t full_rows_num = 0;
+    while (!_full_chunk_queue.empty()) {
+        auto&& chunk = std::move(_full_chunk_queue.front());
+        _full_chunk_queue.pop();
+        full_rows_num += chunk->num_rows();
+    }
+    // clear _full_chunk_queue
+    { [[maybe_unused]] typeof(_full_chunk_queue) tmp = std::move(_full_chunk_queue); }
+    // clear _partition_chunk_queue
+    { [[maybe_unused]] typeof(_partition_chunk_queue) tmp = std::move(_partition_chunk_queue); }
+    // Subtract the number of rows of buffered chunks from row_count of _memory_manager and make it unblocked.
+    _memory_manager->update_row_count(-(full_rows_num + _partition_rows_num));
+    _partition_rows_num = 0;
 }
 
 StatusOr<vectorized::ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {

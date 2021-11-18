@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
+#include <limits>
+
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
@@ -111,55 +113,40 @@ template <class T>
 using SelectorRandomGen = RandomGenerator<T, 2>;
 
 template <class T>
-using ValueRandomGen = RandomGenerator<T, 128>;
+using ValueRandomGen = RandomGenerator<T, 65535>;
+
+template <PrimitiveType TYPE, int TEST_SIZE>
+bool test_simd_select_if_wrapper() {
+    test_simd_select_if<TYPE, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, TEST_SIZE>();
+    test_simd_select_if<TYPE, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, TEST_SIZE>();
+    test_simd_select_if<TYPE, SelectorRandomGen, ValueRandomGen, ValueRandomGen, TEST_SIZE>();
+    return true;
+}
+
+template <PrimitiveType... TYPE>
+bool test_simd_select_if_all() {
+    constexpr int batch_size = 4095;
+    return (... && test_simd_select_if_wrapper<TYPE, batch_size>());
+}
 
 PARALLEL_TEST(SIMDSelectorTest, SelectorTest) {
     constexpr int BATCH_SIZE = 4095;
     {
-        test_simd_select_if<TYPE_TINYINT, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_TINYINT, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_TINYINT, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
+        test_simd_select_if<TYPE_BOOLEAN, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
+        test_simd_select_if<TYPE_BOOLEAN, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
+        test_simd_select_if<TYPE_BOOLEAN, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
     }
-    {
-        test_simd_select_if<TYPE_INT, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_INT, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_INT, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
-    }
-    {
-        test_simd_select_if<TYPE_BIGINT, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_BIGINT, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_BIGINT, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
-    }
-    {
-        test_simd_select_if<TYPE_FLOAT, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_FLOAT, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_FLOAT, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
-    }
-    {
-        test_simd_select_if<TYPE_DOUBLE, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_DOUBLE, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_DOUBLE, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
-    }
-    {
-        test_simd_select_if<TYPE_LARGEINT, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_LARGEINT, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_LARGEINT, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
-    }
-    {
-        test_simd_select_if<TYPE_DECIMAL32, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_DECIMAL32, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_DECIMAL32, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
-    }
-    {
-        test_simd_select_if<TYPE_DECIMAL64, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_DECIMAL64, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_DECIMAL64, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
-    }
-    {
-        test_simd_select_if<TYPE_DECIMAL128, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator,
-                            BATCH_SIZE>();
-        test_simd_select_if<TYPE_DECIMAL128, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, BATCH_SIZE>();
-        test_simd_select_if<TYPE_DECIMAL128, SelectorRandomGen, SelectorRandomGen, SelectorRandomGen, BATCH_SIZE>();
-    }
+    // clang-format off
+    test_simd_select_if_all<TYPE_TINYINT,
+                            TYPE_SMALLINT, 
+                            TYPE_INT, 
+                            TYPE_BIGINT, 
+                            TYPE_LARGEINT, 
+                            TYPE_DECIMAL32,
+                            TYPE_DECIMAL64, 
+                            TYPE_DECIMAL128, 
+                            TYPE_FLOAT, 
+                            TYPE_DOUBLE>();
+    // clang-format on
 }
 } // namespace starrocks::vectorized

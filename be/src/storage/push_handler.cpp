@@ -265,7 +265,7 @@ OLAPStatus PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetShared
         context.partition_id = _request.partition_id;
         context.tablet_schema_hash = cur_tablet->schema_hash();
         context.rowset_type = BETA_ROWSET;
-        context.rowset_path_prefix = cur_tablet->tablet_path();
+        context.rowset_path_prefix = cur_tablet->schema_hash_path();
         context.tablet_schema = &cur_tablet->tablet_schema();
         context.rowset_state = PREPARED;
         context.txn_id = _request.transaction_id;
@@ -328,7 +328,7 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
         context.partition_id = _request.partition_id;
         context.tablet_schema_hash = cur_tablet->schema_hash();
         context.rowset_type = BETA_ROWSET;
-        context.rowset_path_prefix = cur_tablet->tablet_path();
+        context.rowset_path_prefix = cur_tablet->schema_hash_path();
         context.tablet_schema = &cur_tablet->tablet_schema();
         context.rowset_state = PREPARED;
         context.txn_id = _request.transaction_id;
@@ -385,7 +385,8 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
 
             // 4. Read data from broker and write into Rowset of cur_tablet
             VLOG(3) << "start to convert etl file to delta.";
-            while (!reader->eof()) {
+            bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+            while (!reader->eof() && !bg_worker_stopped) {
                 res = reader->next(&row);
                 if (OLAP_SUCCESS != res) {
                     LOG(WARNING) << "read next row failed."
@@ -403,7 +404,14 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
                     }
                     num_rows++;
                 }
+                bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
             }
+
+            if (bg_worker_stopped) {
+                res = OLAP_ERR_PUSH_INPUT_DATA_ERROR;
+                break;
+            }
+
             if (res != OLAP_SUCCESS) {
                 reader->close();
                 break;

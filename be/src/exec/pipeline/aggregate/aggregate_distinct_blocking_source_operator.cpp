@@ -14,7 +14,7 @@ bool AggregateDistinctBlockingSourceOperator::is_finished() const {
     return _aggregator->is_sink_complete() && _aggregator->is_ht_eos();
 }
 
-void AggregateDistinctBlockingSourceOperator::finish(RuntimeState* state) {
+void AggregateDistinctBlockingSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 

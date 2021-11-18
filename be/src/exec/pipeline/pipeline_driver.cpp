@@ -24,6 +24,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     source_operator()->add_morsel_queue(_morsel_queue);
     for (auto& op : _operators) {
         RETURN_IF_ERROR(op->prepare(runtime_state));
+        _operator_stages[op->get_id()] = OperatorStage::PREPARED;
     }
     // Driver has no dependencies always sets _all_dependencies_ready to true;
     _all_dependencies_ready = _dependencies.empty();
@@ -63,9 +64,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
-                        curr_op->finish(runtime_state);
+                        _mark_operator_finishing(curr_op, runtime_state);
                     }
-                    next_op->finish(runtime_state);
+                    _mark_operator_finishing(next_op, runtime_state);
                     _new_first_unfinished = i + 1;
                     continue;
                 }
@@ -116,9 +117,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
-                        curr_op->finish(runtime_state);
+                        _mark_operator_finishing(curr_op, runtime_state);
                     }
-                    next_op->finish(runtime_state);
+                    _mark_operator_finishing(next_op, runtime_state);
                     _new_first_unfinished = i + 1;
                     continue;
                 }
@@ -132,8 +133,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         }
         // close finished operators and update _first_unfinished index
         for (auto i = _first_unfinished; i < _new_first_unfinished; ++i) {
-            _operators[i]->finish(runtime_state);
-            RETURN_IF_ERROR(_operators[i]->close(runtime_state));
+            _mark_operator_finished(_operators[i], runtime_state);
         }
         _first_unfinished = _new_first_unfinished;
 
@@ -168,23 +168,29 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     }
 }
 
-void PipelineDriver::finish_operators(RuntimeState* state) {
-    for (auto i = _first_unfinished; i < _operators.size(); ++i) {
-        _operators[i]->finish(state);
+void PipelineDriver::dispatch_operators() {
+    for (auto& op : _operators) {
+        _operator_stages[op->get_id()] = OperatorStage::PROCESSING;
+    }
+}
+
+void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
+    for (auto& op : _operators) {
+        _mark_operator_finished(op, runtime_state);
+    }
+}
+void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
+    for (auto& op : _operators) {
+        _mark_operator_closed(op, runtime_state);
     }
 }
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     VLOG_ROW << "[Driver] finalize, driver=" << this;
-    if (state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR) {
-        auto num_operators = _operators.size();
-        for (auto i = _first_unfinished; i < num_operators; ++i) {
-            _operators[i]->finish(runtime_state);
-            _operators[i]->close(runtime_state);
-        }
-    } else {
-        DCHECK(false);
-    }
+    DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
+
+    _close_operators(runtime_state);
+
     _state = state;
 
     // Calculate total time before report profile
@@ -239,6 +245,35 @@ bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
         return true;
     }
     return false;
+}
+
+void PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* state) {
+    auto& op_state = _operator_stages[op->get_id()];
+    if (op_state >= OperatorStage::FINISHING) {
+        return;
+    }
+    op->set_finishing(state);
+    op_state = OperatorStage::FINISHING;
+}
+
+void PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* state) {
+    _mark_operator_finishing(op, state);
+    auto& op_state = _operator_stages[op->get_id()];
+    if (op_state >= OperatorStage::FINISHED) {
+        return;
+    }
+    op->set_finished(state);
+    op_state = OperatorStage::FINISHED;
+}
+
+void PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state) {
+    _mark_operator_finished(op, state);
+    auto& op_state = _operator_stages[op->get_id()];
+    if (op_state >= OperatorStage::CLOSED) {
+        return;
+    }
+    op->close(state);
+    op_state = OperatorStage::CLOSED;
 }
 
 } // namespace starrocks::pipeline

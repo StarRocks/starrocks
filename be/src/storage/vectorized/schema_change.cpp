@@ -350,12 +350,18 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                         Slice slice;
                         slice.size = new_tablet->tablet_meta()->tablet_schema().column(i).length();
                         slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
+                        if (slice.data == nullptr) {
+                            LOG(WARNING) << "failed to allocate memory in mem_pool";
+                            return false;
+                        }
                         memset(slice.data, 0, slice.size);
                         size_t copy_size = slice.size < base_slice.size ? slice.size : base_slice.size;
                         memcpy(slice.data, base_slice.data, copy_size);
                         new_datum.set(slice);
                         new_col->append_datum(new_datum);
                     }
+                } else if (new_col->is_nullable() != base_col->is_nullable()) {
+                    new_col->append(*base_col.get());
                 } else {
                     new_col = base_col;
                 }
@@ -579,7 +585,9 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
         _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
     }
 
-    while (!_heap.empty()) {
+    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    bool bg_worker_stopped = storage_engine->bg_worker_stopped();
+    while (!_heap.empty() && !bg_worker_stopped) {
         if (tmp_chunk->reach_capacity_limit() || nread >= config::vector_chunk_size) {
             if (_tablet->keys_type() == KeysType::AGG_KEYS) {
                 aggregate_chunk(*_aggregator, tmp_chunk, rowset_writer);
@@ -596,6 +604,11 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
             process_err();
             return false;
         }
+        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    }
+
+    if (bg_worker_stopped) {
+        return false;
     }
 
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
@@ -676,6 +689,10 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     do {
+        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        if (bg_worker_stopped) {
+            return false;
+        }
 #ifndef BE_TEST
         Status st = tls_thread_status.mem_tracker()->check_mem_limit("DirectSchemaChange");
         if (!st.ok()) {
@@ -763,7 +780,9 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
             this->_chunk_allocator->release(it, it->num_rows());
         }
     });
-    while (true) {
+    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    bool bg_worker_stopped = storage_engine->bg_worker_stopped();
+    while (!bg_worker_stopped) {
 #ifndef BE_TEST
         Status st = tls_thread_status.mem_tracker()->check_mem_limit("SortSchemaChange");
         if (!st.ok()) {
@@ -824,6 +843,11 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
 
         chunk_arr.push_back(new_chunk);
         mem_pool->clear();
+        bg_worker_stopped = storage_engine->bg_worker_stopped();
+    }
+
+    if (bg_worker_stopped) {
+        return false;
     }
 
     if (!chunk_arr.empty()) {
@@ -1183,7 +1207,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         writer_context.partition_id = new_tablet->partition_id();
         writer_context.tablet_schema_hash = new_tablet->schema_hash();
         writer_context.rowset_type = sc_params.new_tablet->tablet_meta()->preferred_rowset_type();
-        writer_context.rowset_path_prefix = new_tablet->tablet_path();
+        writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
         writer_context.tablet_schema = &(new_tablet->tablet_schema());
         writer_context.rowset_state = VISIBLE;
         writer_context.version = sc_params.rowsets_to_change[i]->version();

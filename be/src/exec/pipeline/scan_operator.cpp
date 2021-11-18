@@ -30,14 +30,12 @@ Status ScanOperator::prepare(RuntimeState* state) {
 Status ScanOperator::close(RuntimeState* state) {
     // decrement global counter num_scan_operators.
     state->exec_env()->decrement_num_scan_operators(1);
-    if (!_is_io_task_active.load(std::memory_order_acquire)) {
-        if (_chunk_source) {
-            _chunk_source->close(state);
-            _chunk_source = nullptr;
-        }
+    DCHECK(!_is_io_task_active.load(std::memory_order_acquire));
+    if (_chunk_source) {
+        _chunk_source->close(state);
+        _chunk_source = nullptr;
     }
-    Operator::close(state);
-    return Status::OK();
+    return Operator::close(state);
 }
 
 bool ScanOperator::has_output() const {
@@ -68,22 +66,14 @@ bool ScanOperator::pending_finish() {
     DCHECK(_is_finished);
     // If there is no next morsel, and io task is active
     // we just wait for the io thread to end
-    if (_is_io_task_active.load(std::memory_order_acquire)) {
-        return true;
-    } else {
-        if (_chunk_source) {
-            _chunk_source->close(_state);
-            _chunk_source = nullptr;
-        }
-        return false;
-    }
+    return _is_io_task_active.load(std::memory_order_acquire);
 }
 
 bool ScanOperator::is_finished() const {
     return _is_finished;
 }
 
-void ScanOperator::finish(RuntimeState* state) {
+void ScanOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 
@@ -156,8 +146,8 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
-    vectorized::DictOptimizeParser::rewrite_descriptor(state, tuple_desc->slots(), _conjunct_ctxs,
-                                                       _olap_scan_node.dict_string_id_to_int_ids);
+    vectorized::DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
+                                                       &(tuple_desc->decoded_slots()));
     return Status::OK();
 }
 

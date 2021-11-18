@@ -43,22 +43,16 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity)
           _num_tuples_per_row(row_desc.tuple_descriptors().size()),
           _row_desc(row_desc),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool()) {}
-
-// called after construction function above
-Status RowBatch::init() {
-    DCHECK_GT(_capacity, 0);
+          _tuple_data_pool(new MemPool()) {
+    DCHECK_GT(capacity, 0);
     _tuple_ptrs_size = _capacity * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
+    // TODO: switch to Init() pattern so we can check memory limit and return Status.
     if (config::enable_partitioned_aggregation) {
         _tuple_ptrs = reinterpret_cast<Tuple**>(malloc(_tuple_ptrs_size));
+        DCHECK(_tuple_ptrs != nullptr);
     } else {
         _tuple_ptrs = reinterpret_cast<Tuple**>(_tuple_data_pool->allocate(_tuple_ptrs_size));
-    }
-    if (_tuple_ptrs) {
-        return Status::OK();
-    } else {
-        return Status::MemoryAllocFailed("RowBatch::init");
     }
 }
 
@@ -75,20 +69,15 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch)
           _num_tuples_per_row(input_batch.row_tuples_size()),
           _row_desc(row_desc),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool()) {}
-
-// called after construction function above
-Status RowBatch::init(const PRowBatch& input_batch) {
+          _tuple_data_pool(new MemPool()) {
     _tuple_ptrs_size = _num_rows * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
+    // TODO: switch to Init() pattern so we can check memory limit and return Status.
     if (config::enable_partitioned_aggregation) {
         _tuple_ptrs = reinterpret_cast<Tuple**>(malloc(_tuple_ptrs_size));
+        DCHECK(_tuple_ptrs != nullptr);
     } else {
         _tuple_ptrs = reinterpret_cast<Tuple**>(_tuple_data_pool->allocate(_tuple_ptrs_size));
-    }
-
-    if (nullptr == _tuple_ptrs) {
-        return Status::MemoryAllocFailed("RowBatch::init");
     }
 
     uint8_t* tuple_data = nullptr;
@@ -120,7 +109,7 @@ Status RowBatch::init(const PRowBatch& input_batch) {
 
     // Check whether we have slots that require offset-to-pointer conversion.
     if (!_row_desc.has_varlen_slots()) {
-        return Status::OK();
+        return;
     }
     const std::vector<TupleDescriptor*>& tuple_descs = _row_desc.tuple_descriptors();
 
@@ -132,29 +121,12 @@ Status RowBatch::init(const PRowBatch& input_batch) {
         TupleRow* row = get_row(i);
         std::vector<TupleDescriptor*>::const_iterator desc = tuple_descs.begin();
         for (int j = 0; desc != tuple_descs.end(); ++desc, ++j) {
-            if ((*desc)->string_slots().empty()) {
-                continue;
-            }
             Tuple* tuple = row->get_tuple(j);
             if (tuple == nullptr) {
                 continue;
             }
-
-            for (auto slot : (*desc)->string_slots()) {
-                DCHECK(slot->type().is_string_type());
-                StringValue* string_val = tuple->get_string_slot(slot->tuple_offset());
-                int offset = reinterpret_cast<intptr_t>(string_val->ptr);
-                string_val->ptr = reinterpret_cast<char*>(tuple_data + offset);
-
-                // Why we do this mask? Field len of StringValue is changed from int to size_t in
-                // StarRocks 0.11. When upgrading, some bits of len sent from 0.10 is random value,
-                // this works fine in version 0.10, however in 0.11 this will lead to an invalid
-                // length. So we make the high bits zero here.
-                string_val->len &= 0x7FFFFFFFL;
-            }
         }
     }
-    return Status::OK();
 }
 
 // TODO: we want our input_batch's tuple_data to come from our (not yet implemented)
@@ -224,28 +196,9 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch)
         TupleRow* row = get_row(i);
         std::vector<TupleDescriptor*>::const_iterator desc = tuple_descs.begin();
         for (int j = 0; desc != tuple_descs.end(); ++desc, ++j) {
-            if ((*desc)->string_slots().empty()) {
-                continue;
-            }
-
             Tuple* tuple = row->get_tuple(j);
             if (tuple == nullptr) {
                 continue;
-            }
-
-            std::vector<SlotDescriptor*>::const_iterator slot = (*desc)->string_slots().begin();
-            for (; slot != (*desc)->string_slots().end(); ++slot) {
-                DCHECK((*slot)->type().is_string_type());
-                StringValue* string_val = tuple->get_string_slot((*slot)->tuple_offset());
-
-                int offset = reinterpret_cast<intptr_t>(string_val->ptr);
-                string_val->ptr = reinterpret_cast<char*>(tuple_data + offset);
-
-                // Why we do this mask? Field len of StringValue is changed from int to size_t in
-                // StarRocks 0.11. When upgrading, some bits of len sent from 0.10 is random value,
-                // this works fine in version 0.10, however in 0.11 this will lead to an invalid
-                // length. So we make the high bits zero here.
-                string_val->len &= 0x7FFFFFFFL;
             }
         }
     }
@@ -446,15 +399,6 @@ int RowBatch::total_byte_size() {
                 continue;
             }
             result += (*desc)->byte_size();
-            std::vector<SlotDescriptor*>::const_iterator slot = (*desc)->string_slots().begin();
-            for (; slot != (*desc)->string_slots().end(); ++slot) {
-                DCHECK((*slot)->type().is_string_type());
-                if (tuple->is_null((*slot)->null_indicator_offset())) {
-                    continue;
-                }
-                StringValue* string_val = tuple->get_string_slot((*slot)->tuple_offset());
-                result += string_val->len;
-            }
         }
     }
 

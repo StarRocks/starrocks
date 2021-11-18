@@ -89,7 +89,7 @@ public class InsertIntoValuesDecimalV3Test {
     public void testInsertArray() throws Exception {
         String sql = "insert into tarray values (1, 2, []) ";
         try {
-            String plan = UtFrameUtils.getNewFragmentPlan(ctx, sql);
+            String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
         } catch (NullPointerException ignored) {
         }
     }

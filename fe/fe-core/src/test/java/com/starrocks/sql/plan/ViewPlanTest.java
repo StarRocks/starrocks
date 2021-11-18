@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.plan;
 
+import org.checkerframework.checker.units.qual.A;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,10 +31,17 @@ public class ViewPlanTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
-        sqlPlan = sqlPlan.replaceAll("bitmap_union_count\\(", "count(distinct ");
-        viewPlan = viewPlan.replaceAll("bitmap_union_count\\(", "count(distinct ");
-        sqlPlan = sqlPlan.replaceAll("hll_union_agg\\(", "count(distinct ");
-        viewPlan = viewPlan.replaceAll("hll_union_agg\\(", "count(distinct ");
+        System.out.println(sqlPlan);
+        System.out.println(viewPlan);
+
+        sqlPlan = sqlPlan.replaceAll("bitmap_union_count\\(", "count");
+        viewPlan = viewPlan.replaceAll("bitmap_union_count\\(", "count");
+        sqlPlan = sqlPlan.replaceAll("bitmap_union_count", "count");
+        viewPlan = viewPlan.replaceAll("bitmap_union_count", "count");
+        sqlPlan = sqlPlan.replaceAll("hll_union_agg\\(", "count");
+        viewPlan = viewPlan.replaceAll("hll_union_agg\\(", "count");
+        sqlPlan = sqlPlan.replaceAll("hll_union_agg", "count");
+        viewPlan = viewPlan.replaceAll("hll_union_agg", "count");
         Assert.assertEquals(sqlPlan, viewPlan);
     }
 
@@ -1183,8 +1191,10 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql257() throws Exception {
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
         String sql = "select v1 as v2 from t0 group by v1, v2;";
         testView(sql);
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(false);
     }
 
     @Test
@@ -1562,5 +1572,36 @@ public class ViewPlanTest extends PlanTestBase {
         String viewPlan = getFragmentPlan("select * from test_view15");
         Assert.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("test_view15");
+    }
+
+    @Test
+    public void testGroupByView() throws Exception {
+        String sql = "select case  when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a group by case  when c1=1 then 1 end;";
+        testView(sql);
+
+        sql = "select case  when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a group by rollup(case  when c1=1 then 1 end, a.c1);";
+        testView(sql);
+
+        sql = "select case when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a " +
+                "group by grouping sets((case when c1=1 then 1 end, c1), (case  when c1=1 then 1 end));";
+        testView(sql);
+    }
+
+    @Test
+    public void testGroupByView2() throws Exception {
+        String sql = "select case  when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a group by cube(case when c1=1 then 1 end, a.c1);";
+        String viewName = "view" + INDEX.getAndIncrement();
+        String createView = "create view " + viewName + " as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from " + viewName);
+
+        Assert.assertEquals(sqlPlan, viewPlan);
+        starRocksAssert.dropView(viewName);
     }
 }

@@ -298,8 +298,10 @@ class QueryTransformer {
         boolean groupAllConst = groupByExpressions.stream().allMatch(Expr::isConstant);
 
         for (Expr groupingItem : groupByExpressions) {
-            // grouping columns save one least
-            if (groupingItem.isConstant() && !(groupAllConst && groupByColumnRefs.isEmpty())) {
+            //Grouping columns save one least
+            //Grouping set type aggregation cannot delete constant aggregation columns
+            if (groupingItem.isConstant() && !(groupAllConst && groupByColumnRefs.isEmpty()) &&
+                    groupingSetsList == null) {
                 continue;
             }
 
@@ -322,7 +324,7 @@ class QueryTransformer {
             CallOperator aggOperator = (CallOperator) aggCallOperator;
 
             ColumnRefOperator colRef =
-                    columnRefFactory.create(aggOperator.toString(), aggregate.getType(), aggregate.isNullable());
+                    columnRefFactory.create(aggOperator.getFnName(), aggregate.getType(), aggregate.isNullable());
             aggregationsMap.put(colRef, aggOperator);
             groupingTranslations.put(aggregate, colRef);
         }

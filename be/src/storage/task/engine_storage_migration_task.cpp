@@ -21,6 +21,7 @@
 
 #include "storage/task/engine_storage_migration_task.h"
 
+#include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "util/defer_op.h"
@@ -63,6 +64,12 @@ OLAPStatus EngineStorageMigrationTask::execute() {
 }
 
 OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    if (!bg_worker_stopped) {
+        LOG(WARNING) << "Process is going to quit. The migration should be stopped as soon as possible.";
+        return OLAP_ERR_OTHER_ERROR;
+    }
+
     OLAPStatus res = OLAP_SUCCESS;
     LOG(INFO) << "begin to process storage migrate. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash
               << ", tablet=" << tablet->full_name() << ", dest_store=" << _dest_store->path();
@@ -322,6 +329,11 @@ OLAPStatus EngineStorageMigrationTask::_copy_index_and_data_files(
         const std::vector<RowsetSharedPtr>& consistent_rowsets) const {
     OLAPStatus status = OLAP_SUCCESS;
     for (const auto& rs : consistent_rowsets) {
+        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        if (!bg_worker_stopped) {
+            status = OLAP_ERR_OTHER_ERROR;
+            break;
+        }
         status = rs->copy_files_to(schema_hash_path);
         if (status != OLAP_SUCCESS) {
             break;

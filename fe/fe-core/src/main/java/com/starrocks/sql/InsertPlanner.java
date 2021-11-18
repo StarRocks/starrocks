@@ -120,9 +120,19 @@ public class InsertPlanner {
         OlapTableSink dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
                 insertRelation.getTargetPartitionIds());
         execPlan.getFragments().get(0).setSink(dataSink);
-        // After data loading, we need to check the global dict for low cardinality string column
-        // whether update.
-        execPlan.getFragments().get(0).setGlobalDicts(globalDicts);
+        if (!globalDicts.isEmpty()) {
+            // 1 After data loading, we need to check the global dict for low cardinality string column
+            // whether update.
+
+            // 2 If there are query global dicts in top query fragment, we shouldn't override it with
+            // load global dicts. we will invalidate it in CacheDictManager
+
+            // TODO(kks): we could handle this better
+            if (execPlan.getFragments().get(0).getGlobalDicts().isEmpty()) {
+                execPlan.getFragments().get(0).setGlobalDicts(globalDicts);
+            }
+        }
+
         return execPlan;
     }
 

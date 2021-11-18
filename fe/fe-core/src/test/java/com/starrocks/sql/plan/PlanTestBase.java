@@ -639,33 +639,32 @@ public class PlanTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        return UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
     }
 
     public String getVerboseExplain(String sql) throws Exception {
-        return UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.VERBOSE);
     }
 
     public String getCostExplain(String sql) throws Exception {
-        return UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.COSTS);
     }
 
     public String getDumpString(String sql) throws Exception {
-        UtFrameUtils.getNewPlanAndFragment(connectContext, sql);
+        UtFrameUtils.getPlanAndFragment(connectContext, sql);
         return GsonUtils.GSON.toJson(connectContext.getDumpInfo());
     }
 
     public String getThriftPlan(String sql) throws Exception {
-        return UtFrameUtils.getThriftString(
-                UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.getFragments());
+        return UtFrameUtils.getPlanThriftString(connectContext, sql);
     }
 
     public static int getPlanCount(String sql) throws Exception {
         connectContext.getSessionVariable().setUseNthExecPlan(1);
-        int planCount = UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.getPlanCount();
+        int planCount = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPlanCount();
         connectContext.getSessionVariable().setUseNthExecPlan(0);
         return planCount;
     }
@@ -768,7 +767,7 @@ public class PlanTestBase {
                         continue;
                     case "[end]":
                         Pair<String, ExecPlan> pair =
-                                UtFrameUtils.getNewPlanAndFragment(connectContext, sql.toString());
+                                UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
 
                         try {
                             String fra = null;

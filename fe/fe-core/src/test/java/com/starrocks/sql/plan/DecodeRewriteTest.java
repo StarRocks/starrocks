@@ -51,8 +51,6 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
-
-        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         FeConstants.USE_MOCK_DICT_MANAGER = true;
     }
 
@@ -170,8 +168,8 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
-                "  |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]\n" +
-                "  |  * count(3: S_ADDRESS)-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]"));
+                "  |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE\n" +
+                "  |  * count-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE"));
     }
 
     @Test
@@ -237,7 +235,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("  3:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(9: count())\n" +
+                "  |  output: count(9: count)\n" +
                 "  |  group by: 10: S_ADDRESS"));
 
         sql = "select count(*) from supplier group by S_ADDRESS";
@@ -343,7 +341,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         sql = "select count(*) as b from supplier group by S_ADDRESS having b > 3";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  group by: 10: S_ADDRESS\n" +
-                "  |  having: 9: count() > 3"));
+                "  |  having: 9: count > 3"));
     }
 
     @Test
@@ -413,5 +411,29 @@ public class DecodeRewriteTest extends PlanTestBase{
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testProjectionPredicate() throws Exception {
+        String sql = "select count(t.a) from(select S_ADDRESS in ('kks', 'kks2') as a from supplier) as t";
+        String plan = getVerboseExplain(sql);
+
+        Assert.assertTrue(plan.contains(" 3: S_ADDRESS IN ('kks', 'kks2')"));
+
+        sql = "select count(t.a) from(select S_ADDRESS = 'kks' as a from supplier) as t";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("[3: S_ADDRESS, VARCHAR, false] = 'kks'"));
+
+        sql = "select count(t.a) from(select S_ADDRESS is null as a from supplier) as t";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("3: S_ADDRESS IS NULL"));
+
+        sql = "select count(t.a) from(select S_ADDRESS is not null as a from supplier) as t";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("3: S_ADDRESS IS NOT NULL"));
+
+        sql = "select count(t.a) from(select S_ADDRESS <=> 'kks' as a from supplier) as t";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("[3: S_ADDRESS, VARCHAR, false] <=> 'kks'"));
     }
 }
