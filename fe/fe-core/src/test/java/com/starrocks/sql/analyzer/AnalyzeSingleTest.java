@@ -363,5 +363,14 @@ public class AnalyzeSingleTest {
 
         query = analyzeSuccess("select * from (select t0.*, v4 from t0 inner join t1 on v1 = v5) tmp");
         Assert.assertEquals("v1,v2,v3,v4", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess("select t1.* from t0 inner join t1 on v1 = v4 order by v1");
+        Assert.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess("select v4,v1,t1.* from t0 inner join t1 on v1 = v4 order by v1");
+        Assert.assertEquals("v4,v1,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess("select v1+2 as v, * from t0 order by v+1");
+        Assert.assertEquals("v,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
     }
 }
