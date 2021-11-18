@@ -17,15 +17,15 @@ namespace starrocks::pipeline {
 // 1. OpB should perceive that OpA has been finished early.
 // 2. Context object can be released only if both OpA and OpB are closed,
 //    because the close order of OpA and OpB are uncertain.
-class ContextBase {
+class ContextWithDependency {
 public:
-    ContextBase() = default;
-    ~ContextBase() = default;
+    ContextWithDependency() = default;
+    ~ContextWithDependency() = default;
 
-    ContextBase(const ContextBase&) = delete;
-    ContextBase(ContextBase&&) = delete;
-    ContextBase& operator=(ContextBase&&) = delete;
-    ContextBase& operator=(const ContextBase&) = delete;
+    ContextWithDependency(const ContextWithDependency&) = delete;
+    ContextWithDependency(ContextWithDependency&&) = delete;
+    ContextWithDependency& operator=(ContextWithDependency&&) = delete;
+    ContextWithDependency& operator=(const ContextWithDependency&) = delete;
 
     // For pipeline, it is called by unref() when the last operator is unreffed.
     // For non-pipeline, it is called by close() of the exec node directly

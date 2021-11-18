@@ -10,7 +10,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/context_base.h"
+#include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/aggregate/agg_hash_variant.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
@@ -55,7 +55,7 @@ using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 // Component used to process aggregation including bloking aggregate and streaming aggregate
 // it contains common data struct and algorithm of aggregation
-class Aggregator : public pipeline::ContextBase {
+class Aggregator : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 

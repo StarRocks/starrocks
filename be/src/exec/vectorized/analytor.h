@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "exec/pipeline/context_base.h"
+#include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
@@ -32,7 +32,7 @@ using AnalytorPtr = std::shared_ptr<Analytor>;
 // it contains common data struct and algorithm of analysis
 // TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
 // TODO(hcf) all the data should be protected by lightweight lock
-class Analytor : public pipeline::ContextBase {
+class Analytor : public pipeline::ContextWithDependency {
     friend class ManagedFunctionStates;
 
 public:

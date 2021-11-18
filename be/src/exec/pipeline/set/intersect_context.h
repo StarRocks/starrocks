@@ -8,7 +8,7 @@
 #include "column/type_traits.h"
 #include "common/statusor.h"
 #include "exec/olap_common.h"
-#include "exec/pipeline/context_base.h"
+#include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/intersect_hash_set.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
@@ -26,7 +26,7 @@ class IntersectPartitionContextFactory;
 using IntersectPartitionContextFactoryPtr = std::shared_ptr<IntersectPartitionContextFactory>;
 
 // Used as the shared context for IntersectBuildSinkOperator, IntersectProbeSinkOperator, and IntersectOutputSourceOperator.
-class IntersectContext final : public ContextBase {
+class IntersectContext final : public ContextWithDependency {
 public:
     IntersectContext(const int dst_tuple_id, const size_t intersect_times)
             : _dst_tuple_id(dst_tuple_id), _intersect_times(intersect_times) {}

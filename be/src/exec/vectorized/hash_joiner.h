@@ -6,7 +6,7 @@
 #include "column/fixed_length_column.h"
 #include "common/statusor.h"
 #include "exec/exec_node.h"
-#include "exec/pipeline/context_base.h"
+#include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/hash_join_node.h"
 #include "exec/vectorized/join_hash_map.h"
 #include "util/phmap/phmap.h"
@@ -39,7 +39,7 @@ enum HashJoinPhase {
     EOS = 4,
 };
 
-class HashJoiner : public pipeline::ContextBase {
+class HashJoiner : public pipeline::ContextWithDependency {
 public:
     HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id, TPlanNodeType::type node_type, int64_t limit,
                const std::vector<bool>& is_null_safes, const std::vector<ExprContext*>& build_expr_ctxs,
