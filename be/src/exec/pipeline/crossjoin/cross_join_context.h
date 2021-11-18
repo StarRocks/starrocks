@@ -11,7 +11,7 @@
 
 namespace starrocks::pipeline {
 
-class CrossJoinContext : public ContextBase {
+class CrossJoinContext final : public ContextBase {
 public:
     explicit CrossJoinContext(const int32_t num_right_sinkers)
             : _num_right_sinkers(num_right_sinkers), _build_chunks(num_right_sinkers) {}

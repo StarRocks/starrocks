@@ -26,7 +26,7 @@ class IntersectPartitionContextFactory;
 using IntersectPartitionContextFactoryPtr = std::shared_ptr<IntersectPartitionContextFactory>;
 
 // Used as the shared context for IntersectBuildSinkOperator, IntersectProbeSinkOperator, and IntersectOutputSourceOperator.
-class IntersectContext : public ContextBase {
+class IntersectContext final : public ContextBase {
 public:
     IntersectContext(const int dst_tuple_id, const size_t intersect_times)
             : _dst_tuple_id(dst_tuple_id), _intersect_times(intersect_times) {}

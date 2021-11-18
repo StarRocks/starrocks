@@ -25,7 +25,7 @@ class ExceptPartitionContextFactory;
 using ExceptPartitionContextFactoryPtr = std::shared_ptr<ExceptPartitionContextFactory>;
 
 // Used as the shared context for ExceptBuildSinkOperator, ExceptProbeSinkOperator, and ExceptOutputSourceOperator.
-class ExceptContext : public ContextBase {
+class ExceptContext final : public ContextBase {
 public:
     explicit ExceptContext(const int dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
 

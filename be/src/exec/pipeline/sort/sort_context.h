@@ -21,7 +21,7 @@ class ChunksSorter;
 namespace pipeline {
 using namespace vectorized;
 
-class SortContext : public ContextBase {
+class SortContext final : public ContextBase {
 public:
     explicit SortContext(int64_t limit, const int32_t num_right_sinkers, const std::vector<bool>& is_asc_order,
                          const std::vector<bool>& is_null_first)
