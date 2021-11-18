@@ -16,15 +16,22 @@ public:
                                const std::shared_ptr<CrossJoinContext>& cross_join_context)
             : Operator(id, "cross_join_right_sink", plan_node_id),
               _driver_sequence(driver_sequence),
-              _cross_join_context(cross_join_context) {}
+              _cross_join_context(cross_join_context) {
+        _cross_join_context->create_one_operator();
+    }
 
     ~CrossJoinRightSinkOperator() override = default;
+
+    Status close(RuntimeState* state) override {
+        RETURN_IF_ERROR(_cross_join_context->close_one_operator(state));
+        return Operator::close(state);
+    }
 
     bool has_output() const override { return false; }
 
     bool need_input() const override { return !is_finished(); }
 
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _cross_join_context->is_finished(); }
 
     void set_finishing(RuntimeState* state) override {
         _is_finished = true;

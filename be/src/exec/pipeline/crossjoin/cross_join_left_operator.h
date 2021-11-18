@@ -27,9 +27,16 @@ public:
               _probe_column_count(probe_column_count),
               _build_column_count(build_column_count),
               _conjunct_ctxs(conjunct_ctxs),
-              _cross_join_context(cross_join_context) {}
+              _cross_join_context(cross_join_context) {
+        _cross_join_context->create_one_operator();
+    }
 
     ~CrossJoinLeftOperator() override = default;
+
+    Status close(RuntimeState* state) override {
+        RETURN_IF_ERROR(_cross_join_context->close_one_operator(state));
+        return Operator::close(state);
+    }
 
     bool is_ready() const override { return _cross_join_context->is_right_finished(); }
 
@@ -64,6 +71,10 @@ public:
     }
 
     void set_finishing(RuntimeState* state) override { _is_finished = true; }
+
+    void set_finished(RuntimeState* state) override {
+        _cross_join_context->set_finished();
+    }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
