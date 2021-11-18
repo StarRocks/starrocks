@@ -43,7 +43,7 @@ public class Frontend implements Writable {
 
     private long replayedJournalId;
     private long lastUpdateTime;
-    private long startTime = -1;
+    private long startTime;
     private String heartbeatErrMsg = "";
 
     private boolean isAlive = false;
