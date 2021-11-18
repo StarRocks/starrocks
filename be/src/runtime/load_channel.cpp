@@ -65,49 +65,6 @@ Status LoadChannel::open(const PTabletWriterOpenRequest& params) {
     return Status::OK();
 }
 
-Status LoadChannel::add_batch(const PTabletWriterAddBatchRequest& request,
-                              google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec) {
-    int64_t index_id = request.index_id();
-    // 1. get tablets channel
-    std::shared_ptr<TabletsChannel> channel;
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        auto it = _tablets_channels.find(index_id);
-        if (it == _tablets_channels.end()) {
-            if (_finished_channel_ids.find(index_id) != _finished_channel_ids.end()) {
-                // this channel is already finished, just return OK
-                return Status::OK();
-            }
-            std::stringstream ss;
-            ss << "load channel " << _load_id << " add batch with unknown index id: " << index_id;
-            return Status::InternalError(ss.str());
-        }
-        channel = it->second;
-    }
-
-    // 2. check if mem consumption exceed limit
-    _handle_mem_exceed_limit();
-
-    // 3. add batch to tablets channel
-    if (request.has_row_batch()) {
-        RETURN_IF_ERROR(channel->add_batch(request));
-    }
-
-    // 4. handle eos
-    Status st;
-    if (request.has_eos() && request.eos()) {
-        bool finished = false;
-        RETURN_IF_ERROR(channel->close(request.sender_id(), &finished, request.partition_ids(), tablet_vec));
-        if (finished) {
-            std::lock_guard<std::mutex> l(_lock);
-            _tablets_channels.erase(index_id);
-            _finished_channel_ids.emplace(index_id);
-        }
-    }
-    _last_updated_time.store(time(nullptr));
-    return st;
-}
-
 Status LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request,
                               google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec) {
     int64_t index_id = request.index_id();

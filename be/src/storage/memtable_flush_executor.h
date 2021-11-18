@@ -31,9 +31,7 @@
 namespace starrocks {
 
 class DataDir;
-class DeltaWriter;
 class ExecEnv;
-class MemTable;
 
 namespace vectorized {
 class MemTable;
@@ -62,8 +60,6 @@ public:
     explicit FlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
             : _flush_token(std::move(flush_pool_token)), _flush_status(OLAP_SUCCESS) {}
 
-    OLAPStatus submit(const std::shared_ptr<MemTable>& mem_table);
-
     Status submit(const std::shared_ptr<vectorized::MemTable>& mem_table);
 
     // error has happpens, so we cancel this token
@@ -77,9 +73,7 @@ public:
     const FlushStatistic& get_stats() const { return _stats; }
 
 private:
-    void _flush_memtable(std::shared_ptr<MemTable> mem_table);
-
-    void _flush_vectorized_memtable(std::shared_ptr<vectorized::MemTable> mem_table);
+    void _flush_memtable(std::shared_ptr<vectorized::MemTable> mem_table);
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 
