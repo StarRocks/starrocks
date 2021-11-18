@@ -17,7 +17,9 @@ public:
                                   const int32_t dependency_index)
             : SourceOperator(id, "intersect_output_source", plan_node_id),
               _intersect_ctx(std::move(intersect_ctx)),
-              _dependency_index(dependency_index) {}
+              _dependency_index(dependency_index) {
+        _intersect_ctx->ref();
+    }
 
     bool has_output() const override {
         return _intersect_ctx->is_dependency_finished(_dependency_index) && !_intersect_ctx->is_output_finished();
@@ -27,8 +29,7 @@ public:
         return _intersect_ctx->is_dependency_finished(_dependency_index) && _intersect_ctx->is_output_finished();
     }
 
-    // Finish is noop.
-    void set_finishing(RuntimeState* state) override {}
+    void set_finished(RuntimeState* state) override { _intersect_ctx->set_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

@@ -250,11 +250,9 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
     return std::make_shared<Chunk>();
 }
 
-void HashJoiner::close(RuntimeState* state) {
-    if (!_is_closed) {
-        _ht.close();
-        _is_closed = true;
-    }
+Status HashJoiner::close(RuntimeState* state) {
+    _ht.close();
+    return Status::OK();
 }
 
 bool HashJoiner::_has_null(const ColumnPtr& column) {

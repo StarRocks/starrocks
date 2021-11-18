@@ -7,13 +7,16 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/context_with_dependency.h"
 
 namespace starrocks::pipeline {
 
-class CrossJoinContext {
+class CrossJoinContext final : public ContextWithDependency {
 public:
     explicit CrossJoinContext(const int32_t num_right_sinkers)
             : _num_right_sinkers(num_right_sinkers), _build_chunks(num_right_sinkers) {}
+
+    Status close(RuntimeState* state) override { return Status::OK(); }
 
     bool is_build_chunk_empty() const {
         return std::all_of(_build_chunks.begin(), _build_chunks.end(),

@@ -17,7 +17,9 @@ public:
             : Operator(id, "intersect_probe_sink", plan_node_id),
               _intersect_ctx(std::move(intersect_ctx)),
               _dst_exprs(dst_exprs),
-              _dependency_index(dependency_index) {}
+              _dependency_index(dependency_index) {
+        _intersect_ctx->ref();
+    }
 
     bool need_input() const override {
         return _intersect_ctx->is_dependency_finished(_dependency_index) &&
@@ -27,6 +29,10 @@ public:
     bool has_output() const override { return false; }
 
     bool is_finished() const override {
+        if (_intersect_ctx->is_finished()) {
+            return true;
+        }
+
         return _intersect_ctx->is_dependency_finished(_dependency_index) &&
                (_is_finished || _intersect_ctx->is_ht_empty());
     }
@@ -35,6 +41,8 @@ public:
         _is_finished = true;
         _intersect_ctx->finish_probe_ht();
     }
+
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
