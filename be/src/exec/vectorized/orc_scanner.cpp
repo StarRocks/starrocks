@@ -166,7 +166,11 @@ ChunkPtr ORCScanner::_transfer_chunk(starrocks::vectorized::ChunkPtr& src) {
     if (range.__isset.num_of_columns_from_file) {
         for (int i = 0; i < range.columns_from_path.size(); ++i) {
             auto slot = _src_slot_descriptors[range.num_of_columns_from_file + i];
-            cast_chunk->append_column(src->get_column_by_slot_id(slot->id()), slot->id());
+            // This happens when there are extra fields in broker load specification
+            // but those extra fields don't match any fields in native table.
+            if (slot != nullptr) {
+                cast_chunk->append_column(src->get_column_by_slot_id(slot->id()), slot->id());
+            }
         }
     }
     return cast_chunk;
