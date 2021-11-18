@@ -113,8 +113,9 @@ void ScanOperator::_trigger_next_scan(RuntimeState* state) {
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
-    // try to submit io task, always return true except that _io_threads is shutdown.
-    _io_threads->try_offer(task);
+    if (!_io_threads->offer(task)) {
+        LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool shutdown";
+    }
 }
 
 void ScanOperator::_pickup_morsel(RuntimeState* state) {
