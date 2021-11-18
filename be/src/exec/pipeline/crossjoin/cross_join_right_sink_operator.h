@@ -17,13 +17,13 @@ public:
             : Operator(id, "cross_join_right_sink", plan_node_id),
               _driver_sequence(driver_sequence),
               _cross_join_context(cross_join_context) {
-        _cross_join_context->create_one_operator();
+        _cross_join_context->ref_no_barrier();
     }
 
     ~CrossJoinRightSinkOperator() override = default;
 
     Status close(RuntimeState* state) override {
-        RETURN_IF_ERROR(_cross_join_context->close_one_operator(state));
+        RETURN_IF_ERROR(_cross_join_context->unref(state));
         return Operator::close(state);
     }
 

@@ -10,7 +10,7 @@ class AnalyticSinkOperator : public Operator {
 public:
     AnalyticSinkOperator(int32_t id, int32_t plan_node_id, const TPlanNode& tnode, AnalytorPtr analytor)
             : Operator(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(std::move(analytor)) {
-        _analytor->create_one_operator();
+        _analytor->ref_no_barrier();
     }
     ~AnalyticSinkOperator() = default;
 

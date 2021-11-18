@@ -18,7 +18,7 @@ public:
     Status prepare(RuntimeState* state) override { return OperatorWithDependency::prepare(state); }
 
     Status close(RuntimeState* state) override {
-        RETURN_IF_ERROR(_hash_joiner->close_one_operator(state));
+        RETURN_IF_ERROR(_hash_joiner->unref(state));
         return OperatorWithDependency::close(state);
     }
 

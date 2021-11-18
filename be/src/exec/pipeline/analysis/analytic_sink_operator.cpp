@@ -39,7 +39,7 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
 }
 
 Status AnalyticSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_analytor->close_one_operator(state));
+    RETURN_IF_ERROR(_analytor->unref(state));
     return Operator::close(state);
 }
 

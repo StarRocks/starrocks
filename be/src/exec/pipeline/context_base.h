@@ -29,16 +29,16 @@ public:
 
     virtual Status close(RuntimeState* state) = 0;
 
-    // create_one_operator and close_one_operator are used to close context
+    // ref_no_barrier and unref are used to close context
     // when the last running related operator is closed.
-    // - create_one_operator is called by operator::constructor() at the preparation stage.
-    // - close_one_operator is called by operator::close() at the close stage.
+    // - ref_no_barrier is called by operator::constructor() at the preparation stage.
+    // - unref is called by operator::close() at the close stage.
     // It is the guaranteed by the dispatcher queue that the increment operations
-    // by create_one_operator() are visible to close_one_operator(), so we needn't barrier here.
-    void create_one_operator() { _num_running_operators.fetch_add(1, std::memory_order_relaxed); }
+    // by ref_no_barrier() are visible to unref(), so we needn't barrier here.
+    void ref_no_barrier() { _num_running_operators.fetch_add(1, std::memory_order_relaxed); }
 
     // Called by operator::close. Close the context when the last running operator is closed.
-    Status close_one_operator(RuntimeState* state) {
+    Status unref(RuntimeState* state) {
         if (_num_running_operators.fetch_sub(1, std::memory_order_acq_rel) == 1) {
             return close(state);
         }

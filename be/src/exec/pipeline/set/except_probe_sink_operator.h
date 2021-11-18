@@ -17,7 +17,7 @@ public:
               _except_ctx(std::move(except_ctx)),
               _dst_exprs(dst_exprs),
               _dependency_index(dependency_index) {
-        _except_ctx->create_one_operator();
+        _except_ctx->ref_no_barrier();
     }
 
     Status close(RuntimeState* state) override;

@@ -5,7 +5,7 @@
 namespace starrocks::pipeline {
 
 Status IntersectProbeSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_intersect_ctx->close_one_operator(state));
+    RETURN_IF_ERROR(_intersect_ctx->unref(state));
     return Operator::close(state);
 }
 

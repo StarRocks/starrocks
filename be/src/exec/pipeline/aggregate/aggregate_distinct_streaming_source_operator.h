@@ -13,7 +13,7 @@ public:
     AggregateDistinctStreamingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : SourceOperator(id, "aggregate_distinct_streaming_source", plan_node_id),
               _aggregator(std::move(aggregator)) {
-        _aggregator->create_one_operator();
+        _aggregator->ref_no_barrier();
     }
 
     ~AggregateDistinctStreamingSourceOperator() override = default;

@@ -7,7 +7,7 @@ namespace pipeline {
 HashJoinProbeOperator::HashJoinProbeOperator(int32_t id, const string& name, int32_t plan_node_id,
                                              HashJoinerPtr hash_joiner)
         : OperatorWithDependency(id, name, plan_node_id), _hash_joiner(hash_joiner) {
-    _hash_joiner->create_one_operator();
+    _hash_joiner->ref_no_barrier();
 }
 
 bool HashJoinProbeOperator::has_output() const {

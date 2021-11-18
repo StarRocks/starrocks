@@ -5,7 +5,7 @@
 namespace starrocks::pipeline {
 
 Status ExceptProbeSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_except_ctx->close_one_operator(state));
+    RETURN_IF_ERROR(_except_ctx->unref(state));
     return Operator::close(state);
 }
 

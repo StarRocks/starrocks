@@ -30,7 +30,7 @@ public:
             : Operator(id, "except_build_sink", plan_node_id),
               _except_ctx(std::move(except_ctx)),
               _dst_exprs(dst_exprs) {
-        _except_ctx->create_one_operator();
+        _except_ctx->ref_no_barrier();
     }
 
     bool need_input() const override { return !is_finished(); }

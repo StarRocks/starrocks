@@ -17,7 +17,7 @@ public:
             : SourceOperator(id, "except_output_source", plan_node_id),
               _except_ctx(std::move(except_ctx)),
               _dependency_index(dependency_index) {
-        _except_ctx->create_one_operator();
+        _except_ctx->ref_no_barrier();
     }
 
     bool has_output() const override {

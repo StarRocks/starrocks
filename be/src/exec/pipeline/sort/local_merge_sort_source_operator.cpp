@@ -14,7 +14,7 @@
 namespace starrocks::pipeline {
 
 Status LocalMergeSortSourceOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_sort_context->close_one_operator(state));
+    RETURN_IF_ERROR(_sort_context->unref(state));
     return Operator::close(state);
 }
 

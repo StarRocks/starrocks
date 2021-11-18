@@ -28,13 +28,13 @@ public:
               _build_column_count(build_column_count),
               _conjunct_ctxs(conjunct_ctxs),
               _cross_join_context(cross_join_context) {
-        _cross_join_context->create_one_operator();
+        _cross_join_context->ref_no_barrier();
     }
 
     ~CrossJoinLeftOperator() override = default;
 
     Status close(RuntimeState* state) override {
-        RETURN_IF_ERROR(_cross_join_context->close_one_operator(state));
+        RETURN_IF_ERROR(_cross_join_context->unref(state));
         return Operator::close(state);
     }
 

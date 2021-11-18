@@ -8,7 +8,7 @@ namespace pipeline {
 HashJoinBuildOperator::HashJoinBuildOperator(int32_t id, const string& name, int32_t plan_node_id,
                                              HashJoinerPtr hash_joiner)
         : Operator(id, name, plan_node_id), _hash_joiner(hash_joiner) {
-    _hash_joiner->create_one_operator();
+    _hash_joiner->ref_no_barrier();
 }
 
 Status HashJoinBuildOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
@@ -20,7 +20,7 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
     return _hash_joiner->prepare(state);
 }
 Status HashJoinBuildOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_hash_joiner->close_one_operator(state));
+    RETURN_IF_ERROR(_hash_joiner->unref(state));
     return Operator::close(state);
 }
 

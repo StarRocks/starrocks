@@ -17,7 +17,7 @@ void AnalyticSourceOperator::set_finished(RuntimeState* state) {
 }
 
 Status AnalyticSourceOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_analytor->close_one_operator(state));
+    RETURN_IF_ERROR(_analytor->unref(state));
     return SourceOperator::close(state);
 }
 
