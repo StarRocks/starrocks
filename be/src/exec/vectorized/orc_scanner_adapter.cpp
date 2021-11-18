@@ -1888,7 +1888,7 @@ static Status decode_string_min_max(PrimitiveType ptype, const orc::proto::Colum
         colStats.stringstatistics().has_maximum()) {
         const auto& stats = colStats.stringstatistics();
         const std::string& min_value = stats.minimum();
-        const std::string& max_value = stats.minimum();
+        const std::string& max_value = stats.maximum();
         size_t min_value_size = min_value.size();
         size_t max_value_size = max_value.size();
         if (ptype == TYPE_CHAR) {
