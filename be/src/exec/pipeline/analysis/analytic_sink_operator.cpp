@@ -43,10 +43,6 @@ Status AnalyticSinkOperator::close(RuntimeState* state) {
     return Operator::close(state);
 }
 
-bool AnalyticSinkOperator::is_finished() const {
-    return _is_finished || _analytor->is_finished();
-}
-
 void AnalyticSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     _analytor->input_eos() = true;
