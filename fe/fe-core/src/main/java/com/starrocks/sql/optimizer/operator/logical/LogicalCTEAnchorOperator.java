@@ -13,7 +13,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
  *
  * */
 public class LogicalCTEAnchorOperator extends LogicalOperator {
-    private String cteId;
+    private final String cteId;
 
     public LogicalCTEAnchorOperator(String cteId) {
         super(OperatorType.LOGICAL_CTE_ANCHOR);
@@ -22,6 +22,10 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        return null;
+        return expressionContext.getChildLogicalProperty(1).getOutputColumns();
+    }
+
+    public String getCteId() {
+        return cteId;
     }
 }

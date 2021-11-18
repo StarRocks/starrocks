@@ -5,10 +5,14 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 public class PhysicalCTEConsumeOperator extends PhysicalOperator {
-    private String cteId;
+    private final String cteId;
 
-    protected PhysicalCTEConsumeOperator(String cteId) {
+    public PhysicalCTEConsumeOperator(String cteId) {
         super(OperatorType.PHYSICAL_CTE_CONSUME);
         this.cteId = cteId;
+    }
+
+    public String getCteId() {
+        return cteId;
     }
 }

@@ -2,34 +2,40 @@
 
 package com.starrocks.sql.analyzer.relation;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
 
 import java.util.List;
 
-public class CTERelation extends QueryRelation {
-    private String cteId;
-    private QueryRelation cteQueryRelation;
+public class CTERelation extends Relation {
+    private final String cteId;
 
-    public CTERelation(String cteId, QueryRelation cteQueryRelation) {
-        super(cteQueryRelation.getOutputExpr(), cteQueryRelation.getOutputScope(),
-                cteQueryRelation.getColumnOutputNames());
+    private final String name;
+
+    private QueryRelation cteQuery;
+
+    public CTERelation(String cteId, String name, QueryRelation cteQuery, List<Field> relationFields) {
+        super(new RelationFields(relationFields));
         this.cteId = cteId;
+        this.name = name;
+        this.cteQuery = cteQuery;
     }
 
-    public CTERelation(List<Expr> outputExpr, Scope outputScope,
-                       List<String> columnOutputNames,
-                       QueryRelation cteQueryRelation, String cteId) {
-        super(outputExpr, outputScope, columnOutputNames);
-        this.cteQueryRelation = cteQueryRelation;
-        this.cteId = cteId;
-    }
-
-    public QueryRelation getCteQueryRelation() {
-        return cteQueryRelation;
+    public QueryRelation getCteQuery() {
+        return cteQuery;
     }
 
     public String getCteId() {
         return cteId;
+    }
+
+    @Override
+    public String toString() {
+        return name == null ? cteId : name;
+    }
+
+    @Override
+    public <R, C> R accept(RelationVisitor<R, C> visitor, C context) {
+        return visitor.visitCTE(this, context);
     }
 }

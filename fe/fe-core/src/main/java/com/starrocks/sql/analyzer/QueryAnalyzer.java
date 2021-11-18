@@ -50,6 +50,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.relation.CTERelation;
 import com.starrocks.sql.analyzer.relation.ExceptRelation;
 import com.starrocks.sql.analyzer.relation.IntersectRelation;
 import com.starrocks.sql.analyzer.relation.JoinRelation;
@@ -392,7 +393,7 @@ public class QueryAnalyzer {
              *  and the previous CTE can rewrite the existing table name.
              *  So here will save an increasing AnalyzeState to add cte scope
              */
-            cteScope.addNamedQueries(withQuery.getName(), query);
+            cteScope.addCteQueries(withQuery.getName(), query);
 
             /*
              * use cte column name as output scope of subquery relation fields
@@ -483,6 +484,11 @@ public class QueryAnalyzer {
 
                     public List<String> visitUnion(UnionRelation node, Void context) {
                         return node.getRelations().get(0).getColumnOutputNames();
+                    }
+
+                    @Override
+                    public List<String> visitCTE(CTERelation node, Void context) {
+                        return node.getCteQuery().getColumnOutputNames();
                     }
                 }.visit(analyzeState.getRelation()));
 
@@ -724,7 +730,7 @@ public class QueryAnalyzer {
         TableName tableName = tableRef.getAliasAsName();
 
         if (tableRef.getName() != null && Strings.isNullOrEmpty(tableName.getDb())) {
-            Optional<QueryRelation> withQuery = scope.getNamedQueries(tableRef.getName().getTbl());
+            Optional<QueryRelation> withQuery = scope.getCteQueries(tableRef.getName().getTbl());
             if (withQuery.isPresent()) {
                 QueryRelation qb = withQuery.get();
 
@@ -740,7 +746,11 @@ public class QueryAnalyzer {
                             originField.getOriginExpression()));
                 }
 
-                return new SubqueryRelation(tableRef.getAlias(), qb, outputFields.build());
+                if (session.getSessionVariable().isCboCteReuse()) {
+                    return new CTERelation(tableRef.getName().getTbl(), tableRef.getAlias(), qb, outputFields.build());
+                } else {
+                    return new SubqueryRelation(tableRef.getAlias(), qb, outputFields.build());
+                }
             }
         }
 

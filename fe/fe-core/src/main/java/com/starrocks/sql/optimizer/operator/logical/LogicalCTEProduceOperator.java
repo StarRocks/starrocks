@@ -14,7 +14,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
  *
  * */
 public class LogicalCTEProduceOperator extends LogicalOperator {
-    private String cteId;
+    private final String cteId;
 
     public LogicalCTEProduceOperator(String cteId) {
         super(OperatorType.LOGICAL_CTE_PRODUCE);
@@ -23,6 +23,10 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        return null;
+        return expressionContext.getChildLogicalProperty(0).getOutputColumns();
+    }
+
+    public String getCteId() {
+        return cteId;
     }
 }

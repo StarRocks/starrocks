@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 /*
@@ -17,19 +18,28 @@ import java.util.Map;
  * operator corresponds to the CTEProducer to which it refers. There can be multiple CTEConsumers
  * referring to the same CTEProducer.
  * */
-public class LogicalCTEConsumerOperator extends LogicalOperator {
-    private String cteId;
+public class LogicalCTEConsumeOperator extends LogicalOperator {
+    private final String cteId;
 
     private Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
 
-    public LogicalCTEConsumerOperator(String cteId, long limit, ScalarOperator predicate, Projection projection) {
+    public LogicalCTEConsumeOperator(long limit, ScalarOperator predicate, Projection projection, String cteId,
+                                     Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
         super(OperatorType.LOGICAL_CTE_CONSUME, limit, predicate, projection);
         this.cteId = cteId;
+        this.cteOutputColumnRefMap = cteOutputColumnRefMap;
     }
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        return null;
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            return new ColumnRefSet(new ArrayList<>(cteOutputColumnRefMap.keySet()));
+        }
     }
 
+    public String getCteId() {
+        return cteId;
+    }
 }

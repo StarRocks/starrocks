@@ -7,7 +7,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 public class PhysicalCTEProduceOperator extends PhysicalOperator {
     private String cteId;
 
-    protected PhysicalCTEProduceOperator(String cteId) {
+    public PhysicalCTEProduceOperator(String cteId) {
         super(OperatorType.PHYSICAL_CTE_PRODUCE);
         this.cteId = cteId;
     }
