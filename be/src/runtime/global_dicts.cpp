@@ -203,7 +203,19 @@ void DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ctx,
 
     std::vector<SlotId> slot_ids;
     expr_ctx->root()->get_slot_ids(&slot_ids);
-    if (slot_ids.size() == 1 && _mutable_dict_maps->count(slot_ids.back())) {
+
+    // Some string functions have multiple input slots, but their input slots are the same
+    // eg: concat(slot1, slot1)
+    auto only_one_slots = [](auto& slots) {
+        int prev_slot = -1;
+        for (auto slot : slots) {
+            if (prev_slot != -1 && prev_slot != slot) return false;
+            prev_slot = slot;
+        }
+        return !slots.empty();
+    };
+
+    if (only_one_slots(slot_ids) && _mutable_dict_maps->count(slot_ids.back())) {
         dict_opt_ctx->slot_id = slot_ids.back();
         dict_opt_ctx->could_apply_dict_optimize = true;
     }
