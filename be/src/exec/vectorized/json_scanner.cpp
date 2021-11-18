@@ -460,7 +460,7 @@ Status JsonReader::_process_object(Chunk* chunk, const std::vector<SlotDescripto
         auto col_name = slot_desc->col_name();
 
         simdjson::ondemand::value val;
-        auto err = obj.find_field(col_name).get(val);
+        auto err = obj.find_field_unordered(col_name).get(val);
         if (err) {
             column->append_nulls(1);
             continue;
@@ -535,7 +535,6 @@ Status JsonReader::_read_and_parse_json() {
 
 // _construct_column constructs column based on no value.
 void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc) {
-
     simdjson::ondemand::json_type tp;
     value.type().get(tp);
 
@@ -547,8 +546,11 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
 
     case simdjson::ondemand::json_type::boolean: {
         bool ok;
-
-        value.get_bool().get(ok);
+        auto err = value.get_bool().get(ok);
+        if (UNLIKELY(err)) {
+            column->append_nulls(1);
+            break;
+        }
 
         if (ok) {
             column->append_strings(std::vector<Slice>{Slice("1")});
@@ -561,12 +563,21 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
     case simdjson::ondemand::json_type::number: {
         simdjson::ondemand::number_type tp;
 
-        value.get_number_type().get(tp);
+        auto err = value.get_number_type().get(tp);
+        if (UNLIKELY(err)) {
+            column->append_nulls(1);
+            break;
+        }
 
         switch (tp) {
         case simdjson::ondemand::number_type::signed_integer: {
             int64_t i64;
-            value.get_int64().get(i64);
+            err = value.get_int64().get(i64);
+            if (UNLIKELY(err)) {
+                column->append_nulls(1);
+                break;
+            }
+
             auto f = fmt::format_int(i64);
             column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
             break;
@@ -574,7 +585,12 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
 
         case simdjson::ondemand::number_type::unsigned_integer: {
             uint64_t u64;
-            value.get_uint64().get(u64);
+            err = value.get_uint64().get(u64);
+            if (UNLIKELY(err)) {
+                column->append_nulls(1);
+                break;
+            }
+
             auto f = fmt::format_int(u64);
             column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
             break;
@@ -582,13 +598,17 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
 
         case simdjson::ondemand::number_type::floating_point_number: {
             std::string_view sv;
-            simdjson::to_json_string(value).get(sv);
+            err = simdjson::to_json_string(value).get(sv);
+            if (UNLIKELY(err)) {
+                column->append_nulls(1);
+                break;
+            }
+
             column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
             break;
         }
 
         default: {
-            // TODO: float number support.
             column->append_nulls(1);
             break;
         }
@@ -597,8 +617,14 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
     }
 
     case simdjson::ondemand::json_type::string: {
+
         std::string_view sv;
-        value.get_string().get(sv);
+        auto err = value.get_string().get(sv);
+        if (UNLIKELY(err)) {
+            column->append_nulls(1);
+            break;
+        }
+
         column->append_strings(std::vector<Slice>{Slice(sv.data(), sv.length())});
         break;
     }

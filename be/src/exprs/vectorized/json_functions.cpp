@@ -111,12 +111,12 @@ bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const s
         int index = jsonpath[i].idx;
 
         if (i == 1) {
-            auto err = obj.find_field(col).get(tvalue);
+            auto err = obj.find_field_unordered(col).get(tvalue);
             if (err) {
                 return false;
             }
         } else {
-            auto err = tvalue.find_field(col).get(tvalue);
+            auto err = tvalue.find_field_unordered(col).get(tvalue);
             if (err) {
                 return false;
             }
@@ -133,8 +133,10 @@ bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const s
                 if (a.error()) {
                     return false;
                 }
+
                 if (idx++ == index) {
                     a.get(tvalue);
+                    break;
                 }
             }
         }
@@ -166,7 +168,7 @@ Status JsonFunctions::minify_json_to_string(simdjson::ondemand::value& val, std:
     }
 
     buf.reset(new char[sv.size()]);
-    auto error = simdjson::minify(sv.data(), sv.size(), buf.get(), buflen);
+    err = simdjson::minify(sv.data(), sv.size(), buf.get(), buflen);
     if (err) {
         return Status::InvalidArgument(strings::Substitute("Invalid json : $0", simdjson::error_message(err)));
     }
@@ -248,14 +250,23 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
         std::vector<JsonPath> jsonpath;
         parse_json_paths(path_string, &jsonpath);
 
-        switch (doc.type()) {
+        simdjson::ondemand::json_type tp;
+
+        auto err = doc.type().get(tp);
+        if (err) {
+            result.append_null();
+            continue;
+        }
+
+        switch (tp) {
         case simdjson::ondemand::json_type::object: {
-            auto res = doc.get_object();
-            if (res.error()) {
+            simdjson::ondemand::object obj;
+
+            err = doc.get_object().get(obj);
+            if (err) {
                 result.append_null();
                 continue;
             }
-            auto obj = res.value();
 
             simdjson::ondemand::value value;
             if (!extract_from_object(obj, jsonpath, value)) {
@@ -268,19 +279,29 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
         }
 
         case simdjson::ondemand::json_type::array: {
-            auto arr = doc.get_array();
+            simdjson::ondemand::array arr;
+            err = doc.get_array().get(arr);
+            if (err) {
+                result.append_null();
+                continue;
+            }
+
             for (auto a : arr) {
-                if (a.type() != simdjson::ondemand::json_type::object) {
+                simdjson::ondemand::json_type tp;
+                a.type().get(tp);
+
+                if (tp != simdjson::ondemand::json_type::object) {
                     result.append_null();
                     continue;
                 }
 
-                auto res = a.get_object();
-                if (res.error()) {
+                simdjson::ondemand::object obj;
+
+                err = a.get_object().get(obj);
+                if (err) {
                     result.append_null();
                     continue;
                 }
-                auto obj = res.value();
 
                 simdjson::ondemand::value value;
                 if (!extract_from_object(obj, jsonpath, value)) {
@@ -305,50 +326,39 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
 template <PrimitiveType primitive_type>
 void JsonFunctions::_build_column(ColumnBuilder<primitive_type>& result, simdjson::ondemand::value& value) {
     if constexpr (primitive_type == TYPE_INT) {
-        if (value.type() == simdjson::ondemand::json_type::number) {
-            switch (value.get_number_type()) {
-            case simdjson::ondemand::number_type::signed_integer: {
-                result.append(value.get_int64());
-                break;
-            }
-
-            case simdjson::ondemand::number_type::unsigned_integer: {
-                result.append(value.get_uint64());
-                break;
-            }
-
-            case simdjson::ondemand::number_type::floating_point_number: {
-                result.append(value.get_double());
-            }
-
-            default: {
-                result.append_null();
-                break;
-            }
-            }
-        } else {
+        int64_t i64;
+        auto err = value.get_int64().get(i64);
+        if (UNLIKELY(err)) {
             result.append_null();
+            return;
         }
+
+        result.append(i64);
+        return;
 
     } else if constexpr (primitive_type == TYPE_DOUBLE) {
-        if (value.type() == simdjson::ondemand::json_type::number &&
-            value.get_number_type() == simdjson::ondemand::number_type::floating_point_number) {
-            result.append(value.get_double());
-        } else {
+        double d;
+        auto err = value.get_double().get(d);
+        if (UNLIKELY(err)) {
             result.append_null();
+            return;
         }
+
+        result.append(d);
+            return;
+
     } else if constexpr (primitive_type == TYPE_VARCHAR) {
-        if (value.type() == simdjson::ondemand::json_type::string) {
-            auto v = value.get_string();
-            if (v.error()) {
-                result.append_null();
-            }
-            auto sv = v.value();
-            std::string s{sv.data(), sv.size()};
-            result.append(Slice{s});
-        } else {
+        std::string_view sv;
+        auto err = value.get_string().get(sv);
+        if (UNLIKELY(err)) {
             result.append_null();
+            return;
         }
+
+        result.append(Slice{sv.data(), sv.size()});
+        return;
+    } else {
+        result.append_null();
     }
 }
 
