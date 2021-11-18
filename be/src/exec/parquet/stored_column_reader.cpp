@@ -136,6 +136,7 @@ public:
     ~RequiredStoredColumnReader() override = default;
 
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata, RandomAccessFile* file) {
+        LOG(ERROR) << "RequiredStoredColumnReader:"<<field->debug_string()<<std::endl;
         _field = field;
 
         ColumnChunkReaderOptions opts;
@@ -143,6 +144,7 @@ public:
         _reader.reset(new ColumnChunkReader(_field->max_def_level(), _field->max_rep_level(), _field->type_length,
                                             chunk_metadata, file, opts));
         RETURN_IF_ERROR(_reader->init());
+        _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
 

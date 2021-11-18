@@ -336,6 +336,8 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
         return Status::InvalidArgument(strings::Substitute("Remaining $0 unparsed field", t_schemas.size() - next_pos));
     }
 
+    LOG(ERROR)<<"SCHEMA:"<<this->debug_string()<<std::endl;
+
     return Status::OK();
 }
 
