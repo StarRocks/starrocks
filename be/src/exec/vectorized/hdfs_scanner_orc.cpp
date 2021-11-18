@@ -192,6 +192,13 @@ bool OrcRowReaderFilter::filterOnPickRowGroup(size_t rowGroupIdx,
     return false;
 }
 
+// Hive ORC char type will pad trailing spaces.
+// https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
+static inline size_t remove_trailing_spaces(const char* s, size_t size) {
+    while (size > 0 && s[size - 1] == ' ') size--;
+    return size;
+}
+
 bool OrcRowReaderFilter::filterOnPickStringDictionary(
         const std::unordered_map<uint64_t, orc::StringDictionary*>& sdicts) {
     if (sdicts.empty()) return false;
@@ -241,15 +248,34 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         bytes.reserve(content_size);
         const uint8_t* start = reinterpret_cast<const uint8_t*>(content_data);
         const uint8_t* end = reinterpret_cast<const uint8_t*>(content_data + content_size);
-        bytes.insert(bytes.end(), start, end);
 
         size_t offset_size = dict->dictionaryOffset.size();
         size_t dict_size = offset_size - 1;
         const int64_t* offset_data = dict->dictionaryOffset.data();
         offsets.resize(offset_size);
-        // type mismatche, have to use loop to assign.
-        for (size_t i = 0; i < offset_size; i++) {
-            offsets[i] = offset_data[i];
+
+        if (slot_desc->type().type == TYPE_CHAR) {
+            // for char type, dict strings are also padded with spaces.
+            // we also have to strip space off. For example
+            // | hello      |  world      | yes     |, we have to compact to
+            // | hello | world | yes |
+            size_t total_size = 0;
+            const char* p_start = reinterpret_cast<const char*>(start);
+            for (size_t i = 0; i < dict_size; i++) {
+                const char* s = p_start + offset_data[i];
+                size_t old_size = offset_data[i + 1] - offset_data[i];
+                size_t new_size = remove_trailing_spaces(s, old_size);
+                bytes.insert(bytes.end(), s, s + new_size);
+                offsets[i] = total_size;
+                total_size += new_size;
+            }
+            offsets[dict_size] = total_size;
+        } else {
+            bytes.insert(bytes.end(), start, end);
+            // type mismatch, have to use loop to assign.
+            for (size_t i = 0; i < offset_size; i++) {
+                offsets[i] = offset_data[i];
+            }
         }
 
         // first (dict_size) th items are all not-null

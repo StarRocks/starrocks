@@ -357,7 +357,7 @@ TEST_F(OrcScannerTest, normal) {
     rangeDesc.format_type = TFileFormatType::FORMAT_ORC;
     rangeDesc.splittable = false;
 
-    rangeDesc.path = "./be/test/exec/test_data/orc_scanner/my-file.orc";
+    rangeDesc.path = "./be/test/exec/test_data/orc_scanner/non_vec_orc_scanner.orc";
     rangeDesc.file_type = TFileType::FILE_LOCAL;
     ranges.push_back(rangeDesc);
 
