@@ -155,7 +155,7 @@ public class HeartbeatMgr extends MasterDaemon {
         // we also add a 'mocked' master Frontends heartbeat response to synchronize master info to other Frontends.
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName,
                 Config.query_port, Config.rpc_port, Catalog.getCurrentCatalog().getEditLog().getMaxJournalId(),
-                System.currentTimeMillis()));
+                System.currentTimeMillis(), Catalog.getCurrentCatalog().getFeStartTime()));
 
         // write edit log
         Catalog.getCurrentCatalog().getEditLog().logHeartbeat(hbPackage);
@@ -286,7 +286,8 @@ public class HeartbeatMgr extends MasterDaemon {
                 // heartbeat to self
                 if (Catalog.getCurrentCatalog().isReady()) {
                     return new FrontendHbResponse(fe.getNodeName(), Config.query_port, Config.rpc_port,
-                            Catalog.getCurrentCatalog().getReplayedJournalId(), System.currentTimeMillis());
+                            Catalog.getCurrentCatalog().getReplayedJournalId(), System.currentTimeMillis(),
+                            Catalog.getCurrentCatalog().getFeStartTime());
                 } else {
                     return new FrontendHbResponse(fe.getNodeName(), "not ready");
                 }
@@ -309,8 +310,9 @@ public class HeartbeatMgr extends MasterDaemon {
                     long replayedJournalId = root.getLong(BootstrapFinishAction.REPLAYED_JOURNAL_ID);
                     int queryPort = root.getInt(BootstrapFinishAction.QUERY_PORT);
                     int rpcPort = root.getInt(BootstrapFinishAction.RPC_PORT);
+                    long feStartTime = root.getLong(BootstrapFinishAction.FE_START_TIME);
                     return new FrontendHbResponse(fe.getNodeName(), queryPort, rpcPort, replayedJournalId,
-                            System.currentTimeMillis());
+                            System.currentTimeMillis(), feStartTime);
                 }
             } catch (Exception e) {
                 return new FrontendHbResponse(fe.getNodeName(),

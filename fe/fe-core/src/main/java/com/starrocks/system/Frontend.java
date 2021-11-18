@@ -43,27 +43,19 @@ public class Frontend implements Writable {
 
     private long replayedJournalId;
     private long lastUpdateTime;
-    private long startTime;
+    private long startTime = -1;
     private String heartbeatErrMsg = "";
 
     private boolean isAlive = false;
 
     public Frontend() {
-        this.startTime = System.currentTimeMillis();
     }
 
     public Frontend(FrontendNodeType role, String nodeName, String host, int editLogPort) {
-        this(role, nodeName, host, editLogPort, false);
-    }
-
-    public Frontend(FrontendNodeType role, String nodeName, String host, int editLogPort, boolean isNewFe) {
         this.role = role;
         this.nodeName = nodeName;
         this.host = host;
         this.editLogPort = editLogPort;
-        if (!isNewFe) {
-            this.startTime = System.currentTimeMillis();
-        }
     }
 
     public FrontendNodeType getRole() {
@@ -124,17 +116,14 @@ public class Frontend implements Writable {
             rpcPort = hbResponse.getRpcPort();
             replayedJournalId = hbResponse.getReplayedJournalId();
             lastUpdateTime = hbResponse.getHbTime();
+            startTime = hbResponse.getFeStartTime();
             heartbeatErrMsg = "";
             isChanged = true;
-            if (startTime == 0) {
-                startTime = System.currentTimeMillis();
-            }
         } else {
             if (isAlive) {
                 isAlive = false;
                 isChanged = true;
             }
-            startTime = 0;
             heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
         }
         return isChanged;

@@ -442,6 +442,8 @@ public class Catalog {
 
     private long imageJournalId;
 
+    private long feStartTime = System.currentTimeMillis();
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -506,6 +508,10 @@ public class Catalog {
 
     public DynamicPartitionScheduler getDynamicPartitionScheduler() {
         return this.dynamicPartitionScheduler;
+    }
+
+    public long getFeStartTime() {
+        return feStartTime;
     }
 
     private static class SingletonHolder {
@@ -2512,7 +2518,7 @@ public class Catalog {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
             }
 
-            fe = new Frontend(role, nodeName, host, editLogPort, true);
+            fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
             if (role == FrontendNodeType.FOLLOWER || role == FrontendNodeType.REPLICA) {
                 ((BDBHA) getHaProtocol()).addHelperSocket(host, editLogPort);
