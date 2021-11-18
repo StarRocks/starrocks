@@ -39,7 +39,7 @@ enum HashJoinPhase {
     EOS = 4,
 };
 
-class HashJoiner : public pipeline::ContextWithDependency {
+class HashJoiner final : public pipeline::ContextWithDependency {
 public:
     HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id, TPlanNodeType::type node_type, int64_t limit,
                const std::vector<bool>& is_null_safes, const std::vector<ExprContext*>& build_expr_ctxs,

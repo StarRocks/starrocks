@@ -55,7 +55,7 @@ using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 // Component used to process aggregation including bloking aggregate and streaming aggregate
 // it contains common data struct and algorithm of aggregation
-class Aggregator : public pipeline::ContextWithDependency {
+class Aggregator final : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 

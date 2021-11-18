@@ -32,7 +32,7 @@ using AnalytorPtr = std::shared_ptr<Analytor>;
 // it contains common data struct and algorithm of analysis
 // TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
 // TODO(hcf) all the data should be protected by lightweight lock
-class Analytor : public pipeline::ContextWithDependency {
+class Analytor final : public pipeline::ContextWithDependency {
     friend class ManagedFunctionStates;
 
 public:
