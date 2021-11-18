@@ -30,7 +30,7 @@ using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr, StdHashWithSee
 template <PhmapSeed seed>
 using Int64AggHashMap = phmap::flat_hash_map<int64_t, AggDataPtr, StdHashWithSeed<int64_t, seed>>;
 template <PhmapSeed seed>
-using Int128AggHashMap = phmap::flat_hash_map<int128_t, AggDataPtr, StdHashWithSeed<int128_t, seed>>;
+using Int128AggHashMap = phmap::flat_hash_map<int128_t, AggDataPtr, Hash128WithSeed<seed>>;
 template <PhmapSeed seed>
 using DateAggHashMap = phmap::flat_hash_map<DateValue, AggDataPtr, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
