@@ -7,6 +7,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
+#include "exec/pipeline/context_base.h"
 
 namespace starrocks {
 
@@ -31,7 +32,7 @@ using AnalytorPtr = std::shared_ptr<Analytor>;
 // it contains common data struct and algorithm of analysis
 // TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
 // TODO(hcf) all the data should be protected by lightweight lock
-class Analytor {
+class Analytor : public pipeline::ContextBase {
     friend class ManagedFunctionStates;
 
 public:
@@ -40,7 +41,7 @@ public:
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
-    Status close(RuntimeState* state);
+    Status close(RuntimeState* state) override;
 
     enum FrameType {
         Unbounded,               // BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING

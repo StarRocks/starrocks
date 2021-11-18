@@ -38,8 +38,13 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+Status AnalyticSinkOperator::close(RuntimeState* state) {
+    RETURN_IF_ERROR(_analytor->close_one_operator(state));
+    return Operator::close(state);
+}
+
 bool AnalyticSinkOperator::is_finished() const {
-    return _is_finished;
+    return _is_finished || _analytor->is_finished();
 }
 
 void AnalyticSinkOperator::set_finishing(RuntimeState* state) {
