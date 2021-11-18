@@ -94,8 +94,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     LOG(INFO) << strings::Substitute("[PIPELINE] IO thread pool: thread_num=$0, queue_size=$1",
                                      config::pipeline_io_thread_pool_thread_num,
                                      config::pipeline_io_thread_pool_queue_size);
-    _pipeline_io_thread_pool = new PriorityThreadPool(config::pipeline_io_thread_pool_thread_num,
-                                                      config::pipeline_io_thread_pool_queue_size);
+    _pipeline_scan_io_thread_pool = new PriorityThreadPool(config::pipeline_io_thread_pool_thread_num,
+                                                           config::pipeline_io_thread_pool_queue_size);
+    _pipeline_exchange_sink_thread_pool = new PriorityThreadPool(config::pipeline_io_thread_pool_thread_num,
+                                                                 config::pipeline_io_thread_pool_queue_size);
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool(config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
@@ -295,9 +297,13 @@ void ExecEnv::_destroy() {
         delete _etl_thread_pool;
         _etl_thread_pool = nullptr;
     }
-    if (_pipeline_io_thread_pool) {
-        delete _pipeline_io_thread_pool;
-        _pipeline_io_thread_pool = nullptr;
+    if (_pipeline_scan_io_thread_pool) {
+        delete _pipeline_scan_io_thread_pool;
+        _pipeline_scan_io_thread_pool = nullptr;
+    }
+    if (_pipeline_exchange_sink_thread_pool) {
+        delete _pipeline_exchange_sink_thread_pool;
+        _pipeline_exchange_sink_thread_pool = nullptr;
     }
     if (_thread_pool) {
         delete _thread_pool;
