@@ -27,6 +27,9 @@ public:
     ContextBase& operator=(ContextBase&&) = delete;
     ContextBase& operator=(const ContextBase&) = delete;
 
+    // For pipeline, it is called by unref() when the last operator is unreffed.
+    // For non-pipeline, it is called by close() of the exec node directly
+    // without calling ref and unref.
     virtual Status close(RuntimeState* state) = 0;
 
     // ref_no_barrier and unref are used to close context
@@ -48,7 +51,8 @@ public:
     // When the output operator is finished, the context can be finished regardless of other running operators.
     void set_finished() { _is_finished.store(true, std::memory_order_release); }
 
-    // Predicate whether the context is finished, which is used to notify non-output operators finished early.
+    // Predicate whether the context is finished, which is used to notify
+    // non-output operators to be finished early.
     bool is_finished() const { return _is_finished.load(std::memory_order_acquire); }
 
 private:
