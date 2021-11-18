@@ -26,15 +26,12 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
 }
 
 Status PartitionSortSinkOperator::close(RuntimeState* state) {
+    RETURN_IF_ERROR(_sort_context->unref(state));
     return Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {
     CHECK(false) << "Shouldn't pull chunk from result sink operator";
-}
-
-bool PartitionSortSinkOperator::need_input() const {
-    return true;
 }
 
 Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {

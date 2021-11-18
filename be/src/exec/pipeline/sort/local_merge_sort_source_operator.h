@@ -3,6 +3,7 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/sort_exec_exprs.h"
 
@@ -18,9 +19,13 @@ class SortContext;
 class LocalMergeSortSourceOperator final : public SourceOperator {
 public:
     LocalMergeSortSourceOperator(int32_t id, int32_t plan_node_id, SortContext* sort_context)
-            : SourceOperator(id, "local_merge_sort_source", plan_node_id), _sort_context(sort_context) {}
+            : SourceOperator(id, "local_merge_sort_source", plan_node_id), _sort_context(sort_context) {
+        _sort_context->ref();
+    }
 
     ~LocalMergeSortSourceOperator() override = default;
+
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -31,6 +36,7 @@ public:
     void add_morsel(Morsel* morsel) {}
 
     void set_finishing(RuntimeState* state) override;
+    void set_finished(RuntimeState* state) override;
 
 private:
     bool _is_finished = false;
