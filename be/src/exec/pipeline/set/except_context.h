@@ -14,6 +14,7 @@
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
+#include "exec/pipeline/context_base.h"
 
 namespace starrocks::pipeline {
 
@@ -24,7 +25,7 @@ class ExceptPartitionContextFactory;
 using ExceptPartitionContextFactoryPtr = std::shared_ptr<ExceptPartitionContextFactory>;
 
 // Used as the shared context for ExceptBuildSinkOperator, ExceptProbeSinkOperator, and ExceptOutputSourceOperator.
-class ExceptContext {
+class ExceptContext : public ContextBase {
 public:
     explicit ExceptContext(const int dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
 

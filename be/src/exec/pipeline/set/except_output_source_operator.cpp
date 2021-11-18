@@ -9,7 +9,7 @@ StatusOr<vectorized::ChunkPtr> ExceptOutputSourceOperator::pull_chunk(RuntimeSta
 }
 
 Status ExceptOutputSourceOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_except_ctx->close(state));
+    RETURN_IF_ERROR(_except_ctx->close_one_operator(state));
     return Operator::close(state);
 }
 

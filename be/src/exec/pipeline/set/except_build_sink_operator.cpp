@@ -18,6 +18,11 @@ Status ExceptBuildSinkOperator::prepare(RuntimeState* state) {
     return _except_ctx->prepare(state, _dst_exprs);
 }
 
+Status ExceptBuildSinkOperator::close(RuntimeState* state) {
+    RETURN_IF_ERROR(_except_ctx->close_one_operator(state));
+    return Operator::close(state);
+}
+
 Status ExceptBuildSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
