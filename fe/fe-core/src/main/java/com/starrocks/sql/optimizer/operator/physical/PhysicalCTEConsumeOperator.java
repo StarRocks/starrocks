@@ -2,7 +2,10 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 public class PhysicalCTEConsumeOperator extends PhysicalOperator {
     private final String cteId;
@@ -14,5 +17,15 @@ public class PhysicalCTEConsumeOperator extends PhysicalOperator {
 
     public String getCteId() {
         return cteId;
+    }
+
+    @Override
+    public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
+        return visitor.visitPhysicalCTEConsume(optExpression, context);
+    }
+
+    @Override
+    public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
+        return visitor.visitPhysicalCTEConsume(this, context);
     }
 }

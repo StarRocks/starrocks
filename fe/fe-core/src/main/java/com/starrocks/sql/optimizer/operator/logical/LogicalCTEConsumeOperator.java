@@ -3,8 +3,11 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -41,5 +44,15 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
 
     public String getCteId() {
         return cteId;
+    }
+
+    @Override
+    public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
+        return visitor.visitLogicalCTEConsume(this, context);
+    }
+
+    @Override
+    public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
+        return visitor.visitLogicalCTEConsume(optExpression, context);
     }
 }

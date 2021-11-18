@@ -6,6 +6,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.rule.implementation.AssertOneRowImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorToNoOpImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CTEConsumerImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CTEProduceImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FilterImplementationRule;
@@ -122,7 +126,11 @@ public class RuleSet {
             new RepeatImplementationRule(),
             new FilterImplementationRule(),
             new TableFunctionImplementationRule(),
-            new LimitImplementationRule()
+            new LimitImplementationRule(),
+            new CTEAnchorToNoOpImplementationRule(),
+            new CTEAnchorImplementationRule(),
+            new CTEConsumerImplementationRule(),
+            new CTEProduceImplementationRule()
     );
 
     private final List<Rule> transformRules = Lists.newArrayList();
