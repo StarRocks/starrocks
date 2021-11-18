@@ -29,14 +29,12 @@ bool AggregateDistinctStreamingSourceOperator::is_finished() const {
     return _aggregator->is_sink_complete() && _aggregator->is_chunk_buffer_empty() && _aggregator->is_ht_eos();
 }
 
-void AggregateDistinctStreamingSourceOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
+void AggregateDistinctStreamingSourceOperator::set_finished(RuntimeState* state) {
+    _aggregator->set_finished();
 }
 
 Status AggregateDistinctStreamingSourceOperator::close(RuntimeState* state) {
-    // _aggregator is shared by sink operator and source operator
-    // we must only close it at source operator
-    RETURN_IF_ERROR(_aggregator->close(state));
+    RETURN_IF_ERROR(_aggregator->unref(state));
     return SourceOperator::close(state);
 }
 

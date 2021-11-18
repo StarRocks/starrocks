@@ -16,7 +16,11 @@ public:
             : Operator(id, "except_probe_sink", plan_node_id),
               _except_ctx(std::move(except_ctx)),
               _dst_exprs(dst_exprs),
-              _dependency_index(dependency_index) {}
+              _dependency_index(dependency_index) {
+        _except_ctx->ref();
+    }
+
+    Status close(RuntimeState* state) override;
 
     bool need_input() const override {
         return _except_ctx->is_dependency_finished(_dependency_index) && !(_is_finished || _except_ctx->is_ht_empty());
@@ -25,6 +29,9 @@ public:
     bool has_output() const override { return false; }
 
     bool is_finished() const override {
+        if (_except_ctx->is_finished()) {
+            return true;
+        }
         return _except_ctx->is_dependency_finished(_dependency_index) && (_is_finished || _except_ctx->is_ht_empty());
     }
 
