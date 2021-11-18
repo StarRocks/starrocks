@@ -29,7 +29,7 @@ public:
 
     // For pipeline, it is called by unref() when the last operator is unreffed.
     // For non-pipeline, it is called by close() of the exec node directly
-    // without calling ref and unref, such as AggregateBaseNode.
+    // without calling ref and unref. For example, AggregateBaseNode uses Aggregator.
     virtual Status close(RuntimeState* state) = 0;
 
     // ref and unref are used to close context
