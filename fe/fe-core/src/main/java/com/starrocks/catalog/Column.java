@@ -45,8 +45,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import static com.starrocks.analysis.ColumnDef.DefaultValue.CURRENT_TIMESTAMP_VALUE;
-
 /**
  * This class represents the column-related metadata.
  */
@@ -74,7 +72,7 @@ public class Column implements Writable {
     private String defaultValue;
     // this handle function like now() or simple expression
     @SerializedName(value = "defaultExpr")
-    private ColumnDef.DefaultValue defaultExpr;
+    private DefaultExpr defaultExpr;
     @SerializedName(value = "comment")
     private String comment;
     @SerializedName(value = "stats")
@@ -133,14 +131,12 @@ public class Column implements Writable {
         // this for compatible previous version
         if (defaultValue != null) {
             if (defaultValue.isExpr) {
-                this.defaultValue = null;
+                this.defaultExpr = new DefaultExpr(defaultValue.expr.toSql());
             } else {
                 this.defaultValue = defaultValue.value;
             }
         }
-        this.defaultExpr = defaultValue;
         this.comment = comment;
-
         this.stats = new ColumnStats();
     }
 
@@ -252,8 +248,8 @@ public class Column implements Writable {
         String defaultValue = FeConstants.null_string;
         if (this.defaultValue != null) {
             return defaultValue;
-        } else if (defaultExpr != null && defaultExpr.isExpr) {
-            if ("now()".equalsIgnoreCase(defaultExpr.value)) {
+        } else if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
                 defaultValue = "CURRENT_TIMESTAMP";
                 extras.add("DEFAULT_GENERATED");
             }
@@ -267,7 +263,7 @@ public class Column implements Writable {
         if (defaultValue != null) {
             return true;
         }
-        if (defaultExpr != null && defaultExpr.isExpr && "now()".equalsIgnoreCase(defaultExpr.value)) {
+        if (defaultExpr != null && "now()".equalsIgnoreCase(defaultExpr.getExpr())) {
             return true;
         }
         return false;
@@ -280,7 +276,7 @@ public class Column implements Writable {
             return defaultValue;
         }
 
-        if ("now()".equalsIgnoreCase(defaultExpr.value)) {
+        if (defaultExpr != null && "now()".equalsIgnoreCase(defaultExpr.getExpr())) {
             return DateTime.now().toString();
         }
 
@@ -441,7 +437,7 @@ public class Column implements Writable {
         } else {
             sb.append("NOT NULL ");
         }
-        if ("now()".equalsIgnoreCase(defaultExpr.value)) {
+        if (defaultExpr != null && "now()".equalsIgnoreCase(defaultExpr.getExpr())) {
             // compatible with mysql
             sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
         } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
@@ -586,13 +582,7 @@ public class Column implements Writable {
             return column;
         } else {
             String json = Text.readString(in);
-            Column column = GsonUtils.GSON.fromJson(json, Column.class);
-            if (column.defaultExpr != null && column.defaultExpr.isExpr) {
-                if ("now()".equalsIgnoreCase(column.defaultExpr.value)) {
-                    column.defaultExpr = CURRENT_TIMESTAMP_VALUE;
-                }
-            }
-            return column;
+            return GsonUtils.GSON.fromJson(json, Column.class);
         }
     }
 }
