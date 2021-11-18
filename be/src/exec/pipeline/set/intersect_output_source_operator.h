@@ -29,7 +29,6 @@ public:
         return _intersect_ctx->is_dependency_finished(_dependency_index) && _intersect_ctx->is_output_finished();
     }
 
-
     void set_finished(RuntimeState* state) override { _intersect_ctx->set_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;

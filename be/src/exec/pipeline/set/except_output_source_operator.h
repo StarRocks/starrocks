@@ -28,7 +28,6 @@ public:
         return _except_ctx->is_dependency_finished(_dependency_index) && _except_ctx->is_output_finished();
     }
 
-
     void set_finished(RuntimeState* state) override { _except_ctx->set_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
