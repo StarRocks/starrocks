@@ -34,12 +34,9 @@ public class MergePredicateRule extends TransformationRule {
             new MergePredicateRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final MergePredicateRule MYSQL_SCAN =
             new MergePredicateRule(OperatorType.LOGICAL_MYSQL_SCAN);
-    public static final MergePredicateRule REPEAT_NODE =
-            new MergePredicateRule(OperatorType.LOGICAL_REPEAT);
 
     public MergePredicateRule(OperatorType type) {
-        super(RuleType.TF_MERGE_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER)
-                .addChildren(Pattern.create(type, OperatorType.PATTERN_MULTI_LEAF)));
+        super(RuleType.TF_MERGE_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));
     }
 
     @Override
@@ -52,17 +49,13 @@ public class MergePredicateRule extends TransformationRule {
         LogicalOperator newOperator = (LogicalOperator) operator;
         newOperator.setPredicate(Utils.compoundAnd(lfo.getPredicate(), newOperator.getPredicate()));
 
-        if (newOperator instanceof LogicalScanOperator) {
-            // Add project node upon scan node for column prune later
-            LogicalScanOperator scanOperator = (LogicalScanOperator) newOperator;
-            Map<ColumnRefOperator, ScalarOperator> scanOutput = scanOperator.getOutputColumns().stream()
-                    .collect(Collectors.toMap(Function.identity(), Function.identity()));
-            LogicalProjectOperator lpo = new LogicalProjectOperator(scanOutput);
-            OptExpression project =
-                    OptExpression.create(lpo, OptExpression.create(newOperator, optExpression.getInputs()));
-            return Lists.newArrayList(project);
-        } else {
-            return Lists.newArrayList(OptExpression.create(newOperator, optExpression.getInputs()));
-        }
+        // Add project node upon scan node for column prune later
+        LogicalScanOperator scanOperator = (LogicalScanOperator) newOperator;
+        Map<ColumnRefOperator, ScalarOperator> scanOutput = scanOperator.getOutputColumns().stream()
+                .collect(Collectors.toMap(Function.identity(), Function.identity()));
+        LogicalProjectOperator lpo = new LogicalProjectOperator(scanOutput);
+        OptExpression project =
+                OptExpression.create(lpo, OptExpression.create(newOperator, optExpression.getInputs()));
+        return Lists.newArrayList(project);
     }
 }
