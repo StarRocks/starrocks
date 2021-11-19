@@ -46,7 +46,7 @@ public:
             } else {
                 _num_sinkers_per_dest_instance[dest_instance_id] = num_sinkers;
 
-                // This dest_instance_id first occurs, so create closure and buffer for it.
+                // This dest_instance_id first occurs, so create other variable for this dest instance.
                 auto* closure = new CallBackClosure<PTransmitChunkResult>();
                 closure->ref();
                 closure->addFailedHandler([this]() noexcept {
@@ -69,8 +69,14 @@ public:
                     }
                 });
                 _closures[dest_instance_id] = closure;
+
                 _buffers[dest_instance_id] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
                 _request_seqs[dest_instance_id] = 0;
+
+                PUniqueId finst_id;
+                finst_id.set_hi(dest_instance_id.hi);
+                finst_id.set_lo(dest_instance_id.lo);
+                _instance_id2finst_id[dest_instance_id] = std::move(finst_id);
             }
 
             _expected_eos = 0;
@@ -272,7 +278,10 @@ private:
                 }
             }
         }
+
+        request.params->set_allocated_finst_id(&_instance_id2finst_id[request.fragment_instance_id]);
         request.params->set_sequence(_request_seqs[request.fragment_instance_id]++);
+
         auto* closure = _closures[request.fragment_instance_id];
         DCHECK(closure != nullptr);
         DCHECK(!closure->has_in_flight_rpc());
@@ -290,6 +299,10 @@ private:
     std::unordered_map<TUniqueId, size_t> _num_sinkers_per_dest_instance;
     std::unordered_map<TUniqueId, int64_t> _request_seqs;
     std::atomic<int32_t> _in_flight_rpc_num = 0;
+
+    // The request needs the reference to the allocated finst id,
+    // so cache finst id for each dest fragment instance.
+    std::unordered_map<TUniqueId, PUniqueId> _instance_id2finst_id;
 
     std::unordered_map<TUniqueId, CallBackClosure<PTransmitChunkResult>*> _closures;
     std::unordered_map<TUniqueId, std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>> _buffers;
