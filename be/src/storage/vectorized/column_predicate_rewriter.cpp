@@ -336,8 +336,8 @@ bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const Co
     column_ref._type = type_desc;
     Expr* probe_expr = &column_ref;
     // probe_expr will be copied into filter, so we don't need to allocate it.
-    ExprContext* filter =
-            RuntimeFilterHelper::create_runtime_in_filter(state, pool, probe_expr, eq_null, null_in_set, is_not_in);
+    ExprContext* filter = RuntimeFilterHelper::create_runtime_in_filter(state, pool, probe_expr, eq_null, null_in_set,
+                                                                        is_not_in, code_size);
     DCHECK_IF_ERROR(RuntimeFilterHelper::fill_runtime_in_filter(used_values, probe_expr, filter, 0));
 
     RowDescriptor row_desc; // I think we don't need to use it at all.

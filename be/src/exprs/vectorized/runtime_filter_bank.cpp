@@ -94,7 +94,8 @@ void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRunti
 }
 
 ExprContext* RuntimeFilterHelper::create_runtime_in_filter(RuntimeState* state, ObjectPool* pool, Expr* probe_expr,
-                                                           bool eq_null, bool null_in_set, bool is_not_in) {
+                                                           bool eq_null, bool null_in_set, bool is_not_in,
+                                                           int bitmap_size) {
     TExprNode node;
     PrimitiveType probe_type = probe_expr->type().type;
 
@@ -121,6 +122,7 @@ ExprContext* RuntimeFilterHelper::create_runtime_in_filter(RuntimeState* state, 
     case PrimitiveType::NAME: {                                                               \
         auto* in_pred = pool->add(new VectorizedInConstPredicate<PrimitiveType::NAME>(node)); \
         in_pred->set_null_in_set(null_in_set);                                                \
+        in_pred->set_bitmap_size(bitmap_size);                                                \
         Status st = in_pred->prepare(state);                                                  \
         if (!st.ok()) return nullptr;                                                         \
         in_pred->add_child(Expr::copy(pool, probe_expr));                                     \
@@ -147,10 +149,16 @@ Status RuntimeFilterHelper::fill_runtime_in_filter(const ColumnPtr& column, Expr
 #define M(FIELD_TYPE)                                                                 \
     case PrimitiveType::FIELD_TYPE: {                                                 \
         using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;        \
-        auto* in_pre = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);               \
+        auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);              \
         auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); \
-        for (size_t j = column_offset; j < data_ptr.size(); j++) {                    \
-            in_pre->insert(&data_ptr[j]);                                             \
+        if (in_pred->is_use_bitmap()) {                                               \
+            for (size_t j = column_offset; j < data_ptr.size(); j++) {                \
+                in_pred->insert_bitmap(&data_ptr[j]);                                 \
+            }                                                                         \
+        } else {                                                                      \
+            for (size_t j = column_offset; j < data_ptr.size(); j++) {                \
+                in_pred->insert(&data_ptr[j]);                                        \
+            }                                                                         \
         }                                                                             \
         break;                                                                        \
     }
@@ -163,14 +171,24 @@ Status RuntimeFilterHelper::fill_runtime_in_filter(const ColumnPtr& column, Expr
 #define M(FIELD_TYPE)                                                                                           \
     case PrimitiveType::FIELD_TYPE: {                                                                           \
         using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;                                  \
-        auto* in_pre = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);                                         \
+        auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);                                        \
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);                            \
         auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data(); \
-        for (size_t j = column_offset; j < data_array.size(); j++) {                                            \
-            if (!nullable_column->is_null(j)) {                                                                 \
-                in_pre->insert(&data_array[j]);                                                                 \
-            } else {                                                                                            \
-                in_pre->insert(nullptr);                                                                        \
+        if (in_pred->is_use_bitmap()) {                                                                         \
+            for (size_t j = column_offset; j < data_array.size(); j++) {                                        \
+                if (!nullable_column->is_null(j)) {                                                             \
+                    in_pred->insert_bitmap(&data_array[j]);                                                     \
+                } else {                                                                                        \
+                    in_pred->insert_bitmap(nullptr);                                                            \
+                }                                                                                               \
+            }                                                                                                   \
+        } else {                                                                                                \
+            for (size_t j = column_offset; j < data_array.size(); j++) {                                        \
+                if (!nullable_column->is_null(j)) {                                                             \
+                    in_pred->insert(&data_array[j]);                                                            \
+                } else {                                                                                        \
+                    in_pred->insert(nullptr);                                                                   \
+                }                                                                                               \
             }                                                                                                   \
         }                                                                                                       \
         break;                                                                                                  \

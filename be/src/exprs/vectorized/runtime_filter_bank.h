@@ -41,7 +41,7 @@ public:
     // =================================
     // create and fill runtime IN filter
     static ExprContext* create_runtime_in_filter(RuntimeState* state, ObjectPool* pool, Expr* probe_expr, bool eq_null,
-                                                 bool null_in_set = false, bool is_not_in = false);
+                                                 bool null_in_set = false, bool is_not_in = false, int bitmap_size = 0);
     static Status fill_runtime_in_filter(const ColumnPtr& column, Expr* probe_expr, ExprContext* filter,
                                          size_t column_offset);
 
