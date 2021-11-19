@@ -17,7 +17,6 @@ set(EXEC_FILES
         ./column/timestamp_value_test.cpp
         ./column/vectorized_schema_test.cpp
         ./common/config_test.cpp
-        ./common/resource_tls_test.cpp
         ./common/status_test.cpp
         ./env/compressed_file_test.cpp
         ./env/env_broker_test.cpp
