@@ -154,7 +154,7 @@ public class LoadingTaskPlanner {
         sinkFragment.setParallelExecNum(parallelInstanceNum);
         // After data loading, we need to check the global dict for low cardinality string column
         // whether update.
-        sinkFragment.setGlobalDicts(globalDicts);
+        sinkFragment.setLoadGlobalDicts(globalDicts);
 
         fragments.add(sinkFragment);
 

@@ -221,17 +221,8 @@ public class CacheDictManager implements IDictManager {
     @Override
     public ColumnDict getGlobalDict(long tableId, String columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        CompletableFuture<Optional<ColumnDict>> result = dictStatistics.get(columnIdentifier);
-        Preconditions.checkArgument(result.isDone());
-        try {
-            Optional<ColumnDict> dict = result.get();
-            Preconditions.checkArgument(dict.isPresent());
-            return dict.get();
-        } catch (Exception e) {
-            LOG.warn(e);
-            Preconditions.checkArgument(false, "Shouldn't run here");
-        }
-        Preconditions.checkArgument(false, "Shouldn't run here");
-        return null;
+        Optional<ColumnDict> dict = dictStatistics.synchronous().get(columnIdentifier);
+        Preconditions.checkArgument(dict != null && dict.isPresent());
+        return dict.get();
     }
 }

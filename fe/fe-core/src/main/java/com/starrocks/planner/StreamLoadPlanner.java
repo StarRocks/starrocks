@@ -153,7 +153,7 @@ public class StreamLoadPlanner {
         fragment.setSink(olapTableSink);
         // After data loading, we need to check the global dict for low cardinality string column
         // whether update.
-        fragment.setGlobalDicts(globalDicts);
+        fragment.setLoadGlobalDicts(globalDicts);
 
         fragment.finalize(null, false);
 

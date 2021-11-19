@@ -65,7 +65,7 @@ Status OlapScanNode::open(RuntimeState* state) {
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status);
     _update_status(status);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
                                            &(_tuple_desc->decoded_slots()));
 
