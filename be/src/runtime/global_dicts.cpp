@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "column/binary_column.h"
+#include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
@@ -34,7 +35,12 @@ public:
         int size = input->size();
 
         if (input->is_constant()) {
-            int code = ColumnHelper::get_const_value<TYPE_INT>(input);
+            int code = 0;
+            if (input->only_null()) {
+                code = 0;
+            } else {
+                code = ColumnHelper::get_const_value<TYPE_INT>(input);
+            }
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(_dict_opt_ctx->filter[code], input->size());
         } else if (input->is_nullable()) {
             res_data.resize(size);
@@ -82,7 +88,18 @@ public:
 
         ColumnPtr output = nullptr;
 
-        if (input->is_nullable()) {
+        if (input->is_constant()) {
+            int res_code = 0;
+            if (input->only_null()) {
+                res_code = _dict_opt_ctx->code_convert_map[0];
+            } else {
+                res_code = _dict_opt_ctx->code_convert_map[ColumnHelper::get_const_value<TYPE_INT>(input)];
+            }
+            if (res_code == 0) {
+                return ColumnHelper::create_const_null_column(row_size);
+            }
+            return ColumnHelper::create_const_column<TYPE_INT>(res_code, row_size);
+        } else if (input->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input.get());
             const auto* null_column = down_cast<const NullColumn*>(nullable_column->null_column().get());
             const auto* data_column = down_cast<const LowCardDictColumn*>(nullable_column->data_column().get());
@@ -234,6 +251,14 @@ void DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeConte
     temp_chunk->append_column(binary_column, need_decode_slot_id);
 
     auto result_column = conjunct->evaluate(temp_chunk.get());
+    // result always null
+    if (result_column->only_null()) {
+        dict_opt_ctx->filter.resize(DICT_DECODE_MAX_SIZE + 1);
+        return;
+    }
+    // unpack result column
+    result_column = ColumnHelper::unpack_and_duplicate_const_column(result_column->size(), result_column);
+
     bool result_nullable = result_column->is_nullable();
     ColumnPtr data_column = result_column;
     if (result_nullable) {
