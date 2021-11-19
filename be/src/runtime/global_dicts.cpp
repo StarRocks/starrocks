@@ -322,7 +322,7 @@ std::pair<std::shared_ptr<BinaryColumn>, std::vector<int32_t>> extract_column_wi
 void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,
                                             const std::map<int32_t, int32_t>& dict_slots_mapping,
                                             std::vector<SlotDescriptor*>* slot_descs) {
-    const auto& global_dict = runtime_state->get_global_dict_map();
+    const auto& global_dict = runtime_state->get_query_global_dict_map();
     if (global_dict.empty()) return;
 
     for (size_t i = 0; i < slot_descs->size(); ++i) {
