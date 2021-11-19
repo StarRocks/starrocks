@@ -19,18 +19,15 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -40,7 +37,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class OlapScanNodeTest {
     // columnA in (1) hashmode=3
@@ -162,49 +158,6 @@ public class OlapScanNodeTest {
             long mod = (int) ((hashValue & 0xffffffff) % 3);
             Assert.assertEquals(mod, 2);
         }
-    }
-
-    @Test
-    public void testAssertFragmentWithDistributedInput(@Injectable AssertNumRowsNode assertNumRowsNode,
-                                                       @Injectable PlanFragment inputFragment,
-                                                       @Injectable PlanNodeId planNodeId,
-                                                       @Injectable PlanFragmentId planFragmentId,
-                                                       @Injectable PlanNode inputPlanRoot,
-                                                       @Injectable TupleId tupleId,
-                                                       @Mocked PlannerContext plannerContext) {
-        DistributedPlanner distributedPlanner = new DistributedPlanner(plannerContext);
-
-        List<TupleId> tupleIdList = Lists.newArrayList(tupleId);
-        Set<TupleId> tupleIdSet = Sets.newHashSet(tupleId);
-        Deencapsulation.setField(inputPlanRoot, "tupleIds", tupleIdList);
-        Deencapsulation.setField(inputPlanRoot, "tblRefIds", tupleIdList);
-        Deencapsulation.setField(inputPlanRoot, "nullableTupleIds", Sets.newHashSet(tupleId));
-        Deencapsulation.setField(inputPlanRoot, "conjuncts", Lists.newArrayList());
-        new Expectations() {
-            {
-                inputFragment.isPartitioned();
-                result = true;
-                plannerContext.getNextNodeId();
-                result = planNodeId;
-                plannerContext.getNextFragmentId();
-                result = planFragmentId;
-                inputFragment.getPlanRoot();
-                result = inputPlanRoot;
-                inputPlanRoot.getTupleIds();
-                result = tupleIdList;
-                inputPlanRoot.getTblRefIds();
-                result = tupleIdList;
-                inputPlanRoot.getNullableTupleIds();
-                result = tupleIdSet;
-                assertNumRowsNode.getChildren();
-                result = inputPlanRoot;
-            }
-        };
-
-        PlanFragment assertFragment = Deencapsulation.invoke(distributedPlanner, "createAssertFragment",
-                assertNumRowsNode, inputFragment);
-        Assert.assertFalse(assertFragment.isPartitioned());
-        Assert.assertSame(assertNumRowsNode, assertFragment.getPlanRoot());
     }
 
     @Test

@@ -268,8 +268,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                 stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
                     }
 
-                    newOutputColumns.remove(stringColumn);
-                    newOutputColumns.add(newDictColumn);
+                    if (newOutputColumns.contains(stringColumn)) {
+                        newOutputColumns.remove(stringColumn);
+                        newOutputColumns.add(newDictColumn);
+                    }
 
                     Column oldColumn = scanOperator.getColRefToColumnMetaMap().get(stringColumn);
                     Column newColumn = new Column(oldColumn.getName(), ID_TYPE, oldColumn.isAllowNull());

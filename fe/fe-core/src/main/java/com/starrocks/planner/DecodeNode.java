@@ -25,7 +25,6 @@ public class DecodeNode extends PlanNode{
                       Map<SlotId, Expr> stringFunctions) {
         super(id, tupleDescriptor.getId().asList(), "Decode");
         addChild(child);
-        this.tupleIds.addAll(child.tupleIds);
         this.dictIdToStringIds = dictIdToStringIds;
         this.stringFunctions = stringFunctions;
     }
