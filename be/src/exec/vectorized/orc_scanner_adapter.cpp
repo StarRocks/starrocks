@@ -14,6 +14,7 @@
 #include "column/array_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
+#include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -1536,6 +1537,24 @@ void OrcScannerAdapter::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc:
         return;
     }
 
+    // handle conjuncts
+    // where (NULL) or (slot == $val)
+    // where (true) or (slot == $val)
+    // If FE can simplify this predicate, then literal processing is no longer needed here
+    if (node_type == TExprNodeType::BOOL_LITERAL || node_type == TExprNodeType::NULL_LITERAL) {
+        orc::TruthValue val = orc::TruthValue::NO;
+        if (node_type == TExprNodeType::BOOL_LITERAL) {
+            Expr* literal = const_cast<Expr*>(conjunct);
+            ColumnPtr ptr = literal->evaluate(nullptr, nullptr);
+            const Datum& datum = ptr->get(0);
+            if (datum.get_int8()) {
+                val = orc::TruthValue::YES;
+            }
+        }
+        builder->literal(val);
+        return;
+    }
+
     Expr* slot = conjunct->get_child(0);
     DCHECK(slot->is_slotref());
     ColumnRef* ref = down_cast<ColumnRef*>(slot);
@@ -1623,6 +1642,15 @@ void OrcScannerAdapter::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc:
         return true;                                                 \
     }
 
+#define ADD_RF_BOOLEAN_TYPE(type)                                      \
+    case type: {                                                       \
+        auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
+        if (xrf == nullptr) return false;                              \
+        auto lower = orc::Literal(bool(xrf->min_value()));             \
+        auto upper = orc::Literal(bool(xrf->max_value()));             \
+        ADD_RF_TO_BUILDER                                              \
+    }
+
 #define ADD_RF_INT_TYPE(type)                                          \
     case type: {                                                       \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
@@ -1686,7 +1714,7 @@ bool OrcScannerAdapter::_add_runtime_filter(const SlotDescriptor* slot, const Jo
     if (type_it == _supported_primitive_types.end()) return false;
     orc::PredicateDataType pred_type = type_it->second;
     switch (ptype) {
-        ADD_RF_INT_TYPE(PrimitiveType::TYPE_BOOLEAN);
+        ADD_RF_BOOLEAN_TYPE(PrimitiveType::TYPE_BOOLEAN);
         ADD_RF_INT_TYPE(PrimitiveType::TYPE_TINYINT);
         ADD_RF_INT_TYPE(PrimitiveType::TYPE_SMALLINT);
         ADD_RF_INT_TYPE(PrimitiveType::TYPE_INT);

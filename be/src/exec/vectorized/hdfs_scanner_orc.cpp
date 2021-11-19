@@ -301,6 +301,7 @@ void HdfsOrcScanner::update_counter() {
 
 Status HdfsParquetScanner::do_close(RuntimeState* runtime_state) {
     update_counter();
+    _reader.reset();
     return Status::OK();
 }
 

@@ -49,7 +49,7 @@ public class HiveTableTest {
         hiveTable = "table0";
 
         columns = Lists.newArrayList();
-        Column column = new Column("col1", Type.BIGINT);
+        Column column = new Column("col1", Type.BIGINT, true);
         columns.add(column);
 
         properties = Maps.newHashMap();
@@ -106,14 +106,14 @@ public class HiveTableTest {
             }
         };
 
-        columns.add(new Column("col2", Type.INT));
+        columns.add(new Column("col2", Type.INT, true));
         properties.put("resource", resourceName);
         HiveTable table = new HiveTable(1000, "hive_table", columns, properties);
         Assert.assertEquals(hiveTable, table.getHiveTable());
         Assert.assertEquals(hiveDb, table.getHiveDb());
         Assert.assertEquals(String.format("%s.%s", hiveDb, hiveTable), table.getHiveDbTable());
         Assert.assertEquals(hdfsPath, table.getHdfsPath());
-        Assert.assertEquals(Lists.newArrayList(new Column("col1", Type.BIGINT)), table.getPartitionColumns());
+        Assert.assertEquals(Lists.newArrayList(new Column("col1", Type.BIGINT, true)), table.getPartitionColumns());
     }
 
     @Test(expected = DdlException.class)
