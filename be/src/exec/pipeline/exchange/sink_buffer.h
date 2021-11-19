@@ -214,12 +214,6 @@ private:
                     TransmitChunkInfo info = buffer.front();
                     _send_rpc(info);
                     info.params->release_finst_id();
-                    if (info.params->eos()) {
-                        std::lock_guard<std::mutex> l(_mutex);
-                        if (--_expected_eos == 0) {
-                            _is_finishing = true;
-                        }
-                    }
                     {
                         std::lock_guard<std::mutex> l(_mutex);
                         buffer.pop();
@@ -264,6 +258,9 @@ private:
         }
 
         if (request.params->eos()) {
+            if (--_expected_eos == 0) {
+                _is_finishing = true;
+            }
             // Only the last eos is sent to ExchangeSourceOperator. it must be guaranteed that
             // eos is the last packet to send to finish the input stream of the corresponding of
             // ExchangeSourceOperator and eos is sent exactly-once.

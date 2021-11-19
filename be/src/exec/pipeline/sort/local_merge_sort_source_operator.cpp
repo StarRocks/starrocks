@@ -23,9 +23,7 @@ StatusOr<vectorized::ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeS
 }
 
 void LocalMergeSortSourceOperator::set_finishing(RuntimeState* state) {
-    if (!_is_finished) {
-        _is_finished = true;
-    }
+    _is_finished = true;
 }
 
 void LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
