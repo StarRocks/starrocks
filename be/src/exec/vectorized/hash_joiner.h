@@ -150,8 +150,8 @@ private:
         }
     }
     void _filter_post_probe_output_chunk(ChunkPtr& chunk) {
-        // Post probe needn't process _other_join_conjunct_ctxs,
-        // because it is ON predicates, which is processed on probe phase.
+        // Post probe needn't process _other_join_conjunct_ctxs, because they
+        // are `ON` predicates, which need to be processed only on probe phase.
         if (chunk && !chunk->is_empty()) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
         }
