@@ -695,16 +695,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int load_parallel_instance_num = 1;
-    /**
-     * use vectorized load if true
-     * Only support broker load with orc file and export job
-     */
-    @ConfField(mutable = true)
-    public static boolean vectorized_load_enable = true;
-
-    // use vectorized load for csv/json/parquet and spark load
-    @ConfField(mutable = true)
-    public static boolean enable_vectorized_file_load = true;
 
     /**
      * Export checker's running interval.
