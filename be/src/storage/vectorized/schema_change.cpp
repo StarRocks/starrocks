@@ -937,7 +937,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     sc_params.new_tablet = new_tablet;
     sc_params.chunk_changer = std::make_unique<ChunkChanger>(sc_params.new_tablet->tablet_schema());
 
-    Status status = _parse_request(sc_params);
+    Status status = _parse_request(sc_params.base_tablet, sc_params.new_tablet, sc_params.chunk_changer.get(),
+                                   &sc_params.sc_sorting, &sc_params.sc_directly, sc_params.materialized_params_map);
     if (!status.ok()) {
         LOG(WARNING) << "failed to parse the request. res=" << status.get_error_msg();
         return status;
@@ -1235,13 +1236,10 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     return status;
 }
 
-Status SchemaChangeHandler::_parse_request(SchemaChangeParams& sc_params) {
-    const auto& base_tablet = sc_params.base_tablet;
-    const auto& new_tablet = sc_params.new_tablet;
-    auto chunk_changer = sc_params.chunk_changer.get();
-    bool* sc_sorting = &sc_params.sc_sorting;
-    bool* sc_directly = &sc_params.sc_directly;
-    const auto& materialized_function_map = sc_params.materialized_params_map;
+Status SchemaChangeHandler::_parse_request(
+        const std::shared_ptr<Tablet>& base_tablet, const std::shared_ptr<Tablet>& new_tablet,
+        ChunkChanger* chunk_changer, bool* sc_sorting, bool* sc_directly,
+        const std::unordered_map<std::string, AlterMaterializedViewParam>& materialized_function_map) {
     for (int i = 0; i < new_tablet->tablet_schema().num_columns(); ++i) {
         const TabletColumn& new_column = new_tablet->tablet_schema().column(i);
         std::string column_name(new_column.name());

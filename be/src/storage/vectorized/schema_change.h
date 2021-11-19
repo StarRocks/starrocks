@@ -178,7 +178,10 @@ private:
 
     static Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
 
-    static Status _parse_request(SchemaChangeParams& sc_params);
+    static Status _parse_request(
+            const std::shared_ptr<Tablet>& base_tablet, const std::shared_ptr<Tablet>& new_tablet,
+            ChunkChanger* chunk_changer, bool* sc_sorting, bool* sc_directly,
+            const std::unordered_map<std::string, AlterMaterializedViewParam>& materialized_function_map);
 
     // default_value for new column is needed
     static Status _init_column_mapping(ColumnMapping* column_mapping, const TabletColumn& column_schema,
