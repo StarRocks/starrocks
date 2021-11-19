@@ -15,7 +15,7 @@ public:
 
     virtual Status add_chunk(vectorized::Chunk* chunk) = 0;
 
-    virtual uint64_t file_size() = 0;
+    virtual std::size_t file_size() = 0;
 
     virtual Status finish() = 0;
 };

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <ryu/ryu.h>
+
 #include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
@@ -90,6 +92,10 @@ public:
     }
 
     virtual Status finalize() { return _flush(); }
+
+    virtual std::size_t size() {
+        return 0;
+    }
 
 protected:
     virtual Status _sync(const char* data, size_t size) = 0;

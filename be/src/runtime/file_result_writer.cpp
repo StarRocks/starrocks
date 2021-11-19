@@ -27,6 +27,8 @@
 #include "exec/local_file_writer.h"
 #include "exec/parquet_builder.h"
 #include "exec/plain_text_builder.h"
+#include "formats/csv/converter.h"
+#include "formats/csv/output_stream.h"
 #include "exprs/expr.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/row_batch.h"
@@ -73,16 +75,17 @@ void FileResultWriter::_init_profile() {
 
 Status FileResultWriter::_create_file_writer() {
     std::string file_name = _get_next_file_name();
-    RETURN_IF_ERROR(_env->new_writable_file(file_name, &_writable_file));
+    std::unique_ptr<WritableFile> writable_file;
+    RETURN_IF_ERROR(_env->new_writable_file(file_name, &writable_file));
 
     switch (_file_opts->file_format) {
     case TFileFormatType::FORMAT_CSV_PLAIN:
         _file_builder = std::make_unique<PlainTextBuilder>(
-                _writable_file.get(), _output_expr_ctxs,
-                PlainTextBuilderOptions{_file_opts->column_separator, _file_opts->row_delimiter});
+                PlainTextBuilderOptions{_file_opts->column_separator, _file_opts->row_delimiter},
+                std::move(writable_file), _output_expr_ctxs);
         break;
     case TFileFormatType::FORMAT_PARQUET:
-        _file_builder = std::make_unique<ParquetBuilder>(_writable_file.get(), _output_expr_ctxs);
+        _file_builder = std::make_unique<ParquetBuilder>(std::move(writable_file), _output_expr_ctxs);
         break;
     default:
         return Status::InternalError(strings::Substitute("unsupport file format: $0", _file_opts->file_format));
@@ -115,7 +118,6 @@ Status FileResultWriter::append_row_batch(const RowBatch* batch) {
 }
 
 Status FileResultWriter::append_chunk(vectorized::Chunk* chunk) {
-    assert(_writable_file != nullptr);
     assert(_file_builder != nullptr);
     _file_builder->add_chunk(chunk);
 
@@ -142,10 +144,6 @@ Status FileResultWriter::_close_file_writer(bool done) {
     if (_file_builder != nullptr) {
         RETURN_IF_ERROR(_file_builder->finish());
         _file_builder.reset();
-    }
-    if (_writable_file != nullptr) {
-        RETURN_IF_ERROR(_writable_file->close());
-        _writable_file.reset();
     }
 
     if (!done) {

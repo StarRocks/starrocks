@@ -7,9 +7,14 @@
 #include <string>
 #include <utility>
 
-#include "file_builder.h"
+#include "exec/file_builder.h"
 
 namespace starrocks {
+
+namespace vectorized::csv {
+class Converter;
+class OutputStream;
+} // namespace vectorized::csv
 
 class ExprContext;
 class FileWriter;
@@ -22,38 +27,25 @@ struct PlainTextBuilderOptions {
 
 class PlainTextBuilder : public FileBuilder {
 public:
-    PlainTextBuilder(WritableFile* writable_file, const std::vector<ExprContext*>& output_expr_ctxs,
-                     PlainTextBuilderOptions options)
-            : _options(std::move(options)), _output_expr_ctxs(output_expr_ctxs), _writable_file(writable_file) {}
+    PlainTextBuilder(PlainTextBuilderOptions options, std::unique_ptr<WritableFile> writable_file,
+                     const std::vector<ExprContext*>& output_expr_ctxs);
     ~PlainTextBuilder() override = default;
 
     Status add_chunk(vectorized::Chunk* chunk) override;
 
-    uint64_t file_size() override;
+    std::size_t file_size() override;
 
     Status finish() override;
 
 private:
-    static const char* NULL_IN_CSV;
-
+    const static size_t OUTSTREAM_BUFFER_SIZE_BYTES;
     const PlainTextBuilderOptions _options;
-
     const std::vector<ExprContext*>& _output_expr_ctxs;
+    std::unique_ptr<vectorized::csv::OutputStream> _output_stream;
+    std::vector<std::unique_ptr<vectorized::csv::Converter>> _converters;
+    bool _init;
 
-    WritableFile* _writable_file;
-
-    // Used to buffer the export data of plain text
-    // TODO(cmy): I simply use a stringstrteam to buffer the data, to avoid calling
-    // file writer's write() for every single row.
-    // But this cannot solve the problem of a row of data that is too large.
-    // For exampel: bitmap_to_string() may return large volumn of data.
-    // And the speed is relative low, in my test, is about 6.5MB/s.
-    std::stringstream _plain_text_outstream;
-    static const size_t OUTSTREAM_BUFFER_SIZE_BYTES;
-
-    // if buffer exceed the limit, write the data buffered in _plain_text_outstream via file_writer
-    // if eos, write the data even if buffer is not full.
-    Status _flush_plain_text_outstream(bool eos);
+    Status init();
 };
 
 } // namespace starrocks

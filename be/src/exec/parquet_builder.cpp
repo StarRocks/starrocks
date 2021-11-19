@@ -77,8 +77,11 @@ arrow::Status ParquetOutputStream::Close() {
 }
 
 /// ParquetBuilder
-ParquetBuilder::ParquetBuilder(WritableFile* writable_file, const std::vector<ExprContext*>& output_expr_ctxs)
-        : _outstream(new ParquetOutputStream(writable_file)), _output_expr_ctxs(output_expr_ctxs) {
+ParquetBuilder::ParquetBuilder(std::unique_ptr<WritableFile> writable_file,
+                               const std::vector<ExprContext*>& output_expr_ctxs)
+        : _outstream(new ParquetOutputStream(writable_file.get())),
+          _writable_file(std::move(writable_file)),
+          _output_expr_ctxs(output_expr_ctxs) {
     // TODO(cmy): implement
 }
 

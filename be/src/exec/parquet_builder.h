@@ -73,17 +73,18 @@ private:
 // a wrapper of parquet output stream
 class ParquetBuilder : public FileBuilder {
 public:
-    ParquetBuilder(WritableFile* _writable_file, const std::vector<ExprContext*>& output_expr_ctxs);
+    ParquetBuilder(std::unique_ptr<WritableFile> writable_file, const std::vector<ExprContext*>& output_expr_ctxs);
     ~ParquetBuilder() override;
 
     Status add_chunk(vectorized::Chunk* chunk) override;
 
-    uint64_t file_size() override { return 0; }
+    std::size_t file_size() override { return 0; }
 
     Status finish() override;
 
 private:
     ParquetOutputStream* _outstream;
+    std::unique_ptr<WritableFile> _writable_file;
     const std::vector<ExprContext*>& _output_expr_ctxs;
 };
 

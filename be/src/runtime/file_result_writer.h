@@ -95,7 +95,6 @@ private:
 
     Env* _env;
     std::unique_ptr<Env> _owned_env;
-    std::unique_ptr<WritableFile> _writable_file;
     std::unique_ptr<FileBuilder> _file_builder;
 
     // the suffix idx of export file name, start at 0
