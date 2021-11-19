@@ -75,7 +75,7 @@ static int64_t calc_process_max_load_memory(int64_t process_mem_limit) {
 }
 
 static int64_t calc_compaction_max_load_memory(int64_t process_mem_limit) {
-    int64_t limit = config::compaction_max_memory_limit_bytes;
+    int64_t limit = config::compaction_max_memory_limit;
     int64_t percent = config::compaction_max_memory_limit_percent;
 
     if (config::compaction_memory_limit_per_worker < 0) {
