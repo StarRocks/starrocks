@@ -763,13 +763,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_connection_scheduler_threads_num = 4096;
-
-    /**
-     * Deprecated after 0.10
-     */
-    @ConfField
-    public static boolean disable_colocate_join = false;
-
     /**
      * Limit on the number of expr children of an expr tree.
      * Exceed this limit may cause long analysis time while holding database read lock.

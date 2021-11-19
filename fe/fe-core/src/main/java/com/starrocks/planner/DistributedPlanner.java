@@ -40,7 +40,6 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TPartitionType;
@@ -454,11 +453,6 @@ public class DistributedPlanner {
 
     private boolean canColocateJoin(HashJoinNode node, PlanFragment leftChildFragment, PlanFragment rightChildFragment,
                                     List<String> cannotReason) {
-        if (Config.disable_colocate_join) {
-            cannotReason.add("Disabled");
-            return false;
-        }
-
         if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
             cannotReason.add("Session disabled");
             return false;
