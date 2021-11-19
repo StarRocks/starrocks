@@ -203,7 +203,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > RepeatNode::decompose_t
             context->next_operator_id(), id(), std::move(_slot_id_set_list), std::move(_all_slot_ids),
             std::move(_null_slot_ids), std::move(_repeat_id_list), _repeat_times_required, _repeat_times_last,
             std::move(_column_null), std::move(_grouping_columns), std::move(_grouping_list),
-            std::move(_output_tuple_id), _tuple_desc));
+            std::move(_output_tuple_id), _tuple_desc, std::move(_conjunct_ctxs)));
 
     return operators;
 }
