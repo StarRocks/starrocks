@@ -68,16 +68,13 @@ private:
     size_t _freed_bytes = 0;
 };
 
-void* tcmalloc_gc_thread(void* dummy) {
+void gc_tcmalloc_memory(void* arg_this) {
     using namespace starrocks::vectorized;
     const static float kFreeRatio = 0.5;
     GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
-    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
-    bool bg_worker_stopped = false;
-    if (storage_engine != nullptr) {
-        bg_worker_stopped = storage_engine->bg_worker_stopped();
-    }
-    while (!bg_worker_stopped) {
+
+    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    while (!daemon->stopped()) {
         sleep(config::memory_maintenance_sleep_time_s);
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         MallocExtension::instance()->MarkThreadBusy();
@@ -112,14 +109,7 @@ void* tcmalloc_gc_thread(void* dummy) {
         }
         MallocExtension::instance()->MarkThreadIdle();
 #endif
-
-        storage_engine = ExecEnv::GetInstance()->storage_engine();
-        if (storage_engine != nullptr) {
-            bg_worker_stopped = storage_engine->bg_worker_stopped();
-        }
     }
-
-    return nullptr;
 }
 
 /*
@@ -130,7 +120,7 @@ void* tcmalloc_gc_thread(void* dummy) {
  * 4. max network send bytes rate
  * 5. max network receive bytes rate
  */
-void* calculate_metrics(void* dummy) {
+void calculate_metrics(void* arg_this) {
     int64_t last_ts = -1L;
     int64_t lst_push_bytes = -1;
     int64_t lst_query_bytes = -1;
@@ -139,12 +129,8 @@ void* calculate_metrics(void* dummy) {
     std::map<std::string, int64_t> lst_net_send_bytes;
     std::map<std::string, int64_t> lst_net_receive_bytes;
 
-    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
-    bool bg_worker_stopped = false;
-    if (storage_engine != nullptr) {
-        bg_worker_stopped = storage_engine->bg_worker_stopped();
-    }
-    while (!bg_worker_stopped) {
+    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    while (!daemon->stopped()) {
         StarRocksMetrics::instance()->metrics()->trigger_hook();
 
         if (last_ts == -1L) {
@@ -190,13 +176,7 @@ void* calculate_metrics(void* dummy) {
         }
 
         sleep(15); // 15 seconds
-        storage_engine = ExecEnv::GetInstance()->storage_engine();
-        if (storage_engine != nullptr) {
-            bg_worker_stopped = storage_engine->bg_worker_stopped();
-        }
     }
-
-    return nullptr;
 }
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
@@ -221,11 +201,6 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
         }
     }
     StarRocksMetrics::instance()->initialize(paths, init_system_metrics, disk_devices, network_interfaces);
-
-    if (config::enable_metric_calculator) {
-        pthread_t calculator_pid;
-        pthread_create(&calculator_pid, nullptr, calculate_metrics, nullptr);
-    }
 }
 
 void sigterm_handler(int signo) {
@@ -268,7 +243,7 @@ void init_minidump() {
 #endif
 }
 
-void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
+void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     // google::SetVersionString(get_build_version(false));
     // google::ParseCommandLineFlags(&argc, &argv, true);
     google::ParseCommandLineFlags(&argc, &argv, true);
@@ -280,20 +255,41 @@ void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
     CpuInfo::init();
     DiskInfo::init();
     MemInfo::init();
+    LOG(INFO) << CpuInfo::debug_string();
+    LOG(INFO) << DiskInfo::debug_string();
+    LOG(INFO) << MemInfo::debug_string();
+
     UserFunctionCache::instance()->init(config::user_function_dir);
 
     vectorized::ColumnHelper::init_static_variable();
     vectorized::date::init_date_cache();
 
-    pthread_t tc_malloc_pid;
-    pthread_create(&tc_malloc_pid, nullptr, tcmalloc_gc_thread, nullptr);
+    std::thread tcmalloc_gc_thread(gc_tcmalloc_memory, this);
+    _daemon_threads.emplace_back(std::move(tcmalloc_gc_thread));
 
-    LOG(INFO) << CpuInfo::debug_string();
-    LOG(INFO) << DiskInfo::debug_string();
-    LOG(INFO) << MemInfo::debug_string();
     init_starrocks_metrics(paths);
+
+    if (config::enable_metric_calculator) {
+        std::thread calculate_metrics_thread(calculate_metrics, this);
+        _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
+    }
+
     init_signals();
     init_minidump();
+}
+
+void Daemon::stop() {
+    _stopped.store(true, std::memory_order_release);
+    int thread_size = _daemon_threads.size();
+    for (int i = 0; i < thread_size; ++i) {
+        if (_daemon_threads[i].joinable()) {
+            _daemon_threads[i].join();
+        }
+    }
+}
+
+bool Daemon::stopped() {
+    return _stopped.load(std::memory_order_consume);
 }
 
 } // namespace starrocks
