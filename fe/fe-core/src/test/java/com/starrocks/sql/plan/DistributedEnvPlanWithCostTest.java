@@ -551,6 +551,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, false]\n" +
                 "  |  other predicates: 1: PS_PARTKEY IS NULL\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (7: P_PARTKEY), remote = false\n" +
                 "  |  cardinality: 8000000"));
         // test full outer join
         sql = "select ps_partkey,ps_suppkey from partsupp full outer join part on " +
