@@ -5,6 +5,7 @@
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/column_hash.h"
+#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -112,6 +113,20 @@ struct DictDecoder {
     Status decode(vectorized::Column* in, vectorized::Column* out) {
         DCHECK(in != nullptr);
         DCHECK(out != nullptr);
+
+        // handle const columns
+        if (in->is_constant()) {
+            if (in->only_null()) {
+                bool res = out->append_nulls(in->size());
+                DCHECK(res);
+                return Status::OK();
+            } else {
+                out->append_datum(in->get(0));
+                out->assign(in->size(), 0);
+                return Status::OK();
+            }
+        }
+
         if (!in->is_nullable()) {
             auto res_column = down_cast<ResultColumnType*>(out);
             auto column = down_cast<ColumnType*>(in);
