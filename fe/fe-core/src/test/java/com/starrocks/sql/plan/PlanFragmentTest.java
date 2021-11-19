@@ -4401,8 +4401,8 @@ public class PlanFragmentTest extends PlanTestBase {
 
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
-  
-    @Test  
+
+    @Test
     public void testUnionEmptyNode() throws Exception {
         String sql;
         String plan;
@@ -4531,7 +4531,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  2:EXCHANGE\n" +
                 "     use vectorized: true\n"));
     }
-  
+
     @Test
     public void testPredicateOnRepeatNode() throws Exception {
         FeConstants.runningUnitTest = true;
@@ -4629,5 +4629,22 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("output: avg(89)"));
         Config.enable_decimal_v3 = false;
+    }
+
+    @Test 
+    public void testLimitPushDownJoin() throws Exception {
+        String sql = "select * from t0 left join[shuffle] t1 on t0.v2 = t1.v5 where t1.v6 is null limit 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 5: v5\n" +
+                "  |  other predicates: 6: v6 IS NULL\n" +
+                "  |  limit: 2"));
+        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0"));
     }
 }
