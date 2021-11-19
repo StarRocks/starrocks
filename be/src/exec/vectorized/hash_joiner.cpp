@@ -222,7 +222,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
         if (!_need_post_probe()) {
             _phase = HashJoinPhase::EOS;
             _ht.close();
-            return Status::OK();
+            return chunk;
         }
 
         RETURN_IF_ERROR(_ht.probe_remain(&chunk, &_ht_has_remain));
