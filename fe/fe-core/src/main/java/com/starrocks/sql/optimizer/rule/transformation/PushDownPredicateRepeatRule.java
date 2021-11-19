@@ -38,7 +38,8 @@ public class PushDownPredicateRepeatRule extends TransformationRule {
         LogicalFilterOperator logicalFilterOperator = (LogicalFilterOperator) input.getOp();
         List<ScalarOperator> predicates = Utils.extractConjuncts(logicalFilterOperator.getPredicate());
 
-        LogicalRepeatOperator logicalRepeatOperator = (LogicalRepeatOperator) input.inputAt(0).getOp();
+        OptExpression repeatOpt = input.getInputs().get(0);
+        LogicalRepeatOperator logicalRepeatOperator = (LogicalRepeatOperator) repeatOpt.getOp();
         Set<ColumnRefOperator> repeatColumns = Sets.newHashSet();
         logicalRepeatOperator.getRepeatColumnRef().forEach(repeatColumns::addAll);
 
@@ -53,20 +54,19 @@ public class PushDownPredicateRepeatRule extends TransformationRule {
 
         // merge filter
         predicates.add(logicalRepeatOperator.getPredicate());
-        OptExpression opt = OptExpression.create(new LogicalRepeatOperator.Builder().withOperator(logicalRepeatOperator)
-                        .setPredicate(Utils.compoundAnd(predicates))
-                        .build(),
-                input.inputAt(0).getInputs());
+        logicalRepeatOperator.setPredicate(Utils.compoundAnd(predicates));
 
         // push down
         if (pushDownPredicates.size() > 0) {
             LogicalFilterOperator newFilter = new LogicalFilterOperator(Utils.compoundAnd(pushDownPredicates));
             OptExpression oe = new OptExpression(newFilter);
-            oe.getInputs().addAll(opt.getInputs());
-            opt.setChild(0, oe);
+            oe.getInputs().addAll(repeatOpt.getInputs());
+
+            repeatOpt.getInputs().clear();
+            repeatOpt.getInputs().add(oe);
         }
 
-        return Lists.newArrayList(opt);
+        return Lists.newArrayList(repeatOpt);
     }
 
     /**
