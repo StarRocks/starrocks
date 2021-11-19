@@ -4641,10 +4641,15 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  equal join conjunct: 2: v2 = 5: v5\n" +
                 "  |  other predicates: 6: v6 IS NULL\n" +
                 "  |  limit: 2"));
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
-                "     TABLE: t0\n" +
+        Assert.assertTrue(plan.contains("     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1\n" +
-                "     rollup: t0"));
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n" +
+                "     use vectorized: true\n"));
     }
 }
