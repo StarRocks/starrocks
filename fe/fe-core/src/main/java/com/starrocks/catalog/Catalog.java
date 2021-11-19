@@ -442,6 +442,8 @@ public class Catalog {
 
     private long imageJournalId;
 
+    private long feStartTime;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -506,6 +508,10 @@ public class Catalog {
 
     public DynamicPartitionScheduler getDynamicPartitionScheduler() {
         return this.dynamicPartitionScheduler;
+    }
+
+    public long getFeStartTime() {
+        return feStartTime;
     }
 
     private static class SingletonHolder {
@@ -860,6 +866,7 @@ public class Catalog {
         while (true) {
             if (isReady()) {
                 LOG.info("catalog is ready. FE type: {}", feType);
+                feStartTime = System.currentTimeMillis();
                 break;
             }
 
