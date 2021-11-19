@@ -123,12 +123,6 @@ public class StreamLoadScanNode extends LoadScanNode {
             }
             rangeDesc.setStrip_outer_array(streamLoadTask.isStripOuterArray());
         }
-        // csv/json/parquet load is controlled by Config::enable_vectorized_file_load
-        // if Config::enable_vectorized_file_load is set true,
-        // vectorized load will been enabled
-        if (rangeDesc.format_type != TFileFormatType.FORMAT_ORC && !Config.enable_vectorized_file_load) {
-            useVectorizedLoad = false;
-        }
         rangeDesc.setSplittable(false);
         switch (streamLoadTask.getFileType()) {
             case FILE_LOCAL:

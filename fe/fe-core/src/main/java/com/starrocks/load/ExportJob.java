@@ -349,7 +349,7 @@ public class ExportJob implements Writable {
                 break;
         }
         fragment.setOutputExprs(createOutputExprs());
-        if (Config.vectorized_load_enable && fragment.isOutPutExprsVectorized()) {
+        if (fragment.isOutPutExprsVectorized()) {
             fragment.setOutPutExprsUseVectorized();
         }
 
