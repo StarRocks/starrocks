@@ -127,7 +127,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     private final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
 
-    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+    private List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
+    private List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -258,22 +259,29 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         result.setPartition(dataPartition.toThrift());
 
-        if (!globalDicts.isEmpty()) {
-            List<TGlobalDict> dicts = Lists.newArrayList();
-            for(Pair<Integer, ColumnDict> dictPair: globalDicts) {
-                TGlobalDict globalDict = new TGlobalDict();
-                globalDict.setColumnId(dictPair.first);
-                List<String> strings = Lists.newArrayList();
-                List<Integer> integers = Lists.newArrayList();
-                for (Map.Entry<String, Integer> kv: dictPair.second.getDict().entrySet()) {
-                    strings.add(kv.getKey());
-                    integers.add(kv.getValue());
-                }
-                globalDict.setStrings(strings);
-                globalDict.setIds(integers);
-                dicts.add(globalDict);
+        if (!queryGlobalDicts.isEmpty()) {
+            result.setQuery_global_dicts(dictToThrift(queryGlobalDicts));
+        }
+        if (!loadGlobalDicts.isEmpty()) {
+            result.setLoad_global_dicts(dictToThrift(loadGlobalDicts));
+        }
+        return result;
+    }
+
+    private List<TGlobalDict> dictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
+        List<TGlobalDict> result = Lists.newArrayList();
+        for(Pair<Integer, ColumnDict> dictPair: dicts) {
+            TGlobalDict globalDict = new TGlobalDict();
+            globalDict.setColumnId(dictPair.first);
+            List<String> strings = Lists.newArrayList();
+            List<Integer> integers = Lists.newArrayList();
+            for (Map.Entry<String, Integer> kv: dictPair.second.getDict().entrySet()) {
+                strings.add(kv.getKey());
+                integers.add(kv.getValue());
             }
-            result.setGlobal_dicts(dicts);
+            globalDict.setStrings(strings);
+            globalDict.setIds(integers);
+            result.add(globalDict);
         }
         return result;
     }
@@ -505,16 +513,21 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return probeRuntimeFilters;
     }
 
-    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
-        return this.globalDicts;
+    public List<Pair<Integer, ColumnDict>> getQueryGlobalDicts() {
+        return this.queryGlobalDicts;
     }
 
-    public void setGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
-        this.globalDicts = dicts;
+    public void setQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
+        this.queryGlobalDicts = dicts;
     }
 
     // For plan fragment has join
-    public void mergeGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
-        this.globalDicts.addAll(dicts);
+    public void mergeQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
+        this.queryGlobalDicts.addAll(dicts);
+    }
+
+    public void setLoadGlobalDicts(
+            List<Pair<Integer, ColumnDict>> loadGlobalDicts) {
+        this.loadGlobalDicts = loadGlobalDicts;
     }
 }

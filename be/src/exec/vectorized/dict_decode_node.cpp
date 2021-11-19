@@ -58,8 +58,8 @@ Status DictDecodeNode::open(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(_children[0]->open(state));
 
-    const auto& global_dict = state->get_global_dict_map();
-    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
+    const auto& global_dict = state->get_query_global_dict_map();
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
 
     DCHECK_EQ(_encode_column_cids.size(), _decode_column_cids.size());
     int need_decode_size = _decode_column_cids.size();

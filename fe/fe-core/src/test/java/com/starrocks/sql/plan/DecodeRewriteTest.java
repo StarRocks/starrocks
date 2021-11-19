@@ -242,12 +242,12 @@ public class DecodeRewriteTest extends PlanTestBase{
         plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+                "query_global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+                "query_global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -381,9 +381,9 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertTrue(plan.contains("P_MFGR IN ('MFGR#1', 'MFGR#2'), enable_column_expr_predicate:false, " +
                 "dict_string_id_to_int_ids:{}"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), global_dicts:[TGlobalDict(columnId:28"));
+                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
         Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]))), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), global_dicts:[TGlobalDict(columnId:28"));
+                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
     }
 
     @Test
