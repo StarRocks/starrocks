@@ -646,6 +646,10 @@ CONF_Int64(pipeline_io_buffer_size, "64");
 CONF_Int16(bitmap_serialize_version, "1");
 // schema change vectorized
 CONF_Bool(enable_schema_change_vectorized, "true");
+// buffer stream reserve size
+// each column will reserve buffer_stream_reserve_size bytes for read
+// default: 8k
+CONF_mInt32(buffer_stream_reserve_size, "8192");
 
 } // namespace config
 
