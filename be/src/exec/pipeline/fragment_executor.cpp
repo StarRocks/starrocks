@@ -111,8 +111,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_plan(plan);
 
     // Set up global dict
-    if (request.fragment.__isset.global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_global_dict(request.fragment.global_dicts));
+    if (request.fragment.__isset.query_global_dicts) {
+        RETURN_IF_ERROR(runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
 
     // Set senders of exchange nodes before pipeline build

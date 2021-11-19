@@ -338,15 +338,27 @@ int64_t RuntimeState::get_load_mem_limit() const {
     return 0;
 }
 
-const vectorized::GlobalDictMaps& RuntimeState::get_global_dict_map() const {
-    return _global_dicts;
+const vectorized::GlobalDictMaps& RuntimeState::get_query_global_dict_map() const {
+    return _query_global_dicts;
 }
 
-vectorized::GlobalDictMaps* RuntimeState::mutable_global_dict_map() {
-    return &_global_dicts;
+const vectorized::GlobalDictMaps& RuntimeState::get_load_global_dict_map() const {
+    return _load_global_dicts;
 }
 
-Status RuntimeState::init_global_dict(const GlobalDictLists& global_dict_list) {
+vectorized::GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
+    return &_query_global_dicts;
+}
+
+Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
+    return _build_global_dict(global_dict_list, &_query_global_dicts);
+}
+
+Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
+    return _build_global_dict(global_dict_list, &_load_global_dicts);
+}
+
+Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result) {
     for (const auto& global_dict : global_dict_list) {
         DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
         vectorized::GlobalDictMap dict_map;
@@ -360,8 +372,7 @@ Status RuntimeState::init_global_dict(const GlobalDictLists& global_dict_list) {
             dict_map.emplace(slice, global_dict.ids[i]);
             rdict_map.emplace(global_dict.ids[i], slice);
         }
-        _global_dicts.emplace(uint32_t(global_dict.columnId),
-                              std::make_pair(std::move(dict_map), std::move(rdict_map)));
+        result->emplace(uint32_t(global_dict.columnId), std::make_pair(std::move(dict_map), std::move(rdict_map)));
     }
     return Status::OK();
 }
