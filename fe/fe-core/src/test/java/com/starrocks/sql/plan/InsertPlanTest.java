@@ -210,6 +210,10 @@ public class InsertPlanTest extends PlanTestBase {
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().equals("Column has no default value, column=k5"));
         }
+
+        sql = "insert into duplicate_table_with_default(K1,k2,k3) values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
+        explainString = getInsertExecPlan(sql);
+        Assert.assertTrue(explainString.contains("<slot 1> : 1: expr"));
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
