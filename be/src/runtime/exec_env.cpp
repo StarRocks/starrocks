@@ -74,6 +74,26 @@ static int64_t calc_process_max_load_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
 }
 
+static int64_t calc_compaction_max_load_memory(int64_t process_mem_limit) {
+    int64_t limit = config::compaction_max_memory_limit;
+    int64_t percent = config::compaction_max_memory_limit_percent;
+
+    if (config::compaction_memory_limit_per_worker < 0) {
+        config::compaction_memory_limit_per_worker = 2147483648; // 2G
+    }
+
+    if (process_mem_limit < 0) {
+        return -1;
+    }
+    if (limit < 0) {
+        limit = process_mem_limit;
+    }
+    if (percent < 0) {
+        percent = 100;
+    }
+    return std::min<int64_t>(limit, process_mem_limit * percent / 100);
+}
+
 Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths) {
     return env->_init(store_paths);
 }
@@ -191,7 +211,9 @@ Status ExecEnv::init_mem_tracker() {
     int64_t load_mem_limit = calc_process_max_load_memory(_mem_tracker->limit());
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", _mem_tracker);
     _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", _mem_tracker);
-    _compaction_mem_tracker = new MemTracker(-1, "compaction", _mem_tracker);
+
+    int64_t compaction_mem_limit = calc_compaction_max_load_memory(_mem_tracker->limit());
+    _compaction_mem_tracker = new MemTracker(compaction_mem_limit, "compaction", _mem_tracker);
     _schema_change_mem_tracker = new MemTracker(-1, "schema_change", _mem_tracker);
     _column_pool_mem_tracker = new MemTracker(-1, "column_pool", _mem_tracker);
     _page_cache_mem_tracker = new MemTracker(-1, "page_cache", _mem_tracker);

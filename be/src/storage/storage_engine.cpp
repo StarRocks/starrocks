@@ -588,8 +588,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
     vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
@@ -629,8 +628,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
 
     StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
     vectorized::BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
 
     Status res = base_compaction.compact();
