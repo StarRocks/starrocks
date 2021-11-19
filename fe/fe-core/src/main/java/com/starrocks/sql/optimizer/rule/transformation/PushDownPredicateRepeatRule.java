@@ -53,22 +53,20 @@ public class PushDownPredicateRepeatRule extends TransformationRule {
 
         // merge filter
         predicates.add(logicalRepeatOperator.getPredicate());
-        input.setChild(0, OptExpression.create(new LogicalRepeatOperator.Builder().withOperator(logicalRepeatOperator)
+        OptExpression opt = OptExpression.create(new LogicalRepeatOperator.Builder().withOperator(logicalRepeatOperator)
                         .setPredicate(Utils.compoundAnd(predicates))
                         .build(),
-                input.inputAt(0).getInputs()));
+                input.inputAt(0).getInputs());
 
         // push down
         if (pushDownPredicates.size() > 0) {
             LogicalFilterOperator newFilter = new LogicalFilterOperator(Utils.compoundAnd(pushDownPredicates));
             OptExpression oe = new OptExpression(newFilter);
-            oe.getInputs().addAll(input.inputAt(0).getInputs());
-
-            input.inputAt(0).getInputs().clear();
-            input.inputAt(0).getInputs().add(oe);
+            oe.getInputs().addAll(opt.getInputs());
+            opt.setChild(0, oe);
         }
 
-        return Lists.newArrayList(input.inputAt(0));
+        return Lists.newArrayList(opt);
     }
 
     /**

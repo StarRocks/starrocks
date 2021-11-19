@@ -4540,6 +4540,21 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 IS NULL"));
+        Assert.assertFalse(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 IS NULL"));
+
+        sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is not null;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
+                "  |  PREDICATES: 1: v1 IS NOT NULL"));
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 IS NOT NULL"));
+
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = 1;";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
@@ -4549,11 +4564,38 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 1"));
+
+        sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = 1 + 2;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
+                "  |  PREDICATES: 1: v1 = 3"));
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 3"));
+
+
+        sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = v2;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
+                "  |  PREDICATES: 1: v1 = 2: v2"));
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 2: v2"));
+
+
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 <=> v2;";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 <=> 2: v2"));
+        Assert.assertFalse(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON" +
+                "     PREDICATES: 1: v1 <=> 2: v2"));
         FeConstants.runningUnitTest = false;
     }
 
