@@ -22,7 +22,6 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
     public static final MergeLimitDirectRule WINDOW = new MergeLimitDirectRule(OperatorType.LOGICAL_WINDOW);
     public static final MergeLimitDirectRule JOIN = new MergeLimitDirectRule(OperatorType.LOGICAL_JOIN);
-    public static final MergeLimitDirectRule UNION = new MergeLimitDirectRule(OperatorType.LOGICAL_UNION);
     public static final MergeLimitDirectRule INTERSECT = new MergeLimitDirectRule(OperatorType.LOGICAL_INTERSECT);
     public static final MergeLimitDirectRule EXCEPT = new MergeLimitDirectRule(OperatorType.LOGICAL_EXCEPT);
     public static final MergeLimitDirectRule VALUES = new MergeLimitDirectRule(OperatorType.LOGICAL_VALUES);

@@ -4265,5 +4265,4 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREDICATES: 1: v1 <=> 2: v2"));
         FeConstants.runningUnitTest = false;
     }
-
 }
