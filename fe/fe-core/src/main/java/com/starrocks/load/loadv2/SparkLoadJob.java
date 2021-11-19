@@ -900,7 +900,7 @@ public class SparkLoadJob extends BulkLoadJob {
         public PushBrokerReaderParams() {
             this.tBrokerScanRange = new TBrokerScanRange();
             this.tDescriptorTable = null;
-            this.useVectorized = Config.enable_vectorized_file_load;
+            this.useVectorized = true;
         }
 
         public void init(List<Column> columns, BrokerDesc brokerDesc) throws UserException {
