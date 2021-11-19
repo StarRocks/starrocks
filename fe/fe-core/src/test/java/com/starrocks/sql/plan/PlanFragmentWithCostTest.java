@@ -645,6 +645,20 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+    public void testThriftWaitingNodeIds() throws Exception {
+        Catalog catalog = connectContext.getCatalog();
+        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        setTableStatistics(t0, 10000000);
+        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        setTableStatistics(t1, 10000);
+
+        String sql = "select * from t0 inner join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("TPlanNode(node_id:3, node_type:HASH_JOIN_NODE"));
+        Assert.assertTrue(plan.contains("local_rf_waiting_set:[3]"));
+    }
+
+    @Test
     public void testIntersectReorder() throws Exception {
         // check cross join generate plan without exception
         Catalog catalog = connectContext.getCatalog();
