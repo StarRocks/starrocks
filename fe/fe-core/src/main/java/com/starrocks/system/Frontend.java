@@ -45,6 +45,7 @@ public class Frontend implements Writable {
     private long lastUpdateTime;
     private long startTime;
     private String heartbeatErrMsg = "";
+    private String feVersion;
 
     private boolean isAlive = false;
 
@@ -102,6 +103,10 @@ public class Frontend implements Writable {
         return startTime;
     }
 
+    public String getFeVersion() {
+        return feVersion;
+    }
+
     /**
      * handle Frontend's heartbeat response.
      * Because the replayed journal id is very likely to be changed at each heartbeat response,
@@ -117,6 +122,7 @@ public class Frontend implements Writable {
             replayedJournalId = hbResponse.getReplayedJournalId();
             lastUpdateTime = hbResponse.getHbTime();
             startTime = hbResponse.getFeStartTime();
+            feVersion = hbResponse.getFeVersion();
             heartbeatErrMsg = "";
             isChanged = true;
         } else {

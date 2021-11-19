@@ -23,6 +23,7 @@ package com.starrocks.system;
 
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.TimeUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -39,13 +40,14 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
     private int rpcPort;
     private long replayedJournalId;
     private long feStartTime;
+    private String feVersion;
 
     public FrontendHbResponse() {
         super(HeartbeatResponse.Type.FRONTEND);
     }
 
     public FrontendHbResponse(String name, int queryPort, int rpcPort,
-                              long replayedJournalId, long hbTime, long feStartTime) {
+                              long replayedJournalId, long hbTime, long feStartTime, String feVersion) {
         super(HeartbeatResponse.Type.FRONTEND);
         this.status = HbStatus.OK;
         this.name = name;
@@ -54,6 +56,7 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         this.replayedJournalId = replayedJournalId;
         this.hbTime = hbTime;
         this.feStartTime = feStartTime;
+        this.feVersion = feVersion;
     }
 
     public FrontendHbResponse(String name, String errMsg) {
@@ -81,6 +84,10 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
 
     public long getFeStartTime() {
         return feStartTime;
+    }
+
+    public String getFeVersion() {
+        return feVersion;
     }
 
     public static FrontendHbResponse read(DataInput in) throws IOException {
@@ -115,6 +122,8 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         sb.append(", queryPort: ").append(queryPort);
         sb.append(", rpcPort: ").append(rpcPort);
         sb.append(", replayedJournalId: ").append(replayedJournalId);
+        sb.append(", feStartTime: ").append(TimeUtils.longToTimeString(feStartTime));
+        sb.append(", feVersion: ").append(feVersion);
         return sb.toString();
     }
 

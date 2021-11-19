@@ -26,7 +26,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.Version;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Frontend;
@@ -126,7 +125,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
             } else {
                 info.add("NULL");
             }
-            info.add(Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
+            info.add(fe.getFeVersion());
 
             infos.add(info);
         }

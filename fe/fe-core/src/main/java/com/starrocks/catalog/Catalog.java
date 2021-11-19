@@ -442,7 +442,7 @@ public class Catalog {
 
     private long imageJournalId;
 
-    private long feStartTime = System.currentTimeMillis();
+    private long feStartTime;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
@@ -866,6 +866,7 @@ public class Catalog {
         while (true) {
             if (isReady()) {
                 LOG.info("catalog is ready. FE type: {}", feType);
+                feStartTime = System.currentTimeMillis();
                 break;
             }
 
