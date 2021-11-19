@@ -76,6 +76,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateExceptRu
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRepeatRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateTableFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRule;
@@ -189,10 +190,10 @@ public class RuleSet {
                 new PushDownPredicateExceptRule(),
                 new PushDownPredicateIntersectRule(),
                 new PushDownPredicateTableFunctionRule(),
+                new PushDownPredicateRepeatRule(),
                 MergePredicateRule.HIVE_SCAN,
                 MergePredicateRule.SCHEMA_SCAN,
                 MergePredicateRule.MYSQL_SCAN,
-                MergePredicateRule.REPEAT_NODE,
                 new MergeTwoFiltersRule()
         ));
 
