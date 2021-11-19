@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import org.checkerframework.checker.units.qual.A;
 import org.junit.Assert;
 import org.junit.Test;
 
