@@ -23,9 +23,11 @@ public class PushDownLimitJoinRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
+        LogicalJoinOperator join = (LogicalJoinOperator) input.getInputs().get(0).getOp();
 
         // 1. Has offset can't push down
-        return !limit.hasOffset();
+        // 2. Has predicate can't push down
+        return !limit.hasOffset() && join.getPredicate() == null;
     }
 
     @Override
