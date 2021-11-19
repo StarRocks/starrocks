@@ -7,7 +7,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -260,7 +259,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
      * */
     private boolean tryColocate(HashDistributionSpec leftShuffleDistribution,
                                 HashDistributionSpec rightShuffleDistribution) {
-        if (Config.disable_colocate_join || ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
+        if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
             return false;
         }
 
