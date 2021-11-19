@@ -946,7 +946,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         Status status;
         if (sc_params.sc_directly) {
-            status = new_tablet->updates()->perform_directly_schema_change(request, sc_params);
+            status = new_tablet->updates()->perform_directly_schema_change(request.alter_version, base_tablet,
+                                                                           sc_params.chunk_changer.get());
         } else if (sc_params.sc_sorting) {
             LOG(WARNING) << "schema change of primary key model do not support sorting.";
             status = Status::NotSupported("schema change of primary key model do not support sorting.");

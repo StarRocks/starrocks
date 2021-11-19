@@ -1811,14 +1811,13 @@ Status TabletUpdates::perform_linked_schema_change(int64_t request_version, Tabl
     return Status::OK();
 }
 
-Status TabletUpdates::perform_directly_schema_change(const TAlterTabletReqV2& request,
-                                                     vectorized::SchemaChangeParams& sc_params) {
+Status TabletUpdates::perform_directly_schema_change(int64_t request_version,
+                                                     const std::shared_ptr<Tablet>& base_tablet,
+                                                     vectorized::ChunkChanger* chunk_changer) {
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << "perform_directly_schema_change is only allowed in schema change process";
-    int64_t request_version = request.alter_version;
     LOG(INFO) << "perform_directly_schema_change start tablet:" << _tablet.tablet_id()
               << " request_version:" << request_version << " #pending:" << _pending_commits.size();
-    const std::shared_ptr<Tablet>& base_tablet = sc_params.base_tablet;
     int64_t max_version = base_tablet->updates()->max_version();
     if (max_version < request_version) {
         LOG(WARNING) << "perform_directly_schema_change base_tablet's max_version:" << max_version
@@ -1855,8 +1854,6 @@ Status TabletUpdates::perform_directly_schema_change(const TAlterTabletReqV2& re
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
         return Status::InternalError("Fail to delete old meta and write new meta");
     }
-
-    auto chunk_changer = sc_params.chunk_changer.get();
 
     vectorized::Schema base_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
     vectorized::TabletReaderParams read_params;

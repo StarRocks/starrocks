@@ -139,25 +139,6 @@ private:
     DISALLOW_COPY_AND_ASSIGN(SchemaChangeWithSorting);
 };
 
-struct AlterMaterializedViewParam {
-    std::string column_name;
-    std::string origin_column_name;
-    std::string mv_expr;
-};
-
-struct SchemaChangeParams {
-    AlterTabletType alter_tablet_type;
-    TabletSharedPtr base_tablet;
-    TabletSharedPtr new_tablet;
-    std::vector<std::unique_ptr<vectorized::TabletReader>> rowset_readers;
-    Version version;
-    std::unordered_map<std::string, AlterMaterializedViewParam> materialized_params_map;
-    std::vector<RowsetSharedPtr> rowsets_to_change;
-    bool sc_sorting = false;
-    bool sc_directly = false;
-    std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
-};
-
 class SchemaChangeHandler {
 public:
     SchemaChangeHandler() {}
@@ -165,6 +146,25 @@ public:
 
     // schema change v2, it will not set alter task in base tablet
     Status process_alter_tablet_v2(const TAlterTabletReqV2& request);
+
+    struct AlterMaterializedViewParam {
+        std::string column_name;
+        std::string origin_column_name;
+        std::string mv_expr;
+    };
+
+    struct SchemaChangeParams {
+        AlterTabletType alter_tablet_type;
+        TabletSharedPtr base_tablet;
+        TabletSharedPtr new_tablet;
+        std::vector<std::unique_ptr<vectorized::TabletReader>> rowset_readers;
+        Version version;
+        std::unordered_map<std::string, AlterMaterializedViewParam> materialized_params_map;
+        std::vector<RowsetSharedPtr> rowsets_to_change;
+        bool sc_sorting = false;
+        bool sc_directly = false;
+        std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
+    };
 
 private:
     Status _get_versions_to_be_changed(TabletSharedPtr base_tablet, std::vector<Version>* versions_to_be_changed);
