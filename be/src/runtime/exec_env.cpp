@@ -78,8 +78,8 @@ static int64_t calc_compaction_max_load_memory(int64_t process_mem_limit) {
     int64_t limit = config::compaction_max_memory_limit_bytes;
     int64_t percent = config::compaction_max_memory_limit_percent;
 
-    if (config::compaction_memory_limit_for_per_worker < 0) {
-        config::compaction_memory_limit_for_per_worker = 2147483648; // 2G
+    if (config::compaction_memory_limit_per_worker < 0) {
+        config::compaction_memory_limit_per_worker = 2147483648; // 2G
     }
 
     if (process_mem_limit < 0) {
