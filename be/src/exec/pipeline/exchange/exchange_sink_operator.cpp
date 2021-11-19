@@ -96,7 +96,6 @@ private:
 
     TNetworkAddress _brpc_dest_addr;
 
-    PUniqueId _finst_id;
     PTransmitChunkParamsPtr _chunk_request;
 
     doris::PBackendService_Stub* _brpc_stub = nullptr;
@@ -117,10 +116,6 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
                         ", maybe version is not compatible.";
         return Status::InternalError("no brpc destination");
     }
-
-    // initialize brpc request
-    _finst_id.set_hi(_fragment_instance_id.hi);
-    _finst_id.set_lo(_fragment_instance_id.lo);
 
     // _brpc_timeout_ms = std::min(3600, state->query_options().query_timeout) * 1000;
     // For bucket shuffle, the dest is unreachable, there is no need to establish a connection
@@ -159,7 +154,6 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     *is_real_sent = false;
     if (_chunk_request == nullptr) {
         _chunk_request = std::make_shared<PTransmitChunkParams>();
-        _chunk_request->set_allocated_finst_id(&_finst_id);
         _chunk_request->set_node_id(_dest_node_id);
         _chunk_request->set_sender_id(_parent->_sender_id);
         _chunk_request->set_be_number(_parent->_be_number);
@@ -190,7 +184,6 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
 
 Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr chunk_request,
                                                          const butil::IOBuf& attachment) {
-    chunk_request->set_allocated_finst_id(&_finst_id);
     chunk_request->set_node_id(_dest_node_id);
     chunk_request->set_sender_id(_parent->_sender_id);
     chunk_request->set_be_number(_parent->_be_number);
@@ -204,7 +197,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
 
 Status ExchangeSinkOperator::Channel::_close_internal() {
     // no need to send EOS packet to pseudo destinations in scenarios of bucket shuffle join.
-    if (this->_finst_id.lo() == -1) {
+    if (this->_fragment_instance_id.lo == -1) {
         return Status::OK();
     }
     RETURN_IF_ERROR(send_one_chunk(_chunk != nullptr ? _chunk.get() : nullptr, true));
