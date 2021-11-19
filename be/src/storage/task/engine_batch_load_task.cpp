@@ -227,21 +227,13 @@ OLAPStatus EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vecto
     }
 
     // 2. Process delete data by push interface
-    bool use_vectorized = request.__isset.use_vectorized && request.use_vectorized;
     DCHECK(request.__isset.transaction_id);
-
-    if (use_vectorized) {
-        vectorized::PushHandler push_handler;
-        Status st = push_handler.process_streaming_ingestion(tablet, request, PUSH_FOR_DELETE, tablet_info_vec);
-        if (!st.ok()) {
-            LOG(WARNING) << "fail to process streaming ingestion. res=" << st.to_string()
-                         << ", transaction_id=" << request.transaction_id << ", tablet=" << tablet->full_name();
-            res = OLAP_ERR_PUSH_INIT_ERROR;
-        }
-
-    } else {
-        PushHandler push_handler;
-        res = push_handler.process_streaming_ingestion(tablet, request, PUSH_FOR_DELETE, tablet_info_vec);
+    vectorized::PushHandler push_handler;
+    Status st = push_handler.process_streaming_ingestion(tablet, request, PUSH_FOR_DELETE, tablet_info_vec);
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to process streaming ingestion. res=" << st.to_string()
+                     << ", transaction_id=" << request.transaction_id << ", tablet=" << tablet->full_name();
+        res = OLAP_ERR_PUSH_INIT_ERROR;
     }
 
     if (res != OLAP_SUCCESS) {
