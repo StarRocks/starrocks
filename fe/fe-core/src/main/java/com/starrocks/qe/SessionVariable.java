@@ -412,6 +412,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @Deprecated
     private boolean enableCbo = true;
 
+    @VariableMgr.VarAttr(name = "enable_vectorized_engine", alias = "vectorized_engine_enable",
+            flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean vectorizedEngineEnable = true;
+
+    @VariableMgr.VarAttr(name = "enable_vectorized_insert", alias = "vectorized_insert_enable",
+            flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean vectorizedInsertEnable = true;
+
     @VariableMgr.VarAttr(name = "prefer_join_method", flag = VariableMgr.INVISIBLE)
     @Deprecated
     private String preferJoinMethod = "broadcast";
