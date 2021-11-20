@@ -26,6 +26,7 @@
 #include <functional>
 #include <iostream>
 
+#include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "env/env_memory.h"
 #include "gutil/strings/substitute.h"
@@ -41,8 +42,11 @@
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/segment_iterator.h"
 #include "storage/rowset/segment_v2/segment_writer.h"
+#include "storage/rowset/vectorized/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/chunk_iterator.h"
 #include "util/file_utils.h"
 
 #define ASSERT_OK(expr)                                   \
@@ -109,7 +113,7 @@ protected:
         fs::CreateBlockOptions block_opts({filename});
         ASSERT_OK(_block_mgr->create_block(block_opts, &wblock));
         SegmentWriter writer(std::move(wblock), 0, &build_schema, opts);
-        ASSERT_OK(writer.init(10));
+        ASSERT_OK(writer.init());
 
         RowCursor row;
         auto olap_st = row.init(build_schema);
@@ -616,7 +620,7 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     fs::CreateBlockOptions wblock_opts({fname});
     ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
     SegmentWriter writer(std::move(wblock), 0, tablet_schema.get(), opts);
-    ASSERT_OK(writer.init(10));
+    ASSERT_OK(writer.init());
 
     RowCursor row;
     auto olap_st = row.init(*tablet_schema);
@@ -776,7 +780,7 @@ TEST_F(SegmentReaderWriterTest, TestStringDict) {
     fs::CreateBlockOptions wblock_opts({fname});
     ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
     SegmentWriter writer(std::move(wblock), 0, tablet_schema.get(), opts);
-    ASSERT_OK(writer.init(10));
+    ASSERT_OK(writer.init());
 
     RowCursor row;
     auto olap_st = row.init(*tablet_schema);
@@ -1131,6 +1135,189 @@ TEST_F(SegmentReaderWriterTest, TestBloomFilterIndexUniqueModel) {
     shared_ptr<Segment> seg2;
     build_segment(opts2, schema, schema, 100, DefaultIntGenerator, &seg2);
     ASSERT_TRUE(seg2->column(3)->has_bloom_filter_index());
+}
+
+TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
+    TabletSchema tablet_schema =
+            create_schema({create_int_key(1), create_int_key(2), create_int_value(3), create_int_value(4)});
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+
+    std::string file_name = kSegmentDir + "/horizontal_write_case";
+    std::unique_ptr<fs::WritableBlock> wblock;
+    fs::CreateBlockOptions wblock_opts({file_name});
+    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
+
+    SegmentWriter writer(std::move(wblock), 0, &tablet_schema, opts);
+    ASSERT_OK(writer.init());
+
+    int32_t chunk_size = config::vector_chunk_size;
+    size_t num_rows = 10000;
+    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+    auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+    for (auto i = 0; i < num_rows % chunk_size; ++i) {
+        chunk->reset();
+        auto& cols = chunk->columns();
+        for (auto j = 0; j < chunk_size; ++j) {
+            if (i * chunk_size + j >= num_rows) {
+                break;
+            }
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
+            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+        }
+        ASSERT_OK(writer.append_chunk(*chunk));
+    }
+
+    uint64_t file_size = 0;
+    uint64_t index_size;
+    ASSERT_OK(writer.finalize(&file_size, &index_size));
+
+
+    auto segment = *segment_v2::Segment::open(_block_mgr, file_name, 0, &tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    vectorized::SegmentReadOptions seg_options;
+    seg_options.block_mgr = _block_mgr;
+    OlapReaderStatistics stats;
+    seg_options.stats = &stats;
+    auto res = segment->new_iterator(schema, seg_options);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
+    auto seg_iterator = res.value();
+
+    size_t count = 0;
+    while (true) {
+        chunk->reset();
+        auto st = seg_iterator->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_FALSE(!st.ok());
+        for (auto i = 0; i < chunk->num_rows(); ++i) {
+            EXPECT_EQ(count, chunk->get(i)[0].get_int32());
+            EXPECT_EQ(count + 1, chunk->get(i)[1].get_int32());
+            EXPECT_EQ(count + 2, chunk->get(i)[2].get_int32());
+            EXPECT_EQ(count + 3, chunk->get(i)[3].get_int32());
+            ++count;
+        }
+    }
+    EXPECT_EQ(count, num_rows);
+}
+
+TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
+    TabletSchema tablet_schema =
+            create_schema({create_int_key(1), create_int_key(2), create_int_value(3), create_int_value(4)});
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+
+    std::string file_name = kSegmentDir + "/vertical_write_case";
+    std::unique_ptr<fs::WritableBlock> wblock;
+    fs::CreateBlockOptions wblock_opts({file_name});
+    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
+
+    SegmentWriter writer(std::move(wblock), 0, &tablet_schema, opts);
+
+    int32_t chunk_size = config::vector_chunk_size;
+    size_t num_rows = 10000;
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+
+    {
+        // col1 col2
+        std::vector<uint32_t> column_indexes{0, 1};
+        ASSERT_OK(writer.init(column_indexes, true));
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+        for (auto i = 0; i < num_rows % chunk_size; ++i) {
+            chunk->reset();
+            auto& cols = chunk->columns();
+            for (auto j = 0; j < chunk_size; ++j) {
+                if (i * chunk_size + j >= num_rows) {
+                    break;
+                }
+                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            }
+            ASSERT_OK(writer.append_chunk(*chunk));
+        }
+        ASSERT_OK(writer.finalize_columns(&index_size));
+    }
+
+    {
+        // col3
+        std::vector<uint32_t> column_indexes{2};
+        ASSERT_OK(writer.init(column_indexes, false));
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+        for (auto i = 0; i < num_rows % chunk_size; ++i) {
+            chunk->reset();
+            auto& cols = chunk->columns();
+            for (auto j = 0; j < chunk_size; ++j) {
+                if (i * chunk_size + j >= num_rows) {
+                    break;
+                }
+                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+            }
+            ASSERT_OK(writer.append_chunk(*chunk));
+        }
+        ASSERT_OK(writer.finalize_columns(&index_size));
+    }
+
+    {
+        // col4
+        std::vector<uint32_t> column_indexes{3};
+        ASSERT_OK(writer.init(column_indexes, false));
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+        for (auto i = 0; i < num_rows % chunk_size; ++i) {
+            chunk->reset();
+            auto& cols = chunk->columns();
+            for (auto j = 0; j < chunk_size; ++j) {
+                if (i * chunk_size + j >= num_rows) {
+                    break;
+                }
+                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+            }
+            ASSERT_OK(writer.append_chunk(*chunk));
+        }
+        ASSERT_OK(writer.finalize_columns(&index_size));
+    }
+
+    ASSERT_OK(writer.finalize_footer(&file_size));
+
+    auto segment = *segment_v2::Segment::open(_block_mgr, file_name, 0, &tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    vectorized::SegmentReadOptions seg_options;
+    seg_options.block_mgr = _block_mgr;
+    OlapReaderStatistics stats;
+    seg_options.stats = &stats;
+    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+    auto res = segment->new_iterator(schema, seg_options);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
+    auto seg_iterator = res.value();
+
+    size_t count = 0;
+    auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+    while (true) {
+        chunk->reset();
+        auto st = seg_iterator->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_FALSE(!st.ok());
+        for (auto i = 0; i < chunk->num_rows(); ++i) {
+            EXPECT_EQ(count, chunk->get(i)[0].get_int32());
+            EXPECT_EQ(count + 1, chunk->get(i)[1].get_int32());
+            EXPECT_EQ(count + 2, chunk->get(i)[2].get_int32());
+            EXPECT_EQ(count + 3, chunk->get(i)[3].get_int32());
+            ++count;
+        }
+    }
+    EXPECT_EQ(count, num_rows);
 }
 
 } // namespace segment_v2
