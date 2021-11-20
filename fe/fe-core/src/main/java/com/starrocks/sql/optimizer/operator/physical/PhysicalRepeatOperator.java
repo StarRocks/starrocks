@@ -12,14 +12,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 public class PhysicalRepeatOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> outputGrouping;
-    private final List<Set<ColumnRefOperator>> repeatColumnRef;
+    private final List<List<ColumnRefOperator>> repeatColumnRef;
     private final List<List<Long>> groupingIds;
 
-    public PhysicalRepeatOperator(List<ColumnRefOperator> outputGrouping, List<Set<ColumnRefOperator>> repeatColumnRef,
+    public PhysicalRepeatOperator(List<ColumnRefOperator> outputGrouping, List<List<ColumnRefOperator>> repeatColumnRef,
                                   List<List<Long>> groupingIds, long limit,
                                   ScalarOperator predicate,
                                   Projection projection) {
@@ -42,7 +41,7 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
         return visitor.visitPhysicalRepeat(optExpression, context);
     }
 
-    public List<Set<ColumnRefOperator>> getRepeatColumnRef() {
+    public List<List<ColumnRefOperator>> getRepeatColumnRef() {
         return repeatColumnRef;
     }
 
