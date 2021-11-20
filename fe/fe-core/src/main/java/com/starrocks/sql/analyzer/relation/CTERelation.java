@@ -9,10 +9,8 @@ import java.util.List;
 
 public class CTERelation extends Relation {
     private final String cteId;
-
     private final String name;
-
-    private QueryRelation cteQuery;
+    private final QueryRelation cteQuery;
 
     public CTERelation(String cteId, String name, QueryRelation cteQuery, List<Field> relationFields) {
         super(new RelationFields(relationFields));

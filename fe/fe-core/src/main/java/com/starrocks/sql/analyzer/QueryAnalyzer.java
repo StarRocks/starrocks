@@ -76,6 +76,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -101,6 +102,7 @@ public class QueryAnalyzer {
 
     public QueryRelation transformQueryStmt(QueryStmt stmt, Scope parent) {
         Scope scope = analyzeCTE(stmt, parent);
+        QueryRelation queryRelation;
         if (stmt instanceof SelectStmt) {
             SelectStmt selectStmt = (SelectStmt) stmt;
 
@@ -133,7 +135,7 @@ public class QueryAnalyzer {
                     fields.add(new Field("column_" + fieldIdx, outputTypes[fieldIdx], null, null));
                 }
 
-                return new ValuesRelation(rows, new RelationFields(fields));
+                queryRelation = new ValuesRelation(rows, new RelationFields(fields));
             } else if (selectStmt.getTableRefs().size() == 0) {
                 AnalyzeState analyzeState = new AnalyzeState();
 
@@ -146,15 +148,20 @@ public class QueryAnalyzer {
 
                 List<ArrayList<Expr>> rows = new ArrayList<>();
                 rows.add(row);
-                return new ValuesRelation(rows, outputScope.getRelationFields());
+                queryRelation = new ValuesRelation(rows, outputScope.getRelationFields());
             } else {
-                return transformSelectStmt((SelectStmt) stmt, scope);
+                queryRelation = transformSelectStmt((SelectStmt) stmt, scope);
             }
         } else if (stmt instanceof SetOperationStmt) {
-            return transformSetOperationStmt((SetOperationStmt) stmt, scope);
+            queryRelation = transformSetOperationStmt((SetOperationStmt) stmt, scope);
         } else {
             throw new StarRocksPlannerException("Error query statement", INTERNAL_ERROR);
         }
+
+        for (Map.Entry<String, CTERelation> entry : scope.getAllCteQueries().entrySet()) {
+            queryRelation.addCTERelation(entry.getValue());
+        }
+        return queryRelation;
     }
 
     public QuerySpecification transformSelectStmt(SelectStmt stmt, Scope parent) {
@@ -385,6 +392,7 @@ public class QueryAnalyzer {
         Scope cteScope = new Scope(RelationId.anonymous(), new RelationFields());
         cteScope.setParent(scope);
         for (View withQuery : stmt.getWithClause().getViews()) {
+
             QueryRelation query = transformQueryStmt(withQuery.getQueryStmt(), cteScope);
 
             /*
@@ -393,7 +401,6 @@ public class QueryAnalyzer {
              *  and the previous CTE can rewrite the existing table name.
              *  So here will save an increasing AnalyzeState to add cte scope
              */
-            cteScope.addCteQueries(withQuery.getName(), query);
 
             /*
              * use cte column name as output scope of subquery relation fields
@@ -412,6 +419,12 @@ public class QueryAnalyzer {
                         originField.getType(),
                         tableName, originField.getOriginExpression()));
             }
+
+            cteScope.addCteQueries(withQuery.getName(), new CTERelation(
+                    String.valueOf(RelationId.of(query).hashCode()),
+                    withQuery.getName(),
+                    query,
+                    outputFields.build()));
             query.setOutputScope(
                     new Scope(query.getOutputScope().getRelationId(), new RelationFields(outputFields.build())));
         }
@@ -735,27 +748,9 @@ public class QueryAnalyzer {
         TableName tableName = tableRef.getAliasAsName();
 
         if (tableRef.getName() != null && Strings.isNullOrEmpty(tableName.getDb())) {
-            Optional<QueryRelation> withQuery = scope.getCteQueries(tableRef.getName().getTbl());
+            Optional<CTERelation> withQuery = scope.getCteQueries(tableRef.getName().getTbl());
             if (withQuery.isPresent()) {
-                QueryRelation qb = withQuery.get();
-
-                /*
-                 * use colLables as output scope of subquery relation fields
-                 */
-                ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-                for (int fieldIdx = 0; fieldIdx < qb.getOutputScope().getRelationFields().getAllFields().size();
-                        ++fieldIdx) {
-                    Field originField = qb.getOutputScope().getRelationFields().getAllFields().get(fieldIdx);
-                    outputFields.add(new Field(
-                            originField.getName(), originField.getType(), tableName,
-                            originField.getOriginExpression()));
-                }
-
-                if (session.getSessionVariable().isCboCteReuse()) {
-                    return new CTERelation(tableRef.getName().getTbl(), tableRef.getAlias(), qb, outputFields.build());
-                } else {
-                    return new SubqueryRelation(tableRef.getAlias(), qb, outputFields.build());
-                }
+                return withQuery.get();
             }
         }
 

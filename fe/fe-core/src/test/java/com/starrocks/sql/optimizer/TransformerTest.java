@@ -150,7 +150,7 @@ public class TransformerTest {
 
             Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
             Relation relation = analyzer.analyze(statementBase);
-            LogicalPlan logicalPlan = new RelationTransformer(new ColumnRefFactory()).transform(relation);
+            LogicalPlan logicalPlan = new RelationTransformer(new ColumnRefFactory(), connectContext).transform(relation);
 
             OperatorStrings operatorPrinter = new OperatorStrings();
             try {

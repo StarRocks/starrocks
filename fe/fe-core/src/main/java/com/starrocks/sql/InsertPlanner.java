@@ -69,7 +69,7 @@ public class InsertPlanner {
         //2. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory).transform(insertRelation.getQueryRelation());
+                new RelationTransformer(columnRefFactory, session).transform(insertRelation.getQueryRelation());
 
         //3. Fill in the default value and NULL
         OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertRelation, outputColumns);
