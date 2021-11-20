@@ -79,7 +79,6 @@ public class RangeExtractTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
         Assert.assertTrue(plan.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true"));
     }
 
     @Test
@@ -96,7 +95,6 @@ public class RangeExtractTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
         Assert.assertTrue(plan.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true\n"));
     }
 
     @Test

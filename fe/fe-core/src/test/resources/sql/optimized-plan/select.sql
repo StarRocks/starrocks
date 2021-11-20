@@ -10,7 +10,6 @@ RESULT SINK
 0:UNION
 constant exprs:
 1 | 2
-use vectorized: true
 [end]
 
 [sql]
@@ -33,7 +32,6 @@ RESULT SINK
 0:UNION
 constant exprs:
 1
-use vectorized: true
 [end]
 
 [sql]
@@ -50,7 +48,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 5:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -61,13 +58,10 @@ EXCHANGE ID: 05
 UNPARTITIONED
 
 0:UNION
-|  use vectorized: true
 |
 |----4:EXCHANGE
-|       use vectorized: true
 |
 2:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -80,7 +74,6 @@ RANDOM
 3:UNION
 constant exprs:
 1 | 2
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -100,7 +93,6 @@ tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=2.0
 numNodes=0
-use vectorized: true
 [end]
 
 [sql]
@@ -120,7 +112,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 8:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -132,10 +123,8 @@ UNPARTITIONED
 
 7:AGGREGATE (merge finalize)
 |  group by: 4: v1, 5: v2
-|  use vectorized: true
 |
 6:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -148,16 +137,12 @@ HASH_PARTITIONED: 4: v1, 5: v2
 5:AGGREGATE (update serialize)
 |  STREAMING
 |  group by: 4: v1, 5: v2
-|  use vectorized: true
 |
 0:UNION
-|  use vectorized: true
 |
 |----4:EXCHANGE
-|       use vectorized: true
 |
 2:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -170,7 +155,6 @@ HASH_PARTITIONED: <slot 6>, <slot 7>
 3:UNION
 constant exprs:
 1 | 2
-use vectorized: true
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -190,7 +174,6 @@ tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=2.0
 numNodes=0
-use vectorized: true
 [end]
 
 [sql]
@@ -223,7 +206,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 5:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -237,24 +219,20 @@ UNPARTITIONED
 |  <slot 1> : 1: v1
 |  <slot 2> : 2: v2
 |  <slot 5> : 5: expr
-|  use vectorized: true
 |
 3:HASH JOIN
 |  join op: INNER JOIN (COLOCATE)
 |  hash predicates:
 |  colocate: true
 |  equal join conjunct: 1: v1 = 6: cast
-|  use vectorized: true
 |
 |----2:Project
 |    |  <slot 5> : 5: expr
 |    |  <slot 6> : CAST(4: expr AS BIGINT)
-|    |  use vectorized: true
 |    |
 |    1:UNION
 |       constant exprs:
 |           1 | 2
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: t0
@@ -266,7 +244,6 @@ tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=2.0
 numNodes=0
-use vectorized: true
 [end]
 
 [sql]
@@ -281,7 +258,6 @@ PLAN FRAGMENT 0
   RESULT SINK
 
   0:EMPTYSET
-     use vectorized: true
 [end]
 
 [sql]
@@ -296,7 +272,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 0:EMPTYSET
-use vectorized: true
 [end]
 
 [sql]
@@ -316,10 +291,8 @@ PLAN FRAGMENT 0
 3:AGGREGATE (merge finalize)
   |  output: sum(4: sum)
   |  group by:
-  |  use vectorized: true
   |
 2:EXCHANGE
-     use vectorized: true
 
 PLAN FRAGMENT 1
  OUTPUT EXPRS:
@@ -332,10 +305,8 @@ EXCHANGE ID: 02
 1:AGGREGATE (update serialize)
   |  output: sum(1: v1)
   |  group by:
-  |  use vectorized: true
   |
   0:EMPTYSET
-     use vectorized: true
 [end]
 
 [sql]

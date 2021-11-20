@@ -77,14 +77,12 @@ public class PartitionPruneTest extends PlanTestBase {
     public void testPredicatePrune5() throws Exception {
         String sql = getFragmentPlan("select * from ptest where d2 = '2020-08-01' and d2 < '2020-07-01';");
         assertTrue(sql.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true"));
     }
 
     @Test
     public void testPredicatePrune6() throws Exception {
         String sql = getFragmentPlan("select * from ptest where d2 = '2020-08-01' and d2 = '2020-09-01';");
         assertTrue(sql.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true"));
     }
 
     @Test

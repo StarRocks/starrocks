@@ -44,7 +44,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 22:MERGING-EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -57,7 +56,6 @@ UNPARTITIONED
 21:SORT
 |  order by: <slot 1> 1: S_SUPPKEY ASC
 |  offset: 0
-|  use vectorized: true
 |
 20:Project
 |  <slot 1> : 1: S_SUPPKEY
@@ -65,17 +63,14 @@ UNPARTITIONED
 |  <slot 3> : 3: S_ADDRESS
 |  <slot 5> : 5: S_PHONE
 |  <slot 27> : 27: sum
-|  use vectorized: true
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 1: S_SUPPKEY = 11: L_SUPPKEY
-|  use vectorized: true
 |
 |----18:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: supplier
@@ -87,7 +82,6 @@ tabletList=10111
 cardinality=1000000
 avgRowSize=84.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -100,25 +94,20 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 11: L_SUPPKEY
 17:Project
 |  <slot 11> : 11: L_SUPPKEY
 |  <slot 27> : 27: sum
-|  use vectorized: true
 |
 16:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 27: sum = 47: max
-|  use vectorized: true
 |
 |----15:EXCHANGE
-|       use vectorized: true
 |
 5:AGGREGATE (merge finalize)
 |  output: sum(27: sum)
 |  group by: 11: L_SUPPKEY
-|  use vectorized: true
 |
 4:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -131,10 +120,8 @@ UNPARTITIONED
 14:AGGREGATE (merge finalize)
 |  output: max(47: max)
 |  group by:
-|  use vectorized: true
 |
 13:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -147,19 +134,15 @@ UNPARTITIONED
 12:AGGREGATE (update serialize)
 |  output: max(46: sum)
 |  group by:
-|  use vectorized: true
 |
 11:Project
 |  <slot 46> : 46: sum
-|  use vectorized: true
 |
 10:AGGREGATE (merge finalize)
 |  output: sum(46: sum)
 |  group by: 30: L_SUPPKEY
-|  use vectorized: true
 |
 9:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 5
 OUTPUT EXPRS:
@@ -173,12 +156,10 @@ HASH_PARTITIONED: 30: L_SUPPKEY
 |  STREAMING
 |  output: sum(45: expr)
 |  group by: 30: L_SUPPKEY
-|  use vectorized: true
 |
 7:Project
 |  <slot 30> : 30: L_SUPPKEY
 |  <slot 45> : 33: L_EXTENDEDPRICE * 1.0 - 34: L_DISCOUNT
-|  use vectorized: true
 |
 6:OlapScanNode
 TABLE: lineitem
@@ -191,7 +172,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=21861386
 avgRowSize=32.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -205,12 +185,10 @@ HASH_PARTITIONED: 11: L_SUPPKEY
 |  STREAMING
 |  output: sum(26: expr)
 |  group by: 11: L_SUPPKEY
-|  use vectorized: true
 |
 2:Project
 |  <slot 11> : 11: L_SUPPKEY
 |  <slot 26> : 14: L_EXTENDEDPRICE * 1.0 - 15: L_DISCOUNT
-|  use vectorized: true
 |
 1:OlapScanNode
 TABLE: lineitem
@@ -223,7 +201,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=21861386
 avgRowSize=32.0
 numNodes=0
-use vectorized: true
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
 Output Exprs:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum

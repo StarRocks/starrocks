@@ -152,7 +152,6 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                         "  |  <slot 2> : 2: v2\n" +
                         "  |  <slot 4> : NULL\n" +
-                        "  |  use vectorized: true"));
 
         String createMVSQL =
                 "create materialized view mvb as select v1,bitmap_union(to_bitmap(v2)) from ti2 group by v1";
@@ -165,7 +164,6 @@ public class InsertPlanTest extends PlanTestBase {
                         "  |  <slot 6> : to_bitmap(CAST(1: v1 AS VARCHAR))\n" +
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
                         "  |  <slot 8> : CAST(NULL AS BIGINT)\n" +
-                        "  |  use vectorized: true"));
     }
 
     @Test

@@ -111,7 +111,6 @@ public class DecodeRewriteTest extends PlanTestBase{
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 18> : <string id 16>\n" +
-                "  |  use vectorized: true"));
     }
 
     @Test
@@ -120,7 +119,6 @@ public class DecodeRewriteTest extends PlanTestBase{
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 4> : <string id 2>\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  <slot 4> : 4: dept_name"));
@@ -307,7 +305,6 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  string functions:\n" +
                 "  |  <function id 14> : upper(13: S_ADDRESS)\n" +
                 "  |  <function id 15> : lower(14: upper)\n" +
-                "  |  use vectorized: true"));
 
         sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);

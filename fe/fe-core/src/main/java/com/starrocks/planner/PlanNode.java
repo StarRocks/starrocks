@@ -365,7 +365,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             expBuilder.append("\n");
         }
-        expBuilder.append(detailPrefix).append("use vectorized: ").append(true).append("\n");
+        expBuilder.append(detailPrefix).append("\n");
         // Print the children
         // if (children != null && children.size() > 0) {
         if (traverseChildren) {

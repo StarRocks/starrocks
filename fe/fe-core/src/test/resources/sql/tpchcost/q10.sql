@@ -39,7 +39,6 @@ RESULT SINK
 
 17:MERGING-EXCHANGE
 limit: 20
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -53,12 +52,10 @@ UNPARTITIONED
 |  order by: <slot 43> 43: sum DESC
 |  offset: 0
 |  limit: 20
-|  use vectorized: true
 |
 15:AGGREGATE (update finalize)
 |  output: sum(42: expr)
 |  group by: 1: C_CUSTKEY, 2: C_NAME, 6: C_ACCTBAL, 5: C_PHONE, 38: N_NAME, 3: C_ADDRESS, 8: C_COMMENT
-|  use vectorized: true
 |
 14:Project
 |  <slot 1> : 1: C_CUSTKEY
@@ -69,17 +66,14 @@ UNPARTITIONED
 |  <slot 8> : 8: C_COMMENT
 |  <slot 38> : 38: N_NAME
 |  <slot 42> : 25: L_EXTENDEDPRICE * 1.0 - 26: L_DISCOUNT
-|  use vectorized: true
 |
 13:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 1: C_CUSTKEY = 11: O_CUSTKEY
-|  use vectorized: true
 |
 |----12:EXCHANGE
-|       use vectorized: true
 |
 4:Project
 |  <slot 1> : 1: C_CUSTKEY
@@ -89,17 +83,14 @@ UNPARTITIONED
 |  <slot 6> : 6: C_ACCTBAL
 |  <slot 8> : 8: C_COMMENT
 |  <slot 38> : 38: N_NAME
-|  use vectorized: true
 |
 3:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 4: C_NATIONKEY = 37: N_NATIONKEY
-|  use vectorized: true
 |
 |----2:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: customer
@@ -111,7 +102,6 @@ tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
 cardinality=15000000
 avgRowSize=217.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -125,23 +115,19 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 11: O_CUSTKEY
 |  <slot 11> : 11: O_CUSTKEY
 |  <slot 25> : 25: L_EXTENDEDPRICE
 |  <slot 26> : 26: L_DISCOUNT
-|  use vectorized: true
 |
 10:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 20: L_ORDERKEY = 10: O_ORDERKEY
-|  use vectorized: true
 |
 |----9:EXCHANGE
-|       use vectorized: true
 |
 6:Project
 |  <slot 20> : 20: L_ORDERKEY
 |  <slot 25> : 25: L_EXTENDEDPRICE
 |  <slot 26> : 26: L_DISCOUNT
-|  use vectorized: true
 |
 5:OlapScanNode
 TABLE: lineitem
@@ -154,7 +140,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=200000000
 avgRowSize=25.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -167,7 +152,6 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 10: O_ORDERKEY
 8:Project
 |  <slot 10> : 10: O_ORDERKEY
 |  <slot 11> : 11: O_CUSTKEY
-|  use vectorized: true
 |
 7:OlapScanNode
 TABLE: orders
@@ -180,7 +164,6 @@ tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=5738046
 avgRowSize=20.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -200,6 +183,5 @@ tabletList=10185
 cardinality=25
 avgRowSize=29.0
 numNodes=0
-use vectorized: true
 [end]
 

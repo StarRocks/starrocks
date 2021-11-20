@@ -224,7 +224,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("  6:AGGREGATE (merge finalize)\n"
                 + "  |  output: count(4: count), sum(5: sum)\n"
                 + "  |  group by: \n"
-                + "  |  use vectorized: true"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n"
                 + "    EXCHANGE ID: 05\n"
                 + "    UNPARTITIONED"));
@@ -338,10 +337,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 2: v2 = 7: t1d\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  |----3:EXCHANGE\n"
-                + "  |       use vectorized: true\n"
                 + "  |    \n"
                 + "  1:EXCHANGE"));
         Assert.assertTrue(planFragment.contains("    EXCHANGE ID: 03\n"
@@ -366,10 +363,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 2: v2 = 7: t1d\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  |----2:EXCHANGE\n"
-                + "  |       use vectorized: true\n"
                 + "  |    \n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t0\n"));
@@ -387,10 +382,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 7: t1d = 1: v1\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  |----2:EXCHANGE\n"
-                + "  |       use vectorized: true\n"
                 + "  |    \n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: test_all_type\n"));
@@ -417,7 +410,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertFalse(planFragment.contains("  2:AGGREGATE (update finalize)\n" +
                 "  |  group by: <slot 4>\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:Project"));
         Assert.assertTrue(planFragment.contains("EXCHANGE"));
@@ -546,11 +538,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  output: sum(3: v3)\n" +
                 "  |  group by: 1: v1, 2: v2, 5: GROUPING_ID\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
 
@@ -564,11 +554,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  output: sum(3: v3)\n" +
                 "  |  group by: 1: v1, 5: GROUPING_ID\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 1 lines [[], [1]]\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
@@ -578,7 +566,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         System.out.println(plan);
         Assert.assertTrue(plan.contains("  3:EXCHANGE\n" +
-                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
@@ -592,7 +579,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  output: sum(3: v3)\n" +
                 "  |  group by: 5: GROUPING_ID\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:REPEAT_NODE"));
     }
@@ -672,16 +658,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  0:INTERSECT\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  |----6:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
-                "     use vectorized: true"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
                 "    HASH_PARTITIONED: <slot 5>\n" +

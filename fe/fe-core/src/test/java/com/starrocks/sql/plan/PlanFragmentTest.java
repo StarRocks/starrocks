@@ -231,7 +231,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 4> : 1: v1 + 20\n" +
-                "  |  use vectorized: true"));
 
         sql = "select v1+20, if(true, v1, v2) from t0 where v1 is null";
         planFragment = getFragmentPlan(sql);
@@ -254,7 +253,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(18,2)) + CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(18,3))\n" +
-                "  |  use vectorized: true\n"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -265,7 +263,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(38,2)) - CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(38,3))\n" +
-                "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -276,7 +273,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(10,5)) AS DECIMAL128(38,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(38,7))\n" +
-                "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -287,7 +283,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(18,5)) AS DECIMAL128(38,5)) / CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL128(38,7))\n" +
-                "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -298,7 +293,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 4> : CAST(1: v1 AS DECIMAL64(18,5)) % CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL64(18,7))\n" +
-                "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -309,10 +303,8 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update finalize)\n"
                 + "  |  group by: 1: v1\n"
                 + "  |  having: TRUE\n"
-                + "  |  use vectorized: true"));
 
         Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true"));
     }
 
     @Test
@@ -365,7 +357,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true\n"));
     }
 
     @Test
@@ -424,10 +415,8 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("  3:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode"));
     }
@@ -519,7 +508,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "SELECT DISTINCT + + v1, v1 AS col2 FROM t0;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  |  group by: 1: v1\n"
-                + "  |  use vectorized: true"));
     }
 
     @Test
@@ -789,10 +777,8 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  3:AGGREGATE (merge finalize)\n"
                 + "  |  output: count(4: count)\n"
                 + "  |  group by: 2: k2\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  2:EXCHANGE\n"
-                + "     use vectorized: true\n"
                 + "\n"
                 + "PLAN FRAGMENT 2\n"
                 + " OUTPUT EXPRS:"));
@@ -805,12 +791,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "where NOT NULL IS NULL";
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true"));
 
         queryStr = "select * from test.colocate1 t1, test.colocate2 t2 where FALSE";
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true"));
     }
 
     @Test
@@ -818,12 +802,10 @@ public class PlanFragmentTest extends PlanTestBase {
         String queryStr = "select connection_id()";
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("0:UNION"));
-        Assert.assertTrue(explainString.contains("use vectorized: true"));
 
         queryStr = "select database();";
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("0:UNION"));
-        Assert.assertTrue(explainString.contains("use vectorized: true"));
     }
 
     @Test
@@ -856,7 +838,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  3:AGGREGATE (update finalize)\n"
                 + "  |  output: avg(4: avg), count(1: v1)\n"
                 + "  |  group by: 1: v1\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  2:AGGREGATE (merge serialize)\n"
                 + "  |  output: avg(4: avg)\n"
@@ -870,12 +851,10 @@ public class PlanFragmentTest extends PlanTestBase {
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 4: avg\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  1:AGGREGATE (update finalize)\n"
                 + "  |  output: avg(2: v2)\n"
                 + "  |  group by: 2: v2\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  0:OlapScanNode"));
     }
@@ -887,11 +866,9 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  2:AGGREGATE (update finalize)\n"
                 + "  |  output: min(1: expr)\n"
                 + "  |  group by: \n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  1:SELECT\n"
                 + "  |  predicates: abs(1) = 2\n"
-                + "  |  use vectorized: true"));
     }
 
     @Test
@@ -902,7 +879,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  output: min(1: v1)\n"
                 + "  |  group by: \n"
                 + "  |  having: abs(1) = 2\n"
-                + "  |  use vectorized: true"));
     }
 
     @Test
@@ -913,7 +889,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  output: min(1: v1)\n"
                 + "  |  group by: \n"
                 + "  |  having: TRUE\n"
-                + "  |  use vectorized: true"));
     }
 
     @Test
@@ -923,7 +898,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 4\n"
                 + "  |  limit: 3\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  1:OlapScanNode"));
     }
@@ -935,16 +909,13 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  6:Project\n"
                 + "  |  <slot 10> : 1\n"
                 + "  |  limit: 3\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  0:EXCEPT\n"
                 + "  |  limit: 3\n"
-                + "  |  use vectorized: true"));
 
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 1\n"
                 + "  |  <slot 5> : 3\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  1:OlapScanNode"));
     }
@@ -956,16 +927,13 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  6:Project\n"
                 + "  |  <slot 10> : 1\n"
                 + "  |  limit: 3\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  0:INTERSECT\n"
                 + "  |  limit: 3\n"
-                + "  |  use vectorized: true"));
 
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 1\n"
                 + "  |  <slot 5> : 3\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  1:OlapScanNode"));
     }
@@ -1036,7 +1004,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  equal join conjunct: 4: v4 = 1: v1\n"
                 + "  |  equal join conjunct: 5: v5 = 2: v2\n"
                 + "  |  other join predicates: CAST(CAST(3: v3 <= 3: v3 AS BIGINT) < 6: v6 AS BIGINT) = 5: v5\n"
-                + "  |  use vectorized: true"));
     }
 
     @Test
@@ -1060,7 +1027,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  equal join conjunct: 4: v4 = 1: v1\n"
                 + "  |  equal join conjunct: 5: v5 = 2: v2\n"
                 + "  |  other join predicates: CAST(CAST(3: v3 <= 3: v3 AS BIGINT) < 6: v6 AS BIGINT) = 5: v5\n"
-                + "  |  use vectorized: true\n"));
     }
 
     @Test
@@ -1222,7 +1188,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  3:AGGREGATE (merge finalize)\n"
                 + "  |  output: sum(9: sum)\n"
                 + "  |  group by: \n"
-                + "  |  use vectorized: true\n"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
         FeConstants.runningUnitTest = false;
     }
@@ -1442,7 +1407,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select t1.v5 from t0 inner join[broadcast] t1 on cast(t0.v1 as int) = cast(t1.v4 as int)";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  equal join conjunct: 7: cast = 8: cast\n"
-                + "  |  use vectorized: true\n"));
         Assert.assertTrue(plan.contains("<slot 7> : CAST(1: v1 AS INT)"));
         Assert.assertTrue(plan.contains("<slot 8> : CAST(4: v4 AS INT)"));
     }
@@ -1498,11 +1462,9 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:Project\n"
                 + "  |  <slot 1> : 1: v1\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  1:SELECT\n"
                 + "  |  predicates: 3: v3 > 1\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t0\n"));
@@ -1519,10 +1481,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 1: v1 = 4: v4\n"
                 + "  |  limit: 10\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  |----2:EXCHANGE\n"
-                + "  |       use vectorized: true\n"
                 + "  |    \n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t0"));
@@ -1534,10 +1494,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 1: v1 = 4: v4\n"
                 + "  |  limit: 10\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  |----2:EXCHANGE\n"
-                + "  |       use vectorized: true\n"
                 + "  |    \n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t0\n"));
@@ -1549,10 +1507,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 4: v4 = 1: v1\n"
                 + "  |  limit: 10\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  |----2:EXCHANGE\n"
-                + "  |       use vectorized: true\n"
                 + "  |    \n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t1\n"));
@@ -1568,10 +1524,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  limit: 10\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode"));
         Assert.assertTrue(plan.contains("     TABLE: t0\n"
@@ -1598,15 +1552,12 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 1: v1 = 4: v4\n"
                 + "  |  limit: 10\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  |----3:EXCHANGE\n"
                 + "  |       limit: 10\n"
-                + "  |       use vectorized: true\n"
                 + "  |    \n"
                 + "  1:EXCHANGE\n"
                 + "     limit: 10\n"
-                + "     use vectorized: true"));
 
         sql = "select * from t0, t1 limit 10";
         plan = getFragmentPlan(sql);
@@ -1615,11 +1566,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
                 "  |  limit: 10\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
                 "  |       limit: 10\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
@@ -1633,12 +1582,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  <slot 2> : 2: v2\n"
                 + "  |  <slot 5> : 5: sum\n"
                 + "  |  <slot 6> : 'a'\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  1:AGGREGATE (update finalize)\n"
                 + "  |  output: sum(1: v1)\n"
                 + "  |  group by: 2: v2\n"
-                + "  |  use vectorized: true"));
     }
 
     @Test
@@ -1648,15 +1595,12 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  3:Project\n"
                 + "  |  <slot 4> : 4: expr\n"
                 + "  |  <slot 6> : 'b'\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  2:AGGREGATE (update finalize)\n"
                 + "  |  group by: 4: expr\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  1:Project\n"
                 + "  |  <slot 4> : 'a'\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t0"));
@@ -1677,12 +1621,10 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:Project\n"
                 + "  |  <slot 4> : 2\n"
                 + "  |  limit: 2\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  1:SELECT\n"
                 + "  |  predicates: 1: v1 > 2\n"
                 + "  |  limit: 2\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t0"));
@@ -1768,7 +1710,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  0:SCAN SCHEMA\n" +
                 "     limit: 1\n" +
-                "     use vectorized: true"));
     }
 
     @Test
@@ -1778,10 +1719,8 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:Project\n"
                 + "  |  <slot 4> : 4: COLUMN_NAME\n"
                 + "  |  <slot 25> : upper(8: DATA_TYPE)\n"
-                + "  |  use vectorized: true\n"
                 + "  |  \n"
                 + "  0:SCAN SCHEMA\n"
-                + "     use vectorized: true"));
     }
 
     @Test
@@ -1820,12 +1759,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  order by: <slot 2> 2: order_no ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 10\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(pay_st)\n" +
                 "  |  group by: order_dt, order_no\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:SCAN MYSQL\n" +
                 "     TABLE: `ods_order`\n" +
@@ -1842,10 +1779,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: order_no = 8: t1a\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:SCAN MYSQL\n" +
                 "     TABLE: `ods_order`\n" +
@@ -2031,7 +1966,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:Project\n" +
                 "  |  <slot 4> : 4: expr\n" +
                 "  |  <slot 5> : 4: expr + 1\n" +
-                "  |  use vectorized: true"));
         Assert.assertTrue(plan.contains("1:Project\n" +
                 "  |  <slot 4> : 1: v1 + 1"));
     }
@@ -2092,13 +2026,11 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(5: expr)\n" +
                 "  |  group by: 1: v1, 4: expr\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 3: v3[1] + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
                 "  |  <slot 5> : 3: v3[1]\n" +
-                "  |  use vectorized: true"));
     }
 
     @Test
@@ -2733,7 +2665,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         1 | 'newzland'\n" +
-                "     use vectorized: true"));
     }
 
     @Test
@@ -2818,9 +2749,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 5: id = 2: id"));
         Assert.assertTrue(plan.contains("  |----2:EMPTYSET\n" +
-                "  |       use vectorized: true"));
         Assert.assertTrue(plan.contains("  7:EMPTYSET\n" +
-                "     use vectorized: true"));
     }
 
     @Test
@@ -3407,7 +3336,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: k1\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
@@ -3726,7 +3654,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("equal join conjunct: 2: id = 5: id"));
         Assert.assertTrue(explainString.contains("  |----2:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: join1"));
@@ -3896,7 +3823,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: v1\n" +
-                "  |  use vectorized: true"));
 
         sql = "select sum(x1) from (select sum(v1) as x1 from t0) as q";
         plan = getFragmentPlan(sql);
@@ -3905,7 +3831,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(1: v1)\n" +
                 "  |  group by: \n" +
-                "  |  use vectorized: true"));
 
         sql = "select SUM(x1) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
@@ -3914,14 +3839,12 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(1: v1)\n" +
                 "  |  group by: \n" +
-                "  |  use vectorized: true"));
 
         sql = "select v2, SUM(x1) from (select v2, v3, sum(v1) as x1 from t0 group by v2, v3) as q group by v2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(1: v1)\n" +
                 "  |  group by: 2: v2\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
@@ -3931,7 +3854,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(3: v3)\n" +
                 "  |  group by: \n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
@@ -3946,7 +3868,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: avg(1: v1)\n" +
                 "  |  group by: \n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
 
@@ -3955,27 +3876,22 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 2: v2\n" +
-                "  |  use vectorized: true\n"));
         sql = "select SUM(v2) from (select v2, sum(distinct v2) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 2: v2\n" +
-                "  |  use vectorized: true\n"));
         sql = "select sum(distinct x1) from (select v2, sum(v2) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: 2: v2\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n"));
     }
@@ -4040,11 +3956,9 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  6:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 1: v1\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  5:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  4:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
@@ -4057,22 +3971,17 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  1:EXCHANGE\n" +
-                "     use vectorized: true"));
 
         sql = "SELECT DISTINCT t1.v4 FROM t0 LEFT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
                 "  |  group by: 4: v4\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  6:EXCHANGE\n" +
-                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 1\n" +
                 " OUTPUT EXPRS:\n" +
@@ -4085,11 +3994,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  5:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 4: v4\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  4:Project\n" +
                 "  |  <slot 4> : 4: v4\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)"));
@@ -4104,7 +4011,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  RESULT SINK\n" +
                 "\n" +
                 "  0:SCAN SCHEMA\n" +
-                "     use vectorized: true"));
     }
 
     @Test
@@ -4129,7 +4035,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("  2:Project\n" +
                 "  |  <slot 13> : 13: bitmap_union_count\n" +
                 "  |  <slot 14> : 13: bitmap_union_count\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: bitmap_union_count(5: b1)"));
@@ -4302,10 +4207,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  limit: 1\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode"));
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
@@ -4328,11 +4231,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v4 = 1: v1\n" +
                 "  |  limit: 100\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |       limit: 10\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  1:EXCHANGE"));
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
@@ -4345,7 +4246,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  3:EXCHANGE\n" +
                 "     limit: 10\n" +
-                "     use vectorized: true\n"));
 
         sql =
                 "select v1 from (select * from t0 limit 10) x0 left outer join (select * from t1 limit 5) x1 on x0.v1 = x1.v4 limit 7";
@@ -4355,11 +4255,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  limit: 7\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |       limit: 5\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode"));
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
@@ -4372,7 +4270,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  2:EXCHANGE\n" +
                 "     limit: 5\n" +
-                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 2"));
     }
@@ -4394,7 +4291,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: id)\n" +
                 "  |  group by: 3: value\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
 
@@ -4408,27 +4304,20 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from (select * from t0 union all select * from t1 union all select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  |----6:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
-                "     use vectorized: true"));
 
         sql = "select * from (select * from t0 limit 0 union all select * from t1 union all select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
-                "     use vectorized: true"));
 
         sql = "select * from (select * from t0 limit 0 union all select * from t1 where false" +
                 " union all select * from t2) as xx";
@@ -4443,7 +4332,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  <slot 4> : 10: v7\n" +
                 "  |  <slot 5> : 11: v8\n" +
                 "  |  <slot 6> : 12: v9\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
     }
@@ -4455,13 +4343,10 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from (select * from t0 intersect select * from t1 intersect select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:INTERSECT\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  |----6:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  2:EXCHANGE"));
 
@@ -4474,7 +4359,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  RESULT SINK\n" +
                 "\n" +
                 "  0:EMPTYSET\n" +
-                "     use vectorized: true"));
 
         sql = "select * from (select * from t0 limit 0 intersect select * from t1 where false " +
                 "intersect select * from t2) as xx";
@@ -4486,7 +4370,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  RESULT SINK\n" +
                 "\n" +
                 "  0:EMPTYSET\n" +
-                "     use vectorized: true"));
     }
 
     @Test
@@ -4496,16 +4379,12 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from (select * from t0 except select * from t1 except select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:EXCEPT\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  |----6:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
-                "     use vectorized: true"));
 
         sql = "select * from (select * from t0 limit 0 except select * from t1 except select * from t2) as xx";
         plan = getFragmentPlan(sql);
@@ -4516,19 +4395,15 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  RESULT SINK\n" +
                 "\n" +
                 "  0:EMPTYSET\n" +
-                "     use vectorized: true"));
 
         sql = "select * from ( select * from t2 except select * from t0 limit 0 except " +
                 "select * from t1) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:EXCEPT\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
-                "     use vectorized: true\n"));
     }
 
     @Test
@@ -4649,6 +4524,5 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
                 "     numNodes=0\n" +
-                "     use vectorized: true\n"));
     }
 }
