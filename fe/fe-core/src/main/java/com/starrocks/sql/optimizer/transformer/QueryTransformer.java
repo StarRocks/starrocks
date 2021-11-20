@@ -34,10 +34,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator.findOrCreateColumnRefForExpr;
@@ -350,10 +348,10 @@ class QueryTransformer {
              * that needs to be repeatedly calculated.
              * This column reference is come from the child of repeat operator
              */
-            List<Set<ColumnRefOperator>> repeatColumnRefList = new ArrayList<>();
+            List<List<ColumnRefOperator>> repeatColumnRefList = new ArrayList<>();
 
             for (List<Expr> grouping : groupingSetsList) {
-                Set<ColumnRefOperator> repeatColumnRef = new HashSet<>();
+                List<ColumnRefOperator> repeatColumnRef = new ArrayList<>();
                 BitSet groupingIdBitSet = new BitSet(groupByColumnRefs.size());
                 groupingIdBitSet.set(0, groupByExpressions.size(), true);
 
@@ -404,7 +402,7 @@ class QueryTransformer {
 
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
                             .translate(slotRef, subOpt.getExpressionMapping());
-                    for (Set<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
+                    for (List<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
                         if (repeatColumns.contains(groupingKey)) {
                             for (int repeatColIdx = 0; repeatColIdx < repeatColumnRefList.size(); ++repeatColIdx) {
                                 tempGroupingIdsBitSets.get(repeatColIdx).set(childIdx,
