@@ -726,12 +726,13 @@ Status HashJoinNode::_push_down_in_filter(RuntimeState* state) {
             ColumnPtr column = _ht.get_key_columns()[i];
             Expr* probe_expr = _probe_expr_ctxs[i]->root();
             // create and fill runtime IN filter.
-            ExprContext* filter =
-                    RuntimeFilterHelper::create_runtime_in_filter(state, _pool, probe_expr, _is_null_safes[i]);
-            if (filter == nullptr) continue;
-            RETURN_IF_ERROR(
-                    RuntimeFilterHelper::fill_runtime_in_filter(column, probe_expr, filter, kHashJoinKeyColumnOffset));
-            _runtime_in_filters.push_back(filter);
+            VectorizedInConstPredicateBuilder builder(state, _pool, probe_expr);
+            builder.set_eq_null(_is_null_safes[i]);
+            builder.use_as_join_runtime_filter();
+            Status st = builder.create();
+            if (!st.ok()) continue;
+            builder.add_values(column, kHashJoinKeyColumnOffset);
+            _runtime_in_filters.push_back(builder.get_in_const_predicate());
         }
     }
 

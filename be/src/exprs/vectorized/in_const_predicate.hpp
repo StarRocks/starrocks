@@ -10,6 +10,12 @@
 #include "exprs/predicate.h"
 
 namespace starrocks {
+
+class RuntimeState;
+class ObjectPool;
+class Expr;
+class ExprContext;
+
 namespace vectorized {
 
 namespace in_const_pred_detail {
@@ -26,12 +32,6 @@ struct PHashSet<Type, std::enable_if_t<isSlicePT<Type>>> {
 template <PrimitiveType Type>
 using PHashSetType = typename PHashSet<Type>::PType;
 
-template <PrimitiveType Type>
-constexpr bool can_use_bitmap() {
-    return Type == TYPE_BOOLEAN || Type == TYPE_TINYINT || Type == TYPE_SMALLINT || Type == TYPE_INT ||
-           Type == TYPE_BIGINT;
-}
-
 } // namespace in_const_pred_detail
 
 /**
@@ -46,6 +46,8 @@ constexpr bool can_use_bitmap() {
 template <PrimitiveType Type>
 class VectorizedInConstPredicate final : public Predicate {
 public:
+    using ValueType = typename RunTimeTypeTraits<Type>::CppType;
+
     VectorizedInConstPredicate(const TExprNode& node)
             : Predicate(node), _is_not_in(node.in_predicate.is_not_in), _is_prepare(false), _null_in_set(false) {}
 
@@ -56,18 +58,23 @@ public:
               _null_in_set(other._null_in_set),
               _is_join_runtime_filter(other._is_join_runtime_filter),
               _eq_null(other._eq_null),
-              _bitmap_size(other._bitmap_size) {}
+              _array_size(other._array_size) {}
 
     ~VectorizedInConstPredicate() override = default;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicate(*this)); }
+
+    static constexpr bool can_use_array() {
+        return Type == TYPE_BOOLEAN || Type == TYPE_TINYINT || Type == TYPE_SMALLINT || Type == TYPE_INT ||
+               Type == TYPE_BIGINT;
+    }
 
     Status prepare([[maybe_unused]] RuntimeState* state) {
         if (_is_prepare) {
             return Status::OK();
         }
         _hash_set.clear();
-        _init_bitmap_buffer();
+        _init_array_buffer();
         _is_prepare = true;
         return Status::OK();
     }
@@ -88,7 +95,7 @@ public:
         }
 
         _hash_set.clear();
-        _init_bitmap_buffer();
+        _init_array_buffer();
         _is_prepare = true;
         return Status::OK();
     }
@@ -102,7 +109,7 @@ public:
             }
         }
 
-        bool use_bitmap = is_use_bitmap();
+        bool use_array = is_use_array();
         for (int i = 1; i < _children.size(); ++i) {
             if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
                 (_children[0]->type().type == _children[i]->type().type) ||
@@ -131,9 +138,9 @@ public:
                 continue;
             }
 
-            if (use_bitmap) {
-                if constexpr (in_const_pred_detail::can_use_bitmap<Type>()) {
-                    _set_bitmap_index(viewer.value(0));
+            if (use_array) {
+                if constexpr (can_use_array()) {
+                    _set_array_index(viewer.value(0));
                 }
             } else {
                 _hash_set.emplace(viewer.value(0));
@@ -142,7 +149,7 @@ public:
         return Status::OK();
     }
 
-    template <bool use_bitmap>
+    template <bool use_array>
     ColumnPtr eval_on_chunk_both_column_and_set_not_has_null(const ColumnPtr& lhs) {
         DCHECK(!_null_in_set);
         auto size = lhs->size();
@@ -158,11 +165,7 @@ public:
 
         if (!lhs->is_constant()) {
             for (int row = 0; row < size; ++row) {
-                if constexpr (use_bitmap && in_const_pred_detail::can_use_bitmap<Type>()) {
-                    data3[row] = _get_bitmap_index(data[row]);
-                } else {
-                    data3[row] = static_cast<uint8_t>(_hash_set.contains(data[row]));
-                }
+                data3[row] = check_value_existence<use_array>(data[row]);
             }
             if (_is_not_in) {
                 for (int i = 0; i < size; i++) {
@@ -171,12 +174,7 @@ public:
             }
         } else {
             if (size > 0) {
-                uint8_t ret = 0;
-                if constexpr (use_bitmap && in_const_pred_detail::can_use_bitmap<Type>()) {
-                    ret = _get_bitmap_index(data[0]);
-                } else {
-                    ret = static_cast<uint8_t>(_hash_set.contains(data[0]));
-                }
+                uint8_t ret = check_value_existence<use_array>(data[0]);
                 if (_is_not_in) {
                     ret = 1 - ret;
                 }
@@ -192,7 +190,7 @@ public:
 
     // null_in_set: true means null is a value of _hash_set.
     // equal_null: true means that 'null' in column and 'null' in set is equal.
-    template <bool null_in_set, bool equal_null, bool use_bitmap>
+    template <bool null_in_set, bool equal_null, bool use_array>
     ColumnPtr eval_on_chunk(const ColumnPtr& lhs) {
         ColumnBuilder<TYPE_BOOLEAN> builder;
         ColumnViewer<Type> viewer(lhs);
@@ -210,16 +208,9 @@ public:
                 continue;
             }
             // find value
-            if constexpr (use_bitmap && in_const_pred_detail::can_use_bitmap<Type>()) {
-                if (_get_bitmap_index(viewer.value(row))) {
-                    builder.append(1);
-                    continue;
-                }
-            } else {
-                if (_hash_set.contains(viewer.value(row))) {
-                    builder.append(1);
-                    continue;
-                }
+            if (check_value_existence<use_array>(viewer.value(row))) {
+                builder.append(1);
+                continue;
             }
             if constexpr (!null_in_set || equal_null) {
                 builder.append(0);
@@ -242,30 +233,30 @@ public:
         if (ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
         }
-        bool use_bitmap = is_use_bitmap();
+        bool use_array = is_use_array();
 
         if (_null_in_set) {
             if (_eq_null) {
-                if (!use_bitmap) {
+                if (!use_array) {
                     return this->template eval_on_chunk<true, true, false>(lhs);
                 } else {
                     return this->template eval_on_chunk<true, true, true>(lhs);
                 }
             } else {
-                if (!use_bitmap) {
+                if (!use_array) {
                     return this->template eval_on_chunk<true, false, false>(lhs);
                 } else {
                     return this->template eval_on_chunk<true, false, true>(lhs);
                 }
             }
         } else if (lhs->is_nullable()) {
-            if (!use_bitmap) {
+            if (!use_array) {
                 return this->template eval_on_chunk<false, false, false>(lhs);
             } else {
                 return this->template eval_on_chunk<false, false, true>(lhs);
             }
         } else {
-            if (!use_bitmap) {
+            if (!use_array) {
                 return eval_on_chunk_both_column_and_set_not_has_null<false>(lhs);
             } else {
                 return eval_on_chunk_both_column_and_set_not_has_null<true>(lhs);
@@ -273,7 +264,7 @@ public:
         }
     }
 
-    void insert(typename RunTimeTypeTraits<Type>::CppType* value) {
+    void insert(const ValueType* value) {
         if (value == nullptr) {
             _null_in_set = true;
         } else {
@@ -281,13 +272,22 @@ public:
         }
     }
 
-    void insert_bitmap(typename RunTimeTypeTraits<Type>::CppType* value) {
+    void insert_array(const ValueType* value) {
         if (value == nullptr) {
             _null_in_set = true;
         } else {
-            if constexpr (in_const_pred_detail::can_use_bitmap<Type>()) {
-                _set_bitmap_index(*value);
+            if constexpr (can_use_array()) {
+                _set_array_index(*value);
             }
+        }
+    }
+
+    template <bool use_array>
+    uint8_t check_value_existence(const ValueType& value) const {
+        if constexpr (use_array && can_use_array()) {
+            return _get_array_index(value);
+        } else {
+            return static_cast<uint8_t>(_hash_set.contains(value));
         }
     }
 
@@ -301,42 +301,27 @@ public:
 
     bool is_join_runtime_filter() const { return _is_join_runtime_filter; }
 
-    void set_is_join_runtime_filter() { _is_join_runtime_filter = true; }
+    void set_is_join_runtime_filter(bool v) { _is_join_runtime_filter = v; }
 
     void set_eq_null(bool value) { _eq_null = value; }
 
-    void set_bitmap_size(int bitmap_size) { _bitmap_size = bitmap_size; }
+    void set_array_size(int array_size) { _array_size = array_size; }
 
-    bool is_use_bitmap() const { return _bitmap_size != 0; }
+    bool is_use_array() const { return _array_size != 0; }
 
 private:
-    // Note(yan): It's very tempting to use real bitmap. But the scenario is, the bitmap size is usually small like dict codes
-    // Use real bitmap involves bit shift, and/or ops. Since the bitmap size is quite small, we can use trade memory usage for performance
-    // And according to experiments, there is 20% performance gain.
-    // inline void _set_bitmap_index(int64_t index) {
-    //     uint8_t* buf = _bitmap_buffer.data();
-    //     buf[index >> 3] |= (1 << (index & 0x7));
-    // }
-    // inline uint8_t _get_bitmap_index(int64_t index) const {
-    //     const uint8_t* buf = _bitmap_buffer.data();
-    //     return (buf[index >> 3] >> (index & 0x7)) & 0x1;
-    // }
-    // void _init_bitmap_buffer() {
-    //     if constexpr (in_const_pred_detail::can_use_bitmap<Type>()) {
-    //         if (is_use_bitmap()) {
-    //             size_t alloc_size = (_bitmap_size + 7) / 8;
-    //             _bitmap_buffer.assign(alloc_size, 0);
-    //         }
-    //     }
-    // }
+    // Note(yan): It's very tempting to use real bitmap, but the real scenario is, the array size is usually small like dict codes.
+    // To usse real bitmap involves bit shift, and/or ops, which eats much cpu cycles.
+    // Since the bitmap size is quite small, we can use trade memory usage for performance
+    // According to experiments, there is 20% performance gain.
 
-    inline void _set_bitmap_index(int64_t index) { _bitmap_buffer[index] = 1; }
-    inline uint8_t _get_bitmap_index(int64_t index) const { return _bitmap_buffer[index]; }
+    inline void _set_array_index(int64_t index) { _array_buffer[index] = 1; }
+    inline uint8_t _get_array_index(int64_t index) const { return _array_buffer[index]; }
 
-    void _init_bitmap_buffer() {
-        if constexpr (in_const_pred_detail::can_use_bitmap<Type>()) {
-            if (is_use_bitmap()) {
-                _bitmap_buffer.assign(_bitmap_size, 0);
+    void _init_array_buffer() {
+        if constexpr (can_use_array()) {
+            if (is_use_array()) {
+                _array_buffer.assign(_array_size, 0);
             }
         }
     }
@@ -346,13 +331,49 @@ private:
     bool _null_in_set;
     bool _is_join_runtime_filter = false;
     bool _eq_null = false;
-    int _bitmap_size = 0;
-    std::vector<uint8_t> _bitmap_buffer;
+    int _array_size = 0;
+    std::vector<uint8_t> _array_buffer;
 
     in_const_pred_detail::PHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free
     std::vector<ColumnPtr> _string_values;
-}; // namespace vectorized
+};
+
+class VectorizedInConstPredicateBuilder {
+public:
+    VectorizedInConstPredicateBuilder(RuntimeState* state, ObjectPool* pool, Expr* expr)
+            : _state(state),
+              _pool(pool),
+              _expr(expr),
+              _eq_null(false),
+              _null_in_set(false),
+              _is_not_in(false),
+              _is_join_runtime_filter(false),
+              _array_size(0),
+              _in_pred_ctx(nullptr) {}
+
+    Status create();
+    Status add_values(const ColumnPtr& column, size_t column_offset);
+    void use_array_set(size_t array_size) { _array_size = array_size; }
+    void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }
+    void set_eq_null(bool v) { _eq_null = v; }
+    void set_null_in_set(bool v) { _null_in_set = v; }
+    void set_is_not_in(bool v) { _is_not_in = v; }
+    ExprContext* get_in_const_predicate() const { return _in_pred_ctx; }
+
+private:
+    ExprContext* _create();
+    RuntimeState* _state;
+    ObjectPool* _pool;
+    Expr* _expr;
+    bool _eq_null;
+    bool _null_in_set;
+    bool _is_not_in;
+    bool _is_join_runtime_filter;
+    int _array_size;
+    ExprContext* _in_pred_ctx;
+    Status _st;
+};
 
 } // namespace vectorized
 } // namespace starrocks
