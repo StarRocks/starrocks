@@ -78,7 +78,7 @@ public class RangeExtractTest extends PlanTestBase {
         String sql = "select * from t0 where v1 = 1 and v1 = 2";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("  0:EMPTYSET\n"
+        Assert.assertTrue(plan.contains("  0:EMPTYSET\n"));
     }
 
     @Test
@@ -94,7 +94,7 @@ public class RangeExtractTest extends PlanTestBase {
         String sql = "select * from t0 where v1 > 1 and v1 <= 0";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("  0:EMPTYSET\n"
+        Assert.assertTrue(plan.contains("  0:EMPTYSET\n"));
     }
 
     @Test

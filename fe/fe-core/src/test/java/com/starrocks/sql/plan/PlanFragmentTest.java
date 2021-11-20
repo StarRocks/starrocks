@@ -230,7 +230,7 @@ public class PlanFragmentTest extends PlanTestBase {
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 2> : 2: v2\n" +
-                "  |  <slot 4> : 1: v1 + 20\n" +
+                "  |  <slot 4> : 1: v1 + 20\n"));
 
         sql = "select v1+20, if(true, v1, v2) from t0 where v1 is null";
         planFragment = getFragmentPlan(sql);
@@ -252,7 +252,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(18,2)) + CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(18,3))\n" +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(18,2)) + CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(18,3))\n"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -262,7 +262,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(38,2)) - CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(38,3))\n" +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(38,2)) - CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(38,3))\n"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -272,7 +272,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(10,5)) AS DECIMAL128(38,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(38,7))\n" +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(10,5)) AS DECIMAL128(38,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(38,7))\n"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -282,7 +282,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(18,5)) AS DECIMAL128(38,5)) / CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL128(38,7))\n" +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(18,5)) AS DECIMAL128(38,5)) / CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL128(38,7))\n"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -292,7 +292,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL64(18,5)) % CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL64(18,7))\n" +
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL64(18,5)) % CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL64(18,7))\n"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -302,9 +302,9 @@ public class PlanFragmentTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update finalize)\n"
                 + "  |  group by: 1: v1\n"
-                + "  |  having: TRUE\n"
+                + "  |  having: TRUE\n"));
 
-        Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"
+        Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"));
     }
 
     @Test
@@ -356,7 +356,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "SELECT * from t0 join test_all_type on NOT NULL >= NULL";
 
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"
+        Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"));
     }
 
     @Test
@@ -507,7 +507,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testDistinctRedundant() throws Exception {
         String sql = "SELECT DISTINCT + + v1, v1 AS col2 FROM t0;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  |  group by: 1: v1\n"
+        Assert.assertTrue(planFragment.contains("  |  group by: 1: v1\n"));
     }
 
     @Test
@@ -790,11 +790,11 @@ public class PlanFragmentTest extends PlanTestBase {
         String queryStr = "select * from test.colocate1 t1, test.colocate2 t2 " +
                 "where NOT NULL IS NULL";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  0:EMPTYSET\n"
+        Assert.assertTrue(explainString.contains("  0:EMPTYSET\n"));
 
         queryStr = "select * from test.colocate1 t1, test.colocate2 t2 where FALSE";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  0:EMPTYSET\n"
+        Assert.assertTrue(explainString.contains("  0:EMPTYSET\n"));
     }
 
     @Test
@@ -868,7 +868,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  group by: \n"
                 + "  |  \n"
                 + "  1:SELECT\n"
-                + "  |  predicates: abs(1) = 2\n"
+                + "  |  predicates: abs(1) = 2\n"));
     }
 
     @Test
@@ -878,7 +878,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  1:AGGREGATE (update finalize)\n"
                 + "  |  output: min(1: v1)\n"
                 + "  |  group by: \n"
-                + "  |  having: abs(1) = 2\n"
+                + "  |  having: abs(1) = 2\n"));
     }
 
     @Test
@@ -888,7 +888,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  1:AGGREGATE (update finalize)\n"
                 + "  |  output: min(1: v1)\n"
                 + "  |  group by: \n"
-                + "  |  having: TRUE\n"
+                + "  |  having: TRUE\n"));
     }
 
     @Test
@@ -911,7 +911,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  limit: 3\n"
                 + "  |  \n"
                 + "  0:EXCEPT\n"
-                + "  |  limit: 3\n"
+                + "  |  limit: 3\n"));
 
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 1\n"
@@ -929,7 +929,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  limit: 3\n"
                 + "  |  \n"
                 + "  0:INTERSECT\n"
-                + "  |  limit: 3\n"
+                + "  |  limit: 3\n"));
 
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 1\n"
@@ -1003,7 +1003,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 4: v4 = 1: v1\n"
                 + "  |  equal join conjunct: 5: v5 = 2: v2\n"
-                + "  |  other join predicates: CAST(CAST(3: v3 <= 3: v3 AS BIGINT) < 6: v6 AS BIGINT) = 5: v5\n"
+                + "  |  other join predicates: CAST(CAST(3: v3 <= 3: v3 AS BIGINT) < 6: v6 AS BIGINT) = 5: v5\n"));
     }
 
     @Test
@@ -1026,7 +1026,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 4: v4 = 1: v1\n"
                 + "  |  equal join conjunct: 5: v5 = 2: v2\n"
-                + "  |  other join predicates: CAST(CAST(3: v3 <= 3: v3 AS BIGINT) < 6: v6 AS BIGINT) = 5: v5\n"
+                + "  |  other join predicates: CAST(CAST(3: v3 <= 3: v3 AS BIGINT) < 6: v6 AS BIGINT) = 5: v5\n"));
     }
 
     @Test
@@ -1187,7 +1187,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "\n"
                 + "  3:AGGREGATE (merge finalize)\n"
                 + "  |  output: sum(9: sum)\n"
-                + "  |  group by: \n"
+                + "  |  group by: \n"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
         FeConstants.runningUnitTest = false;
     }
@@ -1406,7 +1406,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testSubqueryBroadJoin() throws Exception {
         String sql = "select t1.v5 from t0 inner join[broadcast] t1 on cast(t0.v1 as int) = cast(t1.v4 as int)";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  |  equal join conjunct: 7: cast = 8: cast\n"
+        Assert.assertTrue(plan.contains("  |  equal join conjunct: 7: cast = 8: cast\n"));
         Assert.assertTrue(plan.contains("<slot 7> : CAST(1: v1 AS INT)"));
         Assert.assertTrue(plan.contains("<slot 8> : CAST(4: v4 AS INT)"));
     }
@@ -1557,7 +1557,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |       limit: 10\n"
                 + "  |    \n"
                 + "  1:EXCHANGE\n"
-                + "     limit: 10\n"
+                + "     limit: 10\n"));
 
         sql = "select * from t0, t1 limit 10";
         plan = getFragmentPlan(sql);
@@ -1585,7 +1585,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  \n"
                 + "  1:AGGREGATE (update finalize)\n"
                 + "  |  output: sum(1: v1)\n"
-                + "  |  group by: 2: v2\n"
+                + "  |  group by: 2: v2\n"));
     }
 
     @Test
@@ -1709,7 +1709,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  RESULT SINK\n" +
                 "\n" +
                 "  0:SCAN SCHEMA\n" +
-                "     limit: 1\n" +
+                "     limit: 1\n"));
     }
 
     @Test
@@ -1720,7 +1720,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  <slot 4> : 4: COLUMN_NAME\n"
                 + "  |  <slot 25> : upper(8: DATA_TYPE)\n"
                 + "  |  \n"
-                + "  0:SCAN SCHEMA\n"
+                + "  0:SCAN SCHEMA\n"));
     }
 
     @Test
@@ -1965,7 +1965,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("3:Project\n" +
                 "  |  <slot 4> : 4: expr\n" +
-                "  |  <slot 5> : 4: expr + 1\n" +
+                "  |  <slot 5> : 4: expr + 1\n"));
         Assert.assertTrue(plan.contains("1:Project\n" +
                 "  |  <slot 4> : 1: v1 + 1"));
     }
@@ -2030,7 +2030,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 3: v3[1] + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
-                "  |  <slot 5> : 3: v3[1]\n" +
+                "  |  <slot 5> : 3: v3[1]\n"));
     }
 
     @Test
@@ -2664,7 +2664,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |           2 | 'mike'"));
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "     constant exprs: \n" +
-                "         1 | 'newzland'\n" +
+                "         1 | 'newzland'\n"));
     }
 
     @Test
@@ -2748,8 +2748,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 5: id = 2: id"));
-        Assert.assertTrue(plan.contains("  |----2:EMPTYSET\n" +
-        Assert.assertTrue(plan.contains("  7:EMPTYSET\n" +
+        Assert.assertTrue(plan.contains("  |----2:EMPTYSET\n"));
+        Assert.assertTrue(plan.contains("  7:EMPTYSET\n"));
     }
 
     @Test
@@ -3822,7 +3822,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  RESULT SINK\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
-                "  |  group by: 1: v1\n" +
+                "  |  group by: 1: v1\n"));
 
         sql = "select sum(x1) from (select sum(v1) as x1 from t0) as q";
         plan = getFragmentPlan(sql);
@@ -3830,7 +3830,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(1: v1)\n" +
-                "  |  group by: \n" +
+                "  |  group by: \n"));
 
         sql = "select SUM(x1) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
@@ -3838,7 +3838,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(1: v1)\n" +
-                "  |  group by: \n" +
+                "  |  group by: \n"));
 
         sql = "select v2, SUM(x1) from (select v2, v3, sum(v1) as x1 from t0 group by v2, v3) as q group by v2";
         plan = getFragmentPlan(sql);
@@ -3878,7 +3878,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
-                "  |  group by: 2: v2\n" +
+                "  |  group by: 2: v2\n"));
         sql = "select SUM(v2) from (select v2, sum(distinct v2) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
@@ -3886,7 +3886,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
-                "  |  group by: 2: v2\n" +
+                "  |  group by: 2: v2\n"));
         sql = "select sum(distinct x1) from (select v2, sum(v2) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
@@ -3974,7 +3974,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |    \n" +
-                "  1:EXCHANGE\n" +
+                "  1:EXCHANGE\n"));
 
         sql = "SELECT DISTINCT t1.v4 FROM t0 LEFT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
         plan = getFragmentPlan(sql);
@@ -4010,7 +4010,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  0:SCAN SCHEMA\n" +
+                "  0:SCAN SCHEMA\n"));
     }
 
     @Test
@@ -4245,7 +4245,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "    HASH_PARTITIONED: 1: v1\n" +
                 "\n" +
                 "  3:EXCHANGE\n" +
-                "     limit: 10\n" +
+                "     limit: 10\n"));
 
         sql =
                 "select v1 from (select * from t0 limit 10) x0 left outer join (select * from t1 limit 5) x1 on x0.v1 = x1.v4 limit 7";
@@ -4309,15 +4309,16 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |    \n" +
                 "  |----6:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:EXCHANGE\n" +
+                "  2:EXCHANGE\n"));
 
-        sql = "select * from (select * from t0 limit 0 union all select * from t1 union all select * from t2) as xx";
+        sql =
+                "select * from (select * from t0 limit 0 union all select * from t1 union all select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:EXCHANGE\n" +
+                "  2:EXCHANGE\n"));
 
         sql = "select * from (select * from t0 limit 0 union all select * from t1 where false" +
                 " union all select * from t2) as xx";
@@ -4358,7 +4359,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  0:EMPTYSET\n" +
+                "  0:EMPTYSET\n"));
 
         sql = "select * from (select * from t0 limit 0 intersect select * from t1 where false " +
                 "intersect select * from t2) as xx";
@@ -4369,7 +4370,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  0:EMPTYSET\n" +
+                "  0:EMPTYSET\n"));
     }
 
     @Test
@@ -4384,7 +4385,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |    \n" +
                 "  |----6:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:EXCHANGE\n" +
+                "  2:EXCHANGE\n"));
 
         sql = "select * from (select * from t0 limit 0 except select * from t1 except select * from t2) as xx";
         plan = getFragmentPlan(sql);
@@ -4394,7 +4395,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  0:EMPTYSET\n" +
+                "  0:EMPTYSET\n"));
 
         sql = "select * from ( select * from t2 except select * from t0 limit 0 except " +
                 "select * from t1) as xx";
@@ -4403,7 +4404,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:EXCHANGE\n" +
+                "  2:EXCHANGE\n"));
     }
 
     @Test
@@ -4449,7 +4450,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 3"));
 
-
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = v2;";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
@@ -4459,7 +4459,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 2: v2"));
-
 
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 <=> v2;";
         plan = getFragmentPlan(sql);
@@ -4505,7 +4504,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = false;
     }
 
-    @Test 
+    @Test
     public void testLimitPushDownJoin() throws Exception {
         String sql = "select * from t0 left join[shuffle] t1 on t0.v2 = t1.v5 where t1.v6 is null limit 2";
         String plan = getFragmentPlan(sql);
@@ -4523,6 +4522,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
-                "     numNodes=0\n" +
+                "     numNodes=0\n"));
     }
 }

@@ -223,7 +223,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "  |  group by: 2: v2"));
         Assert.assertTrue(planFragment.contains("  6:AGGREGATE (merge finalize)\n"
                 + "  |  output: count(4: count), sum(5: sum)\n"
-                + "  |  group by: \n"
+                + "  |  group by: \n"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n"
                 + "    EXCHANGE ID: 05\n"
                 + "    UNPARTITIONED"));
@@ -608,7 +608,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testSemiJoinPushDownPredicate() throws Exception {
-        String sql = "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String sql =
+                "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -620,7 +621,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testOuterJoinPushDownPredicate() throws Exception {
-        String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String sql =
+                "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -663,7 +665,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |    \n" +
                 "  |----6:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:EXCHANGE\n" +
+                "  2:EXCHANGE\n"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
                 "    HASH_PARTITIONED: <slot 5>\n" +
@@ -682,7 +684,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
         setTableStatistics(t1, 1000000000L);
 
-        String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x join [broadcast] t0 where t0.v1 = t1x.v4";
+        String sql =
+                "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x join [broadcast] t0 where t0.v1 = t1x.v4";
         String planFragment = getVerboseExplain(sql);
 
         Assert.assertTrue(planFragment.contains("  1:TOP-N\n" +

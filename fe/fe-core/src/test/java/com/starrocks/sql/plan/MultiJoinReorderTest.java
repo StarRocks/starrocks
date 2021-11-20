@@ -184,7 +184,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     tabletList=10033,10035,10037\n" +
                 "     cardinality=1000000000\n" +
                 "     avgRowSize=1.0\n" +
-                "     numNodes=0\n" +
+                "     numNodes=0\n"));
 
         // Left sub join tree (b)
         Assert.assertTrue(planFragment.contains("  19:HASH JOIN\n" +
@@ -204,7 +204,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     tabletList=10015,10017,10019\n" +
                 "     cardinality=10\n" +
                 "     avgRowSize=2.0\n" +
-                "     numNodes=0\n" +
+                "     numNodes=0\n"));
 
         // Right sub join tree (a)
         Assert.assertTrue(planFragment.contains("  16:CROSS JOIN\n" +
@@ -217,7 +217,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  output: count(10: count)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  12:EXCHANGE\n" +
+                "  12:EXCHANGE\n"));
     }
 
     @Test
@@ -233,12 +233,12 @@ public class MultiJoinReorderTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 10: v4 = 13: v1\n" +
+                "  |  equal join conjunct: 10: v4 = 13: v1\n"));
 
         Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 4: v1 = 1: v4\n" +
+                "  |  equal join conjunct: 4: v1 = 1: v4\n"));
     }
 
     @Test
@@ -395,7 +395,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     tabletList=10033,10035,10037\n" +
                 "     cardinality=1000000000\n" +
                 "     avgRowSize=1.0\n" +
-                "     numNodes=0\n" +
+                "     numNodes=0\n"));
 
         // Left sub join tree (b)
         Assert.assertTrue(planFragment.contains("  23:HASH JOIN\n" +
@@ -424,7 +424,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     tabletList=10024,10026,10028\n" +
                 "     cardinality=100000\n" +
                 "     avgRowSize=1.0\n" +
-                "     numNodes=0\n" +
+                "     numNodes=0\n"));
 
         // Right sub join tree (a)
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
@@ -444,7 +444,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  output: count(10: count)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  12:EXCHANGE\n" +
+                "  12:EXCHANGE\n"));
     }
 
     @Test
@@ -460,12 +460,12 @@ public class MultiJoinReorderTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 13: v1 = 10: v4\n" +
+                "  |  equal join conjunct: 13: v1 = 10: v4\n"));
 
         Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 4: v1 = 1: v4\n" +
+                "  |  equal join conjunct: 4: v1 = 1: v4\n"));
     }
 
     @Test
@@ -477,7 +477,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  \n" +
                 "  7:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+                "  |  predicates is NULL.\n"));
 
         sql = "select * from (select v1, 2 as v, 3 from t0 inner join t1 on v2 = v4) t,t2;";
         planFragment = getFragmentPlan(sql);
