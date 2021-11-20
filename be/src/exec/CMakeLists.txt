@@ -38,7 +38,6 @@ set(EXEC_FILES
     local_file_reader.cpp
     scan_node.cpp
     select_node.cpp
-    text_converter.cpp
     sort_exec_exprs.cpp
     olap_common.cpp
     tablet_info.cpp
