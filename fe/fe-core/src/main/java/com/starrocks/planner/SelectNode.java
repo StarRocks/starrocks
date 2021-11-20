@@ -45,7 +45,6 @@ public class SelectNode extends PlanNode {
     public SelectNode(PlanNodeId id, PlanNode child, List<Expr> conjuncts) {
         super(id, child.getTupleIds(), "SELECT");
         addChild(child);
-        this.tblRefIds = child.tblRefIds;
         this.nullableTupleIds = child.nullableTupleIds;
         this.conjuncts.addAll(conjuncts);
     }

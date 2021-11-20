@@ -284,7 +284,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(*), S_ADDRESS from supplier group by S_ADDRESS";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("node_type:DECODE_NODE, num_children:1, limit:-1, row_tuples:[3, 2]"));
+        Assert.assertTrue(plan.contains("node_type:DECODE_NODE, num_children:1, limit:-1, row_tuples:[3]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 

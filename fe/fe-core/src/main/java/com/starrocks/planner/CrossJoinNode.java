@@ -50,8 +50,6 @@ public class CrossJoinNode extends PlanNode {
         innerRef_ = innerRef;
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
-        tblRefIds.addAll(outer.getTblRefIds());
-        tblRefIds.addAll(inner.getTblRefIds());
         children.add(outer);
         children.add(inner);
 
