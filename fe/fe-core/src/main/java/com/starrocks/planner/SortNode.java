@@ -259,41 +259,6 @@ public class SortNode extends PlanNode {
     }
 
     @Override
-    public boolean isVectorized() {
-        for (Expr expr : resolvedTupleExprs) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : info.getOrderingExprs()) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : info.getSortTupleSlotExprs()) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }

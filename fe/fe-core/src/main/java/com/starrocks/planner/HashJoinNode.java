@@ -471,35 +471,6 @@ public class HashJoinNode extends PlanNode {
         return Math.max(children.get(0).getNumInstances(), children.get(1).getNumInstances());
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : eqJoinConjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : otherJoinConjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     public enum DistributionMode {
         NONE("NONE"),
         BROADCAST("BROADCAST"),

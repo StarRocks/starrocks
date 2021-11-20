@@ -22,7 +22,6 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.AssertNumRowsElement;
-import com.starrocks.analysis.Expr;
 import com.starrocks.thrift.TAssertNumRowsNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
@@ -66,23 +65,6 @@ public class AssertNumRowsNode extends PlanNode {
         msg.assert_num_rows_node.setDesired_num_rows(desiredNumOfRows);
         msg.assert_num_rows_node.setSubquery_string(subqueryString);
         msg.assert_num_rows_node.setAssertion(assertion.toThrift());
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     @Override

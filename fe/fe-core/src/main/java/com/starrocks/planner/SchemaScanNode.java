@@ -145,8 +145,4 @@ public class SchemaScanNode extends ScanNode {
         return 1;
     }
 
-    @Override
-    public boolean isVectorized() {
-        return true;
-    }
 }

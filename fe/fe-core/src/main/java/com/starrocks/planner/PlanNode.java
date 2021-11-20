@@ -480,7 +480,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected String getColumnStatistics(String prefix) {
         StringBuilder outputBuilder = new StringBuilder();
-        TreeMap<ColumnRefOperator, ColumnStatistic> sortMap = new TreeMap<>(Comparator.comparingInt(ColumnRefOperator::getId));
+        TreeMap<ColumnRefOperator, ColumnStatistic> sortMap =
+                new TreeMap<>(Comparator.comparingInt(ColumnRefOperator::getId));
         sortMap.putAll(columnStatistics);
         sortMap.forEach((key, value) -> {
             outputBuilder.append(prefix).append("* ").append(key.getName());
@@ -537,7 +538,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             msg.setProbe_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(probeRuntimeFilters));
             Set<Integer> waitingPlanNodeIds = Sets.newHashSet();
-            for(RuntimeFilterDescription filter : probeRuntimeFilters) {
+            for (RuntimeFilterDescription filter : probeRuntimeFilters) {
                 if (!filter.isHasRemoteTargets()) {
                     waitingPlanNodeIds.add(filter.getBuildPlanNodeId());
                 }
@@ -799,14 +800,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         isColocate = colocate;
     }
 
-    public boolean isVectorized() {
-        return true;
-    }
-
-    public boolean isUseVectorized() {
-        return useVectorized;
-    }
-
     public boolean canUsePipeLine() {
         return false;
     }
@@ -841,7 +834,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     public boolean canDoReplicatedJoin() {
         if (children.size() == 1) {
             return getChild(0).canDoReplicatedJoin();
-        } else if (children.size() == 2){
+        } else if (children.size() == 2) {
             return getChild(1).canDoReplicatedJoin();
         } else {
             return false;
