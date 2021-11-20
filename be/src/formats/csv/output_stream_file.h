@@ -19,9 +19,7 @@ public:
         return _file->close();
     }
 
-    std::size_t size() override {
-        return _file->size();
-    }
+    std::size_t size() override { return _file->size(); }
 
 protected:
     Status _sync(const char* data, size_t size) override { return _file->append(Slice(data, size)); }

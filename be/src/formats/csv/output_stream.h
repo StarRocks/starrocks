@@ -93,9 +93,7 @@ public:
 
     virtual Status finalize() { return _flush(); }
 
-    virtual std::size_t size() {
-        return 0;
-    }
+    virtual std::size_t size() { return 0; }
 
 protected:
     virtual Status _sync(const char* data, size_t size) = 0;

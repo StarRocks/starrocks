@@ -121,7 +121,7 @@ Status FileResultWriter::append_chunk(vectorized::Chunk* chunk) {
     assert(_file_builder != nullptr);
     _file_builder->add_chunk(chunk);
 
-    // split file_builder if exceed limit
+    // split file if exceed limit
     RETURN_IF_ERROR(_create_new_file_if_exceed_size());
 
     return Status::OK();
