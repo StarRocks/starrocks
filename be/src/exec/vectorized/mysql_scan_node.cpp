@@ -9,7 +9,6 @@
 #include "column/fixed_length_column_base.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
-#include "exec/text_converter.hpp"
 #include "exprs/slot_ref.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/date_value.hpp"

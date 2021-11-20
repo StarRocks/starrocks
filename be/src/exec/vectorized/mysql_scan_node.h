@@ -12,7 +12,6 @@
 
 namespace starrocks {
 
-class TextConverter;
 class Tuple;
 class TupleDescriptor;
 class RuntimeState;
