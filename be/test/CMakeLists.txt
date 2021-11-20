@@ -35,7 +35,7 @@ set(EXEC_FILES
         #./exec/vectorized/csv_scanner_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
-        #./exec/vectorized/json_scanner_test.cpp
+        ./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp

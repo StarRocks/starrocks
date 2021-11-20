@@ -72,9 +72,6 @@ protected:
                                                starrocks_home + "./be/test/exec/test_data/json_scanner/test2.json",
                                                starrocks_home + "./be/test/exec/test_data/json_scanner/test3.json",
                                                starrocks_home + "./be/test/exec/test_data/json_scanner/test4.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test5.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test6.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test7.json",
                                                starrocks_home + "./be/test/exec/test_data/json_scanner/test8.json"};
     }
 
@@ -304,10 +301,4 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
     EXPECT_EQ("['v5', 'server', '10.10.0.5', 50]", chunk->debug_row(4));
 }
 
-
 } // namespace starrocks::vectorized
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-} 
