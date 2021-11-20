@@ -367,7 +367,7 @@ public class Explain {
             sb.append("]");
 
             Set<ColumnRefOperator> outputColumnRef = new HashSet<>(repeat.getOutputGrouping());
-            for (Set<ColumnRefOperator> s : repeat.getRepeatColumnRef()) {
+            for (List<ColumnRefOperator> s : repeat.getRepeatColumnRef()) {
                 outputColumnRef.addAll(s);
             }
             sb.append(buildOutputColumns(repeat, "[" + outputColumnRef.stream().map(new ExpressionPrinter()::print)
