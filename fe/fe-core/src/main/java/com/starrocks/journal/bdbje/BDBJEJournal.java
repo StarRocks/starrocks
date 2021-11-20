@@ -29,6 +29,7 @@ import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
+import com.sleepycat.je.rep.ReplicaWriteException;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -159,6 +160,9 @@ public class BDBJEJournal implements Journal {
                             id, currentJournalDB.getDb().getDatabaseName(), System.currentTimeMillis());
                     break;
                 }
+            } catch (ReplicaWriteException e) {
+                LOG.error("non-master nodes should not write editLog", e);
+                throw e;
             } catch (DatabaseException e) {
                 LOG.error("catch an exception when writing to database. sleep and retry. journal id {}", id, e);
                 try {
