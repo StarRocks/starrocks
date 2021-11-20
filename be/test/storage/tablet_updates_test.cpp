@@ -357,35 +357,6 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, const 
     return count;
 }
 
-static ssize_t read_and_compare_schema_changed(const vectorized::ChunkIteratorPtr& iter, const vector<int64_t>& keys) {
-    auto chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), 100);
-    auto full_chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), keys.size());
-    auto& cols = full_chunk->columns();
-    std::unique_ptr<MemPool> mem_pool(new MemPool());
-    for (size_t i = 0; i < keys.size(); i++) {
-        cols[0]->append_datum(vectorized::Datum((int32_t)keys[i]));
-        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-        cols[2]->append_datum(vectorized::Datum(Slice{std::to_string((int64_t)(keys[i] % 1000 + 2))}));
-        cols[3]->append_datum(vectorized::Datum(1));
-    }
-    size_t count = 0;
-    while (true) {
-        auto st = iter->get_next(chunk.get());
-        if (st.is_end_of_file()) {
-            break;
-        } else if (st.ok()) {
-            for (auto i = 0; i < chunk->num_rows(); i++) {
-                EXPECT_EQ(full_chunk->get(count + i).compare(iter->schema(), chunk->get(i)), 0);
-            }
-            count += chunk->num_rows();
-            chunk->reset();
-        } else {
-            return -1;
-        }
-    }
-    return count;
-}
-
 static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
     auto chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -426,7 +397,31 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
     if (iter == nullptr) {
         return -1;
     }
-    return read_and_compare_schema_changed(iter, keys);
+    auto full_chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), keys.size());
+    auto& cols = full_chunk->columns();
+    for (size_t i = 0; i < keys.size(); i++) {
+        cols[0]->append_datum(vectorized::Datum((int32_t)keys[i]));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
+        cols[2]->append_datum(vectorized::Datum(Slice{std::to_string((int64_t)(keys[i] % 1000 + 2))}));
+        cols[3]->append_datum(vectorized::Datum(1));
+    }
+    auto chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), 100);
+    size_t count = 0;
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (st.ok()) {
+            for (auto i = 0; i < chunk->num_rows(); i++) {
+                EXPECT_EQ(full_chunk->get(count + i).compare(iter->schema(), chunk->get(i)), 0);
+            }
+            count += chunk->num_rows();
+            chunk->reset();
+        } else {
+            return -1;
+        }
+    }
+    return count;
 }
 
 TEST_F(TabletUpdatesTest, writeread) {
@@ -846,11 +841,8 @@ TEST_F(TabletUpdatesTest, perform_directly_schema_change) {
         keys.push_back(i);
     }
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
     auto chunk_changer = std::make_unique<vectorized::ChunkChanger>(tablet_to_schema_change->tablet_schema());
