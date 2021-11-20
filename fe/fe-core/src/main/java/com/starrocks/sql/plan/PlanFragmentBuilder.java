@@ -372,7 +372,9 @@ public class PlanFragmentBuilder {
                         context.getColRefToExpr().put(new ColumnRefOperator(stringSlotId, Type.VARCHAR, "xxx", true),
                                 new SlotRef(stringSlotId.toString(), slotDescriptor));
                     } else {
-                        tupleDescriptor.addSlot(slot);
+                        // Note: must change the parent tuple id
+                        SlotDescriptor slotDescriptor = new SlotDescriptor(slot.getId(), tupleDescriptor, slot);
+                        tupleDescriptor.addSlot(slotDescriptor);
                     }
                 }
             }
