@@ -624,17 +624,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         return 31 * super.hashCode() + Objects.hashCode(op);
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     public boolean isNullable() {
         return op != Operator.EQ_FOR_NULL;
     }

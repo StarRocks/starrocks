@@ -146,17 +146,6 @@ public class IsNullPredicate extends Predicate {
     }
 
     @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    @Override
     public boolean isStrictPredicate() {
         Expr child = getChild(0);
         if (child.unwrapSlotRef() != null) {

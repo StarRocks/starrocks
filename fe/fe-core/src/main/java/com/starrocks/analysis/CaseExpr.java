@@ -380,16 +380,6 @@ public class CaseExpr extends Expr {
     }
 
     @Override
-    public boolean isVectorized() {
-        for (Expr child : children) {
-            if (!child.isVectorized()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    @Override
     public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitCaseWhenExpr(this, context);
     }

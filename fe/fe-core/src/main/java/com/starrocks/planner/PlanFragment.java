@@ -270,12 +270,12 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private List<TGlobalDict> dictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
         List<TGlobalDict> result = Lists.newArrayList();
-        for(Pair<Integer, ColumnDict> dictPair: dicts) {
+        for (Pair<Integer, ColumnDict> dictPair : dicts) {
             TGlobalDict globalDict = new TGlobalDict();
             globalDict.setColumnId(dictPair.first);
             List<String> strings = Lists.newArrayList();
             List<Integer> integers = Lists.newArrayList();
-            for (Map.Entry<String, Integer> kv: dictPair.second.getDict().entrySet()) {
+            for (Map.Entry<String, Integer> kv : dictPair.second.getDict().entrySet()) {
                 strings.add(kv.getKey());
                 integers.add(kv.getValue());
             }
@@ -292,20 +292,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         str.append(" OUTPUT EXPRS:");
 
         StringBuilder outputBuilder = new StringBuilder();
-        List<String> vectorizedTrace = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             outputBuilder.append(outputExprs.stream().map(Expr::toSql)
                     .collect(Collectors.joining(" | ")));
 
-            outputExprs.forEach(v -> v.isVectorizedTrace(vectorizedTrace));
         }
 
-        String outputString = outputBuilder.toString();
-        for (String trace : vectorizedTrace) {
-            outputString = outputString.replace(trace, "non-vectorized::" + trace);
-        }
-
-        str.append(outputString);
+        str.append(outputBuilder.toString());
         str.append("\n");
         str.append("  PARTITION: ").append(dataPartition.getExplainString(explainLevel)).append("\n");
         if (sink != null) {
