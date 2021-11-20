@@ -1865,8 +1865,8 @@ Status TabletUpdates::perform_directly_schema_change(int64_t request_version,
         LOG(INFO) << "begin to convert a history rowset. version=" << rowset->version().first << "-"
                   << rowset->version().second;
 
-        vectorized::TabletReader* tablet_reader =
-                new vectorized::TabletReader(base_tablet, Version(0, version.major()), base_schema);
+        std::unique_ptr<vectorized::TabletReader> tablet_reader =
+                std::make_unique<vectorized::TabletReader>(base_tablet, Version(0, version.major()), base_schema);
         tablet_reader->set_delete_predicates_version(Version(0, max_version));
         RETURN_IF_ERROR(tablet_reader->prepare());
         RETURN_IF_ERROR(tablet_reader->open(read_params));
@@ -1892,7 +1892,7 @@ Status TabletUpdates::perform_directly_schema_change(int64_t request_version,
             return Status::InternalError("build rowset writer failed");
         }
 
-        status = _convert_from_base_rowset(base_tablet, tablet_reader, chunk_changer, rowset_writer);
+        status = _convert_from_base_rowset(base_tablet, tablet_reader.get(), chunk_changer, rowset_writer);
         if (!status.ok()) {
             LOG(WARNING) << "failed to convert from base rowset, exit alter process";
             return status;

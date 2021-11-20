@@ -108,8 +108,7 @@ private:
 // @brief schema change without sorting.
 class SchemaChangeDirectly : public SchemaChange {
 public:
-    explicit SchemaChangeDirectly(ChunkChanger* chunk_changer)
-            : SchemaChange(), _chunk_changer(chunk_changer), _chunk_allocator(nullptr) {}
+    explicit SchemaChangeDirectly(ChunkChanger* chunk_changer) : SchemaChange(), _chunk_changer(chunk_changer) {}
     virtual ~SchemaChangeDirectly() { SAFE_DELETE(_chunk_allocator); }
 
     bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
@@ -117,7 +116,7 @@ public:
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
-    ChunkAllocator* _chunk_allocator;
+    ChunkAllocator* _chunk_allocator = nullptr;
     DISALLOW_COPY_AND_ASSIGN(SchemaChangeDirectly);
 };
 
@@ -135,7 +134,7 @@ private:
 
     ChunkChanger* _chunk_changer = nullptr;
     size_t _memory_limitation;
-    ChunkAllocator* _chunk_allocator;
+    ChunkAllocator* _chunk_allocator = nullptr;
     DISALLOW_COPY_AND_ASSIGN(SchemaChangeWithSorting);
 };
 

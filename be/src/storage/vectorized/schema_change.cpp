@@ -73,7 +73,7 @@ public:
     static bool _chunk_comparator(const ChunkRow& lhs, const ChunkRow& rhs) { return compare_chunk_row(lhs, rhs) < 0; }
 
 private:
-    ChunkAllocator* _chunk_allocator;
+    ChunkAllocator* _chunk_allocator = nullptr;
     ChunkPtr _swap_chunk;
     size_t _max_allocated_rows;
 };
@@ -732,10 +732,7 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
 }
 
 SchemaChangeWithSorting::SchemaChangeWithSorting(ChunkChanger* chunk_changer, size_t memory_limitation)
-        : SchemaChange(),
-          _chunk_changer(chunk_changer),
-          _memory_limitation(memory_limitation),
-          _chunk_allocator(nullptr) {}
+        : SchemaChange(), _chunk_changer(chunk_changer), _memory_limitation(memory_limitation) {}
 
 SchemaChangeWithSorting::~SchemaChangeWithSorting() {
     SAFE_DELETE(_chunk_allocator);
