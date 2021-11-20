@@ -9,7 +9,6 @@
 #include "column/column_helper.h"
 #include "env/env_util.h"
 #include "exec/parquet_reader.h"
-#include "exec/text_converter.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
