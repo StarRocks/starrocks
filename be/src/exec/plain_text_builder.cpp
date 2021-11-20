@@ -80,12 +80,12 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
 }
 
 std::size_t PlainTextBuilder::file_size() {
-    assert(_output_stream != nullptr);
+    DCHECK(_output_stream != nullptr);
     return _output_stream->size();
 }
 
 Status PlainTextBuilder::finish() {
-    assert(_output_stream != nullptr);
+    DCHECK(_output_stream != nullptr);
     return _output_stream->finalize();
 }
 
