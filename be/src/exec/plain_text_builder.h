@@ -25,7 +25,7 @@ struct PlainTextBuilderOptions {
     std::string line_terminated_by;
 };
 
-class PlainTextBuilder : public FileBuilder {
+class PlainTextBuilder final : public FileBuilder {
 public:
     PlainTextBuilder(PlainTextBuilderOptions options, std::unique_ptr<WritableFile> writable_file,
                      const std::vector<ExprContext*>& output_expr_ctxs);
