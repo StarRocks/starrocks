@@ -30,7 +30,6 @@ public class ProjectNode extends PlanNode {
                        Map<SlotId, Expr> commonSlotMap) {
         super(id, tupleDescriptor.getId().asList(), "Project");
         addChild(child);
-        this.tblRefIds = child.tblRefIds;
         this.slotMap = slotMap;
         this.commonSlotMap = commonSlotMap;
     }

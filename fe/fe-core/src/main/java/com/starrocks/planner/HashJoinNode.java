@@ -94,8 +94,6 @@ public class HashJoinNode extends PlanNode {
         Preconditions.checkArgument(otherJoinConjuncts != null);
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
-        tblRefIds.addAll(outer.getTblRefIds());
-        tblRefIds.addAll(inner.getTblRefIds());
         this.innerRef = innerRef;
         this.joinOp = innerRef.getJoinOp();
         for (Expr eqJoinPredicate : eqJoinConjuncts) {
