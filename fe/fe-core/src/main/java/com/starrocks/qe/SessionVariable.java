@@ -734,8 +734,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableColumnExprPredicate;
     }
 
+
+    /**
+     * check cbo_cte_reuse && enable_pipeline
+     */
     public boolean isCboCteReuse() {
-        return cboCteReuse;
+        return cboCteReuse && enablePipelineEngine;
     }
 
     public void setCboCteReuse(boolean cboCteReuse) {

@@ -44,9 +44,9 @@ public class DeriveStatsTask extends OptimizerTask implements Cloneable {
         }
 
         boolean needDerivedChildren = false;
-        // If we haven't got enough stats to compute the current stats, derive them
-        // from the child first
-        for (int i = 0; i < groupExpression.arity(); ++i) {
+        // If we haven't got enough stats to compute the current stats, derive them from the child first.
+        // For CTE, we need derive right tree first, then derive left
+        for (int i = groupExpression.arity() - 1; i >= 0; --i) {
             // TODO(kks): Currently we use the first child expression in the child
             // group to derive stats, in the future we may want to pick the one with
             // the highest confidence refer to ORCA paper
@@ -72,7 +72,7 @@ public class DeriveStatsTask extends OptimizerTask implements Cloneable {
 
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
-                context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext().getDumpInfo());
+                context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext());
         statisticsCalculator.estimatorStats();
         groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
 

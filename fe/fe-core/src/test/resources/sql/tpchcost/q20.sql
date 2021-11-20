@@ -333,11 +333,11 @@ column statistics:
     "test.nation": {
       "nation": 25
     },
-    "test.lineitem": {
-      "lineitem": 600000000
-    },
     "test.partsupp": {
       "partsupp": 80000000
+    },
+    "test.lineitem": {
+      "lineitem": 600000000
     },
     "test.supplier": {
       "supplier": 1000000
@@ -351,16 +351,16 @@ column statistics:
       "N_NAME": "[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE",
       "N_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE"
     },
+    "test.partsupp": {
+      "PS_SUPPKEY": "[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE",
+      "PS_AVAILQTY": "[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE",
+      "PS_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE"
+    },
     "test.lineitem": {
       "L_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE",
       "L_SHIPDATE": "[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE",
       "L_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE",
       "L_QUANTITY": "[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE"
-    },
-    "test.partsupp": {
-      "PS_SUPPKEY": "[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE",
-      "PS_AVAILQTY": "[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE",
-      "PS_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE"
     },
     "test.supplier": {
       "S_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE",

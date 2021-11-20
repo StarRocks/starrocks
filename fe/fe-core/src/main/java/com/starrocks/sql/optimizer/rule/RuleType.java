@@ -127,7 +127,7 @@ public enum RuleType {
     IMP_LIMIT,
     IMP_CTE_CONSUMER,
     IMP_CTE_ANCHOR,
-    IMP_CTE_ANCHOR_TO_NO_OP,
+    IMP_CTE_ANCHOR_TO_NO_CTE,
     IMP_CTE_PRODUCE,
 
     NUM_RULES;
