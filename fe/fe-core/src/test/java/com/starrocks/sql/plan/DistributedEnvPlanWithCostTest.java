@@ -627,4 +627,28 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("count-->[0.0, 1000000.0, 0.0, 8.0, 1.0] ESTIMATE"));
     }
+
+    public void testGenRuntimeFilterWhenRightJoin() throws Exception {
+        String sql = "select * from lineitem right anti join [shuffle] part on lineitem.l_partkey = part.p_partkey";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  4:HASH JOIN\n" +
+                "  |  join op: RIGHT ANTI JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [2: L_PARTKEY, INT, false] = [18: P_PARTKEY, INT, false]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (18: P_PARTKEY), remote = true"));
+        sql = "select * from lineitem right semi join [shuffle] part on lineitem.l_partkey = part.p_partkey";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  4:HASH JOIN\n" +
+                "  |  join op: RIGHT SEMI JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [2: L_PARTKEY, INT, false] = [18: P_PARTKEY, INT, false]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (18: P_PARTKEY), remote = true"));
+        sql = "select * from lineitem right outer join [shuffle] part on lineitem.l_partkey = part.p_partkey";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [2: L_PARTKEY, INT, true] = [18: P_PARTKEY, INT, false]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (18: P_PARTKEY), remote = true"));
+    }
 }
