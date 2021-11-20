@@ -109,8 +109,8 @@ public:
             MemTracker* prev_tracker =
                     tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->page_cache_mem_tracker());
             DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-            _cache->release(_handle);
 #endif
+            _cache->release(_handle);
         }
     }
 
