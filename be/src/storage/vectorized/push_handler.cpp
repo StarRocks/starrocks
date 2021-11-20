@@ -244,7 +244,6 @@ Status PushHandler::process_streaming_ingestion(const TabletSharedPtr& tablet, c
                                                 PushType push_type, std::vector<TTabletInfo>* tablet_info_vec) {
     LOG(INFO) << "begin to realtime vectorized push. tablet=" << tablet->full_name()
               << ", transaction_id=" << request.transaction_id;
-    DCHECK_EQ(push_type, PUSH_NORMAL_V2);
     DCHECK(request.__isset.use_vectorized && request.use_vectorized);
 
     _request = request;
@@ -354,9 +353,37 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         tablet_vars->resize(2);
     }
 
-    // write
-    Status st = _convert(tablet_vars->at(0).tablet, tablet_vars->at(1).tablet, &(tablet_vars->at(0).rowset_to_add),
-                         &(tablet_vars->at(1).rowset_to_add));
+    // check delete condition if push for delete
+    std::queue<DeletePredicatePB> del_preds;
+    if (push_type == PUSH_FOR_DELETE) {
+        for (TabletVars& tablet_var : *tablet_vars) {
+            if (tablet_var.tablet == nullptr) {
+                continue;
+            }
+
+            DeletePredicatePB del_pred;
+            DeleteConditionHandler del_cond_handler;
+            tablet_var.tablet->obtain_header_rdlock();
+            res = del_cond_handler.generate_delete_predicate(tablet_var.tablet->tablet_schema(),
+                                                             request.delete_conditions, &del_pred);
+            del_preds.push(del_pred);
+            tablet_var.tablet->release_header_lock();
+            if (res != OLAP_SUCCESS) {
+                LOG(WARNING) << "Fail to generate delete condition. res=" << res
+                             << ", tablet=" << tablet_var.tablet->full_name();
+                return Status::InternalError("Fail to generate delete condition");
+            }
+        }
+    }
+
+    Status st = Status::OK();
+    if (push_type == PUSH_NORMAL_V2) {
+        st = _load_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add));
+    } else {
+        DCHECK_EQ(push_type, PUSH_FOR_DELETE);
+        st = _delete_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add));
+    }
+
     if (!st.ok()) {
         LOG(WARNING) << "fail to convert tmp file when realtime push. res=" << st.to_string()
                      << ", failed to process realtime push."
@@ -383,6 +410,10 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
             continue;
         }
 
+        if (push_type == PUSH_FOR_DELETE) {
+            tablet_var.rowset_to_add->rowset_meta()->set_delete_predicate(del_preds.front());
+            del_preds.pop();
+        }
         OLAPStatus commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
                 request.partition_id, tablet_var.tablet, request.transaction_id, load_id, tablet_var.rowset_to_add,
                 false);
@@ -410,8 +441,68 @@ void PushHandler::_get_tablet_infos(const std::vector<TabletVars>& tablet_vars,
     }
 }
 
-Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, const TabletSharedPtr& new_tablet_vec,
-                             RowsetSharedPtr* cur_rowset, RowsetSharedPtr* new_rowset) {
+Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
+    Status st = Status::OK();
+    PUniqueId load_id;
+    load_id.set_hi(0);
+    load_id.set_lo(0);
+
+    do {
+        // 1. Init BinaryReader to read raw file if exist,
+        //    in case of empty push and delete data, this will be skipped.
+        DCHECK(!_request.__isset.http_file_path);
+
+        // 2. init RowsetBuilder of cur_tablet for current push
+        RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
+        context.rowset_id = StorageEngine::instance()->next_rowset_id();
+        context.tablet_uid = cur_tablet->tablet_uid();
+        context.tablet_id = cur_tablet->tablet_id();
+        context.partition_id = _request.partition_id;
+        context.tablet_schema_hash = cur_tablet->schema_hash();
+        context.rowset_type = BETA_ROWSET;
+        context.rowset_path_prefix = cur_tablet->schema_hash_path();
+        context.tablet_schema = &cur_tablet->tablet_schema();
+        context.rowset_state = PREPARED;
+        context.txn_id = _request.transaction_id;
+        context.load_id = load_id;
+        // although the hadoop load output files are fully sorted,
+        // but it depends on thirparty implementation, so we conservatively
+        // set this value to OVERLAP_UNKNOWN
+        context.segments_overlap = OVERLAP_UNKNOWN;
+
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
+                         << ", txn_id=" << _request.transaction_id << ", status:" << st.to_string();
+            break;
+        }
+
+        // 3. New RowsetBuilder to write data into rowset
+        VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
+                << ", block_row_size=" << cur_tablet->num_rows_per_row_block();
+        if (rowset_writer->flush() != OLAP_SUCCESS) {
+            LOG(WARNING) << "Failed to finalize writer.";
+            st = Status::InternalError("Fail to finalize writer");
+            break;
+        }
+        *cur_rowset = rowset_writer->build();
+
+        if (*cur_rowset == nullptr) {
+            LOG(WARNING) << "Fail to build rowset";
+            st = Status::InternalError("Fail to build rowset");
+            break;
+        }
+
+        _write_bytes += (*cur_rowset)->data_disk_size();
+        _write_rows += (*cur_rowset)->num_rows();
+
+    } while (false);
+
+    return st;
+}
+
+Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
     Status st;
     uint32_t num_rows = 0;
     PUniqueId load_id;
