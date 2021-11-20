@@ -171,10 +171,6 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override { _data->put_mysql_row_buffer(buf, 0); }
 
-    std::string to_string(size_t idx, const std::string& null_value) const override {
-        return _data->to_string(idx, null_value);
-    }
-
     std::string get_name() const override { return "const-" + _data->get_name(); }
 
     ColumnPtr* mutable_data_column() { return &_data; }

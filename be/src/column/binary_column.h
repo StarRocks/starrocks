@@ -206,10 +206,6 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
-    std::string to_string(size_t idx, const std::string& null_value) const override {
-        return get_slice(idx).to_string();
-    }
-
     std::string get_name() const override { return "binary"; }
 
     Container& get_data() {

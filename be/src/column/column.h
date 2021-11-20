@@ -300,8 +300,6 @@ public:
     // Push one row to MysqlRowBuffer
     virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
 
-    virtual std::string to_string(size_t idx, const std::string& null_value) const { return null_value; }
-
     void set_delete_state(DelCondSatisfied delete_state) { _delete_state = delete_state; }
 
     DelCondSatisfied delete_state() const { return _delete_state; }

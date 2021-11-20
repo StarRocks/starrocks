@@ -163,8 +163,6 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
-    std::string to_string(size_t idx, const std::string& null_value) const override;
-
     std::string get_name() const override;
 
     Container& get_data() { return _data; }

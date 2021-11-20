@@ -10,8 +10,8 @@
 #include "storage/uint24.h"
 #include "util/coding.h"
 #include "util/hash_util.hpp"
-#include "util/int96.h"
 #include "util/mysql_row_buffer.h"
+#include "util/types.h"
 
 namespace starrocks::vectorized {
 
@@ -223,33 +223,6 @@ void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t 
         // date/datetime or something else.
         std::string s = _data[idx].to_string();
         buf->push_string(s.data(), s.size());
-    }
-}
-
-template <typename T>
-std::string FixedLengthColumnBase<T>::to_string(size_t idx, const std::string& null_value) const {
-    if constexpr (std::is_arithmetic_v<T>) {
-        // To prevent loss of precision on float and double types,
-        // they are converted to strings before output.
-        // For example: For a double value 27361919854.929001,
-        // the direct output of using std::to_string is 2.73619e+10,
-        // and after conversion to a string, it outputs 27361919854.929001
-        if constexpr (std::is_same_v<T, float>) {
-            char buffer[MAX_FLOAT_STR_LENGTH + 2];
-            buffer[0] = '\0';
-            FloatToBuffer(_data[idx], MAX_FLOAT_STR_LENGTH, buffer);
-            return buffer;
-        } else if constexpr (std::is_same_v<T, double>) {
-            char buffer[MAX_DOUBLE_STR_LENGTH + 2];
-            buffer[0] = '\0';
-            DoubleToBuffer(_data[idx], MAX_DOUBLE_STR_LENGTH, buffer);
-            return buffer;
-        } else {
-            return std::to_string(_data[idx]);
-        }
-    } else {
-        // decimal/date/datetime or something else.
-        return _data[idx].to_string();
     }
 }
 
