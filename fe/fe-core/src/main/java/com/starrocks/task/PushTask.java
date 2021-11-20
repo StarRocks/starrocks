@@ -91,7 +91,7 @@ public class PushTask extends AgentTask {
         this.transactionId = transactionId;
         this.tBrokerScanRange = null;
         this.tDescriptorTable = null;
-        this.useVectorized = false;
+        this.useVectorized = true;
     }
 
     // for load v2 (SparkLoadJob)
@@ -159,6 +159,7 @@ public class PushTask extends AgentTask {
                     tConditions.add(tCondition);
                 }
                 request.setDelete_conditions(tConditions);
+                request.setUse_vectorized(useVectorized);
                 break;
             case LOAD_V2:
                 request.setBroker_scan_range(tBrokerScanRange);

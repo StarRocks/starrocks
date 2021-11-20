@@ -46,11 +46,6 @@ private:
     DISALLOW_COPY_AND_ASSIGN(Daemon);
 };
 
-// Initialises logging, flags etc. Callers that want to override default gflags
-// variables should do so before calling this method; no logging should be
-// performed until after this method returns.
-void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths);
-
 } // namespace starrocks
 
 #endif
