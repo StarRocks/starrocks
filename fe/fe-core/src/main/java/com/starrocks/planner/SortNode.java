@@ -85,7 +85,6 @@ public class SortNode extends PlanNode {
         this.useTopN = useTopN;
         this.isDefaultLimit = isDefaultLimit;
         this.tupleIds.addAll(Lists.newArrayList(info.getSortTupleDescriptor().getId()));
-        this.tblRefIds.addAll(Lists.newArrayList(info.getSortTupleDescriptor().getId()));
         this.nullableTupleIds.addAll(input.getNullableTupleIds());
         this.children.add(input);
         this.offset = offset;
