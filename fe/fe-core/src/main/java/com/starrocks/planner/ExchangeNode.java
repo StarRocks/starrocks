@@ -110,7 +110,6 @@ public class ExchangeNode extends PlanNode {
     public final void computeTupleIds() {
         clearTupleIds();
         tupleIds.addAll(getChild(0).getTupleIds());
-        tblRefIds.addAll(getChild(0).getTblRefIds());
         nullableTupleIds.addAll(getChild(0).getNullableTupleIds());
     }
 
