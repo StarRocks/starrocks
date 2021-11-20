@@ -14,9 +14,17 @@
 #include "util/time.h"
 #include "util/trace.h"
 
-using std::vector;
-
 namespace starrocks::vectorized {
+
+std::string compaction_algorithm_to_string(CompactionAlgorithm algorithm) {
+    switch (algorithm) {
+    case HORIZONTAL:
+        return "horizontal";
+    case VERTICAL:
+        return "vertical";
+    }
+    return "unknown";
+}
 
 Semaphore Compaction::_concurrency_sem;
 
@@ -35,6 +43,54 @@ Status Compaction::init(int concurreny) {
     return Status::OK();
 }
 
+CompactionAlgorithm Compaction::choose_compaction_algorithm(size_t num_columns, int64_t max_columns_per_group,
+                                                            size_t source_num) {
+    // if the number of columns in the schema is less than or equal to max_columns_per_group, use HORIZONTAL.
+    if (num_columns <= max_columns_per_group) {
+        return HORIZONTAL;
+    }
+
+    // if source_num is less than or equal to 1, heap merge iterator is not used in compaction,
+    // and row source mask is not created.
+    // if source_num is more than MAX_SOURCES, mask in RowSourceMask may overflow.
+    if (source_num <= 1 || source_num > RowSourceMask::MAX_SOURCES) {
+        return HORIZONTAL;
+    }
+
+    return VERTICAL;
+}
+
+uint32_t Compaction::get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size) {
+    // max segment rows
+    int64_t max_segment_rows = max_segment_file_size * input_row_num / (input_size + 1);
+    // default value in RowsetWriterContext is INT32_MAX.
+    // segment file use uint32 to represent row number,
+    // and use INT32_MAX to avoid overflow issue when casting from uint32_t to int.
+    if (max_segment_rows > INT32_MAX) {
+        max_segment_rows = INT32_MAX;
+    } else if (max_segment_rows < 1) {
+        max_segment_rows = 1;
+    }
+    return max_segment_rows;
+}
+
+void Compaction::get_column_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
+                                   std::vector<std::vector<uint32_t>>* column_groups) {
+    std::vector<uint32_t> key_columns;
+    for (size_t i = 0; i < num_key_columns; ++i) {
+        key_columns.emplace_back(i);
+    }
+    column_groups->emplace_back(key_columns);
+
+    for (size_t i = num_key_columns; i < num_columns; ++i) {
+        if ((i - num_key_columns) % max_columns_per_group == 0) {
+            std::vector<uint32_t> columns;
+            column_groups->emplace_back(columns);
+        }
+        column_groups->back().emplace_back(i);
+    }
+}
+
 Status Compaction::do_compaction() {
     _concurrency_sem.wait();
     TRACE("got concurrency lock and start to do compaction");
@@ -48,27 +104,59 @@ Status Compaction::do_compaction_impl() {
 
     // 1. prepare input and output parameters
     int64_t segments_num = 0;
+    int64_t total_row_size = 0;
     for (auto& rowset : _input_rowsets) {
         _input_rowsets_size += rowset->data_disk_size();
         _input_row_num += rowset->num_rows();
         segments_num += rowset->num_segments();
+        total_row_size += rowset->total_row_size();
     }
+
     TRACE_COUNTER_INCREMENT("input_rowsets_data_size", _input_rowsets_size);
     TRACE_COUNTER_INCREMENT("input_row_num", _input_row_num);
     TRACE_COUNTER_INCREMENT("input_segments_num", segments_num);
 
     _output_version = Version(_input_rowsets.front()->start_version(), _input_rowsets.back()->end_version());
 
-    LOG(INFO) << "start " << compaction_name() << ". tablet=" << _tablet->full_name()
-              << ", output version is=" << _output_version.first << "-" << _output_version.second;
+    // choose vertical or horizontal compaction algorithm
+    auto iterator_num_res = _get_segment_iterator_num();
+    if (!iterator_num_res.ok()) {
+        LOG(WARNING) << "fail to get segment iterator num. tablet=" << _tablet->full_name()
+                     << ", err=" << iterator_num_res.status().to_string();
+        return iterator_num_res.status();
+    }
+    size_t segment_iterator_num = iterator_num_res.value();
+    int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+    size_t num_columns = _tablet->num_columns();
+    CompactionAlgorithm algorithm =
+            choose_compaction_algorithm(num_columns, max_columns_per_group, segment_iterator_num);
+    if (algorithm == VERTICAL) {
+        // split columns into column group
+        get_column_groups(_tablet->num_columns(), _tablet->num_key_columns(), max_columns_per_group, &_column_groups);
+    }
 
-    RETURN_IF_ERROR(construct_output_rowset_writer());
+    // max rows per segment
+    int64_t max_rows_per_segment =
+            get_segment_max_rows(config::max_segment_file_size, _input_row_num, _input_rowsets_size);
+
+    LOG(INFO) << "start " << compaction_name() << ". tablet=" << _tablet->full_name()
+              << ", output version is=" << _output_version.first << "-" << _output_version.second
+              << ", max rows per segment=" << max_rows_per_segment << ", segment iterator num=" << segment_iterator_num
+              << ", algorithm=" << compaction_algorithm_to_string(algorithm)
+              << ", column group size=" << _column_groups.size() << ", columns per group=" << max_columns_per_group;
+
+    // create rowset writer
+    RETURN_IF_ERROR(construct_output_rowset_writer(max_rows_per_segment, algorithm));
     TRACE("prepare finished");
 
     // 2. write combined rows to output rowset
     Statistics stats;
-    auto res = merge_rowsets(config::compaction_memory_limit_per_worker, &stats);
-
+    Status res;
+    if (algorithm == VERTICAL) {
+        res = merge_rowsets_vertical(&stats);
+    } else {
+        res = merge_rowsets_horizontal(config::compaction_memory_limit_per_worker, &stats);
+    }
     if (!res.ok()) {
         LOG(WARNING) << "fail to do " << compaction_name() << ". res=" << res.to_string()
                      << ", tablet=" << _tablet->full_name() << ", output_version=" << _output_version.first << "-"
@@ -126,7 +214,18 @@ Status Compaction::do_compaction_impl() {
     return Status::OK();
 }
 
-Status Compaction::construct_output_rowset_writer() {
+StatusOr<size_t> Compaction::_get_segment_iterator_num() {
+    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    TabletReader reader(_tablet, _output_version, schema);
+    TabletReaderParams reader_params;
+    reader_params.reader_type = compaction_type();
+    RETURN_IF_ERROR(reader.prepare());
+    std::vector<ChunkIteratorPtr> seg_iters;
+    RETURN_IF_ERROR(reader.get_segment_iterators(reader_params, &seg_iters));
+    return seg_iters.size();
+}
+
+Status Compaction::construct_output_rowset_writer(uint32_t max_rows_per_segment, CompactionAlgorithm algorithm) {
     RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = _tablet->tablet_uid();
@@ -139,6 +238,8 @@ Status Compaction::construct_output_rowset_writer() {
     context.rowset_state = VISIBLE;
     context.version = _output_version;
     context.segments_overlap = NONOVERLAPPING;
+    context.max_rows_per_segment = max_rows_per_segment;
+    context.writer_type = (algorithm == VERTICAL ? RowsetWriterType::VERTICAL : RowsetWriterType::HORIZONTAL);
     Status st = RowsetFactory::create_rowset_writer(context, &_output_rs_writer);
     if (!st.ok()) {
         std::stringstream ss;
@@ -149,7 +250,7 @@ Status Compaction::construct_output_rowset_writer() {
     return Status::OK();
 }
 
-Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
+Status Compaction::merge_rowsets_horizontal(int64_t mem_limit, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     TabletReader reader(_tablet, _output_rs_writer->version(), schema);
@@ -182,9 +283,87 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
 
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
-    while (true) {
-        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    Status status;
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    while (!bg_worker_stopped) {
+#ifndef BE_TEST
+        status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
+        if (!status.ok()) {
+            LOG(WARNING) << "fail to execute compaction: " << status.message() << std::endl;
+            return status;
+        }
+#endif
+
+        chunk->reset();
+        status = reader.get_next(chunk.get());
+        if (!status.ok()) {
+            if (status.is_end_of_file()) {
+                break;
+            } else {
+                LOG(WARNING) << "reader get next error. tablet=" << _tablet->full_name()
+                             << ", err=" << status.to_string();
+                return Status::InternalError(fmt::format("reader get_next error: {}", status.to_string()));
+            }
+        }
+
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
+
+        OLAPStatus olap_status = _output_rs_writer->add_chunk(*chunk);
+        if (olap_status != OLAP_SUCCESS) {
+            LOG(WARNING) << "writer add_chunk error, err=" << olap_status;
+            return Status::InternalError("writer add_chunk error.");
+        }
+        output_rows += chunk->num_rows();
+
+        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    }
+
+    if (bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The compaction should be stopped as soon as possible.");
+    }
+
+    if (stats_output != nullptr) {
+        stats_output->output_rows = output_rows;
+        stats_output->merged_rows = reader.merged_rows();
+        stats_output->filtered_rows = reader.stats().rows_del_filtered;
+    }
+
+    OLAPStatus olap_status = _output_rs_writer->flush();
+    if (olap_status != OLAP_SUCCESS) {
+        LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " + _tablet->full_name()
+                     << ", err=" << olap_status;
+        return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
+    }
+
+    return Status::OK();
+}
+
+Status Compaction::merge_rowsets_vertical(Statistics* stats_output) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
+    std::unique_ptr<RowSourceMaskBuffer> mask_buffer =
+            std::make_unique<RowSourceMaskBuffer>(_tablet->tablet_id(), _tablet->data_dir()->path());
+    std::unique_ptr<std::vector<RowSourceMask>> source_masks = std::make_unique<std::vector<RowSourceMask>>();
+    for (size_t i = 0; i < _column_groups.size(); ++i) {
+        bool is_key = (i == 0);
+        if (!is_key) {
+            mask_buffer->flip();
+        }
+
+        Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), _column_groups[i]);
+        TabletReader reader(_tablet, _output_rs_writer->version(), schema, is_key, mask_buffer.get());
+        TabletReaderParams reader_params;
+        reader_params.reader_type = compaction_type();
+        reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+        reader_params.chunk_size = config::vector_chunk_size;
+        RETURN_IF_ERROR(reader.prepare());
+        RETURN_IF_ERROR(reader.open(reader_params));
+
+        int64_t output_rows = 0;
+        auto chunk = ChunkHelper::new_chunk(schema, reader_params.chunk_size);
+        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+
         Status status;
+        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
         while (!bg_worker_stopped) {
 #ifndef BE_TEST
             status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
@@ -195,23 +374,35 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
 #endif
 
             chunk->reset();
-            status = reader.get_next(chunk.get());
+            status = reader.get_next(chunk.get(), source_masks.get());
             if (!status.ok()) {
                 if (status.is_end_of_file()) {
                     break;
                 } else {
-                    return Status::InternalError(fmt::format("reader get_next error:{}", status.to_string()));
+                    LOG(WARNING) << "reader get next error. tablet=" << _tablet->full_name()
+                                 << ", err=" << status.to_string();
+                    return Status::InternalError(fmt::format("reader get_next error: {}", status.to_string()));
                 }
             }
 
             ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
 
-            OLAPStatus olap_status = _output_rs_writer->add_chunk(*chunk);
+            OLAPStatus olap_status = _output_rs_writer->add_columns(*chunk, _column_groups[i], is_key);
             if (olap_status != OLAP_SUCCESS) {
-                LOG(WARNING) << "writer add_chunk error, err=" << olap_status;
-                return Status::InternalError("writer add_chunk error.");
+                LOG(WARNING) << "writer add chunk by columns error. tablet=" << _tablet->full_name()
+                             << ", err=" << olap_status;
+                return Status::InternalError("writer add chunk by columns error.");
             }
-            output_rows += chunk->num_rows();
+
+            if (is_key) {
+                output_rows += chunk->num_rows();
+                if (!source_masks->empty()) {
+                    RETURN_IF_ERROR(mask_buffer->write(*source_masks));
+                }
+            }
+            if (!source_masks->empty()) {
+                source_masks->clear();
+            }
 
             bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
         }
@@ -221,21 +412,32 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
                     "Process is going to quit. The compaction should be stopped as soon as possible.");
         }
 
-        if (stats_output != nullptr) {
+        if (is_key && stats_output != nullptr) {
             stats_output->output_rows = output_rows;
             stats_output->merged_rows = reader.merged_rows();
             stats_output->filtered_rows = reader.stats().rows_del_filtered;
         }
 
-        OLAPStatus olap_status = _output_rs_writer->flush();
+        OLAPStatus olap_status = _output_rs_writer->flush_columns();
         if (olap_status != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " + _tablet->full_name()
+            LOG(WARNING) << "failed to flush column group when merging rowsets of tablet " << _tablet->full_name()
                          << ", err=" << olap_status;
-            return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
+            return Status::InternalError("failed to flush column group when merging rowsets of tablet error.");
         }
 
-        return Status::OK();
+        if (is_key) {
+            RETURN_IF_ERROR(mask_buffer->flush());
+        }
     }
+
+    OLAPStatus olap_status = _output_rs_writer->final_flush();
+    if (olap_status != OLAP_SUCCESS) {
+        LOG(WARNING) << "failed to final flush rowset when merging rowsets of tablet " << _tablet->full_name()
+                     << ", err=" << olap_status;
+        return Status::InternalError("failed to final flush rowset when merging rowsets of tablet error.");
+    }
+
+    return Status::OK();
 }
 
 Status Compaction::modify_rowsets() {

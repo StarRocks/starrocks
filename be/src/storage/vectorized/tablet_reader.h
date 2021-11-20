@@ -41,6 +41,8 @@ public:
 
     void set_delete_predicates_version(Version version) { _delete_predicates_version = version; }
 
+    Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
+
 public:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
@@ -54,7 +56,6 @@ private:
     Status _init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
     Status _init_collector(const TabletReaderParams& read_params);
     Status _to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple);
-    Status _get_segment_iterators(const RowsetReadOptions& options, std::vector<ChunkIteratorPtr>* iters);
 
     TabletSharedPtr _tablet;
     Version _version;
