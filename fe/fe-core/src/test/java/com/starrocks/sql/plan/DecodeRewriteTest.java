@@ -169,7 +169,7 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
                 "  |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE\n" +
-                "  |  * count-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE"));
+                "  |  * count-->[0.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE"));
     }
 
     @Test
