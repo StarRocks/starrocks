@@ -237,6 +237,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_VARCHAR>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_VARCHAR>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_VARCHAR>();
+    add_convert_type_mapping<OLAP_FIELD_TYPE_CHAR, OLAP_FIELD_TYPE_VARCHAR>();
 
     add_convert_type_mapping<OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_DATETIME>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_TIMESTAMP>();
@@ -290,8 +291,10 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
         int ref_column = _schema_mapping[i].ref_column;
 
         if (_schema_mapping[i].ref_column >= 0) {
-            FieldType ref_type = base_tablet->tablet_meta()->tablet_schema().column(ref_column).type();
-            FieldType new_type = new_tablet->tablet_meta()->tablet_schema().column(i).type();
+            FieldType ref_type = TypeUtils::to_storage_format_v2(
+                    base_tablet->tablet_meta()->tablet_schema().column(ref_column).type());
+            FieldType new_type =
+                    TypeUtils::to_storage_format_v2(new_tablet->tablet_meta()->tablet_schema().column(i).type());
             if (!_schema_mapping[i].materialized_function.empty()) {
                 const MaterializeTypeConverter* converter = nullptr;
                 if (_schema_mapping[i].materialized_function == "to_bitmap") {
@@ -1200,7 +1203,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         // NOTE if the first sub_table is fail, it will continue as normal
         TabletSharedPtr new_tablet = sc_params.new_tablet;
         TabletSharedPtr base_tablet = sc_params.base_tablet;
-        RowsetWriterContext writer_context(kDataFormatUnknown, config::storage_format_version);
+        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
         writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.tablet_uid = new_tablet->tablet_uid();
         writer_context.tablet_id = new_tablet->tablet_id();
