@@ -25,14 +25,21 @@ public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
-        return operator.accept(new ExpressionStatisticVisitor(input), null);
+        return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
+    }
+
+    public static ColumnStatistic calculate(ScalarOperator operator, Statistics input, double rowCount) {
+        return operator.accept(new ExpressionStatisticVisitor(input, rowCount), null);
     }
 
     private static class ExpressionStatisticVisitor extends ScalarOperatorVisitor<ColumnStatistic, Void> {
-        private final Statistics statistics;
+        private final Statistics inputStatistics;
+        // Some function estimate need plan node row count, such as COUNT
+        private final double rowCount;
 
-        public ExpressionStatisticVisitor(Statistics statistics) {
-            this.statistics = statistics;
+        public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
+            this.inputStatistics = statistics;
+            this.rowCount = rowCount;
         }
 
         @Override
@@ -42,7 +49,7 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visitVariableReference(ColumnRefOperator operator, Void context) {
-            return statistics.getColumnStatistic(operator);
+            return inputStatistics.getColumnStatistic(operator);
         }
 
         @Override
@@ -61,12 +68,13 @@ public class ExpressionStatisticCalculator {
             List<ColumnStatistic> childrenColumnStatistics =
                     call.getChildren().stream().map(child -> child.accept(this, context)).collect(Collectors.toList());
             Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size());
-            if (childrenColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+            if (childrenColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) ||
+                    inputStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
                 return ColumnStatistic.unknown();
             }
 
             if (call.getChildren().size() == 0) {
-                return ColumnStatistic.unknown();
+                return nullaryExpressionCalculate(call);
             } else if (call.getChildren().size() == 1) {
                 return unaryExpressionCalculate(call, childrenColumnStatistics.get(0));
             } else if (call.getChildren().size() == 2) {
@@ -75,6 +83,16 @@ public class ExpressionStatisticCalculator {
             } else {
                 // TODO: Multiple Arithmetic calculations support later
                 return childrenColumnStatistics.get(0);
+            }
+        }
+
+        private ColumnStatistic nullaryExpressionCalculate(CallOperator callOperator) {
+            switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.COUNT:
+                    return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
+                            callOperator.getType().getSlotSize(), rowCount);
+                default:
+                    return ColumnStatistic.unknown();
             }
         }
 
@@ -116,6 +134,9 @@ public class ExpressionStatisticCalculator {
                     return new ColumnStatistic(0, 59, 0,
                             callOperator.getType().getSlotSize(),
                             Math.min(columnStatistic.getDistinctValuesCount(), 60));
+                case FunctionSet.COUNT:
+                    return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
+                            callOperator.getType().getSlotSize(), rowCount);
                 default:
                     // return child column statistic default
                     return columnStatistic;
@@ -150,14 +171,14 @@ public class ExpressionStatisticCalculator {
                             callOperator.getType().getSlotSize(), distinctValues);
                 case FunctionSet.DIVIDE:
                     double divideMinValue = Math.min(Math.min(
-                                    Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                            Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     double divideMaxValue = Math.max(Math.max(
-                                    Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                            Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     return new ColumnStatistic(divideMinValue, divideMaxValue, nullsFraction,
                             callOperator.getType().getSlotSize(),

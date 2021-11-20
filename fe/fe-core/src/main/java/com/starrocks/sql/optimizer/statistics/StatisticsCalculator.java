@@ -628,9 +628,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         builder.addColumnStatistics(groupStatisticsMap);
         rowCount = min(inputStatistics.getOutputRowCount(), rowCount);
         builder.setOutputRowCount(rowCount);
-
+        // use inputStatistics and aggregateNode cardinality to estimate aggregate call operator column statistics.
+        // because of we need cardinality to estimate count function.
+        double estimateCount = rowCount;
         aggregations.forEach((key, value) -> builder
-                .addColumnStatistic(key, ExpressionStatisticCalculator.calculate(value, inputStatistics)));
+                .addColumnStatistic(key, ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount)));
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);

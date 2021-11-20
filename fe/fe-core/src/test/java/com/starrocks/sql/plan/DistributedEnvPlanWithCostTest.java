@@ -615,4 +615,14 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         AggregationNode aggregationNode = (AggregationNode) execPlan.getFragments().get(1).getPlanRoot();
         Assert.assertTrue(aggregationNode.isColocate());
     }
+
+    @Test
+    public void testCountFunctionColumnStatistics() throws Exception {
+        String sql = "select count(S_SUPPKEY) from supplier";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* count-->[0.0, 1000000.0, 0.0, 8.0, 1.0] ESTIMATE"));
+        sql = "select count(*) from supplier";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("count-->[0.0, 1000000.0, 0.0, 8.0, 1.0] ESTIMATE"));
+    }
 }

@@ -168,15 +168,15 @@ RIGHT ANTI JOIN (join-predicate [6: v5 = 2: v2] post-join-predicate [null])
 select v3, min(v1) from t0 group by v3 having not exists (select v4 from t1 where v5 = v6);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[3: v3]] having [null]
-        EXCHANGE SHUFFLE[3]
-            AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
-                SCAN (columns[1: v1, 3: v3] predicate[null])
+    AGGREGATE ([GLOBAL] aggregate [{9: count=count(9: count)}] group by [[]] having [9: count = 0]
+        EXCHANGE GATHER
+            AGGREGATE ([LOCAL] aggregate [{9: count=count(1)}] group by [[]] having [null]
+                SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 7: v6])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{9: count=count(9: count)}] group by [[]] having [9: count = 0]
-            EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{9: count=count(1)}] group by [[]] having [null]
-                    SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 7: v6])
+        AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[3: v3]] having [null]
+            EXCHANGE SHUFFLE[3]
+                AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
+                    SCAN (columns[1: v1, 3: v3] predicate[null])
 [end]
 
 [sql]
