@@ -19,6 +19,7 @@ import java.util.Map;
 // `toExplainString()` for explaining sql
 public class RuntimeFilterDescription {
     private int filterId;
+    private int buildPlanNodeId;
     private Expr buildExpr;
     private int exprOrder; // order of expr in eq conjuncts.
     private final Map<Integer, Expr> nodeIdToProbeExpr;
@@ -113,8 +114,12 @@ public class RuntimeFilterDescription {
         joinMode = mode;
     }
 
-    public HashJoinNode.DistributionMode getJoinMode() {
-        return joinMode;
+    public int getBuildPlanNodeId() {
+        return buildPlanNodeId;
+    }
+
+    public void setBuildPlanNodeId(int buildPlanNodeId) {
+        this.buildPlanNodeId = buildPlanNodeId;
     }
 
     public boolean isLocalApplicable() {

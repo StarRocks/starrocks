@@ -26,7 +26,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 
     _init_counter(state);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
 
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status);
     OlapScanConjunctsManager& cm = _conjuncts_manager;
@@ -289,7 +289,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
 
 // mapping a slot-column-id to schema-columnid
 Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* params) {
-    const auto& global_dict_map = _runtime_state->get_global_dict_map();
+    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(_tuple_id);

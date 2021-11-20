@@ -4401,8 +4401,8 @@ public class PlanFragmentTest extends PlanTestBase {
 
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
-  
-    @Test  
+
+    @Test
     public void testUnionEmptyNode() throws Exception {
         String sql;
         String plan;
@@ -4531,15 +4531,71 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  2:EXCHANGE\n" +
                 "     use vectorized: true\n"));
     }
-  
+
     @Test
     public void testPredicateOnRepeatNode() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is null;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(" 1:REPEAT_NODE\n" +
+        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 IS NULL"));
+        Assert.assertFalse(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 IS NULL"));
+
+        sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is not null;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
+                "  |  PREDICATES: 1: v1 IS NOT NULL"));
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 IS NOT NULL"));
+
+        sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = 1;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
+                "  |  PREDICATES: 1: v1 = 1"));
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 1"));
+
+        sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = 1 + 2;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
+                "  |  PREDICATES: 1: v1 = 3"));
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 3"));
+
+
+        sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = v2;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
+                "  |  PREDICATES: 1: v1 = 2: v2"));
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 2: v2"));
+
+
+        sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 <=> v2;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
+                "  |  PREDICATES: 1: v1 <=> 2: v2"));
+        Assert.assertFalse(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON" +
+                "     PREDICATES: 1: v1 <=> 2: v2"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -4573,5 +4629,27 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("output: avg(89)"));
         Config.enable_decimal_v3 = false;
+    }
+
+    @Test 
+    public void testLimitPushDownJoin() throws Exception {
+        String sql = "select * from t0 left join[shuffle] t1 on t0.v2 = t1.v5 where t1.v6 is null limit 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 5: v5\n" +
+                "  |  other predicates: 6: v6 IS NULL\n" +
+                "  |  limit: 2"));
+        Assert.assertTrue(plan.contains("     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n" +
+                "     use vectorized: true\n"));
     }
 }

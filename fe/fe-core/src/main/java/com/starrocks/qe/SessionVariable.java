@@ -152,6 +152,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
+    public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -291,6 +292,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_USE_NTH_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private int useNthExecPlan = 0;
+
+    @VarAttr(name = CBO_CTE_REUSE)
+    private boolean cboCteReuse = false;
+
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -717,6 +722,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableColumnExprPredicate() {
         return enableColumnExprPredicate;
+    }
+
+    public boolean isCboCteReuse() {
+        return cboCteReuse;
+    }
+
+    public void setCboCteReuse(boolean cboCteReuse) {
+        this.cboCteReuse = cboCteReuse;
     }
 
     // Serialize to thrift object

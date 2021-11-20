@@ -1,8 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -24,6 +28,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
@@ -35,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoOpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -142,6 +150,21 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+    public R visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, C context) {
+        Preconditions.checkState(false);
+        return visitOperator(node, context);
+    }
+
+    public R visitLogicalCTEConsume(LogicalCTEConsumeOperator node, C context) {
+        Preconditions.checkState(false);
+        return visitOperator(node, context);
+    }
+
+    public R visitLogicalCTEProduce(LogicalCTEProduceOperator node, C context) {
+        Preconditions.checkState(false);
+        return visitOperator(node, context);
+    }
+
     public R visitMockOperator(MockOperator node, C context) {
         return visitOperator(node, context);
     }
@@ -232,4 +255,25 @@ public abstract class OperatorVisitor<R, C> {
     public R visitPhysicalLimit(PhysicalLimitOperator node, C context) {
         return visitOperator(node, context);
     }
+
+    public R visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, C context) {
+        Preconditions.checkState(false);
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, C context) {
+        Preconditions.checkState(false);
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, C context) {
+        Preconditions.checkState(false);
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalNoOp(PhysicalNoOpOperator node, C context) {
+        Preconditions.checkState(false);
+        return visitOperator(node, context);
+    }
+
 }

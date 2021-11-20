@@ -178,6 +178,7 @@ public class HashJoinNode extends PlanNode {
             joinConjunct.setUseVectorized(joinConjunct.isVectorized());
             RuntimeFilterDescription rf = new RuntimeFilterDescription();
             rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
+            rf.setBuildPlanNodeId(this.id.asInt());
             rf.setExprOrder(i);
             rf.setJoinMode(distrMode);
             rf.setEqualCount(eqJoinConjuncts.size());

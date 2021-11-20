@@ -533,10 +533,18 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 child.treeToThriftHelper(container);
             }
         }
-        if (probeRuntimeFilters.size() != 0) {
+        if (!probeRuntimeFilters.isEmpty()) {
             msg.setProbe_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(probeRuntimeFilters));
+            Set<Integer> waitingPlanNodeIds = Sets.newHashSet();
+            for(RuntimeFilterDescription filter : probeRuntimeFilters) {
+                if (!filter.isHasRemoteTargets()) {
+                    waitingPlanNodeIds.add(filter.getBuildPlanNodeId());
+                }
+            }
+            msg.setLocal_rf_waiting_set(waitingPlanNodeIds);
         }
+
     }
 
     /**

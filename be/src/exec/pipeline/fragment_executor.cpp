@@ -111,8 +111,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_plan(plan);
 
     // Set up global dict
-    if (request.fragment.__isset.global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_global_dict(request.fragment.global_dicts));
+    if (request.fragment.__isset.query_global_dicts) {
+        RETURN_IF_ERROR(runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
 
     // Set senders of exchange nodes before pipeline build
@@ -191,7 +191,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                                                                     driver_id++, is_root);
                 driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
-                scan_operator->set_io_threads(exec_env->pipeline_io_thread_pool());
+                scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
                 setup_profile_hierarchy(runtime_state, driver);
                 drivers.emplace_back(std::move(driver));
             }

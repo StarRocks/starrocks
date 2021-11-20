@@ -62,11 +62,7 @@ using apache::thrift::transport::TTransportException;
 using apache::thrift::concurrency::ThreadFactory;
 
 BackendService::BackendService(ExecEnv* exec_env)
-        : _exec_env(exec_env), _agent_server(new AgentServer(exec_env, *exec_env->master_info())) {
-    char buf[64];
-    DateTimeValue value = DateTimeValue::local_time();
-    value.to_string(buf);
-}
+        : _exec_env(exec_env), _agent_server(new AgentServer(exec_env, *exec_env->master_info())) {}
 
 Status BackendService::create_service(ExecEnv* exec_env, int port, ThriftServer** server) {
     std::shared_ptr<BackendService> handler(new BackendService(exec_env));

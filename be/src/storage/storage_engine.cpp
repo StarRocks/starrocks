@@ -30,6 +30,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <new>
@@ -588,8 +589,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
     vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
@@ -629,8 +629,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
 
     StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
     vectorized::BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
 
     Status res = base_compaction.compact();
@@ -699,6 +698,8 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
 
     time_t now = time(nullptr);
     tm local_tm_now;
+    memset(&local_tm_now, 0, sizeof(tm));
+
     if (localtime_r(&now, &local_tm_now) == nullptr) {
         LOG(WARNING) << "fail to localtime_r time. time=" << now;
         return OLAP_ERR_OS_ERROR;
@@ -809,6 +810,8 @@ OLAPStatus StorageEngine::_do_sweep(const string& scan_root, const time_t& local
             string dir_name = item.path().filename().string();
             string str_time = dir_name.substr(0, dir_name.find('.'));
             tm local_tm_create;
+            memset(&local_tm_create, 0, sizeof(tm));
+
             if (strptime(str_time.c_str(), "%Y%m%d%H%M%S", &local_tm_create) == nullptr) {
                 LOG(WARNING) << "fail to strptime time. [time=" << str_time << "]";
                 res = OLAP_ERR_OS_ERROR;

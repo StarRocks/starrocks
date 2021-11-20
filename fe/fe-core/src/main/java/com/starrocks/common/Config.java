@@ -695,16 +695,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int load_parallel_instance_num = 1;
-    /**
-     * use vectorized load if true
-     * Only support broker load with orc file and export job
-     */
-    @ConfField(mutable = true)
-    public static boolean vectorized_load_enable = true;
-
-    // use vectorized load for csv/json/parquet and spark load
-    @ConfField(mutable = true)
-    public static boolean enable_vectorized_file_load = true;
 
     /**
      * Export checker's running interval.
@@ -763,13 +753,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_connection_scheduler_threads_num = 4096;
-
-    /**
-     * Deprecated after 0.10
-     */
-    @ConfField
-    public static boolean disable_colocate_join = false;
-
     /**
      * Limit on the number of expr children of an expr tree.
      * Exceed this limit may cause long analysis time while holding database read lock.

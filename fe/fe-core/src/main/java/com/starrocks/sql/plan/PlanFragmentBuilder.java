@@ -482,7 +482,7 @@ public class PlanFragmentBuilder {
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getPlanCtx().getNextFragmentId(), scanNode, DataPartition.RANDOM);
-            fragment.setGlobalDicts(node.getGlobalDicts());
+            fragment.setQueryGlobalDicts(node.getGlobalDicts());
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -1047,7 +1047,7 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getPlanCtx().getNextFragmentId(), exchangeNode, dataPartition);
-            fragment.setGlobalDicts(distribution.getGlobalDicts());
+            fragment.setQueryGlobalDicts(distribution.getGlobalDicts());
             inputFragment.setDestination(exchangeNode);
             inputFragment.setOutputPartition(dataPartition);
 
@@ -1230,7 +1230,7 @@ public class PlanFragmentBuilder {
                     joinNode.setReplicated(true);
                 }
 
-                leftFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
+                leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                 return leftFragment;
             } else {
                 JoinOperator joinOperator = node.getJoinType();
@@ -1341,7 +1341,7 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(leftFragment);
                     leftFragment.setPlanRoot(hashJoinNode);
                     leftFragment.addChild(rightFragment.getChild(0));
-                    leftFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
+                    leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
@@ -1381,8 +1381,8 @@ public class PlanFragmentBuilder {
                     joinFragment.addChild(leftFragment.getChild(0));
                     joinFragment.addChild(rightFragment.getChild(0));
 
-                    joinFragment.mergeGlobalDicts(leftFragment.getGlobalDicts());
-                    joinFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
+                    joinFragment.mergeQueryGlobalDicts(leftFragment.getQueryGlobalDicts());
+                    joinFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                     context.getFragments().add(joinFragment);
 
                     return joinFragment;
@@ -1403,7 +1403,7 @@ public class PlanFragmentBuilder {
                     context.getFragments().remove(leftFragment);
                     context.getFragments().add(leftFragment);
 
-                    leftFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
+                    leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
@@ -1531,7 +1531,7 @@ public class PlanFragmentBuilder {
 
             stayFragment.setPlanRoot(hashJoinNode);
             stayFragment.addChild(removeFragment.getChild(0));
-            stayFragment.mergeGlobalDicts(removeFragment.getGlobalDicts());
+            stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
 
@@ -1553,7 +1553,7 @@ public class PlanFragmentBuilder {
 
             stayFragment.setPlanRoot(hashJoinNode);
             stayFragment.addChild(removeFragment.getChild(0));
-            stayFragment.mergeGlobalDicts(removeFragment.getGlobalDicts());
+            stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
 

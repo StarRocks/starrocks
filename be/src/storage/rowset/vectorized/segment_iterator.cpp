@@ -836,7 +836,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         return Status::EndOfFile("no more data in segment");
     }
 
-    if (chunk_size > 0 && _context->_has_dict_column) {
+    if (_context->_has_dict_column) {
         chunk = _context->_dict_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
         RETURN_IF_ERROR(_decode_dict_codes(_context));
@@ -1179,6 +1179,11 @@ void SegmentIterator::_rewrite_predicates() {
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
     DCHECK_NE(ctx->_read_chunk, ctx->_dict_chunk);
+    if (ctx->_read_chunk->num_rows() == 0) {
+        ctx->_dict_chunk->set_num_rows(0);
+        return Status::OK();
+    }
+
     const Schema& decode_schema = ctx->_dict_decode_schema;
     const size_t n = decode_schema.num_fields();
     bool may_has_del_row = ctx->_read_chunk->delete_state() != DEL_NOT_SATISFIED;
@@ -1205,6 +1210,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
         }
     }
     ctx->_dict_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    ctx->_dict_chunk->check_or_die();
     return Status::OK();
 }
 
