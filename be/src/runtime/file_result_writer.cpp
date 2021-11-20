@@ -29,7 +29,6 @@
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
-#include "exprs/expr.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
