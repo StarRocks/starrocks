@@ -161,7 +161,7 @@ public class BDBJEJournal implements Journal {
                     break;
                 }
             } catch (ReplicaWriteException e) {
-                LOG.error("non-master nodes should not write editLog", e);
+                LOG.error("non-master nodes should not write editLog. journal id {}", id, e);
                 throw e;
             } catch (DatabaseException e) {
                 LOG.error("catch an exception when writing to database. sleep and retry. journal id {}", id, e);
