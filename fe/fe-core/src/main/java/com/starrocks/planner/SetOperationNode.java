@@ -43,8 +43,10 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -478,6 +480,47 @@ public abstract class SetOperationNode extends PlanNode {
 
     @Override
     public boolean canDoReplicatedJoin() {
+        return false;
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!probeExpr.isBoundByTupleIds(getTupleIds())) return false;
+
+        if (probeExpr instanceof SlotRef) {
+            boolean pushDown = false;
+            int probeSlotId = ((SlotRef) probeExpr).getSlotId().asInt();
+            Set<Integer> mappedProbeSlotIds = new HashSet<>();
+            for (Map<Integer, Integer> map : passThroughSlotMaps) {
+                if (map.containsKey(probeSlotId)) {
+                    mappedProbeSlotIds.add(map.get(probeSlotId));
+                }
+            }
+
+            for (int i = 0; i < materializedResultExprLists_.size(); i++) {
+                // try to push all children if any expr of a child can match `probeExpr`
+                for (Expr mexpr : materializedResultExprLists_.get(i)) {
+                    if ((mexpr instanceof SlotRef) && mappedProbeSlotIds.contains(((SlotRef) mexpr).getSlotId().asInt())) {
+                        mexpr.setUseVectorized(mexpr.isVectorized());
+                        if (children.get(i).pushDownRuntimeFilters(description, mexpr)) {
+                            pushDown = true;
+                        }
+                        break;
+                    }
+                }
+            }
+            if (pushDown) {
+                return true;
+            }
+        }
+
+        if (description.canProbeUse(this)) {
+            // can not push down to children.
+            // use runtime filter at this level.
+            description.addProbeExpr(id.asInt(), probeExpr);
+            probeRuntimeFilters.add(description);
+            return true;
+        }
         return false;
     }
 }
