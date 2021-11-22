@@ -397,7 +397,7 @@ public abstract class SetOperationNode extends PlanNode {
         }
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (CollectionUtils.isNotEmpty(materializedResultExprLists_)) {
-                output.append(prefix).append("child exprs: ").append("\n");
+                output.append(prefix).append("child exprs:").append("\n");
                 for (List<Expr> exprs : materializedResultExprLists_) {
                     output.append(prefix).append("    ").append(exprs.stream().map(Expr::explain)
                             .collect(Collectors.joining(" | "))).append("\n");

@@ -30,6 +30,8 @@ public class RuntimeFilterDescription {
     private int equalCount;
     private int crossExchangeNodeTimes;
 
+    // This flag is only for UT, we can push down rf on best effort.
+    private static boolean alwaysCanProbeUse = false;
     private static final int ProbeMinSize = 100 * 1024;
     private static final float ProbeMinSelectivity = 0.5f;
     private long buildCardinality;
@@ -45,6 +47,10 @@ public class RuntimeFilterDescription {
         equalCount = 0;
         crossExchangeNodeTimes = 0;
         buildCardinality = 0;
+    }
+
+    public static void setAlwaysCanProbeUse(boolean value) {
+        alwaysCanProbeUse = value;
     }
 
     public void setFilterId(int id) {
@@ -64,6 +70,7 @@ public class RuntimeFilterDescription {
     }
 
     public boolean canProbeUse(PlanNode node) {
+        if (alwaysCanProbeUse) return true;
         // if we don't across exchange node, that's to say this is in local fragment instance.
         // we don't need to use adaptive strategy now. we are using a conservative way.
         if (inLocalFragmentInstance()) {
