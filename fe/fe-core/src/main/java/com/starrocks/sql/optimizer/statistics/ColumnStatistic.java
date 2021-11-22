@@ -14,8 +14,12 @@ public class ColumnStatistic {
         ESTIMATE
     }
 
+    // Used for the column statistics which we could not get from the statistics storage or
+    // can not compute the actual column statistics for now
     private static final ColumnStatistic
             UNKNOWN = new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, StatisticType.UNKNOWN);
+    private static final ColumnStatistic
+            STRING_CONSTANT = new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, StatisticType.ESTIMATE);
 
     private final double minValue;
     private final double maxValue;
@@ -72,10 +76,20 @@ public class ColumnStatistic {
         return UNKNOWN;
     }
 
+    public static ColumnStatistic stringConstant() {
+        return STRING_CONSTANT;
+    }
+
     public boolean isUnknown() {
         return this.type == StatisticType.UNKNOWN;
     }
 
+    public boolean isStringConstant() {
+        return this.minValue == NEGATIVE_INFINITY && this.maxValue == POSITIVE_INFINITY && this.nullsFraction == 0 &&
+                this.averageRowSize == 1 && this.distinctValuesCount == 1 && this.type == StatisticType.ESTIMATE;
+    }
+
+    // TODO(ywb): remove this after user can dump statistics with type
     public boolean isUnknownValue() {
         return this.minValue == NEGATIVE_INFINITY && this.maxValue == POSITIVE_INFINITY && this.nullsFraction == 0 &&
                 this.averageRowSize == 1 && this.distinctValuesCount == 1;
