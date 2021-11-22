@@ -96,7 +96,7 @@ public:
 
     // parse tablet header msg to generate tablet object
     // - restore: whether the request is from restore tablet action,
-    //   where we should change tablet status from shutdown back to running
+    //   where we should change tablet status from cancel back to running
     //
     // return NotFound if the tablet path has been deleted or the tablet statue is SHUTDOWN.
     Status load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,

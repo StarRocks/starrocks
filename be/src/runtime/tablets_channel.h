@@ -18,28 +18,41 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+#pragma once
+
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
 
 #include <cstdint>
+#include <shared_mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "column/chunk.h"
+#include "common/statusor.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "gutil/ref_counted.h"
 #include "runtime/descriptors.h"
 #include "runtime/global_dicts.h"
 #include "runtime/mem_tracker.h"
+#include "storage/vectorized/async_delta_writer.h"
 #include "util/bitmap.h"
-#include "util/priority_thread_pool.hpp"
+#include "util/countdown_latch.h"
+#include "util/spinlock.h"
+#include "util/threadpool.h"
 #include "util/uid_util.h"
+
+namespace brpc {
+class Controller;
+}
 
 namespace starrocks {
 
-namespace vectorized {
-class DeltaWriter;
-}
+class OlapTableSchemaParam;
+class LoadChannel;
 
 struct TabletsChannelKey {
     UniqueId id;
@@ -54,90 +67,150 @@ struct TabletsChannelKey {
     std::string to_string() const;
 };
 
-std::ostream& operator<<(std::ostream& os, const TabletsChannelKey& key);
-
-class OlapTableSchemaParam;
+inline std::ostream& operator<<(std::ostream& os, const TabletsChannelKey& key);
 
 // Write channel for a particular (load, index).
-class TabletsChannel {
+class TabletsChannel : public RefCountedThreadSafe<TabletsChannel> {
+    using AsyncDeltaWriter = vectorized::AsyncDeltaWriter;
+    using AsyncDeltaWriterCallback = vectorized::AsyncDeltaWriterCallback;
+    using AsyncDeltaWriterRequest = vectorized::AsyncDeltaWriterRequest;
+    using CommittedRowsetInfo = vectorized::CommittedRowsetInfo;
+
 public:
-    TabletsChannel(const TabletsChannelKey& key, MemTracker* mem_tracker);
+    TabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
 
-    ~TabletsChannel();
+    TabletsChannel(const TabletsChannel&) = delete;
+    TabletsChannel(TabletsChannel&&) = delete;
+    void operator=(const TabletsChannel&) = delete;
+    void operator=(TabletsChannel&&) = delete;
 
+    const TabletsChannelKey& key() const { return _key; }
+
+    // NOTE: This method is not retryable.
     Status open(const PTabletWriterOpenRequest& params);
 
-    // no-op when this channel has been closed or cancelled
-    Status add_chunk(const PTabletWriterAddChunkRequest& batch);
+    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest* request,
+                   PTabletWriterAddBatchResult* response, google::protobuf::Closure* done);
 
-    // Mark sender with 'sender_id' as closed.
-    // If all senders are closed, close this channel, set '*finished' to true, update 'tablet_vec'
-    // to include all tablets written in this channel.
-    // no-op when this channel has been closed or cancelled
-    Status close(int sender_id, bool* finished, const google::protobuf::RepeatedField<int64_t>& partition_ids,
-                 google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec);
+    void cancel();
 
-    // no-op when this channel has been closed or cancelled
-    Status cancel();
-
-    // upper application may call this to try to reduce the mem usage of this channel.
-    // eg. flush the largest memtable async.
-    // no-op when this channel has been closed or cancelled.
-    // return Status::OK if flush async success or no-op.
-    Status reduce_mem_usage_async(const std::set<int64_t>& flush_tablet_ids, int64_t* tablet_id,
-                                  int64_t* tablet_mem_consumption);
-    // wait tablet memtables in flush queue to be flushed.
-    Status wait_mem_usage_reduced(int64_t tablet_id);
-
-    int64_t mem_consumption() const { return _mem_tracker->consumption(); }
+    MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
-    // open all writer
+    using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
+
+    friend class RefCountedThreadSafe<TabletsChannel>;
+    ~TabletsChannel();
+
+    static std::atomic<uint64_t> _s_tablet_writer_count;
+
+    struct Sender {
+        std::mutex lock;
+        int64_t next_seq = 0; // NOTE: -1 means this sender has closed
+        bool closed = false;
+    };
+
+    class WriteContext : public RefCountedThreadSafe<WriteContext> {
+    public:
+        explicit WriteContext(PTabletWriterAddBatchResult* response) : _response(response), _latch(nullptr) {}
+
+        WriteContext(const WriteContext&) = delete;
+        void operator=(const WriteContext&) = delete;
+        WriteContext(WriteContext&&) = delete;
+        void operator=(WriteContext&&) = delete;
+
+        void update_status(const Status& status) {
+            if (status.ok() || _response == nullptr) {
+                return;
+            }
+            std::lock_guard l(_response_lock);
+            if (_response->status().status_code() != TStatusCode::OK) {
+                return;
+            }
+            status.to_protobuf(_response->mutable_status());
+        }
+
+        void add_committed_tablet_info(PTabletInfo* tablet_info) {
+            DCHECK(_response != nullptr);
+            std::lock_guard l(_response_lock);
+            _response->add_tablet_vec()->Swap(tablet_info);
+        }
+
+        void set_count_down_latch(BThreadCountDownLatch* latch) { _latch = latch; }
+
+        void clear_response() { _response = nullptr; }
+
+    private:
+        friend class TabletsChannel;
+        friend class RefCountedThreadSafe<WriteContext>;
+        ~WriteContext() {
+            if (_latch) _latch->count_down();
+        }
+
+        mutable std::mutex _response_lock;
+        PTabletWriterAddBatchResult* _response;
+        BThreadCountDownLatch* _latch;
+
+        vectorized::Chunk _chunk;
+        std::unique_ptr<uint32_t[]> _row_indexes;
+        std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
+    };
+
+    class WriteCallback : public AsyncDeltaWriterCallback {
+    public:
+        // |latch| must outlive the WriteCallback
+        explicit WriteCallback(WriteContext* context) : _context(context) { _context->AddRef(); }
+
+        ~WriteCallback() override { _context->Release(); }
+
+        void run(const Status& st, const CommittedRowsetInfo* info) override;
+
+        WriteCallback(const WriteCallback&) = delete;
+        void operator=(const WriteCallback&) = delete;
+        WriteCallback(WriteCallback&&) = delete;
+        void operator=(WriteCallback&&) = delete;
+
+    private:
+        WriteContext* _context;
+    };
+
     Status _open_all_writers(const PTabletWriterOpenRequest& params);
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
-    // id of this load channel
+    StatusOr<scoped_refptr<WriteContext>> _create_write_context(const PTabletWriterAddChunkRequest* request,
+                                                                PTabletWriterAddBatchResult* response,
+                                                                google::protobuf::Closure* done);
+
+    int _close_sender(Sender* sender, const int64_t* partitions, size_t partitions_size);
+
+    LoadChannel* _load_channel;
+
     TabletsChannelKey _key;
 
-    // make execute sequece
-    std::mutex _global_lock;
-    static constexpr int k_shard_size = 127;
-    std::array<std::mutex, k_shard_size + 1> _tablet_locks;
-
-    enum State {
-        kInitialized,
-        kOpened,
-        kFinished // closed or cancelled
-    };
-    State _state;
+    MemTracker* _mem_tracker;
 
     // initialized in open function
     int64_t _txn_id = -1;
     int64_t _index_id = -1;
     OlapTableSchemaParam* _schema = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
-    // row_desc used to construct
     RowDescriptor* _row_desc = nullptr;
 
     // next sequence we expect
-    int _num_remaining_senders = 0;
-    std::vector<int64_t> _next_seqs;
-    Bitmap _closed_senders;
-    // status to return when operate on an already closed/cancelled channel
-    // currently it's OK.
-    Status _close_status;
+    std::atomic<int> _num_remaining_senders;
+    std::vector<Sender> _senders;
 
+    mutable std::mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;
 
-    std::unique_ptr<MemTracker> _mem_tracker;
-
-    static std::atomic<uint64_t> _s_tablet_writer_count;
-
+    mutable std::mutex _chunk_meta_lock;
     vectorized::RuntimeChunkMeta _chunk_meta;
+    std::atomic<bool> _has_chunk_meta;
+
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel
-    std::unordered_map<int64_t, vectorized::DeltaWriter*> _delta_writers;
+    std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
 
     vectorized::GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;

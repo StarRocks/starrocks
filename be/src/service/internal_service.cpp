@@ -42,8 +42,7 @@
 namespace starrocks {
 
 template <typename T>
-PInternalServiceImpl<T>::PInternalServiceImpl(ExecEnv* exec_env)
-        : _exec_env(exec_env), _tablet_worker_pool(config::number_tablet_writer_threads, 10240) {}
+PInternalServiceImpl<T>::PInternalServiceImpl(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 template <typename T>
 PInternalServiceImpl<T>::~PInternalServiceImpl() = default;
@@ -54,7 +53,7 @@ void PInternalServiceImpl<T>::transmit_data(google::protobuf::RpcController* cnt
                                             google::protobuf::Closure* done) {
     VLOG_ROW << "transmit data: fragment_instance_id=" << print_id(request->finst_id())
              << " node=" << request->node_id();
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (cntl->request_attachment().size() > 0) {
         PRowBatch* batch = (const_cast<PTransmitDataParams*>(request))->mutable_row_batch();
         butil::IOBuf& io_buf = cntl->request_attachment();
@@ -118,7 +117,7 @@ void PInternalServiceImpl<T>::transmit_runtime_filter(google::protobuf::RpcContr
                                                       PTransmitRuntimeFilterResult* response,
                                                       google::protobuf::Closure* done) {
     VLOG_FILE << "transmit runtime filter: fragment_instance_id=" << print_id(request->finst_id())
-              << " query_id=" << request->query_id() << ", is_partital=" << request->is_partial()
+              << " query_id=" << print_id(request->query_id()) << ", is_partital=" << request->is_partial()
               << ", filter_id=" << request->filter_id();
     ClosureGuard closure_guard(done);
     _exec_env->runtime_filter_worker()->receive_runtime_filter(*request);
@@ -127,18 +126,12 @@ void PInternalServiceImpl<T>::transmit_runtime_filter(google::protobuf::RpcContr
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::tablet_writer_open(google::protobuf::RpcController* controller,
+void PInternalServiceImpl<T>::tablet_writer_open(google::protobuf::RpcController* cntl_base,
                                                  const PTabletWriterOpenRequest* request,
                                                  PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
-    VLOG_RPC << "tablet writer open, id=" << request->id() << ", index_id=" << request->index_id()
+    VLOG_RPC << "tablet writer open, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
              << ", txn_id=" << request->txn_id();
-    ClosureGuard closure_guard(done);
-    auto st = _exec_env->load_channel_mgr()->open(*request);
-    if (!st.ok()) {
-        LOG(WARNING) << "load channel open failed, message=" << st.get_error_msg() << ", id=" << request->id()
-                     << ", index_id=" << request->index_id() << ", txn_id=" << request->txn_id();
-    }
-    st.to_protobuf(response->mutable_status());
+    _exec_env->load_channel_mgr()->open(static_cast<brpc::Controller*>(cntl_base), request, response, done);
 }
 
 template <typename T>
@@ -164,48 +157,23 @@ void PInternalServiceImpl<T>::tablet_writer_add_batch(google::protobuf::RpcContr
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::tablet_writer_add_chunk(google::protobuf::RpcController* controller,
+void PInternalServiceImpl<T>::tablet_writer_add_chunk(google::protobuf::RpcController* cntl_base,
                                                       const PTabletWriterAddChunkRequest* request,
                                                       PTabletWriterAddBatchResult* response,
                                                       google::protobuf::Closure* done) {
-    VLOG_RPC << "tablet writer add chunk, id=" << request->id() << ", index_id=" << request->index_id()
+    VLOG_RPC << "tablet writer add chunk, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
              << ", sender_id=" << request->sender_id();
-    // add chunk maybe cost a lot of time, and this callback thread will be held.
-    // this will influence query execution, because the pthreads under bthread may be
-    // exhausted, so we put this to a local thread pool to process
-    _tablet_worker_pool.offer([request, response, done, this]() {
-        ClosureGuard closure_guard(done);
-        int64_t execution_time_ns = 0;
-        int64_t wait_lock_time_ns = 0;
-        {
-            SCOPED_RAW_TIMER(&execution_time_ns);
-            auto st = _exec_env->load_channel_mgr()->add_chunk(*request, response->mutable_tablet_vec(),
-                                                               &wait_lock_time_ns);
-            if (!st.ok()) {
-                LOG(WARNING) << "tablet writer add chunk failed, message=" << st.get_error_msg()
-                             << ", id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-                             << ", sender_id=" << request->sender_id();
-            }
-            st.to_protobuf(response->mutable_status());
-        }
-        response->set_execution_time_us(execution_time_ns / 1000);
-        response->set_wait_lock_time_us(wait_lock_time_ns / 1000);
-    });
+    _exec_env->load_channel_mgr()->add_chunk(static_cast<brpc::Controller*>(cntl_base), request, response, done);
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcController* controller,
+void PInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
                                                    const PTabletWriterCancelRequest* request,
                                                    PTabletWriterCancelResult* response,
                                                    google::protobuf::Closure* done) {
-    VLOG_RPC << "tablet writer cancel, id=" << request->id() << ", index_id=" << request->index_id()
+    VLOG_RPC << "tablet writer cancel, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
              << ", sender_id=" << request->sender_id();
-    ClosureGuard closure_guard(done);
-    auto st = _exec_env->load_channel_mgr()->cancel(*request);
-    if (!st.ok()) {
-        LOG(WARNING) << "tablet writer cancel failed, id=" << request->id() << ", index_id=" << request->index_id()
-                     << ", sender_id=" << request->sender_id();
-    }
+    _exec_env->load_channel_mgr()->cancel(static_cast<brpc::Controller*>(cntl_base), request, response, done);
 }
 
 template <typename T>
