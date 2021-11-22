@@ -8,6 +8,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.OutputInputProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -38,8 +39,8 @@ public class GroupExpression {
     private final BitSet ruleMasks = new BitSet(RuleType.NUM_RULES.ordinal() + 1);
     private boolean statsDerived = false;
     private final Map<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> lowestCostTable;
-    private final Set<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> validOutputInputProperties;
-    private Map<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> propertiesPlanCountMap;
+    private final Set<OutputInputProperty> validOutputInputProperties;
+    private Map<OutputInputProperty, Integer> propertiesPlanCountMap;
 
     public GroupExpression(Operator op, List<Group> inputs) {
         this.op = op;
@@ -103,14 +104,14 @@ public class GroupExpression {
 
     public void addValidOutputInputProperties(PhysicalPropertySet outputProperty,
                                               List<PhysicalPropertySet> inputProperties) {
-        validOutputInputProperties.add(new Pair<>(outputProperty, inputProperties));
+        validOutputInputProperties.add(OutputInputProperty.of(outputProperty, inputProperties));
     }
 
     public List<List<PhysicalPropertySet>> getRequiredInputProperties(PhysicalPropertySet requiredProperty) {
         List<List<PhysicalPropertySet>> result = Lists.newArrayList();
-        for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProperty : validOutputInputProperties) {
-            if (outputInputProperty.first.equals(requiredProperty)) {
-                result.add(outputInputProperty.second);
+        for (OutputInputProperty outputInputProperty : validOutputInputProperties) {
+            if (outputInputProperty.getOutputProperty().equals(requiredProperty)) {
+                result.add(outputInputProperty.getInputProperties());
             }
         }
         return result;
@@ -120,20 +121,22 @@ public class GroupExpression {
         return !validOutputInputProperties.isEmpty();
     }
 
-    public void addPlanCountOfProperties(Pair<PhysicalPropertySet, List<PhysicalPropertySet>> properties, int count) {
+    public void addPlanCountOfProperties(OutputInputProperty properties, int count) {
         propertiesPlanCountMap.put(properties, count);
     }
 
-    public Map<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> getPropertiesPlanCountMap(
+    public Map<OutputInputProperty, Integer> getPropertiesPlanCountMap(
             PhysicalPropertySet requiredProperty) {
-        Map<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> result = Maps.newLinkedHashMap();
-        propertiesPlanCountMap.entrySet().stream().filter(entry -> entry.getKey().first.equals(requiredProperty))
+        Map<OutputInputProperty, Integer> result = Maps.newLinkedHashMap();
+        propertiesPlanCountMap.entrySet().stream()
+                .filter(entry -> entry.getKey().getOutputProperty().equals(requiredProperty))
                 .forEach(entry -> result.put(entry.getKey(), entry.getValue()));
         return result;
     }
 
     public int getRequiredPropertyPlanCount(PhysicalPropertySet requiredProperty) {
-        return propertiesPlanCountMap.entrySet().stream().filter(entry -> entry.getKey().first.equals(requiredProperty))
+        return propertiesPlanCountMap.entrySet().stream()
+                .filter(entry -> entry.getKey().getOutputProperty().equals(requiredProperty))
                 .mapToInt(Map.Entry::getValue).sum();
     }
 
