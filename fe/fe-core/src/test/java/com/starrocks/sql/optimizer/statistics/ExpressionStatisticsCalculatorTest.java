@@ -52,7 +52,8 @@ public class ExpressionStatisticsCalculatorTest {
 
         ConstantOperator constantOperator2 = ConstantOperator.createChar("123");
         ColumnStatistic columnStatistic2 = ExpressionStatisticCalculator.calculate(constantOperator2, null);
-        Assert.assertTrue(columnStatistic2.isStringConstant());
+        Assert.assertTrue(columnStatistic2.isInfiniteRange());
+        Assert.assertEquals(columnStatistic2.getDistinctValuesCount(), 1, 0.001);
     }
 
     @Test

@@ -60,7 +60,7 @@ public class ExpressionStatisticCalculator {
                 return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
                         operator.getType().getSlotSize(), 1);
             } else if (operator.getType().isStringType()) {
-                return ColumnStatistic.stringConstant();
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
             } else {
                 return ColumnStatistic.unknown();
             }
