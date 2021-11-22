@@ -138,7 +138,7 @@ public class StreamLoadPlanner {
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
-        LOG.info("use vectorized load: {}, load job id: {}", scanNode.isUseVectorized(), loadId);
+        LOG.info("use vectorized load: {}, load job id: {}", true, loadId);
         descTable.computeMemLayout();
 
         // create dest sink

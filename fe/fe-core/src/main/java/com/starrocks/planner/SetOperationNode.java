@@ -428,55 +428,6 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (List<Expr> exprs : resultExprLists_) {
-            for (Expr expr : exprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-
-        for (List<Expr> exprs : constExprLists_) {
-            for (Expr expr : exprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-
-        for (List<Expr> exprs : materializedResultExprLists_) {
-            for (Expr expr : exprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-
-        for (List<Expr> exprs : materializedConstExprLists_) {
-            for (Expr expr : exprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-    @Override
     public boolean canDoReplicatedJoin() {
         return false;
     }
