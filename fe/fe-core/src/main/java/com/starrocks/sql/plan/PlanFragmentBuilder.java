@@ -1661,20 +1661,6 @@ public class PlanFragmentBuilder {
                 setOperationNode = new UnionNode(context.getPlanCtx().getNextNodeId(), setOperationTuple.getId());
                 isUnionAll = ((PhysicalUnionOperator) setOperation).isUnionAll();
                 setOperationNode.setFirstMaterializedChildIdx_(optExpr.arity());
-
-                List<Map<Integer, Integer>> passThroughSlotMaps = new ArrayList<>();
-                for (int childIdx = 0; childIdx < optExpr.arity(); ++childIdx) {
-                    Map<Integer, Integer> passThroughMap = new HashMap<>();
-                    List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(childIdx);
-                    Preconditions.checkState(childOutput.size() == setOperation.getOutputColumnRefOp().size());
-                    for (int columnIdx = 0; columnIdx < setOperation.getOutputColumnRefOp().size(); ++columnIdx) {
-                        Integer resultColumnIdx = setOperation.getOutputColumnRefOp().get(columnIdx).getId();
-                        passThroughMap.put(resultColumnIdx, childOutput.get(columnIdx).getId());
-                    }
-                    passThroughSlotMaps.add(passThroughMap);
-                    Preconditions.checkState(passThroughMap.size() == setOperation.getOutputColumnRefOp().size());
-                }
-                setOperationNode.setPassThroughSlotMaps(passThroughSlotMaps);
             } else if (operatorType.equals(OperatorType.PHYSICAL_EXCEPT)) {
                 setOperationNode = new ExceptNode(context.getPlanCtx().getNextNodeId(), setOperationTuple.getId());
             } else if (operatorType.equals(OperatorType.PHYSICAL_INTERSECT)) {
@@ -1682,6 +1668,20 @@ public class PlanFragmentBuilder {
             } else {
                 throw new StarRocksPlannerException("Unsupported set operation", INTERNAL_ERROR);
             }
+
+            List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps = new ArrayList<>();
+            for (int childIdx = 0; childIdx < optExpr.arity(); ++childIdx) {
+                Map<Integer, Integer> slotIdMap = new HashMap<>();
+                List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(childIdx);
+                Preconditions.checkState(childOutput.size() == setOperation.getOutputColumnRefOp().size());
+                for (int columnIdx = 0; columnIdx < setOperation.getOutputColumnRefOp().size(); ++columnIdx) {
+                    Integer resultColumnIdx = setOperation.getOutputColumnRefOp().get(columnIdx).getId();
+                    slotIdMap.put(resultColumnIdx, childOutput.get(columnIdx).getId());
+                }
+                outputSlotIdToChildSlotIdMaps.add(slotIdMap);
+                Preconditions.checkState(slotIdMap.size() == setOperation.getOutputColumnRefOp().size());
+            }
+            setOperationNode.setOutputSlotIdToChildSlotIdMaps(outputSlotIdToChildSlotIdMaps);
 
             Preconditions.checkState(optExpr.getInputs().size() == setOperation.getChildOutputColumns().size());
 

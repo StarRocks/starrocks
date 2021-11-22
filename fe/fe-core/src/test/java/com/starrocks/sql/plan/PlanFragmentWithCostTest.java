@@ -19,6 +19,8 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
+
 public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @BeforeClass
@@ -711,5 +713,128 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getVerboseExplain(sql);
         Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update serialize)\n" +
                 "  |  aggregate: sum[([3: t1c, INT, true]); args: INT; result: BIGINT;"));
+    }
+
+    @Test
+    public void testPushDownRuntimeFilterAcrossSetOperationNode() throws Exception {
+        Catalog catalog = connectContext.getCatalog();
+
+        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        setTableStatistics(t0, 1000);
+        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        setTableStatistics(t1, 100);
+        OlapTable t2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t2");
+
+        ArrayList<String> plans = new ArrayList<>();
+        /// ===== union =====
+        setTableStatistics(t2, 200000);
+        setTableStatistics(t0, 400000);
+        setTableStatistics(t1, 400000);
+
+        String sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 union select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        String plan = getVerboseExplain(sql);
+        plans.add(plan);
+
+        // ==== except =====
+        setTableStatistics(t2, 200000);
+        setTableStatistics(t0, 800000);
+        setTableStatistics(t1, 400000);
+        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 except select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        plan = getVerboseExplain(sql);
+        plans.add(plan);
+
+        // ===== intersect =====
+        setTableStatistics(t2, 200000);
+        setTableStatistics(t0, 400000);
+        setTableStatistics(t1, 400000);
+
+        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 intersect select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        plan = getVerboseExplain(sql);
+        plans.add(plan);
+
+        setTableStatistics(t0, 10000);
+
+        // === check union plan ====
+        {
+            String unionPlan = plans.get(0);
+            Assert.assertTrue(unionPlan.contains("  0:UNION\n" +
+                    "  |  child exprs:\n" +
+                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
+                    "  |      [11, BIGINT, true] | [9, BIGINT, true] | [10, BIGINT, true]\n" +
+                    "  |  pass-through-operands: all\n" +
+                    "  |  cardinality: 800000"));
+            Assert.assertTrue(unionPlan.contains("  4:OlapScanNode\n" +
+                    "     table: t1, rollup: t1\n" +
+                    "     preAggregation: on\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=10015,10017,10019\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 400000\n" +
+                    "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (8: v4 + 2)"));
+            Assert.assertTrue(unionPlan.contains("  1:OlapScanNode\n" +
+                    "     table: t0, rollup: t0\n" +
+                    "     preAggregation: on\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=10006,10008,10010\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 400000\n" +
+                    "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
+        }
+        // === check except plan ===
+        {
+            String exceptPlan = plans.get(1);
+            Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
+                    "  |  child exprs:\n" +
+                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
+                    "  |      [11, BIGINT, true] | [9, BIGINT, true] | [10, BIGINT, true]\n" +
+                    "  |  cardinality: 800000"));
+            Assert.assertTrue(exceptPlan.contains("  4:OlapScanNode\n" +
+                    "     table: t1, rollup: t1\n" +
+                    "     preAggregation: on\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=10015,10017,10019\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 400000\n" +
+                    "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (8: v4 + 2)"));
+            Assert.assertTrue(exceptPlan.contains("  1:OlapScanNode\n" +
+                    "     table: t0, rollup: t0\n" +
+                    "     preAggregation: on\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=10006,10008,10010\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 800000\n" +
+                    "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
+        }
+        // === check intersect plan ====
+        {
+            String intersectPlan = plans.get(2);
+            Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
+                    "  |  child exprs:\n" +
+                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
+                    "  |      [11, BIGINT, true] | [9, BIGINT, true] | [10, BIGINT, true]\n" +
+                    "  |  cardinality: 400000"));
+            Assert.assertTrue(intersectPlan.contains("  4:OlapScanNode\n" +
+                    "     table: t1, rollup: t1\n" +
+                    "     preAggregation: on\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=10015,10017,10019\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 400000\n" +
+                    "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (8: v4 + 2)"));
+            Assert.assertTrue(intersectPlan.contains("  1:OlapScanNode\n" +
+                    "     table: t0, rollup: t0\n" +
+                    "     preAggregation: on\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=10006,10008,10010\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 400000\n" +
+                    "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
+        }
     }
 }
