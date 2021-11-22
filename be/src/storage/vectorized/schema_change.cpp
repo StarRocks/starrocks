@@ -295,10 +295,9 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
         if (ref_column >= 0) {
-            FieldType ref_type = TypeUtils::to_storage_format_v2(
-                    base_tablet->tablet_meta()->tablet_schema().column(ref_column).type());
-            FieldType new_type =
-                    TypeUtils::to_storage_format_v2(new_tablet->tablet_meta()->tablet_schema().column(i).type());
+            FieldType ref_type =
+                    TypeUtils::to_storage_format_v2(base_tablet_meta->tablet_schema().column(ref_column).type());
+            FieldType new_type = TypeUtils::to_storage_format_v2(new_tablet_meta->tablet_schema().column(i).type());
             if (!_schema_mapping[i].materialized_function.empty()) {
                 const auto& materialized_function = _schema_mapping[i].materialized_function;
                 const MaterializeTypeConverter* converter =
