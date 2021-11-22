@@ -686,7 +686,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (!call.getFunction().isCouldApplyDictOptimize()) {
                 return false;
             }
-            for(ScalarOperator child: call.getChildren()) {
+            for (ScalarOperator child : call.getChildren()) {
                 if (child instanceof CallOperator) {
                     if (!child.accept(this, null)) {
                         return false;
