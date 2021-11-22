@@ -32,7 +32,7 @@ b. EXPORTING: The FE generates **one** ExportExportingTask and starts executing 
 
 The Export job generates multiple query plans, each of which is responsible for scanning a portion of the Tablet. The amount of data scanned by each BE is calculated by the `export_max_bytes_per_be_per_task` parameter(256M by default). Each BE has at least one tablet to scan, and the maximum amount of exported data does not exceed the value of `export_max_bytes_per_be_per_task`.
 
-Multiple query plans for a job **execute in parallel**. The size of the job thread pool is configured via the `export_task_pool_size` parameter ( defaults to 5).
+Multiple query plans for a job **execute in parallel**. The size of the job thread pool is configured via the `export_task_pool_size` parameter (defaults to 5).
 
 ### Query Plan Execution
 

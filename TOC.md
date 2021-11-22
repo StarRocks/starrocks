@@ -42,7 +42,7 @@
   + [Window Function](/using_starrocks/Window_function.md)
   + [Cost Based Optimizer](/using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
-+ Development
-  + [Build in docker](/development/Build_in_docker.md)
++ Administration
+  + [Build in docker](/administration/Build_in_docker.md)
 + Release Notes
   + [v1.19](release_notes/release-1.19.md)
