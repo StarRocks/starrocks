@@ -80,6 +80,9 @@ private:
 
     Status _process_array(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::array& arr);
 
+    // Reorder column to accelerate simdjson iteration.
+    void _reorder_column_if_needed(std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::document_reference &doc);
+
     Status _process_array_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                          simdjson::ondemand::array& arr);
 
