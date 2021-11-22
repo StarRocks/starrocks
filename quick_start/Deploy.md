@@ -52,7 +52,9 @@ FE的配置文件为StarRocks-XX-1.0.0/fe/conf/fe.conf, 默认配置已经足以
 
 ### FE单实例部署
 
+```bash
 cd StarRocks-XX-1.0.0/fe
+```
 
 第一步: 定制配置文件conf/fe.conf：
 
