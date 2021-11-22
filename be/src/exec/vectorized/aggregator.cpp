@@ -14,6 +14,7 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
         _evaluate_const_columns(i);
     }
+    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }
 
@@ -181,6 +182,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (const auto& ctx : _agg_expr_ctxs) {
         RETURN_IF_ERROR(Expr::prepare(ctx, state, child_row_desc));
     }
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, child_row_desc));
 
     _mem_pool = std::make_unique<MemPool>();
 
@@ -244,6 +246,7 @@ Status Aggregator::close(RuntimeState* state) {
     for (const auto& i : _agg_expr_ctxs) {
         Expr::close(i, state);
     }
+    Expr::close(_conjunct_ctxs, state);
 
     return Status::OK();
 }
