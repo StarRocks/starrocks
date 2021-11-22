@@ -136,7 +136,7 @@ private:
                                                 bool filter_all, bool hit_all, const Column::Filter& filter);
 
     void _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
-    void _process_other_conjunct_and_remove_duplicate_index(ChunkPtr* chunk);
+    void _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
     void _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
     void _process_other_conjunct(ChunkPtr* chunk);
 
