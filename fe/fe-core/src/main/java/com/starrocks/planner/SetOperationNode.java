@@ -90,7 +90,7 @@ public abstract class SetOperationNode extends PlanNode {
 
     protected final TupleId tupleId_;
 
-    protected List<Map<Integer, Integer>> passThroughSlotMaps = Lists.newArrayList();
+    protected List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps = Lists.newArrayList();
 
     protected SetOperationNode(PlanNodeId id, TupleId tupleId, String planNodeName) {
         super(id, tupleId.asList(), planNodeName);
@@ -147,8 +147,8 @@ public abstract class SetOperationNode extends PlanNode {
         this.firstMaterializedChildIdx_ = firstMaterializedChildIdx_;
     }
 
-    public void setPassThroughSlotMaps(List<Map<Integer, Integer>> passThroughSlotMaps) {
-        this.passThroughSlotMaps = passThroughSlotMaps;
+    public void setOutputSlotIdToChildSlotIdMaps(List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps) {
+        this.outputSlotIdToChildSlotIdMaps = outputSlotIdToChildSlotIdMaps;
     }
 
     @Override
@@ -260,7 +260,7 @@ public abstract class SetOperationNode extends PlanNode {
             SlotRef childSlotRef = childExprList.get(i).unwrapSlotRef(false);
             slotMaps.put(setOpSlotRef.getSlotId().asInt(), childSlotRef.getSlotId().asInt());
         }
-        passThroughSlotMaps.add(slotMaps);
+        outputSlotIdToChildSlotIdMaps.add(slotMaps);
 
         return true;
     }
@@ -361,7 +361,7 @@ public abstract class SetOperationNode extends PlanNode {
             case UNION_NODE:
                 msg.union_node = new TUnionNode(
                         tupleId_.asInt(), texprLists, constTexprLists, firstMaterializedChildIdx_);
-                msg.union_node.setPass_through_slot_maps(passThroughSlotMaps);
+                msg.union_node.setPass_through_slot_maps(outputSlotIdToChildSlotIdMaps);
                 msg.node_type = TPlanNodeType.UNION_NODE;
                 break;
             case INTERSECT_NODE:
@@ -491,7 +491,7 @@ public abstract class SetOperationNode extends PlanNode {
             boolean pushDown = false;
             int probeSlotId = ((SlotRef) probeExpr).getSlotId().asInt();
             Set<Integer> mappedProbeSlotIds = new HashSet<>();
-            for (Map<Integer, Integer> map : passThroughSlotMaps) {
+            for (Map<Integer, Integer> map : outputSlotIdToChildSlotIdMaps) {
                 if (map.containsKey(probeSlotId)) {
                     mappedProbeSlotIds.add(map.get(probeSlotId));
                 }
