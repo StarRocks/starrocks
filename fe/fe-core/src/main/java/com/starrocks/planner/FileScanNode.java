@@ -683,15 +683,4 @@ public class FileScanNode extends LoadScanNode {
         return output.toString();
     }
 
-    @Override
-    public boolean isVectorized() {
-        // Column mapping expr already checked in finalizeParams function
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return useVectorizedLoad;
-    }
 }

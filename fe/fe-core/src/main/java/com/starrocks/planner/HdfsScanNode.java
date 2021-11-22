@@ -597,23 +597,4 @@ public class HdfsScanNode extends ScanNode {
         }
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : noEvalPartitionConjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-        for (Expr expr : nonPartitionConjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-        for (Expr expr : minMaxConjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-        return true;
-    }
 }

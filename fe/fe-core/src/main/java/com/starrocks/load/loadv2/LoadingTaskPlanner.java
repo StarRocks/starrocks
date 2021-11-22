@@ -138,7 +138,7 @@ public class LoadingTaskPlanner {
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
-        LOG.info("use vectorized load: {}, load job id: {}", scanNode.isUseVectorized(), loadJobId);
+        LOG.info("use vectorized load: {}, load job id: {}", true, loadJobId);
         scanNodes.add(scanNode);
         descTable.computeMemLayout();
 

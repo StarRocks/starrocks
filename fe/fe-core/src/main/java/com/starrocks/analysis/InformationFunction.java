@@ -110,11 +110,6 @@ public class InformationFunction extends Expr {
         return funcType + "()";
     }
 
-    @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
     /**
      * Below function is added by new analyzer
      */

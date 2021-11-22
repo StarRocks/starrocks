@@ -368,15 +368,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testSetVar() throws Exception {
         String sql = "explain select c2 from db1.tbl3;";
         String plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
-        Assert.assertTrue(plan.contains("use vectorized: true"));
 
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=false) */c2 from db1.tbl3";
         plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
-        Assert.assertTrue(plan.contains("use vectorized: false"));
 
         sql = "explain select c2 from db1.tbl3";
         plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
-        Assert.assertTrue(plan.contains("use vectorized: true"));
 
         // will throw NullPointException
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=true, enable_cbo=true) */ c2 from db1.tbl3";
@@ -390,7 +387,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains("5:AGGREGATE (update serialize)\n" +
                 "  |  output: count(*)\n" +
                 "  |  group by: \n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  4:Project\n" +
                 "  |  <slot 1> : 1: C_CUSTKEY"));
@@ -404,10 +400,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains("7:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----6:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  4:Project\n" +
                 "  |  <slot 1> : 1: v1"));

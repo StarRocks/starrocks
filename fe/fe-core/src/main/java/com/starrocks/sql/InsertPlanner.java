@@ -54,8 +54,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.planner.AdapterNode.checkPlanIsVectorized;
-
 public class InsertPlanner {
     public ExecPlan plan(Relation relation, ConnectContext session) {
         InsertRelation insertRelation = (InsertRelation) relation;
@@ -114,8 +112,6 @@ public class InsertPlanner {
             }
         }
         olapTuple.computeMemLayout();
-
-        checkPlanIsVectorized(execPlan.getFragments());
 
         OlapTableSink dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
                 insertRelation.getTargetPartitionIds());

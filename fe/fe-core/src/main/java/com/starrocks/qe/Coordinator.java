@@ -1794,7 +1794,7 @@ public class Coordinator {
                 params.setDesc_tbl(descTable);
                 params.setParams(new TPlanFragmentExecParams());
                 params.setResource_info(tResourceInfo);
-                params.params.setUse_vectorized(fragment.getPlanRoot().isUseVectorized());
+                params.params.setUse_vectorized(true);
                 params.params.setQuery_id(queryId);
                 params.params.setFragment_instance_id(instanceExecParam.instanceId);
                 Map<Integer, List<TScanRangeParams>> scanRanges = instanceExecParam.perNodeScanRanges;
