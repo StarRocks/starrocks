@@ -34,8 +34,9 @@ struct TransmitChunkInfo {
 
 class SinkBuffer {
 public:
-    SinkBuffer(MemTracker* mem_tracker, const std::vector<TPlanFragmentDestination>& destinations, size_t num_sinkers)
-            : _mem_tracker(mem_tracker) {
+    SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations, size_t num_sinkers)
+            : _mem_tracker(state->instance_mem_tracker()),
+              _brpc_timeout_ms(std::min(3600, state->query_options().query_timeout) * 1000) {
         _threads = ExecEnv::GetInstance()->pipeline_exchange_sink_thread_pool();
         for (const auto& dest : destinations) {
             const auto& dest_instance_id = dest.fragment_instance_id;
@@ -177,11 +178,7 @@ private:
             return;
         }
 
-        // Waiting for rpc task to exit, it won't take too long
-        if (_rpc_task_exit_promise != nullptr) {
-            _rpc_task_exit_promise->get_future().get();
-        }
-        _rpc_task_exit_promise = std::make_unique<std::promise<void>>();
+        _rpc_task_exit_promise = std::make_shared<std::promise<void>>();
 
         PriorityThreadPool::Task task;
         task.work_function = [this]() { _process(); };
@@ -198,6 +195,7 @@ private:
     }
 
     void _process() {
+        auto exit_promise = _rpc_task_exit_promise;
         try {
             MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
             DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
@@ -253,7 +251,7 @@ private:
         } catch (...) {
             LOG(FATAL) << "[ExchangeSinkOperator] sink_buffer::process: UNKNOWN";
         }
-        _rpc_task_exit_promise->set_value();
+        exit_promise->set_value();
     }
 
     void _send_rpc(TransmitChunkInfo& request) {
@@ -287,7 +285,7 @@ private:
         DCHECK(!closure->has_in_flight_rpc());
         closure->ref();
         closure->cntl.Reset();
-        closure->cntl.set_timeout_ms(500);
+        closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         closure->cntl.request_attachment().append(request.attachment);
         _in_flight_rpc_num.fetch_add(1, std::memory_order_release);
         request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
@@ -295,6 +293,7 @@ private:
 
     PriorityThreadPool* _threads = nullptr;
     MemTracker* _mem_tracker = nullptr;
+    const int32_t _brpc_timeout_ms;
 
     std::unordered_map<TUniqueId, size_t> _num_sinkers_per_dest_instance;
     std::unordered_map<TUniqueId, int64_t> _request_seqs;
@@ -315,7 +314,7 @@ private:
 
     // This field is used to help properly handle special situation
     // that SinkBuffer may destruct when method is_finished() return false
-    std::unique_ptr<std::promise<void>> _rpc_task_exit_promise = nullptr;
+    std::shared_ptr<std::promise<void>> _rpc_task_exit_promise = nullptr;
 };
 
 } // namespace starrocks::pipeline

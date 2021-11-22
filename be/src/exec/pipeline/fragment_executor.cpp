@@ -234,8 +234,8 @@ void FragmentExecutor::_convert_data_sink_to_operator(const TPlanFragmentExecPar
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
         starrocks::DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink);
         auto dop = _fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
-        std::shared_ptr<SinkBuffer> sink_buffer = std::make_shared<SinkBuffer>(
-                _fragment_ctx->runtime_state()->instance_mem_tracker(), params.destinations, dop);
+        std::shared_ptr<SinkBuffer> sink_buffer =
+                std::make_shared<SinkBuffer>(_fragment_ctx->runtime_state(), params.destinations, dop);
 
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
                 context->next_operator_id(), -1, sink_buffer, sender->get_partition_type(), params.destinations,
