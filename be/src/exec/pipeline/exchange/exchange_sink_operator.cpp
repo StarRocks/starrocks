@@ -268,16 +268,18 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _runtime_profile->add_info_string("DestFragments", instances);
     _runtime_profile->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
 
-    if (_part_type == TPartitionType::UNPARTITIONED || _part_type == TPartitionType::RANDOM) {
-        // Randomize the order we open/transmit to channels to avoid thundering herd problems.
-        srand(reinterpret_cast<uint64_t>(this));
-        std::shuffle(_channels.begin(), _channels.end(), std::mt19937(std::random_device()()));
-    } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
-               _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+    if (_part_type == TPartitionType::HASH_PARTITIONED ||
+        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
     } else {
         DCHECK(false) << "shouldn't go to here";
     }
+
+    // Randomize the order we open/transmit to channels to avoid thundering herd problems.
+    _channel_indices.resize(_channels.size());
+    std::iota(_channel_indices.begin(), _channel_indices.end(), 0);
+    srand(reinterpret_cast<uint64_t>(this));
+    std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_sent_counter = ADD_COUNTER(_runtime_profile, "BytesSent", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_runtime_profile, "UncompressedBytes", TUnit::BYTES);
@@ -334,9 +336,9 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
             construct_brpc_attachment(_chunk_request, attachment);
-            for (const auto& channel : _channels) {
+            for (auto idx : _channel_indices) {
                 PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-                RETURN_IF_ERROR(channel->send_chunk_request(copy, attachment));
+                RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, attachment));
             }
             _current_request_bytes = 0;
             _chunk_request.reset();
@@ -395,7 +397,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             }
         }
 
-        for (int i = 0; i < num_channels; ++i) {
+        for (int i : _channel_indices) {
             size_t from = _channel_row_idx_start_points[i];
             size_t size = _channel_row_idx_start_points[i + 1] - from;
             if (size == 0) {
