@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ChildPropertyDeriver;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -15,6 +14,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
+import com.starrocks.sql.optimizer.base.OutputInputProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.cost.CostModel;
@@ -49,7 +49,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     private final GroupExpression groupExpression;
     // The Pair first is output PropertySet
     // The Pair second is multi input PropertySets
-    private List<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> outputInputProperties;
+    private List<OutputInputProperty> outputInputProperties;
     // localCost + sum of all InputCost entries.
     private double curTotalCost;
     // the local cost of the group expression
@@ -95,8 +95,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         initOutputProperties();
 
         for (; curPropertyPairIndex < outputInputProperties.size(); curPropertyPairIndex++) {
-            PhysicalPropertySet outputProperty = outputInputProperties.get(curPropertyPairIndex).first;
-            List<PhysicalPropertySet> inputProperties = outputInputProperties.get(curPropertyPairIndex).second;
+            PhysicalPropertySet outputProperty = outputInputProperties.get(curPropertyPairIndex).getOutputProperty();
+            List<PhysicalPropertySet> inputProperties =
+                    outputInputProperties.get(curPropertyPairIndex).getInputProperties();
 
             // Calculate local cost and update total cost
             if (curChildIndex == 0 && prevChildIndex == -1) {
