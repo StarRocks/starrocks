@@ -8,7 +8,6 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -17,6 +16,7 @@ import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
+import com.starrocks.sql.optimizer.base.OutputInputProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -76,7 +76,7 @@ import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils
  */
 public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContext> {
     private PhysicalPropertySet requirements;
-    private List<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> outputInputProps;
+    private List<OutputInputProperty> outputInputProps;
     private final TaskContext taskContext;
     private final OptimizerContext context;
 
@@ -85,7 +85,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         this.context = taskContext.getOptimizerContext();
     }
 
-    public List<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> getOutputInputProps(
+    public List<OutputInputProperty> getOutputInputProps(
             PhysicalPropertySet requirements,
             GroupExpression groupExpression) {
         this.requirements = requirements;
@@ -111,8 +111,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         // 1 For broadcast join
         PhysicalPropertySet rightBroadcastProperty =
                 new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                Lists.newArrayList(new PhysicalPropertySet(), rightBroadcastProperty)));
+        outputInputProps.add(OutputInputProperty.emptyOutputOf(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
 
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
@@ -184,8 +183,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                     new HashDistributionDesc(rightDistribution.getShuffleColumns(),
                             HashDistributionDesc.SourceType.FORCE_SHUFFLE_JOIN)));
 
-            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                    Lists.newArrayList(leftProperty, rightProperty)));
+            outputInputProps.add(OutputInputProperty.emptyOutputOf(leftProperty, rightProperty));
             return;
         }
 
@@ -195,8 +193,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleJoinDesc();
         if (!requiredShuffleDesc.isPresent()) {
-            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                    Lists.newArrayList(leftInputProperty, rightInputProperty)));
+            outputInputProps.add(OutputInputProperty.emptyOutputOf(leftInputProperty, rightInputProperty));
             return;
         }
 
@@ -231,13 +228,12 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                     DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(requiredRight,
                             HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
 
-            outputInputProps.add(new Pair<>(distributeRequirements(),
-                    Lists.newArrayList(leftShuffleProperty, rightShuffleProperty)));
+            outputInputProps
+                    .add(OutputInputProperty.of(distributeRequirements(), leftShuffleProperty, rightShuffleProperty));
             return;
         }
 
-        outputInputProps
-                .add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(leftInputProperty, rightInputProperty)));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, leftInputProperty, rightInputProperty));
     }
 
     /*
@@ -291,8 +287,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                     createLocalByByHashColumns(rightShuffleDistribution.getShuffleColumns()));
             PhysicalPropertySet leftLocalProperty = createPropertySetByDistribution(
                     createLocalByByHashColumns(leftShuffleDistribution.getShuffleColumns()));
-            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                    Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
+            outputInputProps.add(OutputInputProperty.emptyOutputOf(leftLocalProperty, rightLocalProperty));
         } else {
             // colocate group
             if (!colocateIndex.isSameGroup(left.getTable().getId(), right.getTable().getId())) {
@@ -337,8 +332,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             PhysicalPropertySet leftLocalProperty = createPropertySetByDistribution(
                     createLocalByByHashColumns(leftScanDistribution.getShuffleColumns()));
 
-            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                    Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
+            outputInputProps.add(OutputInputProperty.emptyOutputOf(leftLocalProperty, rightLocalProperty));
         }
         return true;
     }
@@ -379,8 +373,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         PhysicalPropertySet rightLocalProperty = createPropertySetByDistribution(
                 createLocalByByHashColumns(rightScanDistribution.getShuffleColumns()));
         // For query schedule, we need left is hash local
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
+        outputInputProps.add(OutputInputProperty.emptyOutputOf(leftLocalProperty, rightLocalProperty));
     }
 
     private void tryReplicatedHashJoin(ExpressionContext context,
@@ -476,8 +469,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         PhysicalPropertySet leftLocalProperty =
                 createPropertySetByDistribution(createLocalByByHashColumns(leftLocalColumns));
 
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                Lists.newArrayList(leftLocalProperty, rightBucketShuffleProperty)));
+        outputInputProps.add(OutputInputProperty.emptyOutputOf(leftLocalProperty, rightBucketShuffleProperty));
     }
 
     private Optional<LogicalOlapScanOperator> findLogicalOlapScanOperator(HashDistributionSpec distributionSpec) {
@@ -541,14 +533,13 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void tryGatherForBroadcastJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
-        List<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> result = Lists.newArrayList();
+        List<OutputInputProperty> result = Lists.newArrayList();
         if (context.getChildLogicalProperty(0).isGatherToOneInstance()) {
-            for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProp : outputInputProps) {
-                PhysicalPropertySet left = outputInputProp.second.get(0);
-                PhysicalPropertySet right = outputInputProp.second.get(1);
+            for (OutputInputProperty outputInputProp : outputInputProps) {
+                PhysicalPropertySet left = outputInputProp.getInputProperty(0);
+                PhysicalPropertySet right = outputInputProp.getInputProperty(1);
                 if (left.getDistributionProperty().isAny() && right.getDistributionProperty().isBroadcast()) {
-                    result.add(new Pair<>(distributeRequirements(),
-                            Lists.newArrayList(distributeRequirements(), right)));
+                    result.add(OutputInputProperty.of(distributeRequirements(), distributeRequirements(), right));
                 } else {
                     result.add(outputInputProp);
                 }
@@ -593,16 +584,15 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             return visitOperator(node, context);
         }
 
-        List<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> result = Lists.newArrayList();
+        List<OutputInputProperty> result = Lists.newArrayList();
         if (requiredLocalColumnsFromLeft) {
-            for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProp : outputInputProps) {
-                PhysicalPropertySet left = outputInputProp.second.get(0);
-                PhysicalPropertySet right = outputInputProp.second.get(1);
+            for (OutputInputProperty outputInputProp : outputInputProps) {
+                PhysicalPropertySet left = outputInputProp.getInputProperty(0);
+                PhysicalPropertySet right = outputInputProp.getInputProperty(1);
 
                 if (left.getDistributionProperty().isAny()) {
                     // Broadcast
-                    result.add(
-                            new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements(), right)));
+                    result.add(OutputInputProperty.of(distributeRequirements(), distributeRequirements(), right));
                 } else if (left.getDistributionProperty().isShuffle()) {
                     HashDistributionDesc desc =
                             ((HashDistributionSpec) left.getDistributionProperty().getSpec()).getHashDistributionDesc();
@@ -611,7 +601,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                             && requireDistributionDesc.getColumns().containsAll(desc.getColumns())) {
                         // BucketShuffle or Colocate
                         // required local columns is sub-set
-                        result.add(new Pair<>(distributeRequirements(), outputInputProp.second));
+                        result.add(
+                                OutputInputProperty.of(distributeRequirements(), outputInputProp.getInputProperties()));
                     }
                 }
             }
@@ -623,8 +614,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                 return visitOperator(node, context);
             }
 
-            for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProp : outputInputProps) {
-                PhysicalPropertySet right = outputInputProp.second.get(1);
+            for (OutputInputProperty outputInputProp : outputInputProps) {
+                PhysicalPropertySet right = outputInputProp.getInputProperty(1);
 
                 if (right.getDistributionProperty().isShuffle()) {
                     HashDistributionDesc desc =
@@ -635,7 +626,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                             && requireDistributionDesc.getColumns().containsAll(desc.getColumns())) {
                         // only Colocate
                         // required local columns is sub-set
-                        result.add(new Pair<>(distributeRequirements(), outputInputProp.second));
+                        result.add(OutputInputProperty.of(distributeRequirements(),
+                                outputInputProp.getInputProperties()));
                     }
                 }
             }
@@ -648,11 +640,11 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
         // Pass through the requirements to the child
-        outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements())));
+        outputInputProps.add(OutputInputProperty.of(distributeRequirements(), distributeRequirements()));
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
@@ -662,15 +654,15 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
                 && context.getRootProperty().isExecuteInOneTablet()
                 && node.getType().isGlobal() && !node.isSplit()) {
-            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
+            outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
             return visitAggregateRequirements(node, context);
         }
 
         LogicalOperator child = (LogicalOperator) context.getChildOperator(0);
         // If child has limit, we need to gather data to one instance
         if (child.hasLimit() && (node.getType().isGlobal() && !node.isSplit())) {
-            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                    Lists.newArrayList(createLimitGatherProperty(child.getLimit()))));
+            outputInputProps.add(OutputInputProperty
+                    .of(PhysicalPropertySet.EMPTY, createLimitGatherProperty(child.getLimit())));
             return visitAggregateRequirements(node, context);
         }
 
@@ -683,8 +675,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                 DistributionProperty distributionProperty =
                         new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
 
-                outputInputProps.add(new Pair<>(new PhysicalPropertySet(distributionProperty),
-                        Lists.newArrayList(new PhysicalPropertySet(distributionProperty))));
+                outputInputProps.add(OutputInputProperty.of(new PhysicalPropertySet(distributionProperty),
+                        new PhysicalPropertySet(distributionProperty)));
                 return visitAggregateRequirements(node, context);
             }
 
@@ -692,20 +684,20 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             DistributionSpec distributionSpec = DistributionSpec.createHashDistributionSpec(
                     new HashDistributionDesc(columns, HashDistributionDesc.SourceType.SHUFFLE_AGG));
             DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-            outputInputProps.add(new Pair<>(new PhysicalPropertySet(distributionProperty),
-                    Lists.newArrayList(new PhysicalPropertySet(distributionProperty))));
+            outputInputProps.add(OutputInputProperty
+                    .of(new PhysicalPropertySet(distributionProperty), new PhysicalPropertySet(distributionProperty)));
 
             // local aggregation
             DistributionSpec localSpec = DistributionSpec.createHashDistributionSpec(
                     new HashDistributionDesc(columns, HashDistributionDesc.SourceType.LOCAL));
             DistributionProperty localProperty = new DistributionProperty(localSpec);
-            outputInputProps.add(new Pair<>(new PhysicalPropertySet(localProperty),
-                    Lists.newArrayList(new PhysicalPropertySet(localProperty))));
+            outputInputProps.add(OutputInputProperty
+                    .of(new PhysicalPropertySet(localProperty), (new PhysicalPropertySet(localProperty))));
 
             return visitAggregateRequirements(node, context);
         }
 
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
         return visitAggregateRequirements(node, context);
     }
 
@@ -720,16 +712,16 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         ColumnRefSet requiredLocalColumns = new ColumnRefSet();
         requireDistributionDesc.getColumns().forEach(requiredLocalColumns::union);
-        List<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> result = Lists.newArrayList();
+        List<OutputInputProperty> result = Lists.newArrayList();
 
-        for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProp : outputInputProps) {
-            PhysicalPropertySet input = outputInputProp.second.get(0);
+        for (OutputInputProperty outputInputProp : outputInputProps) {
+            PhysicalPropertySet input = outputInputProp.getInputProperty(0);
 
             if (input.getDistributionProperty().isAny()) {
-                result.add(new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements())));
+                result.add(OutputInputProperty.of(distributeRequirements(), distributeRequirements()));
             } else if (input.getDistributionProperty().isShuffle()) {
                 HashDistributionDesc outputDesc =
-                        ((HashDistributionSpec) outputInputProp.first.getDistributionProperty().getSpec())
+                        ((HashDistributionSpec) outputInputProp.getOutputProperty().getDistributionProperty().getSpec())
                                 .getHashDistributionDesc();
 
                 HashDistributionDesc inputDesc =
@@ -740,7 +732,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                         && requireDistributionDesc.getColumns().containsAll(inputDesc.getColumns())) {
                     // BucketShuffle or Colocate
                     // required local columns is sub-set
-                    result.add(new Pair<>(distributeRequirements(), outputInputProp.second));
+                    result.add(OutputInputProperty.of(distributeRequirements(), outputInputProp.getInputProperties()));
                 }
             }
         }
@@ -757,11 +749,10 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         boolean satisfyLocalProperty;
         if (node.getSelectedPartitionId().size() <= 1 || (colocateIndex.isColocateTable(node.getTable().getId()) &&
                 !colocateIndex.isGroupUnstable(colocateIndex.getGroup(node.getTable().getId())))) {
-            outputInputProps
-                    .add(new Pair<>(createPropertySetByDistribution(hashDistributionSpec), Lists.newArrayList()));
+            outputInputProps.add(OutputInputProperty.of(createPropertySetByDistribution(hashDistributionSpec)));
             satisfyLocalProperty = true;
         } else {
-            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
+            outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
             satisfyLocalProperty = false;
         }
 
@@ -774,7 +765,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         HashDistributionDesc requireDistributionDesc = required.get();
         if (requireDistributionDesc.getColumns().containsAll(hashDistributionSpec.getShuffleColumns()) &&
                 satisfyLocalProperty) {
-            outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
+            outputInputProps.add(OutputInputProperty.of(distributeRequirements()));
         }
 
         return visitOperator(node, context);
@@ -804,9 +795,9 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         // If child has limit, we need to gather data to one instance
         if (child.hasLimit() && (topN.getSortPhase().isFinal() && !topN.isSplit())) {
             PhysicalPropertySet inputProperty = createLimitGatherProperty(child.getLimit());
-            outputInputProps.add(new Pair<>(outputProperty, Lists.newArrayList(inputProperty)));
+            outputInputProps.add(OutputInputProperty.of(outputProperty, Lists.newArrayList(inputProperty)));
         } else {
-            outputInputProps.add(new Pair<>(outputProperty, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
+            outputInputProps.add(OutputInputProperty.of(outputProperty, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
         }
 
         return visitOperator(topN, context);
@@ -817,27 +808,27 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
     @Override
     public Void visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
-            outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
+            outputInputProps.add(OutputInputProperty.of(distributeRequirements()));
             return visitOperator(node, context);
         }
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
     @Override
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
-            outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
+            outputInputProps.add(OutputInputProperty.of(distributeRequirements()));
             return visitOperator(node, context);
         }
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
@@ -846,7 +837,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
@@ -855,7 +846,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
@@ -867,8 +858,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         DistributionSpec gather = DistributionSpec.createGatherDistributionSpec();
         DistributionProperty inputProperty = new DistributionProperty(gather);
 
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                Lists.newArrayList(new PhysicalPropertySet(inputProperty))));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, new PhysicalPropertySet(inputProperty)));
         return visitOperator(node, context);
     }
 
@@ -890,8 +880,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                 DistributionProperty localProperty = new DistributionProperty(DistributionSpec
                         .createHashDistributionSpec(new HashDistributionDesc(partitionColumnRefSet,
                                 HashDistributionDesc.SourceType.LOCAL)));
-                outputInputProps.add(new Pair<>(new PhysicalPropertySet(localProperty, sortProperty),
-                        Lists.newArrayList(new PhysicalPropertySet(localProperty, sortProperty))));
+                outputInputProps.add(OutputInputProperty.of(new PhysicalPropertySet(localProperty, sortProperty),
+                        new PhysicalPropertySet(localProperty, sortProperty)));
             }
 
             return visitOperator(node, context);
@@ -900,21 +890,21 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         if (partitionColumnRefSet.isEmpty()) {
             DistributionProperty distributionProperty =
                     new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
-            outputInputProps.add(new Pair<>(new PhysicalPropertySet(distributionProperty, sortProperty),
-                    Lists.newArrayList(new PhysicalPropertySet(distributionProperty, sortProperty))));
+            outputInputProps.add(OutputInputProperty.of(new PhysicalPropertySet(distributionProperty, sortProperty),
+                    new PhysicalPropertySet(distributionProperty, sortProperty)));
         } else {
             DistributionProperty distributionProperty = new DistributionProperty(DistributionSpec
                     .createHashDistributionSpec(
                             new HashDistributionDesc(partitionColumnRefSet,
                                     HashDistributionDesc.SourceType.SHUFFLE_AGG)));
-            outputInputProps.add(new Pair<>(new PhysicalPropertySet(distributionProperty, sortProperty),
-                    Lists.newArrayList(new PhysicalPropertySet(distributionProperty, sortProperty))));
+            outputInputProps.add(OutputInputProperty.of(new PhysicalPropertySet(distributionProperty, sortProperty),
+                    new PhysicalPropertySet(distributionProperty, sortProperty)));
 
             // local
             DistributionProperty localProperty = new DistributionProperty(DistributionSpec.createHashDistributionSpec(
                     new HashDistributionDesc(partitionColumnRefSet, HashDistributionDesc.SourceType.LOCAL)));
-            outputInputProps.add(new Pair<>(new PhysicalPropertySet(localProperty, sortProperty),
-                    Lists.newArrayList(new PhysicalPropertySet(localProperty, sortProperty))));
+            outputInputProps.add(OutputInputProperty.of(new PhysicalPropertySet(localProperty, sortProperty),
+                    new PhysicalPropertySet(localProperty, sortProperty)));
         }
 
         return visitOperator(node, context);
@@ -955,12 +945,12 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         }
 
         // Use Any to forbidden enforce some property, will add shuffle in FragmentBuilder
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, childProperty));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, childProperty));
     }
 
     @Override
     public Void visitPhysicalValues(PhysicalValuesOperator node, ExpressionContext context) {
-        outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
+        outputInputProps.add(OutputInputProperty.of(distributeRequirements()));
         return visitOperator(node, context);
     }
 
@@ -970,7 +960,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
@@ -978,10 +968,10 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalFilter(PhysicalFilterOperator node, ExpressionContext context) {
         // Pass through the requirements to the child
         if (getRequiredLocalDesc().isPresent()) {
-            outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements())));
+            outputInputProps.add(OutputInputProperty.of(distributeRequirements(), distributeRequirements()));
             return visitOperator(node, context);
         }
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
@@ -989,10 +979,10 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalTableFunction(PhysicalTableFunctionOperator node, ExpressionContext context) {
         // Pass through the requirements to the child
         if (getRequiredLocalDesc().isPresent()) {
-            outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements())));
+            outputInputProps.add(OutputInputProperty.of(distributeRequirements(), distributeRequirements()));
             return visitOperator(node, context);
         }
-        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
@@ -1002,8 +992,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             return visitOperator(node, context);
         }
 
-        outputInputProps.add(new Pair<>(createLimitGatherProperty(node.getLimit()),
-                Lists.newArrayList(createLimitGatherProperty(node.getLimit()))));
+        outputInputProps.add(OutputInputProperty
+                .of(createLimitGatherProperty(node.getLimit()), createLimitGatherProperty(node.getLimit())));
         return visitOperator(node, context);
     }
 
