@@ -634,12 +634,16 @@ CONF_Int64(pipeline_yield_max_chunks_moved, "100");
 // yield PipelineDriver when maximum time in nano-seconds has spent
 // in current execution round.
 CONF_Int64(pipeline_yield_max_time_spent, "100000000");
-// the number of io threads pipeline engine.
-CONF_Int64(pipeline_io_thread_pool_thread_num, "3");
-// queue size of io thread pool for pipeline engine.
-CONF_Int64(pipeline_io_thread_pool_queue_size, "102400");
+// the number of scan threads pipeline engine.
+CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
+// queue size of scan thread pool for pipeline engine.
+CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
+// the number of exchange threads pipeline engine.
+CONF_Int64(pipeline_exchange_thread_pool_thread_num, "0");
+// queue size of exchange thread pool for pipeline engine.
+CONF_Int64(pipeline_exchange_thread_pool_queue_size, "102400");
 // the number of execution threads for pipeline engine.
-CONF_Int64(pipeline_exec_thread_pool_thread_num, "3");
+CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
 // bitmap serialize version
