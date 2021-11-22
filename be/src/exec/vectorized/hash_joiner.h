@@ -141,6 +141,10 @@ private:
     void _process_other_conjunct(ChunkPtr* chunk);
 
     void _filter_probe_output_chunk(ChunkPtr& chunk) {
+        // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
+        // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
+        // only remains the rows which are not hit the hash table before. Therefore, _process_other_conjunct can
+        // not be called when other_conjuncts is empty.
         if (chunk && !chunk->is_empty() && !_other_join_conjunct_ctxs.empty()) {
             _process_other_conjunct(&chunk);
         }
