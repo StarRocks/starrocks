@@ -12,6 +12,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -72,6 +73,10 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
     @Override
     public OptExpression visitLogicalTableScan(OptExpression optExpression,
                                                MaterializedViewRule.RewriteContext context) {
+        if (!OperatorType.LOGICAL_OLAP_SCAN.equals(optExpression.getOp().getOpType())) {
+            return optExpression;
+        }
+
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
 
         if (olapScanOperator.getColRefToColumnMetaMap().containsKey(context.queryColumnRef)) {
