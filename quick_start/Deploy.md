@@ -53,7 +53,9 @@ The FE configuration file is `StarRocks-XX-1.0.0/fe/conf/fe.conf`. The default c
 
 ### FE Single Instance Deployment
 
+```bash
 cd StarRocks-XX-1.0.0/fe
+```
 
 Step 1: Customize the configuration file `conf/fe.conf`.
 
