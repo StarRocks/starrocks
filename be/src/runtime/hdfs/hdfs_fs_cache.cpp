@@ -38,8 +38,7 @@ static Status parse_namenode(const std::string& path, std::string* namenode) {
     return Status::OK();
 }
 
-Status HdfsFsCache::get_connection(const std::string& path, hdfsFS* fs, ResourceSemaphorePtr* res,
-                                   HdfsFsMap* local_cache) {
+Status HdfsFsCache::get_connection(const std::string& path, hdfsFS* fs, FileOpenLimitPtr* res, HdfsFsMap* local_cache) {
     std::string namenode;
     RETURN_IF_ERROR(parse_namenode(path, &namenode));
 
@@ -62,7 +61,7 @@ Status HdfsFsCache::get_connection(const std::string& path, hdfsFS* fs, Resource
         } else {
             auto hdfs_builder = hdfsNewBuilder();
             hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
-            auto semaphore = std::make_unique<ResourceSemaphore>(0);
+            auto semaphore = std::make_unique<FileOpenLimit>(0);
             *fs = hdfsBuilderConnect(hdfs_builder);
             *res = semaphore.get();
             if (*fs == nullptr) {
@@ -74,7 +73,7 @@ Status HdfsFsCache::get_connection(const std::string& path, hdfsFS* fs, Resource
     }
 
     if (local_cache != nullptr) {
-        local_cache->emplace(namenode, std::make_pair(*fs, std::make_unique<ResourceSemaphore>(0)));
+        local_cache->emplace(namenode, std::make_pair(*fs, std::make_unique<FileOpenLimit>(0)));
     }
 
     return Status::OK();

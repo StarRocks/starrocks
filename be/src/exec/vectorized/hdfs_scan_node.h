@@ -24,7 +24,7 @@ struct HdfsFileDesc {
     int64_t file_length = 0;
     std::vector<const THdfsScanRange*> splits;
 
-    std::atomic<int32_t>* scan_limit = nullptr;
+    std::atomic<int32_t>* open_limit = nullptr;
 };
 
 class HdfsScanNode final : public starrocks::ScanNode {

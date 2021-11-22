@@ -160,7 +160,7 @@ public:
 
     RuntimeState* runtime_state() { return _runtime_state; }
 
-    int scan_limit() { return *_scanner_params.open_limit; }
+    int open_limit() { return *_scanner_params.open_limit; }
 
     bool is_open() { return _is_open; }
 

@@ -194,7 +194,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.parent = this;
-    scanner_params.open_limit = hdfs_file_desc.scan_limit;
+    scanner_params.open_limit = hdfs_file_desc.open_limit;
 
     HdfsScanner* scanner = nullptr;
     if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::PARQUET) {
@@ -288,7 +288,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
         return;
     }
 
-    int concurrency_limit = config::max_hdfs_file_instance;
+    int concurrency_limit = config::max_hdfs_file_handle;
 
     // There is a situation where once a resource overrun has occurred,
     // the scanners that were previously overrun are basically in a pending state,
@@ -297,7 +297,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     if (scanner->has_pending_token()) {
         int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
         int need_put = concurrency - _running_threads;
-        int left_resource = concurrency_limit - scanner->scan_limit();
+        int left_resource = concurrency_limit - scanner->open_limit();
         if (left_resource > 0) {
             need_put = std::min(left_resource, need_put);
             std::lock_guard<std::mutex> l(_mtx);
@@ -316,7 +316,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     // if opened file greater than this. scanner will push back to pending list.
     // We can't have all scanners in the pending state, we need to
     // make sure there is at least one thread on each SCAN NODE that can be running
-    if (!scanner->is_open() && scanner->scan_limit() > concurrency_limit) {
+    if (!scanner->is_open() && scanner->open_limit() > concurrency_limit) {
         if (!scanner->has_pending_token()) {
             std::lock_guard<std::mutex> l(_mtx);
             _pending_scanners.push(scanner);
@@ -607,12 +607,12 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;
-        hdfs_file_desc->scan_limit = nullptr;
+        hdfs_file_desc->open_limit = nullptr;
         _hdfs_files.emplace_back(hdfs_file_desc);
     } else {
         hdfsFS hdfs;
-        std::atomic<int32_t>* scan_limit = nullptr;
-        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs, &scan_limit));
+        std::atomic<int32_t>* open_limit = nullptr;
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs, &open_limit));
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         hdfs_file_desc->hdfs_fs = hdfs;
         hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, native_file_path);
@@ -621,7 +621,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;
-        hdfs_file_desc->scan_limit = scan_limit;
+        hdfs_file_desc->open_limit = open_limit;
         _hdfs_files.emplace_back(hdfs_file_desc);
     }
 
