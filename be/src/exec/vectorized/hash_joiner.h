@@ -141,18 +141,18 @@ private:
     void _process_other_conjunct(ChunkPtr* chunk);
 
     void _filter_probe_output_chunk(ChunkPtr& chunk) {
-        if (chunk && !chunk->is_empty()) {
+        if (chunk && !chunk->is_empty() && !_other_join_conjunct_ctxs.empty()) {
             _process_other_conjunct(&chunk);
         }
 
-        if (chunk && !chunk->is_empty()) {
+        if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
         }
     }
     void _filter_post_probe_output_chunk(ChunkPtr& chunk) {
         // Post probe needn't process _other_join_conjunct_ctxs, because they
         // are `ON` predicates, which need to be processed only on probe phase.
-        if (chunk && !chunk->is_empty()) {
+        if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
         }
     }
