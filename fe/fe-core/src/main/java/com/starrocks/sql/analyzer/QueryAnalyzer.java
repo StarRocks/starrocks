@@ -100,6 +100,12 @@ public class QueryAnalyzer {
     }
 
     public QueryRelation transformQueryStmt(QueryStmt stmt, Scope parent) {
+        try {
+            stmt.analyzeOutfile();
+        } catch (AnalysisException e) {
+            throw new StarRocksPlannerException("Error query statement: " + e.getMessage(), INTERNAL_ERROR);
+        }
+
         Scope scope = analyzeCTE(stmt, parent);
         if (stmt instanceof SelectStmt) {
             SelectStmt selectStmt = (SelectStmt) stmt;

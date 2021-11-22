@@ -9,6 +9,7 @@
 #include "gutil/casts.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
+#include "util/date_func.h"
 
 namespace starrocks::vectorized {
 
@@ -317,6 +318,40 @@ size_t ColumnHelper::compute_bytes_size(ColumnsConstIterator const& begin, Colum
         }
     }
     return n;
+}
+
+ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& column) {
+    auto get_binary_column = [](DoubleColumn* data_column, size_t size) -> ColumnPtr {
+        auto new_data_column = BinaryColumn::create();
+        new_data_column->reserve(size);
+
+        for (int row = 0; row < size; ++row) {
+            auto time = data_column->get_data()[row];
+            std::string time_str = time_str_from_double(time);
+            new_data_column->append(time_str);
+        }
+
+        return new_data_column;
+    };
+
+    ColumnPtr res;
+
+    if (column->only_null()) {
+        res = column;
+    } else if (column->is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(column.get());
+        auto* data_column = down_cast<DoubleColumn*>(nullable_column->mutable_data_column());
+        res = NullableColumn::create(get_binary_column(data_column, column->size()), nullable_column->null_column());
+    } else if (column->is_constant()) {
+        auto* const_column = down_cast<vectorized::ConstColumn*>(column.get());
+        string time_str = time_str_from_double(const_column->get(0).get_double());
+        res = vectorized::ColumnHelper::create_const_column<TYPE_VARCHAR>(time_str, column->size());
+    } else {
+        auto* data_column = down_cast<DoubleColumn*>(column.get());
+        res = get_binary_column(data_column, column->size());
+    }
+
+    return res;
 }
 
 } // namespace starrocks::vectorized
