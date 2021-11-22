@@ -165,6 +165,11 @@ curl --location-trusted -u user:password -T /home/store_sales \
     -H "label:abc" [http://abc.com:8000/api/bj_sales/store_sales/_stream_load](http://abc.com:8000/api/bj_sales/store_sales/_stream_load)
 ~~~
 
+### Code integration examples
+
+JAVA development stream load, reference: [https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load)
+Spark integration stream load, Reference: [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md)
+
 ## FAQs
 
 * Error reported for data quality issue: `ETL-QUALITY-UNSATISFIED; msg:quality not good enough to cancel`

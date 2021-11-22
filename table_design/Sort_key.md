@@ -101,7 +101,7 @@ In the first case, a binary search will be performed to find the specified range
 * The length of shortkey can exceed 36 bytes when the last column of shortkey index is of CHAR or VARCHAR type;
 * The above restrictions don’t apply when user specifies `PROPERTIES {short_key = "integer"}` in the table building statement.
 
-### 3.4.2 How to choose the sort key
+### How to choose the sort key
 
 It is very important to choose the right sort key to accelerate queries. For example, if the user only selects `city_code` as the query condition when querying the table `site_access_duplicate`, it results in bad query performance. You should make the columns that are frequently used as query conditions as sort keys.
 
@@ -113,7 +113,7 @@ Still use the table `site_access_duplicate` as an example:
 * If a user queries by `city_code` more frequently than usingthe combination of `site_id` and `city_code`, then having `city_code` as the first sort key column is more appropriate.
 * If querying by `city_code` and by `city_code`+`site_id` are both frequent use cases, querying by `city_code` alone may trigger a full scan of all the row and result in deteriorated performance. In this case, it would be more efficient to create a RollUp table with `city_code` as the first column. The RollUp table will then build another Sort Index for `city_code` to speed up the query.`
 
-### 3.4.3 Notes
+### Notes
 
 Since the shortkey index has a fixed size in StarRocks (36 bytes), memory bloating won’t be an issue. However, you should keep the following 4 rules in mind.
 

@@ -75,8 +75,6 @@ Here is a configuration file for reading data from MySQL and importing it to Sta
 
 ## Starrockswriter Parameter Description
 
-To configure **mysqlreader**, refer to the description of DataX [mysqlreader](https://github.com/StarRocks/DataX/blob/master/mysqlreader/doc/mysqlreader.md).
-
 * **username**
 
   * Description: The user name of the StarRocks database

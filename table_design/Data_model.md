@@ -43,7 +43,7 @@ The table adopts the duplicate model by default. The sort key uses shortkey inde
 
 The following is an example of creating a data table using the duplicate model.
 
-* Where `DUPLICATE KEY(event\_time, event\_type)` indicates that the duplicate model is used, and the sort key is defined before the definitions of other columns.
+* Where `DUPLICATE KEY(event_time, event_type)` indicates that the duplicate model is used, and the sort key is defined before the definitions of other columns.
 
 ~~~sql
 CREATE TABLE IF NOT EXISTS detail (
@@ -103,7 +103,7 @@ When creating a table, the aggregation model is enabled by specifying the aggreg
 
 The following is an example of creating a data table using the aggregation model.
 
-* `site\_id`, `date` and `city\_code` are sort keys;
+* `site_id`, `date` and `city_code` are sort keys;
 * `pv` is the value column, using the aggregation function `SUM`.
 
 ~~~sql
@@ -166,8 +166,8 @@ In e-commerce scenarios, statistical analysis is often based on order status. Al
 
 The following is an example of creating a data table using the update model.
 
-* Use `UNIQUE KEY`(`create\_time`, `order\_id`) as the primary key, where `create\_time` and`order\_id` are in the queue, and their definitions appear before the definitions of other columns;
-* `order\_state` and `total\_price` are value columns, and their aggregation type is `REPLACE`.
+* Use `UNIQUE KEY`(`create_time`, `order_id`) as the primary key, where `create_time` and`order_id` are in the queue, and their definitions appear before the definitions of other columns;
+* `order_state` and `total_price` are value columns, and their aggregation type is `REPLACE`.
 
 ~~~sql
 CREATE TABLE IF NOT EXISTS detail (

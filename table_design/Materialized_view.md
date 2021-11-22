@@ -107,7 +107,7 @@ Incremental imports to the base table are applied to all associated MVs tables. 
 
 ### **Materialized view function support**
 
-The materialized view must be an aggregation of a single table. Only the following [aggregation functions](https://cloud.google.com/bigquery/docs/reference/standard-sql/aggregate_functions) are supported currently.
+The materialized view must be an aggregation of a single table. Only the following aggregation functions are supported currently.
 
 * COUNT
 * MAX

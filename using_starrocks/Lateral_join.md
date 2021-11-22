@@ -34,7 +34,7 @@ The second syntax here is a shortened version of the first one, where the Latera
 ## Usage examples
 
 The current version of StarRocks supports  type transformation between Bitmap, String, Array, and Column.
-! [Some conversions between types in Lateral Join](... /assets/lateral_join_type_convertion.png)
+![Some conversions between types in Lateral Join](../assets/6.9.1.png)
 
 Together with Unnest, we can achieve the following features:
 

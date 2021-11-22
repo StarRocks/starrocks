@@ -179,7 +179,7 @@ To configure the dynamic partitioning policy, specify `PEROPERTIES` in the table
  PARTITION p20200322 VALUES LESS THAN ("2020-03-23"),
  PARTITION p20200323 VALUES LESS THAN ("2020-03-24"),
  PARTITION p20200324 VALUES LESS THAN ("2020-03-25")
-  * When `WEEK` is specified, the partition name is created with the suffix format  `yyyy\_ww`, e.g. 2020\_13
+  * When `WEEK` is specified, the partition name is created with the suffix format  `yyyy_ww`, e.g. 2020\_13
   * When `MONTH` is specified, the partition name is created with the suffix format `yyyyMM`, e.g. 202003.
 
 * dynamic\_partition.start: The start time of the dynamic partition. Based on the day, partitions that exceed this time range will be deleted. If not filled, it defaults to `Integer.MIN\_VALUE` i.e. -2147483648.

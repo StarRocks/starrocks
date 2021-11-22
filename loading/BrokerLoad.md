@@ -19,8 +19,6 @@ After the user submits the import job, the FE generates and distributes the corr
 The following diagram shows the main flow of broker load.
 
 ![brokerload](/assets/4.2.2-1.png)
-  
----
 
 ## Supported Remote File Systems
 
@@ -28,8 +26,6 @@ The following diagram shows the main flow of broker load.
 * Amazon S3
 * Alibaba Cloud OSS
 * Tencent COS
-  
---
 
 ## Import Example
 
