@@ -30,11 +30,6 @@ public class DecodeNode extends PlanNode{
     }
 
     @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
-    @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }

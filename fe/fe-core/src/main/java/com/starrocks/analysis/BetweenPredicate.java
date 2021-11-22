@@ -81,11 +81,6 @@ public class BetweenPredicate extends Predicate {
     }
 
     @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         throw new IllegalStateException(
                 "BetweenPredicate needs to be rewritten into a CompoundPredicate.");

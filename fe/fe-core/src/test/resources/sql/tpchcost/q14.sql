@@ -21,15 +21,12 @@ RESULT SINK
 
 9:Project
 |  <slot 32> : 100.0 * 30: sum / 31: sum
-|  use vectorized: true
 |
 8:AGGREGATE (merge finalize)
 |  output: sum(30: sum), sum(31: sum)
 |  group by:
-|  use vectorized: true
 |
 7:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -42,7 +39,6 @@ UNPARTITIONED
 6:AGGREGATE (update serialize)
 |  output: sum(28: case), sum(29: expr)
 |  group by:
-|  use vectorized: true
 |
 5:Project
 |  <slot 28> : if(22: P_TYPE LIKE 'PROMO%', 34: multiply, 0.0)
@@ -50,17 +46,14 @@ UNPARTITIONED
 |  common expressions:
 |  <slot 33> : 1.0 - 7: L_DISCOUNT
 |  <slot 34> : 6: L_EXTENDEDPRICE * 33: subtract
-|  use vectorized: true
 |
 4:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 18: P_PARTKEY = 2: L_PARTKEY
-|  use vectorized: true
 |
 |----3:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: part
@@ -72,7 +65,6 @@ tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=20000000
 avgRowSize=33.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -86,7 +78,6 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 2: L_PARTKEY
 |  <slot 2> : 2: L_PARTKEY
 |  <slot 6> : 6: L_EXTENDEDPRICE
 |  <slot 7> : 7: L_DISCOUNT
-|  use vectorized: true
 |
 1:OlapScanNode
 TABLE: lineitem
@@ -99,6 +90,5 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=6653465
 avgRowSize=28.0
 numNodes=0
-use vectorized: true
 [end]
 

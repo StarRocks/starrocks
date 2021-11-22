@@ -264,36 +264,6 @@ public class AnalyticEvalNode extends PlanNode {
         return output.toString();
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : substitutedPartitionExprs) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : analyticFnCalls) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        List<Expr> orderExprs = OrderByElement.getOrderByExprs(orderByElements);
-        for (Expr expr : orderExprs) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     public void setSubstitutedPartitionExprs(List<Expr> substitutedPartitionExprs) {
         this.substitutedPartitionExprs = substitutedPartitionExprs;
     }

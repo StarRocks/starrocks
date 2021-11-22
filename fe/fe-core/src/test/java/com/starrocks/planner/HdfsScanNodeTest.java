@@ -94,7 +94,8 @@ public class HdfsScanNodeTest {
         partitionCols.add(partitionCol);
 
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
-        PartitionKey partitionKey = PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
+        PartitionKey partitionKey =
+                PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
         partitionKeys.put(partitionKey, 0L);
 
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
@@ -206,7 +207,8 @@ public class HdfsScanNodeTest {
         partitionCols.add(partitionCol);
 
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
-        PartitionKey partitionKey = PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
+        PartitionKey partitionKey =
+                PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
         partitionKeys.put(partitionKey, 0L);
 
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
@@ -249,7 +251,6 @@ public class HdfsScanNodeTest {
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
-        Assert.assertTrue(scanNode.isVectorized());
         TPlanNode tPlanNode = new TPlanNode();
         scanNode.toThrift(tPlanNode);
         System.out.println(tPlanNode);
