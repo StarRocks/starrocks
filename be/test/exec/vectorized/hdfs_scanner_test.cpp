@@ -216,8 +216,7 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.is_end_of_file());
 
-    status = scanner->close(_runtime_state);
-    ASSERT_TRUE(status.ok());
+    scanner->close(_runtime_state);
 }
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {
@@ -358,8 +357,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     EXPECT_TRUE(status.ok());
     READ_ORC_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
-    status = scanner->close(_runtime_state);
-    EXPECT_TRUE(status.ok());
+    scanner->close(_runtime_state);
 }
 
 static SlotDesc orc_min_max_descs[] = {{"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
@@ -443,8 +441,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     EXPECT_TRUE(status.ok());
     READ_ORC_ROWS(scanner, 0);
     EXPECT_EQ(scanner->raw_rows_read(), 0);
-    status = scanner->close(_runtime_state);
-    EXPECT_TRUE(status.ok());
+    scanner->close(_runtime_state);
 }
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
@@ -479,8 +476,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     EXPECT_TRUE(status.ok());
     READ_ORC_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
-    status = scanner->close(_runtime_state);
-    EXPECT_TRUE(status.ok());
+    scanner->close(_runtime_state);
 }
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
@@ -515,8 +511,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     EXPECT_TRUE(status.ok());
     READ_ORC_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
-    status = scanner->close(_runtime_state);
-    EXPECT_TRUE(status.ok());
+    scanner->close(_runtime_state);
 }
 
 static SlotDesc string_key_value_orc_desc[] = {
@@ -602,8 +597,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
-    status = scanner->close(_runtime_state);
-    EXPECT_TRUE(status.ok());
+    scanner->close(_runtime_state);
 }
 
 static SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)}, {""}};
@@ -707,8 +701,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     EXPECT_TRUE(status.ok());
     READ_ORC_ROWS(scanner, 4640);
     EXPECT_EQ(scanner->raw_rows_read(), 4640);
-    status = scanner->close(_runtime_state);
-    EXPECT_TRUE(status.ok());
+    scanner->close(_runtime_state);
 }
 
 static SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
@@ -819,8 +812,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
-    status = scanner->close(_runtime_state);
-    EXPECT_TRUE(status.ok());
+    scanner->close(_runtime_state);
 }
 
 } // namespace starrocks::vectorized
