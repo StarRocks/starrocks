@@ -87,11 +87,8 @@ public class CreateResourceStmt extends DdlStmt {
         if (resourceType == ResourceType.UNKNOWN) {
             throw new AnalysisException("Unsupported resource type: " + type);
         }
-        if (resourceType == ResourceType.SPARK && !isExternal) {
-            throw new AnalysisException("Spark is external resource");
-        }
-        if (resourceType == ResourceType.HIVE && !isExternal) {
-            throw new AnalysisException("Hive is external resource");
+        if (!isExternal) {
+            throw new AnalysisException(resourceType + " resource type must be external.");
         }
     }
 

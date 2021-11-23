@@ -32,6 +32,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Map;
 
 public abstract class Resource implements Writable {
@@ -75,7 +76,8 @@ public abstract class Resource implements Writable {
                 resource = new OdbcCatalogResource(stmt.getResourceName());
                 break;
             default:
-                throw new DdlException("Only support spark and hive resource.");
+                throw new DdlException("Unrecognized resource type: " + type + ". " +
+                        "Only " + Arrays.toString(Arrays.stream(ResourceType.values()).filter(t -> t != ResourceType.UNKNOWN).toArray()) + "are supported.");
         }
 
         resource.setProperties(stmt.getProperties());

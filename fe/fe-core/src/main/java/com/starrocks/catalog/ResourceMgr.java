@@ -67,13 +67,8 @@ public class ResourceMgr implements Writable {
     }
 
     public void createResource(CreateResourceStmt stmt) throws DdlException {
-        if (stmt.getResourceType() != ResourceType.SPARK
-                && stmt.getResourceType() != ResourceType.HIVE) {
-            throw new DdlException("Only support Spark or Hive resource.");
-        }
-
-        String resourceName = stmt.getResourceName();
         Resource resource = Resource.fromStmt(stmt);
+        String resourceName = stmt.getResourceName();
         if (nameToResource.putIfAbsent(resourceName, resource) != null) {
             throw new DdlException("Resource(" + resourceName + ") already exist");
         }
