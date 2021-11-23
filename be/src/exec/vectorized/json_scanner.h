@@ -80,10 +80,6 @@ private:
 
     Status _process_array(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::array& arr);
 
-    // Reorder column to accelerate simdjson iteration.
-    void _reorder_column_if_needed(std::vector<SlotDescriptor*>& slot_descs,
-                                   simdjson::ondemand::document_reference& doc);
-
     Status _process_array_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                          simdjson::ondemand::array& arr);
 
@@ -92,6 +88,10 @@ private:
 
     Status _process_object_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                           simdjson::ondemand::object& obj);
+
+    // Reorder column to accelerate simdjson iteration.
+    void _reorder_column(std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::document_reference& doc);
+    
     Status _filter_object_with_json_root(simdjson::ondemand::object& obj);
 
 private:
