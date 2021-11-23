@@ -24,7 +24,7 @@ public:
     // When a driver's sink operator is finished, the driver should wait for pending i/o task completion.
     // Otherwise, pending tasks shall reference to destructed objects in FragmentContext,
     // since FragmentContext is unregistered prematurely after all the drivers are finalized.
-    virtual bool pending_finish() { return false; }
+    //    virtual bool pending_finish() { return false; }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");

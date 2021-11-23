@@ -68,7 +68,7 @@ bool ScanOperator::has_output() const {
     return true;
 }
 
-bool ScanOperator::pending_finish() {
+bool ScanOperator::pending_finish() const {
     DCHECK(_is_finished);
     // If there is no next morsel, and io task is active
     // we just wait for the io thread to end

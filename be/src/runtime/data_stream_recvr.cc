@@ -344,17 +344,19 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         std::unique_lock<std::mutex> l(_lock);
         wait_timer.stop();
 
-        for (auto& pair : chunks) {
-            _chunk_queue.emplace_back(std::move(pair));
+        if (!_is_cancelled) {
+            for (auto& pair : chunks) {
+                _chunk_queue.emplace_back(std::move(pair));
+            }
+            // if done is nullptr, this function can't delay this response
+            if (done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+                MonotonicStopWatch monotonicStopWatch;
+                DCHECK(*done != nullptr);
+                _pending_closures.emplace_back(*done, monotonicStopWatch);
+                *done = nullptr;
+            }
+            _recvr->_num_buffered_bytes += total_chunk_bytes;
         }
-        // if done is nullptr, this function can't delay this response
-        if (done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
-            MonotonicStopWatch monotonicStopWatch;
-            DCHECK(*done != nullptr);
-            _pending_closures.emplace_back(*done, monotonicStopWatch);
-            *done = nullptr;
-        }
-        _recvr->_num_buffered_bytes += total_chunk_bytes;
     }
     cb();
     return Status::OK();

@@ -89,7 +89,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
                 auto status = maybe_chunk.status();
                 if (!status.ok() && !status.is_end_of_file()) {
-                    LOG(WARNING) << " status " << status.to_string();
+                    LOG(WARNING) << "pull_chunk returns not ok status " << status.to_string();
                     return status;
                 }
 
@@ -103,8 +103,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                         size_t row_num = maybe_chunk.value()->num_rows();
                         {
                             SCOPED_TIMER(next_op->_push_timer);
-                            next_op->push_chunk(runtime_state, maybe_chunk.value());
+                            status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
+
+                        if (!status.ok() && !status.is_end_of_file()) {
+                            LOG(WARNING) << "push_chunk returns not ok status " << status.to_string();
+                            return status;
+                        }
+
                         COUNTER_UPDATE(curr_op->_pull_row_num_counter, row_num);
                         COUNTER_UPDATE(next_op->_push_chunk_num_counter, 1);
                         COUNTER_UPDATE(next_op->_push_row_num_counter, row_num);
@@ -139,7 +145,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
-            _state = source_operator()->pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
+            _state = is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
             return _state;
         }
 
@@ -237,7 +243,7 @@ bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
         finish_operators(runtime_state);
         // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
         // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
-        if (source_operator()->pending_finish()) {
+        if (is_still_pending_finish()) {
             _state = DriverState::PENDING_FINISH;
         } else {
             _state = _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
@@ -252,6 +258,9 @@ void PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* sta
     if (op_state >= OperatorStage::FINISHING) {
         return;
     }
+
+    VLOG_ROW << strings::Substitute("[Driver] finishing operator [driver=$0] [operator=$1]", to_readable_string(),
+                                    op->get_name());
     op->set_finishing(state);
     op_state = OperatorStage::FINISHING;
 }
@@ -262,6 +271,9 @@ void PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* stat
     if (op_state >= OperatorStage::FINISHED) {
         return;
     }
+
+    VLOG_ROW << strings::Substitute("[Driver] finished operator [driver=$0] [operator=$1]", to_readable_string(),
+                                    op->get_name());
     op->set_finished(state);
     op_state = OperatorStage::FINISHED;
 }
@@ -272,6 +284,9 @@ void PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state)
     if (op_state >= OperatorStage::CLOSED) {
         return;
     }
+
+    VLOG_ROW << strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
+                                    op->get_name());
     op->close(state);
     op_state = OperatorStage::CLOSED;
 }
