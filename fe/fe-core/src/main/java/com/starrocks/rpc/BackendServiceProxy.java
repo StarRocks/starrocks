@@ -130,13 +130,13 @@ public class BackendServiceProxy {
         PUniqueId uid = new PUniqueId();
         uid.hi = finstId.hi;
         uid.lo = finstId.lo;
-        pRequest.finst_id = uid;
-        pRequest.cancel_reason = cancelReason;
-        pRequest.is_pipeline = isPipeline;
+        pRequest.finstId = uid;
+        pRequest.cancelReason = cancelReason;
+        pRequest.isPipeline = isPipeline;
         PUniqueId qid = new PUniqueId();
         qid.hi = queryId.hi;
         qid.lo = queryId.lo;
-        pRequest.query_id = qid;
+        pRequest.queryId = qid;
         try {
             final PBackendService service = getProxy(address);
             return service.cancelPlanFragmentAsync(pRequest);
