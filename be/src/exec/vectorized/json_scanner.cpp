@@ -27,7 +27,7 @@
 namespace starrocks::vectorized {
 
 static std::vector<Slice> literal_0_slice_vector{Slice("0")};
-static std::vector<Slice> literal_1_slice_vector{Slice("0")};
+static std::vector<Slice> literal_1_slice_vector{Slice("1")};
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
