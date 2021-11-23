@@ -74,7 +74,7 @@ public:
     // of close operation, client should call close_wait() to finish channel's close.
     // We split one close operation into two phases in order to make multiple channels
     // can run parallel.
-    void close(RuntimeState* state);
+    void close(RuntimeState* state, FragmentContext* fragment_ctx);
 
     std::string get_fragment_instance_id_str() {
         UniqueId uid(_fragment_instance_id);
@@ -84,7 +84,7 @@ public:
     TUniqueId get_fragment_instance_id() { return _fragment_instance_id; }
 
 private:
-    Status _close_internal();
+    Status _close_internal(RuntimeState* state, FragmentContext* fragment_ctx);
 
     ExchangeSinkOperator* _parent;
 
@@ -195,31 +195,37 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::_close_internal() {
+Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, FragmentContext* fragment_ctx) {
     // no need to send EOS packet to pseudo destinations in scenarios of bucket shuffle join.
     if (this->_fragment_instance_id.lo == -1) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(send_one_chunk(_chunk != nullptr ? _chunk.get() : nullptr, true));
+
+    if (!fragment_ctx->is_canceled()) {
+        RETURN_IF_ERROR(send_one_chunk(_chunk != nullptr ? _chunk.get() : nullptr, true));
+    }
+
     return Status::OK();
 }
 
-void ExchangeSinkOperator::Channel::close(RuntimeState* state) {
-    state->log_error(_close_internal().get_error_msg());
+void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
+    state->log_error(_close_internal(state, fragment_ctx).get_error_msg());
 }
 
 ExchangeSinkOperator::ExchangeSinkOperator(int32_t id, int32_t plan_node_id, const std::shared_ptr<SinkBuffer>& buffer,
                                            TPartitionType::type part_type,
                                            const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
                                            PlanNodeId dest_node_id,
-                                           const std::vector<ExprContext*>& partition_expr_ctxs)
+                                           const std::vector<ExprContext*>& partition_expr_ctxs,
+                                           FragmentContext* const fragment_ctx)
         : Operator(id, "exchange_sink", plan_node_id),
           _buffer(buffer),
           _part_type(part_type),
           _destinations(destinations),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
-          _partition_expr_ctxs(partition_expr_ctxs) {
+          _partition_expr_ctxs(partition_expr_ctxs),
+          _fragment_ctx(fragment_ctx) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
     // fragment_instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
     std::optional<std::shared_ptr<Channel>> pseudo_channel;
@@ -302,11 +308,19 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 }
 
 bool ExchangeSinkOperator::is_finished() const {
-    return _is_finished && _buffer->is_finished();
+    return _is_finished && _buffer->is_finishing();
 }
 
 bool ExchangeSinkOperator::need_input() const {
-    return !_is_finished && !_buffer->is_full();
+    return !is_finished() && !_buffer->is_full();
+}
+
+bool ExchangeSinkOperator::pending_finish() const {
+    return !_buffer->is_finished();
+}
+
+void ExchangeSinkOperator::set_finished(RuntimeState* state) {
+    _buffer->decrease_running_sinkers();
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {
@@ -428,7 +442,7 @@ void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     }
 
     for (auto& _channel : _channels) {
-        _channel->close(state);
+        _channel->close(state, _fragment_ctx);
     }
 }
 
@@ -506,23 +520,22 @@ void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chu
     }
 }
 
-ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                                         std::shared_ptr<SinkBuffer> buffer,
-                                                         TPartitionType::type part_type,
-                                                         const std::vector<TPlanFragmentDestination>& destinations,
-                                                         int sender_id, PlanNodeId dest_node_id,
-                                                         std::vector<ExprContext*> partition_expr_ctxs)
+ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
+        int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer, TPartitionType::type part_type,
+        const std::vector<TPlanFragmentDestination>& destinations, int sender_id, PlanNodeId dest_node_id,
+        std::vector<ExprContext*> partition_expr_ctxs, FragmentContext* const fragment_ctx)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
           _buffer(std::move(buffer)),
           _part_type(part_type),
           _destinations(destinations),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
-          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)),
+          _fragment_ctx(fragment_ctx) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations, _sender_id,
-                                                  _dest_node_id, _partition_expr_ctxs);
+                                                  _dest_node_id, _partition_expr_ctxs, _fragment_ctx);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {

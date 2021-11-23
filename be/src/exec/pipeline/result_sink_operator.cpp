@@ -44,7 +44,12 @@ Status ResultSinkOperator::close(RuntimeState* state) {
             // Incrementing and reading _num_written_rows needn't memory barrier, because
             // the visibility of _num_written_rows is guaranteed by _num_result_sinkers.fetch_sub().
             _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
-            _sender->close(st);
+
+            Status final_status = _fragment_ctx->final_status();
+            if (!st.ok() && final_status.ok()) {
+                final_status = st;
+            }
+            _sender->close(final_status);
         }
 
         state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
