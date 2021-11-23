@@ -279,7 +279,10 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
-    if (!_pending_closures.empty()) {
+    // A Requet may contain multiple Chunks.
+    // The consumption of a Chunk does not necessarily require the sender to send it immediately.
+    // It should be determined according to the current memory usage.
+    if (!_pending_closures.empty() && !_recvr->exceeds_limit()) {
         auto closure_pair = _pending_closures.front();
         closure_pair.first->Run();
         _pending_closures.pop_front();
