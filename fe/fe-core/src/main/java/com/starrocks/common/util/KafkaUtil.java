@@ -87,12 +87,12 @@ public class KafkaUtil {
                 kafkaLoadInfo.properties.add(pair);
             }
             PKafkaMetaProxyRequest metaRequest = new PKafkaMetaProxyRequest();
-            metaRequest.kafka_info = kafkaLoadInfo;
+            metaRequest.kafkaInfo = kafkaLoadInfo;
             PProxyRequest request = new PProxyRequest();
-            request.kafka_meta_request = metaRequest;
+            request.kafkaMetaRequest = metaRequest;
 
             PProxyResult result = sendProxyRequest(request);
-            return result.kafka_meta_result.partition_ids;
+            return result.kafkaMetaResult.partitionIds;
         }
 
         public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
@@ -124,10 +124,10 @@ public class KafkaUtil {
                 kafkaLoadInfo.properties.add(pair);
             }
             PKafkaOffsetProxyRequest offsetRequest = new PKafkaOffsetProxyRequest();
-            offsetRequest.kafka_info = kafkaLoadInfo;
-            offsetRequest.partition_ids = partitions;
+            offsetRequest.kafkaInfo = kafkaLoadInfo;
+            offsetRequest.partitionIds = partitions;
             PProxyRequest request = new PProxyRequest();
-            request.kafka_offset_request = offsetRequest;
+            request.kafkaOffsetRequest = offsetRequest;
 
             // send request
             PProxyResult result = sendProxyRequest(request);
@@ -136,12 +136,12 @@ public class KafkaUtil {
             Map<Integer, Long> partitionOffsets = Maps.newHashMapWithExpectedSize(partitions.size());
             List<Long> offsets;
             if (isLatest) {
-                offsets = result.kafka_offset_result.latest_offsets;
+                offsets = result.kafkaOffsetResult.latestOffsets;
             } else {
-                offsets = result.kafka_offset_result.beginning_offsets;
+                offsets = result.kafkaOffsetResult.beginningOffsets;
             }
-            for (int i = 0; i < result.kafka_offset_result.partition_ids.size(); i++) {
-                partitionOffsets.put(result.kafka_offset_result.partition_ids.get(i), offsets.get(i));
+            for (int i = 0; i < result.kafkaOffsetResult.partitionIds.size(); i++) {
+                partitionOffsets.put(result.kafkaOffsetResult.partitionIds.get(i), offsets.get(i));
             }
             return partitionOffsets;
         }
@@ -159,9 +159,9 @@ public class KafkaUtil {
                 // get info
                 Future<PProxyResult> future = BackendServiceProxy.getInstance().getInfo(address, request);
                 PProxyResult result = future.get(5, TimeUnit.SECONDS);
-                TStatusCode code = TStatusCode.findByValue(result.status.status_code);
+                TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {
-                    throw new UserException("failed to send proxy request: " + result.status.error_msgs);
+                    throw new UserException("failed to send proxy request: " + result.status.errorMsgs);
                 } else {
                     return result;
                 }

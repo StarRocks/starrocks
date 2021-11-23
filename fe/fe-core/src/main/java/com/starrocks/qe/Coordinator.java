@@ -530,9 +530,9 @@ public class Coordinator {
                     try {
                         PExecPlanFragmentResult result = pair.second.get(queryOptions.query_timeout * 1000L,
                                 TimeUnit.MILLISECONDS);
-                        code = TStatusCode.findByValue(result.status.status_code);
-                        if (result.status.error_msgs != null && !result.status.error_msgs.isEmpty()) {
-                            errMsg = result.status.error_msgs.get(0);
+                        code = TStatusCode.findByValue(result.status.statusCode);
+                        if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
+                            errMsg = result.status.errorMsgs.get(0);
                         }
                     } catch (ExecutionException e) {
                         LOG.warn("catch a execute exception", e);
@@ -1726,10 +1726,10 @@ public class Coordinator {
                     public PExecPlanFragmentResult get() {
                         PExecPlanFragmentResult result = new PExecPlanFragmentResult();
                         PStatus pStatus = new PStatus();
-                        pStatus.error_msgs = Lists.newArrayList();
-                        pStatus.error_msgs.add(e.getMessage());
+                        pStatus.errorMsgs = Lists.newArrayList();
+                        pStatus.errorMsgs.add(e.getMessage());
                         // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.
-                        pStatus.status_code = TStatusCode.THRIFT_RPC_ERROR.getValue();
+                        pStatus.statusCode = TStatusCode.THRIFT_RPC_ERROR.getValue();
                         result.status = pStatus;
                         return result;
                     }
