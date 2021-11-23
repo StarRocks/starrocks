@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -68,8 +69,18 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visitCaseWhenOperator(CaseWhenOperator caseWhenOperator, Void context) {
+            // 1. compute children column statistics
             int whenClauseSize = caseWhenOperator.getWhenClauseSize();
-            int distinctValues = whenClauseSize + (caseWhenOperator.hasElse() ? 1 : 0);
+            List<ColumnStatistic> childrenColumnStatistics = Lists.newArrayList();
+            for (int i = 0; i < whenClauseSize; ++i) {
+                childrenColumnStatistics.add(caseWhenOperator.getThenClause(i).accept(this, context));
+            }
+            if (caseWhenOperator.hasElse()) {
+                childrenColumnStatistics.add(caseWhenOperator.getElseClause().accept(this, context));
+            }
+            // 2. use sum of then clause and else clause's distinct values as column distinctValues
+            double distinctValues = childrenColumnStatistics.stream().mapToDouble(
+                    ColumnStatistic::getDistinctValuesCount).sum();
             return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
                     caseWhenOperator.getType().getSlotSize(), distinctValues);
         }
