@@ -162,8 +162,6 @@ public class Optimizer {
         return result;
     }
 
-
-
     /**
      * Extract the lowest cost physical operator tree from memo
      *
