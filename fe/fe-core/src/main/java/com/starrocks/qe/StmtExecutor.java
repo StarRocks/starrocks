@@ -809,19 +809,19 @@ public class StmtExecutor {
         if (!isOutfileQuery) {
             context.getState().setEof();
         } else {
-            context.getState().setOk(statisticsForAuditLog.returned_rows, 0, "");
+            context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
         }
-        if (null == statisticsForAuditLog || null == statisticsForAuditLog.stats_items ||
-                statisticsForAuditLog.stats_items.isEmpty()) {
+        if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
+                statisticsForAuditLog.statsItems.isEmpty()) {
             return;
         }
         // collect table-level metrics
         Set<Long> tableIds = Sets.newHashSet();
-        for (QueryStatisticsItemPB item : statisticsForAuditLog.stats_items) {
-            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(item.table_id);
-            entity.COUNTER_SCAN_ROWS_TOTAL.increase(item.scan_rows);
-            entity.COUNTER_SCAN_BYTES_TOTAL.increase(item.scan_bytes);
-            tableIds.add(item.table_id);
+        for (QueryStatisticsItemPB item : statisticsForAuditLog.statsItems) {
+            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(item.tableId);
+            entity.COUNTER_SCAN_ROWS_TOTAL.increase(item.scanRows);
+            entity.COUNTER_SCAN_BYTES_TOTAL.increase(item.scanBytes);
+            tableIds.add(item.tableId);
         }
         for (Long tableId : tableIds) {
             TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
@@ -1266,11 +1266,11 @@ public class StmtExecutor {
         if (statisticsForAuditLog == null) {
             statisticsForAuditLog = new PQueryStatistics();
         }
-        if (statisticsForAuditLog.scan_bytes == null) {
-            statisticsForAuditLog.scan_bytes = 0L;
+        if (statisticsForAuditLog.scanBytes == null) {
+            statisticsForAuditLog.scanBytes = 0L;
         }
-        if (statisticsForAuditLog.scan_rows == null) {
-            statisticsForAuditLog.scan_rows = 0L;
+        if (statisticsForAuditLog.scanRows == null) {
+            statisticsForAuditLog.scanRows = 0L;
         }
         return statisticsForAuditLog;
     }
