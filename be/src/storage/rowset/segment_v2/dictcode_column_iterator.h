@@ -84,11 +84,11 @@ public:
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
         if (_local_dict_code_col == nullptr) {
-            _local_dict_code_col = std::make_unique<vectorized::Int32Column>();
+            _init_local_dict_col();
         }
         _local_dict_code_col->reset_column();
         RETURN_IF_ERROR(_col_iter->fetch_dict_codes_by_rowid(rowids, size, _local_dict_code_col.get()));
-        const auto& container = _local_dict_code_col->get_data();
+        const auto& container = _get_local_dict_col_container(_local_dict_code_col.get());
         RETURN_IF_ERROR(decode_dict_codes(container.data(), container.size(), values));
         return Status::OK();
     }
@@ -157,6 +157,9 @@ public:
 
 private:
     Status _build_to_global_dict();
+    void _init_local_dict_col();
+    const LowCardDictColumn::Container& _get_local_dict_col_container(Column* column);
+
     ColumnId _cid;
     ColumnIterator* _col_iter;
 
@@ -167,7 +170,7 @@ private:
 
     // global dict
     GlobalDictMap* _global_dict;
-    std::unique_ptr<vectorized::Int32Column> _local_dict_code_col;
+    vectorized::ColumnPtr _local_dict_code_col;
 };
 
 } // namespace starrocks::segment_v2

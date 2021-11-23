@@ -43,4 +43,31 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
     return Status::OK();
 }
 
+void GlobalDictCodeColumnIterator::_init_local_dict_col() {
+    _local_dict_code_col = std::make_unique<vectorized::Int32Column>();
+    if (_opts.is_nullable) {
+        _local_dict_code_col =
+                vectorized::NullableColumn::create(std::move(_local_dict_code_col), vectorized::NullColumn::create());
+    }
+}
+
+auto GlobalDictCodeColumnIterator::_get_local_dict_col_container(Column* column)
+        -> const LowCardDictColumn::Container& {
+    LowCardDictColumn* dict_column = nullptr;
+    if (_opts.is_nullable) {
+        auto nullable_column = down_cast<vectorized::NullableColumn*>(column);
+        dict_column = down_cast<LowCardDictColumn*>(nullable_column->data_column().get());
+        const auto& null_data = nullable_column->immutable_null_column_data();
+        int row_sz = null_data.size();
+        // TODO: If we can ensure that the null value of data is the default value,
+        // then this loop can be removed
+        for (int i = 0; i < row_sz; ++i) {
+            dict_column->get_data()[i] = null_data[i] ? 0 : dict_column->get_data()[i];
+        }
+    } else {
+        dict_column = down_cast<LowCardDictColumn*>(column);
+    }
+    return dict_column->get_data();
+}
+
 } // namespace starrocks::segment_v2
