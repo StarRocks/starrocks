@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
 import com.starrocks.sql.optimizer.task.TopDownRewriteOnceTask;
+import com.starrocks.sql.optimizer.task.UnlimitedTaskScheduler;
 
 import java.util.Collections;
 import java.util.List;
@@ -162,7 +163,35 @@ public class Optimizer {
         return result;
     }
 
+    public OptExpression optimizeInsertValuesPlan(ConnectContext connectContext,
+                                                  OptExpression logicOperatorTree,
+                                                  PhysicalPropertySet requiredProperty,
+                                                  ColumnRefSet requiredColumns,
+                                                  ColumnRefFactory columnRefFactory) {
+        Memo memo = new Memo();
+        memo.init(logicOperatorTree);
 
+        OptimizerContext context = new OptimizerContext(memo, columnRefFactory, connectContext.getSessionVariable(),
+                connectContext.getDumpInfo(), UnlimitedTaskScheduler.create());
+
+        TaskContext rootTaskContext = new TaskContext(context,
+                requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
+        context.addTaskContext(rootTaskContext);
+
+        context.getTaskScheduler().pushTask(new TopDownRewriteIterativeTask(rootTaskContext,
+                memo.getRootGroup(), RuleSetType.PRUNE_PROJECT));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+
+        context.getTaskScheduler().pushTask(new OptimizeGroupTask(
+                rootTaskContext, memo.getRootGroup()));
+
+        context.getTaskScheduler().pushTask(new DeriveStatsTask(
+                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
+
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+
+        return extractBestPlan(requiredProperty, memo.getRootGroup());
+    }
 
     /**
      * Extract the lowest cost physical operator tree from memo
