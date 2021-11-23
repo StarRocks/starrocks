@@ -55,6 +55,8 @@ public class Analyzer {
         } else if (node instanceof CreateAnalyzeJobStmt) {
             return analyzeCreateAnalyzeStmt((CreateAnalyzeJobStmt) node);
         } else if (node instanceof CreateTableAsSelectStmt) {
+            // this phrase do not analyze insertStmt, insertStmt will analyze in
+            // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
             return new CTASAnalyzer(catalog, session).transformCTASStmt((CreateTableAsSelectStmt) node);
         } else {
             throw unsupportedException("New Planner only support Query Statement");

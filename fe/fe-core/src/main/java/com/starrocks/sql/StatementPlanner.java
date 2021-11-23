@@ -2,7 +2,6 @@
 package com.starrocks.sql;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
@@ -58,26 +57,6 @@ public class StatementPlanner {
                 return createInsertPlan(relation, session);
             } finally {
                 unLock(dbs);
-            }
-        } else if (stmt instanceof CreateTableAsSelectStmt) {
-            CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) stmt;
-            createTableAsSelectStmt.createTable(session);
-
-            try {
-                InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
-                Relation insertRelation = analyzer.analyze(insertStmt);
-                Map<String, Database> dbs = Maps.newTreeMap();
-                insertStmt.getDbs(session, dbs);
-
-                try {
-                    lock(dbs);
-                    return createInsertPlan(insertRelation, session);
-                } finally {
-                    unLock(dbs);
-                }
-            } catch (Exception ex) {
-                createTableAsSelectStmt.dropTable(session);
-                throw ex;
             }
         }
         return null;

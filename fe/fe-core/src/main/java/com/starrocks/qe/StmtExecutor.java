@@ -412,42 +412,10 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof UseStmt) {
                 handleUseStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
-                try {
-                    if (execPlanBuildByNewPlanner) {
-                        handleInsertStmtWithNewPlanner(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
-                    } else {
-                        handleInsertStmt(uuid);
-                    }
-                    if (context.getSessionVariable().isReportSucc()) {
-                        writeProfile(beginTimeInNanoSecond);
-                    }
-                    if (context.getState().getStateType() == MysqlStateType.ERR) {
-                        ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
-                    }
-                } catch (Throwable t) {
-                    LOG.warn("handle create table as select stmt fail", t);
-                    ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
-                    // the transaction of this insert may already begun, we will abort it at outer finally block.
-                    throw t;
-                } finally {
-                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
-                }
-            } else if (parsedStmt instanceof InsertStmt) { // Must ahead of DdlStmt because InsertStmt is its subclass
-                try {
-                    if (execPlanBuildByNewPlanner) {
-                        handleInsertStmtWithNewPlanner(execPlan, (InsertStmt) parsedStmt);
-                    } else {
-                        handleInsertStmt(uuid);
-                    }
-                    if (context.getSessionVariable().isReportSucc()) {
-                        writeProfile(beginTimeInNanoSecond);
-                    }
-                } catch (Throwable t) {
-                    LOG.warn("handle insert stmt fail", t);
-                    // the transaction of this insert may already begun, we will abort it at outer finally block.
-                    throw t;
-                } finally {
-                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                if (execPlanBuildByNewPlanner) {
+                    handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
+                } else {
+                    throw new AnalysisException("old planner does not support CTAS statement");
                 }
             } else if (parsedStmt instanceof DdlStmt) {
                 handleDdlStmt();
@@ -513,6 +481,32 @@ public class StmtExecutor {
                 }
             }
             context.setSessionVariable(sessionVariableBackup);
+        }
+    }
+
+    private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
+        CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) parsedStmt;
+
+        try {
+            createTableAsSelectStmt.createTable(context);
+            com.starrocks.sql.analyzer.Analyzer analyzer =
+                        new com.starrocks.sql.analyzer.Analyzer(context.catalog, context);
+            InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
+            analyzer.analyze(insertStmt);
+            ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
+            handleInsertStmtWithNewPlanner(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
+            if (context.getSessionVariable().isReportSucc()) {
+                writeProfile(beginTimeInNanoSecond);
+            }
+            if (context.getState().getStateType() == MysqlStateType.ERR) {
+                ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
+            }
+        } catch (Throwable t) {
+            LOG.warn("handle create table as select stmt fail", t);
+            ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
+            throw t;
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
     }
 
