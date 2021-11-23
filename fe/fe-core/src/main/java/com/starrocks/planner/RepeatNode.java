@@ -36,6 +36,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -196,7 +197,9 @@ public class RepeatNode extends PlanNode {
         msg.node_type = TPlanNodeType.REPEAT_NODE;
         msg.repeat_node = new TRepeatNode(outputTupleDesc.getId().asInt(), repeatSlotIdList, groupingList.get(0),
                 groupingList, allSlotId);
-        msg.setFilter_null_value_columns(filter_null_value_columns);
+        if (ConnectContext.get().getSessionVariable().getEnableFilterNullValues()) {
+            msg.setFilter_null_value_columns(filter_null_value_columns);
+        }
     }
 
     @Override

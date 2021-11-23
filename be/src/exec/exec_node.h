@@ -174,6 +174,7 @@ public:
     void register_runtime_filter_descriptor(RuntimeState* state, vectorized::RuntimeFilterProbeDescriptor* rf_desc);
     void eval_join_runtime_filters(vectorized::Chunk* chunk);
     void eval_join_runtime_filters(vectorized::ChunkPtr* chunk);
+    void eval_filter_null_values(vectorized::Chunk* chunk);
 
     // Returns a string representation in DFS order of the plan rooted at this.
     std::string debug_string() const;
@@ -274,6 +275,7 @@ protected:
     std::vector<TupleId> _tuple_ids;
 
     vectorized::RuntimeFilterProbeCollector _runtime_filter_collector;
+    std::vector<SlotId> _filter_null_value_columns;
 
     std::vector<ExecNode*> _children;
     RowDescriptor _row_descriptor;

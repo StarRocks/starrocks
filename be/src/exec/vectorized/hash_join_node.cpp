@@ -421,6 +421,16 @@ Status HashJoinNode::_build(RuntimeState* state) {
     return Status::OK();
 }
 
+static inline bool check_chunk_zero_and_create_new(ChunkPtr* chunk) {
+    if ((*chunk)->num_rows() <= 0) {
+        // TODO: It's better to reuse the chunk object.
+        // Use a new chunk to continue call _ht.probe.
+        *chunk = std::make_shared<Chunk>();
+        return true;
+    }
+    return false;
+}
+
 Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>& probe_timer, ChunkPtr* chunk,
                             bool& eos) {
     while (true) {
@@ -512,21 +522,16 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             _probing_chunk = nullptr;
         }
 
-        if ((*chunk)->num_rows() <= 0) {
-            // TODO: It's better to reuse the chunk object.
-            // Use a new chunk to continue call _ht.probe.
-            *chunk = std::make_shared<Chunk>();
+        eval_join_runtime_filters(chunk);
+
+        if (check_chunk_zero_and_create_new(chunk)) {
             continue;
         }
 
         if (!_other_join_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_other_join_conjunct_evaluate_timer);
             _process_other_conjunct(chunk);
-
-            if ((*chunk)->num_rows() <= 0) {
-                // TODO: It's better to reuse the chunk object.
-                // Use a new chunk to continue call _ht.probe.
-                *chunk = std::make_shared<Chunk>();
+            if (check_chunk_zero_and_create_new(chunk)) {
                 continue;
             }
         }
@@ -535,10 +540,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             SCOPED_TIMER(_where_conjunct_evaluate_timer);
             eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 
-            if ((*chunk)->num_rows() <= 0) {
-                // TODO: It's better to reuse the chunk object.
-                // Use a new chunk to continue call _ht.probe.
-                *chunk = std::make_shared<Chunk>();
+            if (check_chunk_zero_and_create_new(chunk)) {
                 continue;
             }
         }
@@ -555,6 +557,8 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     while (!_build_eos) {
         RETURN_IF_ERROR(_ht.probe_remain(chunk, &_right_table_has_remain));
 
+        eval_join_runtime_filters(chunk);
+
         if ((*chunk)->num_rows() <= 0) {
             // right table already have no remain data
             _build_eos = true;
@@ -565,10 +569,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
         if (!_conjunct_ctxs.empty()) {
             eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 
-            if ((*chunk)->num_rows() <= 0) {
-                // TODO: It's better to reuse the chunk object.
-                // Use a new chunk to continue call _ht.probe_remain.
-                *chunk = std::make_shared<Chunk>();
+            if (check_chunk_zero_and_create_new(chunk)) {
                 _build_eos = !_right_table_has_remain;
                 continue;
             }
