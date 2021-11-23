@@ -66,6 +66,8 @@ TEST_F(UnionIteratorTest, union_two) {
     };
 
     ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+
     Status st = iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(3U, chunk->num_rows());
@@ -95,6 +97,7 @@ TEST_F(UnionIteratorTest, union_one) {
     auto sub1 = std::make_shared<IntIterator>(n1);
 
     auto iter = new_union_iterator({sub1});
+    iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
         auto c = std::dynamic_pointer_cast<FixedLengthColumn<int32_t>>(chunk->get_column_by_index(0));
