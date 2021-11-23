@@ -144,7 +144,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(96, planCount);
+        Assert.assertEquals(48, planCount);
     }
 
     @Test
