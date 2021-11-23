@@ -138,8 +138,8 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString()).setQueryTime(elapseMs)
-                .setScanBytes(statistics == null ? 0 : statistics.scan_bytes)
-                .setScanRows(statistics == null ? 0 : statistics.scan_rows)
+                .setScanBytes(statistics == null ? 0 : statistics.scanBytes)
+                .setScanRows(statistics == null ? 0 : statistics.scanRows)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
