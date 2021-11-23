@@ -761,9 +761,11 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         if (filter == nullptr) continue;
         filter->set_join_mode(rf_desc->join_mode());
         filter->init(_ht.get_row_count());
-        ColumnPtr column = _ht.get_key_columns()[rf_desc->build_expr_order()];
-        RETURN_IF_ERROR(
-                RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter, kHashJoinKeyColumnOffset));
+        int expr_order = rf_desc->build_expr_order();
+        ColumnPtr column = _ht.get_key_columns()[expr_order];
+        bool eq_null = _is_null_safes[expr_order];
+        RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter,
+                                                                       kHashJoinKeyColumnOffset, eq_null));
         rf_desc->set_runtime_filter(filter);
     }
 
