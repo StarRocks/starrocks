@@ -2,10 +2,15 @@
 
 package com.starrocks.journal.bdbje;
 
+import com.sleepycat.bind.tuple.LongBinding;
+import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
+import com.sleepycat.je.Get;
 import com.sleepycat.je.LockMode;
+import com.sleepycat.je.OperationResult;
 import com.sleepycat.je.OperationStatus;
+import com.sleepycat.je.ReadOptions;
 import com.sleepycat.je.Transaction;
 
 import java.util.concurrent.locks.ReadWriteLock;
@@ -45,6 +50,24 @@ public class CloseSafeDatabase {
         lock.readLock().lock();
         try {
             return this.db.get(txn, key, data, lockMode);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public long getMaxJournalId() {
+        lock.readLock().lock();
+        try {
+            DatabaseEntry key = new DatabaseEntry();
+            DatabaseEntry data = new DatabaseEntry();
+            OperationResult result = this.db.get(null, key, data, Get.LAST,
+                    new ReadOptions().setLockMode(LockMode.READ_COMMITTED));
+            if (result == null) {
+                return Long.parseLong(db.getDatabaseName()) - 1;
+            } else {
+                TupleBinding<Long> binding = new LongBinding();
+                return binding.entryToObject(key);
+            }
         } finally {
             lock.readLock().unlock();
         }

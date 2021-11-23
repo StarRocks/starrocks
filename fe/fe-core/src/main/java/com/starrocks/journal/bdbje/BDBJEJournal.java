@@ -108,16 +108,14 @@ public class BDBJEJournal implements Journal {
         }
 
         long newName = nextJournalId.get();
-        String currentDbName = currentJournalDB.getDb().getDatabaseName();
-        long currentName = Long.parseLong(currentDbName);
-        long newNameVerify = currentName + currentJournalDB.getDb().count();
+        long newNameVerify = currentJournalDB.getMaxJournalId() + 1;
         if (newName == newNameVerify) {
             LOG.info("roll edit log. new db name is {}", newName);
             currentJournalDB = bdbEnvironment.openDatabase(Long.toString(newName));
         } else {
-            String msg = String.format("roll journal error! journalId and db journal numbers is not match. "
-                            + "journal id: %d, current db: %s, expected db count: %d",
-                    newName, currentDbName, newNameVerify);
+            String msg = String.format("roll journal error! nestJournalId and db max journal id is not match. "
+                            + "journal id: %d, current db's max journal id : %s",
+                    newName, newNameVerify);
             LOG.error(msg);
             Util.stdoutWithTime(msg);
             System.exit(-1);
@@ -220,11 +218,8 @@ public class BDBJEJournal implements Journal {
 
         int index = dbNames.size() - 1;
         String dbName = dbNames.get(index).toString();
-        long dbNumberName = dbNames.get(index);
         Database database = bdbEnvironment.openDatabase(dbName).getDb();
-        ret = dbNumberName + database.count() - 1;
-
-        return ret;
+        return new CloseSafeDatabase(database).getMaxJournalId();
     }
 
     @Override
