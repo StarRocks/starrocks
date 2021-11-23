@@ -47,18 +47,6 @@ public class OptimizerContext {
         this.dumpInfo = dumpInfo;
     }
 
-    public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, SessionVariable sessionVariable,
-                            DumpInfo dumpInfo, TaskScheduler taskScheduler) {
-        this.memo = memo;
-        this.ruleSet = new RuleSet();
-        this.catalog = Catalog.getCurrentCatalog();
-        this.taskContext = Lists.newArrayList();
-        this.taskScheduler = taskScheduler;
-        this.columnRefFactory = columnRefFactory;
-        this.sessionVariable = sessionVariable;
-        this.dumpInfo = dumpInfo;
-    }
-
     public Memo getMemo() {
         return memo;
     }

@@ -83,28 +83,12 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan;
-
-        if (insertRelation.getQueryRelation() instanceof ValuesRelation) {
-            /**
-             * If the insert statement is insert into ... values(),
-             * then there is no need to enter the query optimizer.
-             * On the one hand, it avoids unnecessary overhead caused by the optimizer.
-             * and on the other hand, it prevents the optimizer timeout exception due to memory GC
-             */
-            optimizedPlan = optimizer.optimizeInsertValuesPlan(session,
-                    logicalPlan.getRoot(),
-                    new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
-        } else {
-            optimizedPlan = optimizer.optimize(
-                    session,
-                    logicalPlan.getRoot(),
-                    new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
-        }
+        OptExpression optimizedPlan = optimizer.optimize(
+                session,
+                logicalPlan.getRoot(),
+                new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()),
+                columnRefFactory);
 
         //7. Build fragment exec plan
         PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);

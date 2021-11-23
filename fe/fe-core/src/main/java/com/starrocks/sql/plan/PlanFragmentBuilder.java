@@ -141,7 +141,15 @@ public class PlanFragmentBuilder {
                                                             ColumnRefFactory columnRefFactory,
                                                             List<String> colNames) {
         ExecPlan execPlan = new ExecPlan(plannerContext, connectContext, colNames, plan, outputColumns);
-        new PhysicalPlanTranslator(columnRefFactory).visit(plan, execPlan);
+        PlanFragment root = new PhysicalPlanTranslator(columnRefFactory).visit(plan, execPlan);
+
+        List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
+                .buildExecExpression(variable,
+                        new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr()))
+        ).collect(Collectors.toList());
+        root.setOutputExprs(outputExprs);
+        execPlan.getOutputExprs().addAll(outputExprs);
+
         execPlan.setPlanCount(plan.getPlanCount());
         return finalizeFragments(execPlan);
     }
