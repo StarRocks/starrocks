@@ -76,6 +76,12 @@ private:
     PlanNodeId _dest_node_id;
 
     std::vector<std::shared_ptr<Channel>> _channels;
+    // index list for channels
+    // We need a random order of sending channels to avoid rpc blocking at the same time.
+    // But we can't change the order in the vector<channel> directly,
+    // because the channel is selected based on the hash pattern,
+    // so we pick a random order for the index
+    std::vector<int> _channel_indices;
     // Index of current channel to send to if _part_type == RANDOM.
     int _curr_random_channel_idx = 0;
 
