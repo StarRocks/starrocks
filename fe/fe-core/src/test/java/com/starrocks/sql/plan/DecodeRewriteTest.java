@@ -445,4 +445,13 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertTrue(plan.contains("  6:Decode\n" +
                 "  |  <dict id 17> : <string id 3>"));
     }
+
+    @Test
+    public void testDecodeWithCast() throws Exception {
+        String sql = "select reverse(conv(cast(S_ADDRESS as bigint), NULL, NULL)) from supplier";
+        String plan = getFragmentPlan(sql);
+        // Currently, we disable cast operator
+        Assert.assertFalse(plan.contains("Decode"));
+        Assert.assertTrue(plan.contains("reverse(conv(CAST(3: S_ADDRESS AS BIGINT), NULL, NULL))"));
+    }
 }
