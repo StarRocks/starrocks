@@ -89,7 +89,7 @@ public class CreateResourceStmt extends DdlStmt {
         if (resourceType == ResourceType.UNKNOWN) {
             throw new AnalysisException("Unrecognized resource type: " + type + ". " + "Only " +
                     Arrays.toString(Arrays.stream(ResourceType.values())
-                            .filter(t -> t != ResourceType.UNKNOWN).toArray()) + "are supported.");
+                            .filter(t -> t != ResourceType.UNKNOWN).toArray()) + " are supported.");
         }
         if (!isExternal) {
             throw new AnalysisException(resourceType + " resource type must be external.");
