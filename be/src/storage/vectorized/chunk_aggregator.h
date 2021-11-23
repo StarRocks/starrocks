@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/chunk_iterator.h"
 #include "storage/vectorized/column_aggregate_func.h"
