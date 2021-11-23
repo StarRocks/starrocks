@@ -714,7 +714,8 @@ void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
     }
     if (selection.size() == 0) return;
 
-    size_t after_size = SIMD::count_zero(selection);
+    size_t after_size = SIMD::count_nonzero(selection);
+    // Those rows will be filtered out anyway, better to be filtered out here.
     if (after_size != before_size) {
         VLOG_FILE << "filter null values. before_size = " << before_size << ", after_size = " << after_size;
         chunk->filter(selection);
