@@ -185,7 +185,6 @@ std::string JsonFunctions::minify_json_to_string(simdjson::ondemand::value& val)
 }
 
 std::string JsonFunctions::minify_json_to_string(simdjson::ondemand::document_reference& doc) {
-
     simdjson::ondemand::value val;
     auto err = doc.get_value().get(val);
     if (err) {
@@ -345,7 +344,7 @@ void JsonFunctions::_build_column(ColumnBuilder<primitive_type>& result, simdjso
         }
 
         result.append(d);
-            return;
+        return;
 
     } else if constexpr (primitive_type == TYPE_VARCHAR) {
         std::string_view sv;

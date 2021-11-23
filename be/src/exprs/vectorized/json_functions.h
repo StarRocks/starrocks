@@ -2,7 +2,6 @@
 
 #pragma once
 
-
 #include "common/compiler_util.h"
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
