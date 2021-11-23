@@ -61,6 +61,24 @@ public class MVRewriteTest {
         UtFrameUtils.createMinStarRocksCluster(runningDir);
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
+        starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
+                "  `order_dt` date NOT NULL DEFAULT '9999-12-31',\n" +
+                "  `order_no` varchar(32) NOT NULL DEFAULT '',\n" +
+                "  `org_order_no` varchar(64) NOT NULL DEFAULT '',\n" +
+                "  `bank_transaction_id` varchar(32) NOT NULL DEFAULT '',\n" +
+                "  `up_trade_no` varchar(32) NOT NULL DEFAULT '',\n" +
+                "  `mchnt_no` varchar(15) NOT NULL DEFAULT '',\n" +
+                "  `pay_st` tinyint(4) NOT NULL DEFAULT '1'\n" +
+                ") ENGINE=mysql\n" +
+                "PROPERTIES\n" +
+                "    (\n" +
+                "    \"host\" = \"127.0.0.1\",\n" +
+                "    \"port\" = \"3306\",\n" +
+                "    \"user\" = \"mysql_user\",\n" +
+                "    \"password\" = \"mysql_password\",\n" +
+                "    \"database\" = \"test\",\n" +
+                "    \"table\" = \"ods_order\"\n" +
+                "    )");
     }
 
     @Before
@@ -87,24 +105,6 @@ public class MVRewriteTest {
                 "ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
                 "BUCKETS 3 PROPERTIES ( 'replication_num' = '1');";
         starRocksAssert.withTable(createTableSQL);
-        starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
-                "  `order_dt` date NOT NULL DEFAULT '9999-12-31',\n" +
-                "  `order_no` varchar(32) NOT NULL DEFAULT '',\n" +
-                "  `org_order_no` varchar(64) NOT NULL DEFAULT '',\n" +
-                "  `bank_transaction_id` varchar(32) NOT NULL DEFAULT '',\n" +
-                "  `up_trade_no` varchar(32) NOT NULL DEFAULT '',\n" +
-                "  `mchnt_no` varchar(15) NOT NULL DEFAULT '',\n" +
-                "  `pay_st` tinyint(4) NOT NULL DEFAULT '1'\n" +
-                ") ENGINE=mysql\n" +
-                "PROPERTIES\n" +
-                "    (\n" +
-                "    \"host\" = \"127.0.0.1\",\n" +
-                "    \"port\" = \"3306\",\n" +
-                "    \"user\" = \"mysql_user\",\n" +
-                "    \"password\" = \"mysql_password\",\n" +
-                "    \"database\" = \"test\",\n" +
-                "    \"table\" = \"ods_order\"\n" +
-                "    )");
     }
 
     @After
@@ -117,6 +117,7 @@ public class MVRewriteTest {
 
     @AfterClass
     public static void afterClass() throws Exception {
+        starRocksAssert.dropTable("ods_order");
         UtFrameUtils.cleanStarRocksFeDir(baseDir);
     }
 
