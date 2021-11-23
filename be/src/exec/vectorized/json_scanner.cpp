@@ -50,11 +50,15 @@ Status JsonScanner::open() {
     }
 
     const TBrokerRangeDesc& range = _scan_range.ranges[0];
+    if (range.__isset.jsonpaths && range.__isset.json_root) {
+        return Status::InvalidArgument("json path and json root cannot be both set");
+    }
+
     if (range.__isset.jsonpaths) {
         RETURN_IF_ERROR(_parse_json_paths(range.jsonpaths, &_json_paths));
     }
     if (range.__isset.json_root) {
-        return Status::InvalidArgument(strings::Substitute("Use json path to instead json root"));
+        JsonFunctions::parse_json_paths(range.json_root, &_root_paths);
     }
     if (range.__isset.strip_outer_array) {
         _strip_outer_array = range.strip_outer_array;
@@ -168,7 +172,7 @@ Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<s
         return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
     }
 
-    for (auto path : paths) {
+    for (const auto &path : paths) {
         if (!path.is_string()) {
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
         }
@@ -393,6 +397,8 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
                 return Status::DataQualityError(err_msg.c_str());
             }
 
+            RETURN_IF_ERROR(_filter_object_with_json_root(obj));
+
             if (_scanner->_json_paths.empty()) {
                 RETURN_IF_ERROR(_process_object(chunk, ordered_slot_descs, obj));
             } else {
@@ -486,6 +492,9 @@ Status JsonReader::_process_array(Chunk* chunk, const std::vector<SlotDescriptor
                 _counter->num_rows_filtered++;
                 return Status::DataQualityError(err_msg.c_str());
             }
+
+            RETURN_IF_ERROR(_filter_object_with_json_root(obj));
+
             RETURN_IF_ERROR(_process_object(chunk, slot_descs, obj));
         } else {
             std::string err_msg = strings::Substitute("Failed to parse json in array. code=$0, error=$1", a.error(),
@@ -529,6 +538,9 @@ Status JsonReader::_process_array_with_json_path(Chunk* chunk, const std::vector
                 _counter->num_rows_filtered++;
                 return Status::DataQualityError(err_msg.c_str());
             }
+
+            RETURN_IF_ERROR(_filter_object_with_json_root(obj));
+
             RETURN_IF_ERROR(_process_object_with_json_path(chunk, slot_descs, obj));
         } else {
             std::string err_msg = strings::Substitute("Failed to parse json in array with jsonpath. code=$0, error=$1",
@@ -583,6 +595,22 @@ Status JsonReader::_process_object_with_json_path(Chunk* chunk, const std::vecto
             column->append_nulls(1);
         } else {
             _construct_column(val, column.get(), slot_descs[i]->type());
+        }
+    }
+    return Status::OK();
+}
+
+Status JsonReader::_filter_object_with_json_root(simdjson::ondemand::object& obj) {
+    if (!_scanner->_root_paths.empty()) {
+        // json root filter.
+        simdjson::ondemand::value val;
+        if (!JsonFunctions::extract_from_object(obj, _scanner->_root_paths, val)) {
+            return Status::DataQualityError("invalid json root");
+        }
+
+        auto err = val.get_object().get(obj);
+        if (err) {
+            return Status::DataQualityError("invalid json root");
         }
     }
     return Status::OK();

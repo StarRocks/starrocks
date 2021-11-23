@@ -100,6 +100,8 @@ public:
      */
     DEFINE_VECTORIZED_FN(get_json_string);
 
+    // extract_from_object extracts value from object according to the json path.
+    // Now, we do not support complete functions of json path.
     static bool extract_from_object(simdjson::ondemand::object& obj, const std::vector<JsonPath>& jsonpath,
                                     simdjson::ondemand::value& value);
 

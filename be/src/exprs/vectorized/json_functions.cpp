@@ -100,6 +100,7 @@ Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
 bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<JsonPath>& jsonpath,
                                         simdjson::ondemand::value& value) {
     simdjson::ondemand::value tvalue;
+    bool ok = false;
 
     // Skip the first $.
     for (int i = 1; i < jsonpath.size(); i++) {
@@ -115,14 +116,16 @@ bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const s
             if (err) {
                 return false;
             }
+            ok = true;
         } else {
             auto err = tvalue.find_field_unordered(col).get(tvalue);
             if (err) {
                 return false;
             }
+            ok = true;
         }
 
-        if (index != -1) {
+        if (ok && index != -1) {
             auto arr = tvalue.get_array();
             if (arr.error()) {
                 return false;
@@ -144,7 +147,7 @@ bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const s
 
     std::swap(value, tvalue);
 
-    return true;
+    return ok;
 }
 
 void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector<JsonPath>* parsed_paths) {

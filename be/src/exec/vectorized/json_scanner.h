@@ -92,6 +92,7 @@ private:
 
     Status _process_object_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                           simdjson::ondemand::object& obj);
+    Status _filter_object_with_json_root(simdjson::ondemand::object& obj);
 
 private:
     RuntimeState* _state = nullptr;
