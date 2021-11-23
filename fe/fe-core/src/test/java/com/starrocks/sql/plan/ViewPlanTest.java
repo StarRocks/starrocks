@@ -1621,4 +1621,20 @@ public class ViewPlanTest extends PlanTestBase {
                         "  |  repeat: repeat 3 lines [[], [4], [2], [2, 4]]\n"));
         starRocksAssert.dropView(viewName);
     }
+
+    @Test
+    public void testUnionWith() throws Exception {
+        String sql = "with a as (select 1 c1 union all select 2 ), b as (select 1 c1 union all select 2 ) " +
+                "select * from a union all select * from b;";
+
+        String createView = "create view test_view16 (c_1) as with a as (select 1 c1 union all select 2 ), " +
+                "b as (select 1 c1 union all select 2 ) select * from a union all select * from b;";
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from test_view16;");
+        Assert.assertEquals(sqlPlan, viewPlan);
+
+        starRocksAssert.dropView("test_view16");
+    }
 }
