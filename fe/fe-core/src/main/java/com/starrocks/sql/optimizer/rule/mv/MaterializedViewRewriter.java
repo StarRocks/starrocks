@@ -11,6 +11,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -68,6 +69,10 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
 
     @Override
     public Void visitLogicalTableScan(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
+        if (!OperatorType.LOGICAL_OLAP_SCAN.equals(optExpression.getOp().getOpType())) {
+            return null;
+        }
+
         LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) optExpression.getOp();
 
         if (scanOperator.getColumnRefMap().containsKey(context.queryColumnRef)) {
@@ -97,7 +102,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
                     CallOperator callOperator = new CallOperator(FunctionSet.SUM,
                             kv.getValue().getType(),
                             kv.getValue().getChildren(),
-                            Expr.getBuiltinFunction(FunctionSet.SUM, new Type[]{Type.BIGINT}, IS_IDENTICAL));
+                            Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
                     kv.setValue((CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
                     break;
                 } else if (
@@ -107,15 +112,17 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
                     CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
                             kv.getValue().getType(),
                             kv.getValue().getChildren(),
-                            Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[]{Type.BITMAP}, IS_IDENTICAL));
+                            Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                                    IS_IDENTICAL));
                     kv.setValue((CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
                     break;
-                } else if ((functionName.equals(FunctionSet.NDV) || functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT))
-                        && context.mvColumn.getAggregationType() == AggregateType.HLL_UNION) {
+                } else if (
+                        (functionName.equals(FunctionSet.NDV) || functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT))
+                                && context.mvColumn.getAggregationType() == AggregateType.HLL_UNION) {
                     CallOperator callOperator = new CallOperator(FunctionSet.HLL_UNION_AGG,
                             kv.getValue().getType(),
                             kv.getValue().getChildren(),
-                            Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[]{Type.HLL}, IS_IDENTICAL));
+                            Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL));
                     kv.setValue((CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
                     break;
                 } else if (functionName.equals(FunctionSet.PERCENTILE_APPROX) &&
@@ -130,7 +137,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
                             kv.getValue().getType(),
                             Lists.newArrayList(child),
                             Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
-                                    new Type[]{Type.PERCENTILE}, IS_IDENTICAL));
+                                    new Type[] {Type.PERCENTILE}, IS_IDENTICAL));
                     kv.setValue((CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
                     break;
                 }
