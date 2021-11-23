@@ -111,13 +111,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _thread_mgr = new ThreadResourceMgr();
     _thread_pool = new PriorityThreadPool(config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
-    LOG(INFO) << strings::Substitute("[PIPELINE] IO thread pool: thread_num=$0, queue_size=$1",
-                                     config::pipeline_io_thread_pool_thread_num,
-                                     config::pipeline_io_thread_pool_queue_size);
-    _pipeline_scan_io_thread_pool = new PriorityThreadPool(config::pipeline_io_thread_pool_thread_num,
-                                                           config::pipeline_io_thread_pool_queue_size);
-    _pipeline_exchange_sink_thread_pool = new PriorityThreadPool(config::pipeline_io_thread_pool_thread_num,
-                                                                 config::pipeline_io_thread_pool_queue_size);
+    _pipeline_scan_io_thread_pool = new PriorityThreadPool(config::pipeline_scan_thread_pool_thread_num <= 0
+                                                                   ? std::thread::hardware_concurrency()
+                                                                   : config::pipeline_scan_thread_pool_thread_num,
+                                                           config::pipeline_scan_thread_pool_queue_size);
+    _pipeline_exchange_sink_thread_pool = new PriorityThreadPool(
+            config::pipeline_exchange_thread_pool_thread_num <= 0 ? std::thread::hardware_concurrency()
+                                                                  : config::pipeline_exchange_thread_pool_thread_num,
+            config::pipeline_exchange_thread_pool_queue_size);
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool(config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
