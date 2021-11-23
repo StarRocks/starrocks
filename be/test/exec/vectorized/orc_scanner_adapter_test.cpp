@@ -1018,4 +1018,72 @@ TEST_F(OrcScannerAdapterTest, TestReadArrayBasic) {
     }
 }
 
+/**
+ * File Version: 0.12 with ORC_135
+Rows: 1
+Compression: NONE
+Calendar: Julian/Gregorian
+Type: struct<col_tinyint:tinyint,col_smallint:smallint,col_int:int,col_integer:int,col_bigint:bigint,col_float:float,col_double:double,col_double_precision:double,col_decimal:decimal(10,0),col_timestamp:timestamp,col_date:date,col_string:string,col_varchar:varchar(100),col_binary:binary,col_char:char(100),col_boolean:boolean>
+
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 1 hasNull: false
+    Column 1: count: 1 hasNull: false min: 1 max: 1 sum: 1
+    Column 2: count: 1 hasNull: false min: 1 max: 1 sum: 1
+    Column 3: count: 1 hasNull: false min: 1 max: 1 sum: 1
+    Column 4: count: 1 hasNull: false min: 1 max: 1 sum: 1
+    Column 5: count: 1 hasNull: false min: 1 max: 1 sum: 1
+    Column 6: count: 1 hasNull: false min: 1.0010000467300415 max: 1.0010000467300415 sum: 1.0010000467300415
+    Column 7: count: 1 hasNull: false min: 10.1 max: 10.1 sum: 10.1
+    Column 8: count: 1 hasNull: false min: 110.1 max: 110.1 sum: 110.1
+    Column 9: count: 1 hasNull: false min: 1110 max: 1110 sum: 1110
+    Column 10: count: 1 hasNull: false min: 2021-10-30 12:10:23.0 max: 2021-10-30 12:10:23.000999999
+    Column 11: count: 1 hasNull: false min: Hybrid AD 2021-10-30 max: Hybrid AD 2021-10-30
+    Column 12: count: 1 hasNull: false min: hello world max: hello world sum: 11
+    Column 13: count: 1 hasNull: false min: hi max: hi sum: 2
+    Column 14: count: 1 hasNull: false sum: 22
+    Column 15: count: 1 hasNull: false min: nihao                                                                                                max: nihao                                                                                                sum: 100
+    Column 16: count: 1 hasNull: false true: 1
+
+Processing data file padding-char.orc [length: 2664]
+{"col_tinyint":1,"col_smallint":1,"col_int":1,"col_integer":1,"col_bigint":1,"col_float":1.0010000467300415,"col_double":10.1,"col_double_precision":110.1,"col_decimal":"1110","col_timestamp":"2021-10-30 12:10:23.0","col_date":"2021-10-30","col_string":"hello world","col_varchar":"hi",
+"col_binary":[49,49,49,48,48,48,49,48,49,48,49,48,49,48,49,49,48,48,49,48,48,49],"col_char":"nihao","col_boolean":true}    
+*/
+
+TEST_F(OrcScannerAdapterTest, TestReadPaddingChar) {
+    SlotDesc slot_descs[] = {
+            {"col_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
+    };
+
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_padding_char.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    const int n = sizeof(slot_descs) / sizeof(slot_descs[0]);
+    ObjectPool pool;
+    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs, n);
+
+    {
+        OrcScannerAdapter adapter(src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = adapter.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = adapter.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = adapter.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = adapter.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = adapter.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 1);
+        EXPECT_EQ(result->num_columns(), 1);
+
+        ColumnPtr col = result->get_column_by_slot_id(0);
+        Slice s = col->get(0).get_slice();
+        std::string res(s.data, s.size);
+        EXPECT_EQ(res, "nihao"); // no-padding version.
+    }
+}
+
 } // namespace starrocks::vectorized

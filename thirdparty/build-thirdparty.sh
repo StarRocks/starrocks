@@ -738,6 +738,12 @@ build_mariadb() {
     make -j$PARALLEL && make install
 }
 
+# aliyun_oss_jars
+build_aliyun_oss_jars() {
+    check_if_source_exist $ALIYUN_OSS_JARS_SOURCE
+    cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/aliyun_oss_jars
+}
+
 build_libevent
 build_zlib
 build_lz4
@@ -772,6 +778,7 @@ build_jdk
 build_ragel
 build_hyperscan
 build_mariadb
+build_aliyun_oss_jars
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

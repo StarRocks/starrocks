@@ -81,11 +81,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // ids materialized by the tree rooted at this node
     protected ArrayList<TupleId> tupleIds;
 
-    // ids of the TblRefs "materialized" by this node; identical with tupleIds_
-    // if the tree rooted at this node only materializes BaseTblRefs;
-    // useful during plan generation
-    protected ArrayList<TupleId> tblRefIds;
-
     // A set of nullable TupleId produced by this node. It is a subset of tupleIds.
     // A tuple is nullable within a particular plan tree if it's the "nullable" side of
     // an outer join, which has nothing to do with the schema.
@@ -140,7 +135,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.limit = -1;
         // make a copy, just to be on the safe side
         this.tupleIds = Lists.newArrayList(tupleIds);
-        this.tblRefIds = Lists.newArrayList(tupleIds);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
         this.numInstances = 1;
@@ -150,7 +144,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.id = id;
         this.limit = -1;
         this.tupleIds = Lists.newArrayList();
-        this.tblRefIds = Lists.newArrayList();
         this.cardinality = -1;
         this.planNodeName = planNodeName;
         this.numInstances = 1;
@@ -163,7 +156,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.id = id;
         this.limit = node.limit;
         this.tupleIds = Lists.newArrayList(node.tupleIds);
-        this.tblRefIds = Lists.newArrayList(node.tblRefIds);
         this.nullableTupleIds = Sets.newHashSet(node.nullableTupleIds);
         this.conjuncts = Expr.cloneList(node.conjuncts, null);
         this.cardinality = -1;
@@ -171,10 +163,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.numInstances = 1;
     }
 
-    /**
-     * Sets tblRefIds_, tupleIds_, and nullableTupleIds_.
-     * The default implementation is a no-op.
-     */
     public void computeTupleIds() {
         Preconditions.checkState(children.isEmpty() || !tupleIds.isEmpty());
     }
@@ -183,7 +171,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Clears tblRefIds_, tupleIds_, and nullableTupleIds_.
      */
     protected void clearTupleIds() {
-        tblRefIds.clear();
         tupleIds.clear();
         nullableTupleIds.clear();
     }
@@ -254,14 +241,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     public ArrayList<TupleId> getTupleIds() {
         Preconditions.checkState(tupleIds != null);
         return tupleIds;
-    }
-
-    public ArrayList<TupleId> getTblRefIds() {
-        return tblRefIds;
-    }
-
-    public void setTblRefIds(ArrayList<TupleId> ids) {
-        tblRefIds = ids;
     }
 
     public Set<TupleId> getNullableTupleIds() {
@@ -365,7 +344,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             expBuilder.append("\n");
         }
-        expBuilder.append(detailPrefix).append("use vectorized: ").append(true).append("\n");
         // Print the children
         // if (children != null && children.size() > 0) {
         if (traverseChildren) {
@@ -480,7 +458,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected String getColumnStatistics(String prefix) {
         StringBuilder outputBuilder = new StringBuilder();
-        TreeMap<ColumnRefOperator, ColumnStatistic> sortMap = new TreeMap<>(Comparator.comparingInt(ColumnRefOperator::getId));
+        TreeMap<ColumnRefOperator, ColumnStatistic> sortMap =
+                new TreeMap<>(Comparator.comparingInt(ColumnRefOperator::getId));
         sortMap.putAll(columnStatistics);
         sortMap.forEach((key, value) -> {
             outputBuilder.append(prefix).append("* ").append(key.getName());
@@ -533,10 +512,18 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 child.treeToThriftHelper(container);
             }
         }
-        if (probeRuntimeFilters.size() != 0) {
+        if (!probeRuntimeFilters.isEmpty()) {
             msg.setProbe_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(probeRuntimeFilters));
+            Set<Integer> waitingPlanNodeIds = Sets.newHashSet();
+            for (RuntimeFilterDescription filter : probeRuntimeFilters) {
+                if (!filter.isHasRemoteTargets()) {
+                    waitingPlanNodeIds.add(filter.getBuildPlanNodeId());
+                }
+            }
+            msg.setLocal_rf_waiting_set(waitingPlanNodeIds);
         }
+
     }
 
     /**
@@ -791,14 +778,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         isColocate = colocate;
     }
 
-    public boolean isVectorized() {
-        return true;
-    }
-
-    public boolean isUseVectorized() {
-        return useVectorized;
-    }
-
     public boolean canUsePipeLine() {
         return false;
     }
@@ -833,7 +812,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     public boolean canDoReplicatedJoin() {
         if (children.size() == 1) {
             return getChild(0).canDoReplicatedJoin();
-        } else if (children.size() == 2){
+        } else if (children.size() == 2) {
             return getChild(1).canDoReplicatedJoin();
         } else {
             return false;

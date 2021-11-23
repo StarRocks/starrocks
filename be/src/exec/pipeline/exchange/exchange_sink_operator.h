@@ -45,7 +45,7 @@ public:
 
     bool is_finished() const override;
 
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -56,8 +56,6 @@ public:
     Status serialize_chunk(const vectorized::Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
 
     void construct_brpc_attachment(PTransmitChunkParamsPtr _chunk_request, butil::IOBuf& attachment);
-
-    RuntimeProfile* profile() { return _profile; }
 
 private:
     class Channel;
@@ -78,6 +76,12 @@ private:
     PlanNodeId _dest_node_id;
 
     std::vector<std::shared_ptr<Channel>> _channels;
+    // index list for channels
+    // We need a random order of sending channels to avoid rpc blocking at the same time.
+    // But we can't change the order in the vector<channel> directly,
+    // because the channel is selected based on the hash pattern,
+    // so we pick a random order for the index
+    std::vector<int> _channel_indices;
     // Index of current channel to send to if _part_type == RANDOM.
     int _curr_random_channel_idx = 0;
 
@@ -102,7 +106,6 @@ private:
     // Only sender will change this value, so no need to use lock to protect it.
     Status _close_status;
 
-    RuntimeProfile* _profile; // Allocated from _pool
     RuntimeProfile::Counter* _serialize_batch_timer;
     RuntimeProfile::Counter* _compress_timer{};
     RuntimeProfile::Counter* _bytes_sent_counter;

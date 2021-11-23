@@ -68,6 +68,7 @@ add_library(Exprs
   vectorized/info_func.cpp
   vectorized/runtime_filter.cpp
   vectorized/runtime_filter_bank.cpp
+  vectorized/in_const_predicate.cpp
 )
 
 # simdjson Runtime CPU Detection: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection

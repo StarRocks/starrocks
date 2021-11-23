@@ -474,17 +474,6 @@ public class ArithmeticExpr extends Expr {
         return hasNullableChild();
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     /**
      * Below function is added by new analyzer
      */

@@ -184,9 +184,6 @@ public class FileScanNode extends LoadScanNode {
             // if Config::enable_vectorized_file_load is set true,
             // vectorized load will been enabled
             TFileFormatType format = formatType(context.fileGroup.getFileFormat(), "");
-            if (format != TFileFormatType.FORMAT_ORC && !Config.enable_vectorized_file_load) {
-                useVectorizedLoad = false;
-            }
             initParams(context);
             paramCreateContexts.add(context);
         }
@@ -686,15 +683,4 @@ public class FileScanNode extends LoadScanNode {
         return output.toString();
     }
 
-    @Override
-    public boolean isVectorized() {
-        // Column mapping expr already checked in finalizeParams function
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return useVectorizedLoad;
-    }
 }

@@ -354,6 +354,7 @@ Status ScrollParser::_append_value_from_json_val(Column* column, PrimitiveType t
 }
 
 Slice ScrollParser::_json_val_to_slice(const rapidjson::Value& val) {
+    _scratch_buffer.Clear();
     _temp_writer.Reset(_scratch_buffer);
     val.Accept(_temp_writer);
     return {_scratch_buffer.GetString(), _scratch_buffer.GetSize()};

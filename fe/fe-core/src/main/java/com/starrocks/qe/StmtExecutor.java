@@ -359,18 +359,29 @@ public class StmtExecutor {
                         }
 
                         if (execPlanBuildByNewPlanner) {
-                            StringBuilder explainStringBuilder = new StringBuilder("WORK ON CBO OPTIMIZER\n");
+                            StringBuilder explainStringBuilder = new StringBuilder();
                             // StarRocksManager depends on explainString to get sql plan
                             if (parsedStmt.isExplain() || context.getSessionVariable().isReportSucc()) {
-                                TExplainLevel level = parsedStmt.isCosts() ? TExplainLevel.COSTS :
-                                        parsedStmt.isVerbose() ? TExplainLevel.VERBOSE : TExplainLevel.NORMAL;
+                                TExplainLevel level = null;
+                                switch (parsedStmt.getExplainLevel()) {
+                                    case NORMAL:
+                                        level = TExplainLevel.NORMAL;
+                                        break;
+                                    case VERBOSE:
+                                        level = TExplainLevel.VERBOSE;
+                                        break;
+                                    case COST:
+                                        level = TExplainLevel.COSTS;
+                                        break;
+                                }
                                 explainStringBuilder.append(execPlan.getExplainString(level));
                             }
                             handleQueryStmt(execPlan.getFragments(), execPlan.getScanNodes(),
                                     execPlan.getDescTbl().toThrift(),
                                     execPlan.getColNames(), execPlan.getOutputExprs(), explainStringBuilder.toString());
                         } else {
-                            TExplainLevel level = parsedStmt.isVerbose() ? TExplainLevel.VERBOSE : TExplainLevel.NORMAL;
+                            TExplainLevel level = parsedStmt.getExplainLevel().equals(StatementBase.ExplainLevel.VERBOSE)
+                                    ? TExplainLevel.VERBOSE : TExplainLevel.NORMAL;
                             String explainString = planner.getExplainString(planner.getFragments(), level);
                             handleQueryStmt(planner.getFragments(), planner.getScanNodes(),
                                     analyzer.getDescTbl().toThrift(),
@@ -638,8 +649,6 @@ public class StmtExecutor {
         parsedStmt.analyze(analyzer);
         if (parsedStmt instanceof QueryStmt || parsedStmt instanceof InsertStmt) {
             boolean isExplain = parsedStmt.isExplain();
-            boolean isVerbose = parsedStmt.isVerbose();
-            boolean isCosts = parsedStmt.isCosts();
             // Apply expr and subquery rewrites.
             boolean reAnalyze = false;
 
@@ -676,7 +685,7 @@ public class StmtExecutor {
                     LOG.trace("rewrittenStmt: " + parsedStmt.toSql());
                 }
                 if (isExplain) {
-                    parsedStmt.setIsExplain(isExplain, isVerbose, isCosts);
+                    parsedStmt.setIsExplain(isExplain, parsedStmt.getExplainLevel());
                 }
             }
         }
@@ -807,19 +816,19 @@ public class StmtExecutor {
         if (!isOutfileQuery) {
             context.getState().setEof();
         } else {
-            context.getState().setOk(statisticsForAuditLog.returned_rows, 0, "");
+            context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
         }
-        if (null == statisticsForAuditLog || null == statisticsForAuditLog.stats_items ||
-                statisticsForAuditLog.stats_items.isEmpty()) {
+        if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
+                statisticsForAuditLog.statsItems.isEmpty()) {
             return;
         }
         // collect table-level metrics
         Set<Long> tableIds = Sets.newHashSet();
-        for (QueryStatisticsItemPB item : statisticsForAuditLog.stats_items) {
-            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(item.table_id);
-            entity.counterScanRowsTotal.increase(item.scan_rows);
-            entity.counterScanBytesTotal.increase(item.scan_bytes);
-            tableIds.add(item.table_id);
+        for (QueryStatisticsItemPB item : statisticsForAuditLog.statsItems) {
+            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(item.tableId);
+            entity.counterScanRowsTotal.increase(item.scanRows);
+            entity.counterScanBytesTotal.increase(item.scanBytes);
+            tableIds.add(item.tableId);
         }
         for (Long tableId : tableIds) {
             TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
@@ -1265,11 +1274,11 @@ public class StmtExecutor {
         if (statisticsForAuditLog == null) {
             statisticsForAuditLog = new PQueryStatistics();
         }
-        if (statisticsForAuditLog.scan_bytes == null) {
-            statisticsForAuditLog.scan_bytes = 0L;
+        if (statisticsForAuditLog.scanBytes == null) {
+            statisticsForAuditLog.scanBytes = 0L;
         }
-        if (statisticsForAuditLog.scan_rows == null) {
-            statisticsForAuditLog.scan_rows = 0L;
+        if (statisticsForAuditLog.scanRows == null) {
+            statisticsForAuditLog.scanRows = 0L;
         }
         return statisticsForAuditLog;
     }

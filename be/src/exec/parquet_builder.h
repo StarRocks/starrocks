@@ -37,6 +37,7 @@
 #include <string>
 
 #include "common/status.h"
+#include "exec/file_builder.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
@@ -53,7 +54,7 @@ class RowBatch;
 
 class ParquetOutputStream : public arrow::io::OutputStream {
 public:
-    ParquetOutputStream(FileWriter* file_writer);
+    ParquetOutputStream(WritableFile* _writable_file);
     ~ParquetOutputStream() override;
 
     arrow::Status Write(const void* data, int64_t nbytes) override;
@@ -64,23 +65,26 @@ public:
     bool closed() const override { return _is_closed; }
 
 private:
-    FileWriter* _file_writer; // not owned
-    int64_t _cur_pos = 0;     // current write position
+    WritableFile* _writable_file; // not owned
+    int64_t _cur_pos = 0;         // current write position
     bool _is_closed = false;
 };
 
 // a wrapper of parquet output stream
-class ParquetWriterWrapper {
+class ParquetBuilder : public FileBuilder {
 public:
-    ParquetWriterWrapper(FileWriter* file_writer, const std::vector<ExprContext*>& output_expr_ctxs);
-    virtual ~ParquetWriterWrapper();
+    ParquetBuilder(std::unique_ptr<WritableFile> writable_file, const std::vector<ExprContext*>& output_expr_ctxs);
+    ~ParquetBuilder() override;
 
-    Status write(const RowBatch& row_batch);
+    Status add_chunk(vectorized::Chunk* chunk) override;
 
-    void close();
+    std::size_t file_size() override { return 0; }
+
+    Status finish() override;
 
 private:
     ParquetOutputStream* _outstream;
+    std::unique_ptr<WritableFile> _writable_file;
     const std::vector<ExprContext*>& _output_expr_ctxs;
 };
 

@@ -151,8 +151,7 @@ public class InsertPlanTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains(
                 "  |  <slot 1> : 1: v1\n" +
                         "  |  <slot 2> : 2: v2\n" +
-                        "  |  <slot 4> : NULL\n" +
-                        "  |  use vectorized: true"));
+                        "  |  <slot 4> : NULL\n"));
 
         String createMVSQL =
                 "create materialized view mvb as select v1,bitmap_union(to_bitmap(v2)) from ti2 group by v1";
@@ -164,8 +163,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                         "  |  <slot 6> : to_bitmap(CAST(1: v1 AS VARCHAR))\n" +
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
-                        "  |  <slot 8> : CAST(NULL AS BIGINT)\n" +
-                        "  |  use vectorized: true"));
+                        "  |  <slot 8> : CAST(NULL AS BIGINT)\n"));
     }
 
     @Test
@@ -210,6 +208,11 @@ public class InsertPlanTest extends PlanTestBase {
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().equals("Column has no default value, column=k5"));
         }
+
+        sql =
+                "insert into duplicate_table_with_default(K1,k2,k3) values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
+        explainString = getInsertExecPlan(sql);
+        Assert.assertTrue(explainString.contains("<slot 1> : 1: expr"));
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
@@ -239,7 +242,7 @@ public class InsertPlanTest extends PlanTestBase {
 
         sql = "insert into test.bitmap_table select id, bitmap_union(id2) from test.bitmap_table_2 group by id;";
         plan = getInsertExecPlan(sql);
-        containsKeywords(plan, "OUTPUT EXPRS:1: id | 3: bitmap_union(2: id2)",
+        containsKeywords(plan, "OUTPUT EXPRS:1: id | 3: bitmap_union",
                 "OLAP TABLE SINK", "1:AGGREGATE (update finalize)", "output: bitmap_union(2: id2)", "0:OlapScanNode");
 
         sql = "insert into test.bitmap_table select id, id2 from test.bitmap_table_2;";

@@ -25,6 +25,10 @@ public:
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status done(RuntimeState* state) override;
     void get_next(ChunkPtr* chunk, bool* eos) override;
+    DataSegment* get_result_data_segment() override;
+    uint64_t get_partition_rows() const override;
+    Permutation* get_permutation() const override;
+
     bool pull_chunk(ChunkPtr* chunk) override;
 
     int64_t mem_usage() const override {
@@ -53,7 +57,7 @@ private:
 
     ChunkUniquePtr _big_chunk;
     std::unique_ptr<DataSegment> _sorted_segment;
-    Permutation _sorted_permutation;
+    mutable Permutation _sorted_permutation;
     std::vector<uint32_t> _selective_values; // for appending selective values to sorted rows
 };
 

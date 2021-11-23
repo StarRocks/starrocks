@@ -32,10 +32,6 @@
 #undef DISALLOW_IMPLICIT_CONSTRUCTORS
 #endif
 
-#ifdef arraysize
-#undef arraysize
-#endif
-
 #undef OVERRIDE
 #undef FINAL
 

@@ -20,11 +20,9 @@ StatusOr<vectorized::ChunkPtr> LocalExchangeSinkOperator::pull_chunk(RuntimeStat
     return Status::InternalError("Shouldn't call pull_chunk from local exchange sink.");
 }
 
-void LocalExchangeSinkOperator::finish(RuntimeState* state) {
-    if (!_is_finished) {
-        _is_finished = true;
-        _exchanger->finish(state);
-    }
+void LocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
+    _is_finished = true;
+    _exchanger->finish(state);
 }
 
 Status LocalExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {

@@ -28,13 +28,12 @@ order by
     value desc ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:1: PS_PARTKEY | 21: sum(20: expr)
+OUTPUT EXPRS:1: PS_PARTKEY | 21: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
 
 29:MERGING-EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -45,42 +44,34 @@ EXCHANGE ID: 29
 UNPARTITIONED
 
 28:SORT
-|  order by: <slot 21> 21: sum(20: expr) DESC
+|  order by: <slot 21> 21: sum DESC
 |  offset: 0
-|  use vectorized: true
 |
 27:Project
 |  <slot 1> : 1: PS_PARTKEY
-|  <slot 21> : 21: sum(20: expr)
-|  use vectorized: true
+|  <slot 21> : 21: sum
 |
 26:CROSS JOIN
 |  cross join:
-|  predicates: 21: sum(20: expr) > 43: expr
-|  use vectorized: true
+|  predicates: 21: sum > 43: expr
 |
 |----25:EXCHANGE
-|       use vectorized: true
 |
 10:AGGREGATE (update finalize)
 |  output: sum(20: expr)
 |  group by: 1: PS_PARTKEY
-|  use vectorized: true
 |
 9:Project
 |  <slot 1> : 1: PS_PARTKEY
 |  <slot 20> : 4: PS_SUPPLYCOST * CAST(3: PS_AVAILQTY AS DOUBLE)
-|  use vectorized: true
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: PS_SUPPKEY = 7: S_SUPPKEY
-|  use vectorized: true
 |
 |----7:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: partsupp
@@ -92,7 +83,6 @@ tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 cardinality=80000000
 avgRowSize=28.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -103,16 +93,13 @@ EXCHANGE ID: 25
 UNPARTITIONED
 
 24:Project
-|  <slot 43> : 42: sum(41: expr) * 1.0E-4
-|  use vectorized: true
+|  <slot 43> : 42: sum * 1.0E-4
 |
 23:AGGREGATE (merge finalize)
-|  output: sum(42: sum(41: expr))
+|  output: sum(42: sum)
 |  group by:
-|  use vectorized: true
 |
 22:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -125,21 +112,17 @@ UNPARTITIONED
 21:AGGREGATE (update serialize)
 |  output: sum(41: expr)
 |  group by:
-|  use vectorized: true
 |
 20:Project
 |  <slot 41> : 25: PS_SUPPLYCOST * CAST(24: PS_AVAILQTY AS DOUBLE)
-|  use vectorized: true
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 23: PS_SUPPKEY = 28: S_SUPPKEY
-|  use vectorized: true
 |
 |----18:EXCHANGE
-|       use vectorized: true
 |
 11:OlapScanNode
 TABLE: partsupp
@@ -151,7 +134,6 @@ tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 cardinality=80000000
 avgRowSize=20.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -163,17 +145,14 @@ UNPARTITIONED
 
 17:Project
 |  <slot 28> : 28: S_SUPPKEY
-|  use vectorized: true
 |
 16:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 31: S_NATIONKEY = 36: N_NATIONKEY
-|  use vectorized: true
 |
 |----15:EXCHANGE
-|       use vectorized: true
 |
 12:OlapScanNode
 TABLE: supplier
@@ -185,7 +164,6 @@ tabletList=10111
 cardinality=1000000
 avgRowSize=8.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 5
 OUTPUT EXPRS:
@@ -197,7 +175,6 @@ UNPARTITIONED
 
 14:Project
 |  <slot 36> : 36: N_NATIONKEY
-|  use vectorized: true
 |
 13:OlapScanNode
 TABLE: nation
@@ -210,7 +187,6 @@ tabletList=10185
 cardinality=1
 avgRowSize=29.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -222,17 +198,14 @@ UNPARTITIONED
 
 6:Project
 |  <slot 7> : 7: S_SUPPKEY
-|  use vectorized: true
 |
 5:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 10: S_NATIONKEY = 15: N_NATIONKEY
-|  use vectorized: true
 |
 |----4:EXCHANGE
-|       use vectorized: true
 |
 1:OlapScanNode
 TABLE: supplier
@@ -244,7 +217,6 @@ tabletList=10111
 cardinality=1000000
 avgRowSize=8.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 7
 OUTPUT EXPRS:
@@ -256,7 +228,6 @@ UNPARTITIONED
 
 3:Project
 |  <slot 15> : 15: N_NATIONKEY
-|  use vectorized: true
 |
 2:OlapScanNode
 TABLE: nation
@@ -269,6 +240,5 @@ tabletList=10185
 cardinality=1
 avgRowSize=29.0
 numNodes=0
-use vectorized: true
 [end]
 

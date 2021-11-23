@@ -252,14 +252,14 @@ protected:
         ASSERT_TRUE(res.ok()) << res.to_string();
         tablet = k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(tablet.get() != nullptr);
-        _tablet_path = tablet->tablet_path();
+        _schema_hash_path = tablet->schema_hash_path();
 
         set_create_duplicate_tablet_request(&_create_dup_tablet);
         res = k_engine->create_tablet(_create_dup_tablet);
         ASSERT_TRUE(res.ok()) << res.to_string();
         dup_tablet = k_engine->tablet_manager()->get_tablet(_create_dup_tablet.tablet_id);
         ASSERT_TRUE(dup_tablet.get() != nullptr);
-        _dup_tablet_path = tablet->tablet_path();
+        _dup_tablet_path = tablet->schema_hash_path();
     }
 
     void TearDown() {
@@ -269,7 +269,7 @@ protected:
         ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
     }
 
-    std::string _tablet_path;
+    std::string _schema_hash_path;
     std::string _dup_tablet_path;
     TabletSharedPtr tablet;
     TabletSharedPtr dup_tablet;
@@ -407,7 +407,7 @@ protected:
         ASSERT_TRUE(res.ok()) << res.to_string();
         tablet = k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(tablet.get() != nullptr);
-        _tablet_path = tablet->tablet_path();
+        _schema_hash_path = tablet->schema_hash_path();
     }
 
     void TearDown() {
@@ -416,7 +416,7 @@ protected:
         ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
     }
 
-    std::string _tablet_path;
+    std::string _schema_hash_path;
     TabletSharedPtr tablet;
     TCreateTabletReq _create_tablet;
     DeleteConditionHandler _delete_condition_handler;
@@ -734,7 +734,7 @@ protected:
         ASSERT_TRUE(res.ok()) << res.to_string();
         tablet = k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(tablet != nullptr);
-        _tablet_path = tablet->tablet_path();
+        _schema_hash_path = tablet->schema_hash_path();
 
         _data_row_cursor.init(tablet->tablet_schema());
         _data_row_cursor.allocate_memory_for_string_type(tablet->tablet_schema());
@@ -747,7 +747,7 @@ protected:
         ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
     }
 
-    std::string _tablet_path;
+    std::string _schema_hash_path;
     RowCursor _data_row_cursor;
     TabletSharedPtr tablet;
     TCreateTabletReq _create_tablet;

@@ -39,7 +39,6 @@
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/logging.h"
-#include "common/resource_tls.h"
 #include "common/status.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
@@ -180,9 +179,9 @@ int main(int argc, char** argv) {
     // add logger for thrift internal
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
-    starrocks::init_daemon(argc, argv, paths);
+    std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
+    daemon->init(argc, argv, paths);
 
-    starrocks::ResourceTls::init();
     if (!starrocks::BackendOptions::init()) {
         exit(-1);
     }
@@ -227,8 +226,8 @@ int main(int argc, char** argv) {
     }
 
     // 2. brpc service
-    starrocks::BRpcService brpc_service(exec_env);
-    status = brpc_service.start(starrocks::config::brpc_port);
+    std::unique_ptr<starrocks::BRpcService> brpc_service = std::make_unique<starrocks::BRpcService>(exec_env);
+    status = brpc_service->start(starrocks::config::brpc_port);
     if (!status.ok()) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting";
         starrocks::shutdown_logging();
@@ -236,9 +235,9 @@ int main(int argc, char** argv) {
     }
 
     // 3. http service
-    starrocks::HttpService http_service(exec_env, starrocks::config::webserver_port,
-                                        starrocks::config::webserver_num_workers);
-    status = http_service.start();
+    std::unique_ptr<starrocks::HttpService> http_service = std::make_unique<starrocks::HttpService>(
+            exec_env, starrocks::config::webserver_port, starrocks::config::webserver_num_workers);
+    status = http_service->start();
     if (!status.ok()) {
         LOG(ERROR) << "Internal Error:" << status.message();
         LOG(ERROR) << "StarRocks Be http service did not start correctly, exiting";
@@ -261,23 +260,37 @@ int main(int argc, char** argv) {
 
     status = heartbeat_thrift_server->start();
     if (!status.ok()) {
-        LOG(ERROR) << "StarRocks BE HeartBeat Service did not start correctly, exiting";
+        LOG(ERROR) << "StarRocks BE HeartBeat Service did not start correctly. Error=" << status.to_string();
         starrocks::shutdown_logging();
         exit(1);
+    } else {
+        LOG(INFO) << "StarRocks BE HeartBeat Service started correctly.";
     }
 
     while (!starrocks::k_starrocks_exit) {
-#if defined(LEAK_SANITIZER)
-        __lsan_do_leak_check();
-#endif
         sleep(10);
     }
+
+    daemon->stop();
+    daemon.reset();
+
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
+    delete heartbeat_thrift_server;
+
+    http_service.reset();
+    brpc_service.reset();
+
     be_server->stop();
     be_server->join();
-
     delete be_server;
+
+    engine->stop();
+    delete engine;
+    exec_env->set_storage_engine(nullptr);
+
+    starrocks::ExecEnv::destroy(exec_env);
+
     return 0;
 }
 

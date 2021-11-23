@@ -90,6 +90,18 @@ void ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
     _next_output_row += count;
 }
 
+DataSegment* ChunksSorterTopn::get_result_data_segment() {
+    return &_merged_segment;
+}
+
+uint64_t ChunksSorterTopn::get_partition_rows() const {
+    return _merged_segment.chunk->num_rows();
+}
+
+Permutation* ChunksSorterTopn::get_permutation() const {
+    return nullptr;
+}
+
 /*
  * _next_output_row index the next row we need to get, 
  * In this case, The actual data is _merged_segment.chunk, 

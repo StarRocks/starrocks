@@ -10,7 +10,6 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -30,7 +29,6 @@ public class ProjectNode extends PlanNode {
                        Map<SlotId, Expr> commonSlotMap) {
         super(id, tupleDescriptor.getId().asList(), "Project");
         addChild(child);
-        this.tblRefIds = child.tblRefIds;
         this.slotMap = slotMap;
         this.commonSlotMap = commonSlotMap;
     }
@@ -114,29 +112,6 @@ public class ProjectNode extends PlanNode {
             }
         }
         return output.toString();
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                throw UnsupportedException.unsupportedException("Not support non-vectorized project node.");
-            }
-        }
-
-        for (Expr expr : slotMap.values()) {
-            if (!expr.isVectorized()) {
-                throw UnsupportedException.unsupportedException("Not support non-vectorized project node.");
-            }
-        }
-
-        for (Expr expr : commonSlotMap.values()) {
-            if (!expr.isVectorized()) {
-                throw UnsupportedException.unsupportedException("Not support non-vectorized project node.");
-            }
-        }
-
-        return true;
     }
 
     @Override

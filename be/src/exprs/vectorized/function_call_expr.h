@@ -31,8 +31,7 @@ protected:
 private:
     const FunctionDescriptor* _fn_desc;
 
-    // is rand/random function.
-    bool _is_rand_function = false;
+    bool _is_returning_random_value;
 };
 
 } // namespace vectorized

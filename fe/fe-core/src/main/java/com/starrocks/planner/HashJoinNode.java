@@ -94,8 +94,6 @@ public class HashJoinNode extends PlanNode {
         Preconditions.checkArgument(otherJoinConjuncts != null);
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
-        tblRefIds.addAll(outer.getTblRefIds());
-        tblRefIds.addAll(inner.getTblRefIds());
         this.innerRef = innerRef;
         this.joinOp = innerRef.getJoinOp();
         for (Expr eqJoinPredicate : eqJoinConjuncts) {
@@ -159,13 +157,13 @@ public class HashJoinNode extends PlanNode {
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator,
                                     PlanNode inner, List<BinaryPredicate> eqJoinConjuncts,
                                     JoinOperator joinOp) {
-        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin()) {
+        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin()) {
             return;
         }
 
         if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.LOCAL_HASH_BUCKET)) {
-            // if it's partitioned join and we can not get correct ndv
-            // then it's hard to estimate right bloom filter size or it's too big
+            // if it's partitioned join, and we can not get correct ndv
+            // then it's hard to estimate right bloom filter size, or it's too big.
             // so we'd better to skip this global runtime filter.
             long card = inner.getCardinality();
             if (card <= 0 || card > runtimeFilterMaxSize) {
@@ -178,6 +176,7 @@ public class HashJoinNode extends PlanNode {
             joinConjunct.setUseVectorized(joinConjunct.isVectorized());
             RuntimeFilterDescription rf = new RuntimeFilterDescription();
             rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
+            rf.setBuildPlanNodeId(this.id.asInt());
             rf.setExprOrder(i);
             rf.setJoinMode(distrMode);
             rf.setEqualCount(eqJoinConjuncts.size());
@@ -468,35 +467,6 @@ public class HashJoinNode extends PlanNode {
     @Override
     public int getNumInstances() {
         return Math.max(children.get(0).getNumInstances(), children.get(1).getNumInstances());
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : eqJoinConjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : otherJoinConjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     public enum DistributionMode {

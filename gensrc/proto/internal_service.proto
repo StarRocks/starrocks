@@ -103,6 +103,7 @@ message PTransmitRuntimeFilterParams {
     repeated PTransmitRuntimeFilterForwardTarget forward_targets = 9;
     // when merge node starts to broadcast this rf(millseconds since unix epoch)
     optional int64 broadcast_timestamp = 10;
+    optional bool is_pipeline = 11;
 };
 
 message PTransmitRuntimeFilterResult {

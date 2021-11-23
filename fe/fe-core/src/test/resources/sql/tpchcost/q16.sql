@@ -31,13 +31,12 @@ order by
     p_size ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:10: P_BRAND | 11: P_TYPE | 12: P_SIZE | 26: count(distinct 2: PS_SUPPKEY)
+OUTPUT EXPRS:10: P_BRAND | 11: P_TYPE | 12: P_SIZE | 26: count
 PARTITION: UNPARTITIONED
 
 RESULT SINK
 
 14:MERGING-EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -48,17 +47,14 @@ EXCHANGE ID: 14
 UNPARTITIONED
 
 13:SORT
-|  order by: <slot 26> 26: count(distinct 2: PS_SUPPKEY) DESC, <slot 10> 10: P_BRAND ASC, <slot 11> 11: P_TYPE ASC, <slot 12> 12: P_SIZE ASC
+|  order by: <slot 26> 26: count DESC, <slot 10> 10: P_BRAND ASC, <slot 11> 11: P_TYPE ASC, <slot 12> 12: P_SIZE ASC
 |  offset: 0
-|  use vectorized: true
 |
 12:AGGREGATE (merge finalize)
-|  output: multi_distinct_count(26: count(distinct 2: PS_SUPPKEY))
+|  output: multi_distinct_count(26: count)
 |  group by: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
-|  use vectorized: true
 |
 11:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -72,41 +68,34 @@ HASH_PARTITIONED: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
 |  STREAMING
 |  output: multi_distinct_count(2: PS_SUPPKEY)
 |  group by: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
-|  use vectorized: true
 |
 9:Project
 |  <slot 2> : 2: PS_SUPPKEY
 |  <slot 10> : 10: P_BRAND
 |  <slot 11> : 11: P_TYPE
 |  <slot 12> : 12: P_SIZE
-|  use vectorized: true
 |
 8:HASH JOIN
 |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: PS_SUPPKEY = 17: S_SUPPKEY
-|  use vectorized: true
 |
 |----7:EXCHANGE
-|       use vectorized: true
 |
 4:Project
 |  <slot 2> : 2: PS_SUPPKEY
 |  <slot 10> : 10: P_BRAND
 |  <slot 11> : 11: P_TYPE
 |  <slot 12> : 12: P_SIZE
-|  use vectorized: true
 |
 3:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 1: PS_PARTKEY = 7: P_PARTKEY
-|  use vectorized: true
 |
 |----2:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: partsupp
@@ -118,7 +107,6 @@ tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 cardinality=80000000
 avgRowSize=16.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -130,7 +118,6 @@ UNPARTITIONED
 
 6:Project
 |  <slot 17> : 17: S_SUPPKEY
-|  use vectorized: true
 |
 5:OlapScanNode
 TABLE: supplier
@@ -143,7 +130,6 @@ tabletList=10111
 cardinality=250000
 avgRowSize=105.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -164,6 +150,5 @@ tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=2304000
 avgRowSize=47.0
 numNodes=0
-use vectorized: true
 [end]
 

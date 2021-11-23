@@ -45,6 +45,10 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, const
     //  for varargs in vectorized engine?
     _fn_context_index = context->register_func(state, return_type, args_types, 0);
 
+    _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
+                                 _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
+                                 _fn.fid == 100015 /* uuid */;
+
     return Status::OK();
 }
 
@@ -82,13 +86,6 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         }
     }
 
-    // is function rand/random?
-    if (_fn.name.function_name == "rand" || _fn.name.function_name == "random") {
-        _is_rand_function = true;
-    } else {
-        _is_rand_function = false;
-    }
-
     return Status::OK();
 }
 
@@ -107,7 +104,7 @@ void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks
 }
 
 bool VectorizedFunctionCallExpr::is_constant() const {
-    if (_is_rand_function) {
+    if (_is_returning_random_value) {
         return false;
     }
 
@@ -124,7 +121,7 @@ ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, 
         args.emplace_back(column);
     }
 
-    if (_is_rand_function) {
+    if (_is_returning_random_value) {
         if (ptr != nullptr) {
             args.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(ptr->num_rows(), ptr->num_rows()));
         } else {

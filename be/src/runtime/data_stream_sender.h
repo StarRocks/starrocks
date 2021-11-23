@@ -147,6 +147,12 @@ private:
     std::vector<ExprContext*> _partition_expr_ctxs; // compute per-row partition values
 
     std::vector<Channel*> _channels;
+    // index list for channels
+    // We need a random order of sending channels to avoid rpc blocking at the same time.
+    // But we can't change the order in the vector<channel> directly,
+    // because the channel is selected based on the hash pattern,
+    // so we pick a random order for the index
+    std::vector<int> _channel_indices;
     std::vector<std::shared_ptr<Channel>> _channel_shared_ptrs;
 
     // map from range value to partition_id

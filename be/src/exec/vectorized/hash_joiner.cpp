@@ -20,11 +20,12 @@
 namespace starrocks::vectorized {
 
 HashJoiner::HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id, TPlanNodeType::type node_type,
-                       int64_t limit, std::vector<bool>&& is_null_safes, std::vector<ExprContext*>&& build_expr_ctxs,
-                       std::vector<ExprContext*>&& probe_expr_ctxs,
-                       std::vector<ExprContext*>&& other_join_conjunct_ctxs, std::vector<ExprContext*>&& conjunct_ctxs,
-                       const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
-                       const RowDescriptor& row_descriptor)
+                       int64_t limit, const std::vector<bool>& is_null_safes,
+                       const std::vector<ExprContext*>& build_expr_ctxs,
+                       const std::vector<ExprContext*>& probe_expr_ctxs,
+                       const std::vector<ExprContext*>& other_join_conjunct_ctxs,
+                       const std::vector<ExprContext*>& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
+                       const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor)
         : _join_type(hash_join_node.join_op),
           _limit(limit),
           _num_rows_returned(0),
@@ -84,15 +85,6 @@ Status HashJoiner::prepare(RuntimeState* state) {
     _avg_input_probe_chunk_size = ADD_COUNTER(_runtime_profile, "AvgInputProbeChunkSize", TUnit::UNIT);
     _avg_output_chunk_size = ADD_COUNTER(_runtime_profile, "AvgOutputChunkSize", TUnit::UNIT);
     _runtime_profile->add_info_string("JoinType", _get_join_type_str(_join_type));
-
-    RETURN_IF_ERROR(Expr::prepare(_build_expr_ctxs, state, _build_row_descriptor));
-    RETURN_IF_ERROR(Expr::prepare(_probe_expr_ctxs, state, _probe_row_descriptor));
-    RETURN_IF_ERROR(Expr::prepare(_other_join_conjunct_ctxs, state, _row_descriptor));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_descriptor));
-    RETURN_IF_ERROR(Expr::open(_build_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_probe_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_other_join_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
     HashTableParam param;
     _init_hash_table_param(&param);
@@ -159,41 +151,43 @@ bool HashJoiner::need_input() const {
 bool HashJoiner::has_output() const {
     if (_phase == HashJoinPhase::BUILD) {
         return false;
-    } else if (_phase == HashJoinPhase::PROBE) {
+    }
+
+    if (_phase == HashJoinPhase::PROBE) {
         return _probe_input_chunk != nullptr;
-    } else if (_phase == HashJoinPhase::POST_PROBE) {
+    }
+
+    if (_phase == HashJoinPhase::POST_PROBE) {
         // Only RIGHT ANTI-JOIN, RIGHT OUTER-JOIN, FULL OUTER-JOIN has HashJoinPhase::POST_PROBE,
         // in this phase, has_output() returns true until HashJoiner enters into HashJoinPhase::DONE.
         return true;
-    } else {
-        return _buffered_probe_output_chunk != nullptr;
     }
+
+    return false;
 }
 
 void HashJoiner::push_chunk(RuntimeState* state, ChunkPtr&& chunk) {
     DCHECK(chunk && !chunk->is_empty());
     DCHECK(!_probe_input_chunk);
-    _merge_probe_input_chunk(state, std::move(chunk));
-    if (_probe_input_chunk) {
-        _ht_has_remain = true;
-        _prepare_probe_key_columns();
-    }
+
+    _probe_input_chunk = std::move(chunk);
+    _ht_has_remain = true;
+    _prepare_probe_key_columns();
 }
 
 StatusOr<ChunkPtr> HashJoiner::pull_chunk(RuntimeState* state) {
     DCHECK(_phase != HashJoinPhase::BUILD);
+
     auto&& maybe_chunk = _pull_probe_output_chunk(state);
     if (UNLIKELY(!maybe_chunk.ok())) {
         return std::move(maybe_chunk);
     }
+
     ChunkPtr chunk = std::move(maybe_chunk.value());
     if (!chunk || chunk->is_empty()) {
         return std::move(chunk);
     }
-    _filter_probe_output_chunk(chunk);
-    if (!chunk || chunk->is_empty()) {
-        return std::move(chunk);
-    }
+
     auto num_rows = chunk->num_rows();
     _num_rows_returned += num_rows;
     if (_reached_limit()) {
@@ -202,71 +196,52 @@ StatusOr<ChunkPtr> HashJoiner::pull_chunk(RuntimeState* state) {
         _phase = HashJoinPhase::EOS;
         // _ht is useless in this point, so deallocate its memory.
         _ht.close();
-        _buffered_probe_output_chunk = nullptr;
     }
     return std::move(chunk);
 }
 
 StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
     DCHECK(_phase != HashJoinPhase::BUILD);
+
     auto chunk = std::make_shared<Chunk>();
-    if (_phase == HashJoinPhase::PROBE) {
+
+    if (_phase == HashJoinPhase::PROBE || _probe_input_chunk != nullptr) {
         DCHECK(_ht_has_remain && _probe_input_chunk);
+
         RETURN_IF_ERROR(_ht.probe(_key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             _probe_input_chunk = nullptr;
         }
-        _merge_probe_output_chunk(state, std::move(chunk));
-        if (_probe_output_chunk) {
-            return std::move(_probe_output_chunk);
-        }
+
+        _filter_probe_output_chunk(chunk);
+
+        return chunk;
     }
 
     if (_phase == HashJoinPhase::POST_PROBE) {
-        // check if _buffered_probe_chunk have rows, if so, then move it into _probe_chunk.
-        if (_buffered_probe_input_chunk && !_probe_input_chunk) {
-            _probe_input_chunk = std::move(_buffered_probe_input_chunk);
-            _ht_has_remain = true;
-            _prepare_probe_key_columns();
+        if (!_need_post_probe()) {
+            _phase = HashJoinPhase::EOS;
+            _ht.close();
+            return chunk;
         }
-        // _probe_chunk has remain rows to be processed, so go on probing ht.
-        if (_probe_input_chunk) {
-            RETURN_IF_ERROR(_ht.probe(_key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain));
-            if (!_ht_has_remain) {
-                _probe_input_chunk = nullptr;
-            }
-            _merge_probe_output_chunk(state, std::move(chunk));
-            if (_probe_output_chunk) {
-                return std::move(_probe_output_chunk);
-            }
+
+        RETURN_IF_ERROR(_ht.probe_remain(&chunk, &_ht_has_remain));
+        if (!_ht_has_remain) {
+            _phase = HashJoinPhase::EOS;
+            _ht.close();
         }
-        // cached _buffered_probe_chunk and _probe_chunk have been exhausted, so now entries of ht should be processed
-        // for RIGHT ANTI-JOIN, RIGHT SEMI-JOIN, FULL OUTER-JOIN.
-        if (!_buffered_probe_input_chunk && !_probe_input_chunk) {
-            RETURN_IF_ERROR(_post_probe(state));
-            if (_probe_output_chunk) {
-                return std::move(_probe_output_chunk);
-            }
-        }
+
+        _filter_post_probe_output_chunk(chunk);
+
+        return chunk;
     }
 
-    // process last less-than-half-sized _buffered_joined_chunk if it exists.
-    if (_phase == HashJoinPhase::EOS && _buffered_probe_output_chunk) {
-        DCHECK(!_probe_output_chunk);
-        return std::move(_buffered_probe_output_chunk);
-    }
-    return std::make_shared<Chunk>();
+    return chunk;
 }
 
-void HashJoiner::close(RuntimeState* state) {
-    if (!_is_closed) {
-        _ht.close();
-        Expr::close(_conjunct_ctxs, state);
-        Expr::close(_other_join_conjunct_ctxs, state);
-        Expr::close(_probe_expr_ctxs, state);
-        Expr::close(_build_expr_ctxs, state);
-        _is_closed = true;
-    }
+Status HashJoiner::close(RuntimeState* state) {
+    _ht.close();
+    return Status::OK();
 }
 
 bool HashJoiner::_has_null(const ColumnPtr& column) {
@@ -379,7 +354,7 @@ void HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t
     (*chunk)->filter(filter);
 }
 
-void HashJoiner::_process_other_conjunct_and_remove_duplicate_index(ChunkPtr* chunk) {
+void HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
@@ -387,10 +362,17 @@ void HashJoiner::_process_other_conjunct_and_remove_duplicate_index(ChunkPtr* ch
     _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
 
     _ht.remove_duplicate_index(&filter);
+    (*chunk)->filter(filter);
 }
 
 void HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
-    _process_other_conjunct_and_remove_duplicate_index(chunk);
+    bool filter_all = false;
+    bool hit_all = false;
+    Column::Filter filter;
+
+    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+
+    _ht.remove_duplicate_index(&filter);
     (*chunk)->set_num_rows(0);
 }
 
@@ -405,7 +387,7 @@ void HashJoiner::_process_other_conjunct(ChunkPtr* chunk) {
     case TJoinOp::LEFT_ANTI_JOIN:
     case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
     case TJoinOp::RIGHT_SEMI_JOIN:
-        _process_other_conjunct_and_remove_duplicate_index(chunk);
+        _process_semi_join_with_other_conjunct(chunk);
         break;
     case TJoinOp::RIGHT_ANTI_JOIN:
         _process_right_anti_join_with_other_conjunct(chunk);

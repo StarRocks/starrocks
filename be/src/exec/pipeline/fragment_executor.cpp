@@ -111,8 +111,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_plan(plan);
 
     // Set up global dict
-    if (request.fragment.__isset.global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_global_dict(request.fragment.global_dicts));
+    if (request.fragment.__isset.query_global_dicts) {
+        RETURN_IF_ERROR(runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
 
     // Set senders of exchange nodes before pipeline build
@@ -191,7 +191,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                                                                     driver_id++, is_root);
                 driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
-                scan_operator->set_io_threads(exec_env->pipeline_io_thread_pool());
+                scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
                 setup_profile_hierarchy(runtime_state, driver);
                 drivers.emplace_back(std::move(driver));
             }
@@ -234,8 +234,8 @@ void FragmentExecutor::_convert_data_sink_to_operator(const TPlanFragmentExecPar
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
         starrocks::DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink);
         auto dop = _fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
-        std::shared_ptr<SinkBuffer> sink_buffer = std::make_shared<SinkBuffer>(
-                _fragment_ctx->runtime_state()->instance_mem_tracker(), sender->get_destinations_size(), dop);
+        std::shared_ptr<SinkBuffer> sink_buffer =
+                std::make_shared<SinkBuffer>(_fragment_ctx->runtime_state(), params.destinations, dop);
 
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
                 context->next_operator_id(), -1, sink_buffer, sender->get_partition_type(), params.destinations,

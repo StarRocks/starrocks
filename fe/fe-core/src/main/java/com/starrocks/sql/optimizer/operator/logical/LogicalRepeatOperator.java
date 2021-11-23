@@ -12,15 +12,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 public class LogicalRepeatOperator extends LogicalOperator {
     private final List<ColumnRefOperator> outputGrouping;
-    private final List<Set<ColumnRefOperator>> repeatColumnRefList;
+    private final List<List<ColumnRefOperator>> repeatColumnRefList;
     private final List<List<Long>> groupingIds;
 
     public LogicalRepeatOperator(List<ColumnRefOperator> outputGrouping,
-                                 List<Set<ColumnRefOperator>> repeatColumnRefList,
+                                 List<List<ColumnRefOperator>> repeatColumnRefList,
                                  List<List<Long>> groupingIds) {
         super(OperatorType.LOGICAL_REPEAT);
         this.outputGrouping = outputGrouping;
@@ -39,7 +38,7 @@ public class LogicalRepeatOperator extends LogicalOperator {
         return outputGrouping;
     }
 
-    public List<Set<ColumnRefOperator>> getRepeatColumnRef() {
+    public List<List<ColumnRefOperator>> getRepeatColumnRef() {
         return repeatColumnRefList;
     }
 
@@ -50,7 +49,7 @@ public class LogicalRepeatOperator extends LogicalOperator {
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         ColumnRefSet outputColumns = new ColumnRefSet(outputGrouping);
-        for (Set<ColumnRefOperator> refSets : repeatColumnRefList) {
+        for (List<ColumnRefOperator> refSets : repeatColumnRefList) {
             outputColumns.union(new ArrayList<>(refSets));
         }
 
@@ -91,7 +90,7 @@ public class LogicalRepeatOperator extends LogicalOperator {
     public static class Builder
             extends LogicalOperator.Builder<LogicalRepeatOperator, LogicalRepeatOperator.Builder> {
         private List<ColumnRefOperator> outputGrouping;
-        private List<Set<ColumnRefOperator>> repeatColumnRefList;
+        private List<List<ColumnRefOperator>> repeatColumnRefList;
         private List<List<Long>> groupingIds;
 
         @Override

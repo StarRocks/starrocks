@@ -54,4 +54,8 @@ void BaseTablet::_gen_tablet_path() {
     }
 }
 
+std::string BaseTablet::tablet_id_path() const {
+    return _tablet_path.substr(0, _tablet_path.rfind('/'));
+}
+
 } /* namespace starrocks */

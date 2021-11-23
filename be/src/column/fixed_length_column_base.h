@@ -67,6 +67,8 @@ public:
 
     size_t size() const override { return _data.size(); }
 
+    size_t capacity() const override { return _data.capacity(); }
+
     size_t byte_size() const override { return _data.size() * sizeof(ValueType); }
 
     size_t byte_size(size_t idx __attribute__((unused))) const override { return sizeof(ValueType); }

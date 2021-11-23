@@ -35,6 +35,7 @@
 #include "util/crc32c.h"
 #include "util/faststring.h"
 #include "util/runtime_profile.h"
+#include "util/scoped_cleanup.h"
 
 namespace starrocks::segment_v2 {
 
@@ -43,6 +44,7 @@ using strings::Substitute;
 Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min_space_saving,
                                   const std::vector<Slice>& body, faststring* compressed_body) {
     size_t uncompressed_size = Slice::compute_total_size(body);
+    auto cleanup = MakeScopedCleanup([&]() { compressed_body->clear(); });
     if (codec != nullptr && codec->exceed_max_input_size(uncompressed_size)) {
         compressed_body->clear();
         return Status::OK();
@@ -57,11 +59,10 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         // return compressed body only when it saves more than min_space_saving
         if (space_saving > 0 && space_saving >= min_space_saving) {
             compressed_body->shrink_to_fit();
+            cleanup.cancel();
             return Status::OK();
         }
     }
-    // otherwise, do not compress
-    compressed_body->clear();
     return Status::OK();
 }
 

@@ -19,4 +19,30 @@ template <>
 struct DefaultValueGenerator<TimestampValue> {
     static TimestampValue next_value() { return TimestampValue::MIN_TIMESTAMP_VALUE; }
 };
+
+template <class T>
+struct AlwaysZeroGenerator {
+    static T next_value() { return 0; }
+};
+
+template <class T>
+struct AlwaysOneGenerator {
+    static T next_value() { return 1; }
+};
+
+template <class T, int range>
+struct RandomGenerator {
+    static T next_value() { return rand() % range; }
+};
+
+template <class DataGenerator, class Container, int init_size>
+struct ContainerIniter {
+    static void init(Container& container) {
+        container.resize(init_size);
+        for (int i = 0; i < container.size(); ++i) {
+            container[i] = DataGenerator::next_value();
+        }
+    }
+};
+
 } // namespace starrocks::vectorized

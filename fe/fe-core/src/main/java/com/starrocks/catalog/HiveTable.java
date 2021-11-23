@@ -81,6 +81,7 @@ public class HiveTable extends Table {
     private static final String JSON_KEY_RESOURCE_NAME = "resourceName";
     private static final String JSON_KEY_HDFS_PATH = "hdfsPath";
     private static final String JSON_KEY_PART_COLUMN_NAMES = "partColumnNames";
+    private static final String JSON_KEY_DATA_COLUMN_NAMES = "dataColumnNames";
     private static final String JSON_KEY_HIVE_PROPERTIES = "hiveProperties";
 
     private static final String HIVE_DB = "database";
@@ -93,6 +94,8 @@ public class HiveTable extends Table {
     private String resourceName;
     private String hdfsPath;
     private List<String> partColumnNames = Lists.newArrayList();
+    // dataColumnNames stores all the non-partition columns of the hive table,
+    // consistent with the order defined in the hive table
     private List<String> dataColumnNames = Lists.newArrayList();
     private Map<String, String> hiveProperties = Maps.newHashMap();
 
@@ -380,6 +383,10 @@ public class HiveTable extends Table {
                     throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                             "starrocks type [" + column.getPrimitiveType() + "]");
                 }
+                if (!column.isAllowNull() && !isTypeRead) {
+                    throw new DdlException(
+                            "hive extern table not support no-nullable column: [" + hiveColumn.getName() + "]");
+                }
             }
             for (FieldSchema partHiveColumn : partHiveColumns) {
                 String columnName = partHiveColumn.getName();
@@ -441,7 +448,7 @@ public class HiveTable extends Table {
             case "BINARY":
                 return Sets.newHashSet(PrimitiveType.VARCHAR);
             case "CHAR":
-                return Sets.newHashSet(PrimitiveType.CHAR);
+                return Sets.newHashSet(PrimitiveType.CHAR, PrimitiveType.VARCHAR);
             case "BOOLEAN":
                 return Sets.newHashSet(PrimitiveType.BOOLEAN);
             default:
@@ -533,6 +540,13 @@ public class HiveTable extends Table {
             }
             jsonObject.add(JSON_KEY_PART_COLUMN_NAMES, jPartColumnNames);
         }
+        if (!dataColumnNames.isEmpty()) {
+            JsonArray jDataColumnNames = new JsonArray();
+            for (String dataColumnName : dataColumnNames) {
+                jDataColumnNames.add(dataColumnName);
+            }
+            jsonObject.add(JSON_KEY_DATA_COLUMN_NAMES, jDataColumnNames);
+        }
         if (!hiveProperties.isEmpty()) {
             JsonObject jHiveProperties = new JsonObject();
             for (Map.Entry<String, String> entry : hiveProperties.entrySet()) {
@@ -569,9 +583,19 @@ public class HiveTable extends Table {
                     hiveProperties.put(entry.getKey(), entry.getValue().getAsString());
                 }
             }
-            {
+            if (jsonObject.has(JSON_KEY_DATA_COLUMN_NAMES)) {
+                JsonArray jDataColumnNames = jsonObject.getAsJsonArray(JSON_KEY_DATA_COLUMN_NAMES);
+                for (int i = 0; i < jDataColumnNames.size(); i++) {
+                    dataColumnNames.add(jDataColumnNames.get(i).getAsString());
+                }
+            } else {
+                // In order to be compatible with the case where JSON_KEY_DATA_COLUMN_NAMES does not exist.
+                // Just put (full schema - partition columns) to dataColumnNames.
+                // But there may be errors, because fullSchema may not store all the non-partition columns of the hive table
+                // and the order may be inconsistent with that in hive
+
                 // full schema - partition columns = data columns
-                HashSet<String> partColumnSet = new HashSet(partColumnNames);
+                HashSet<String> partColumnSet = new HashSet<>(partColumnNames);
                 for (Column col : fullSchema) {
                     if (!partColumnSet.contains(col.getName())) {
                         dataColumnNames.add(col.getName());

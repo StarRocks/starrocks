@@ -82,6 +82,18 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalCTEAnchor(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitLogicalCTEProduce(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitLogicalCTEConsume(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     /**
      * Physical operator visitor
      */
@@ -172,4 +184,21 @@ public abstract class OptExpressionVisitor<R, C> {
     public R visitPhysicalLimit(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
+
+    public R visitPhysicalCTEAnchor(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalCTEConsume(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalCTEProduce(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalNoOp(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
 }

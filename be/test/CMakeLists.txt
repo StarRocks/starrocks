@@ -17,7 +17,6 @@ set(EXEC_FILES
         ./column/timestamp_value_test.cpp
         ./column/vectorized_schema_test.cpp
         ./common/config_test.cpp
-        ./common/resource_tls_test.cpp
         ./common/status_test.cpp
         ./env/compressed_file_test.cpp
         ./env/env_broker_test.cpp
@@ -189,7 +188,6 @@ set(EXEC_FILES
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/large_int_value_test.cpp
-        ./runtime/load_channel_mgr_test.cpp
         ./runtime/memory/chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/mem_pool_test.cpp
@@ -204,6 +202,8 @@ set(EXEC_FILES
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./simd/simd_test.cpp
+        ./simd/simd_selector_test.cpp
+        ./simd/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
         ./util/arrow/arrow_row_batch_test.cpp
         ./util/arrow/arrow_row_block_test.cpp

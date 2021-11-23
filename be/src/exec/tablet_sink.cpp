@@ -140,7 +140,7 @@ void NodeChannel::open() {
     request.set_is_vectorized(_parent->_is_vectorized);
 
     // set global dict
-    const auto& global_dict = _runtime_state->get_global_dict_map();
+    const auto& global_dict = _runtime_state->get_load_global_dict_map();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());

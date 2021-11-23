@@ -34,7 +34,7 @@ order by
 [plan-1]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -58,7 +58,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-2]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -83,7 +83,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-3]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -106,7 +106,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-4]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -130,7 +130,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-5]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -154,7 +154,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-6]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -179,7 +179,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-7]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -204,7 +204,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-8]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -230,7 +230,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-9]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -253,7 +253,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-10]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -277,7 +277,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-11]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -301,7 +301,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-12]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
                 INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                     EXCHANGE SHUFFLE[21, 20]
@@ -326,9 +326,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-13]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [19: L_ORDERKEY = 42: O_ORDERKEY] post-join-predicate [null])
@@ -351,9 +351,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-14]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [19: L_ORDERKEY = 42: O_ORDERKEY] post-join-predicate [null])
@@ -377,9 +377,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-15]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [19: L_ORDERKEY = 42: O_ORDERKEY] post-join-predicate [null])
@@ -401,9 +401,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-16]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [19: L_ORDERKEY = 42: O_ORDERKEY] post-join-predicate [null])
@@ -426,9 +426,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-17]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [42: O_ORDERKEY = 19: L_ORDERKEY] post-join-predicate [null])
@@ -451,9 +451,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-18]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [42: O_ORDERKEY = 19: L_ORDERKEY] post-join-predicate [null])
@@ -477,9 +477,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-19]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [42: O_ORDERKEY = 19: L_ORDERKEY] post-join-predicate [null])
@@ -503,9 +503,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-20]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [42: O_ORDERKEY = 19: L_ORDERKEY] post-join-predicate [null])
@@ -530,9 +530,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-21]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [42: O_ORDERKEY = 19: L_ORDERKEY] post-join-predicate [null])
@@ -554,9 +554,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-22]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [42: O_ORDERKEY = 19: L_ORDERKEY] post-join-predicate [null])
@@ -579,9 +579,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-23]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [42: O_ORDERKEY = 19: L_ORDERKEY] post-join-predicate [null])
@@ -604,9 +604,9 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
 [plan-24]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [21: L_SUPPKEY = 37: PS_SUPPKEY AND 20: L_PARTKEY = 36: PS_PARTKEY] post-join-predicate [null])
                         EXCHANGE SHUFFLE[21, 20]
                             INNER JOIN (join-predicate [42: O_ORDERKEY = 19: L_ORDERKEY] post-join-predicate [null])

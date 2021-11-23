@@ -11,12 +11,16 @@ namespace starrocks::pipeline {
 class AggregateStreamingSourceOperator : public SourceOperator {
 public:
     AggregateStreamingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_streaming_source", plan_node_id), _aggregator(std::move(aggregator)) {}
+            : SourceOperator(id, "aggregate_streaming_source", plan_node_id), _aggregator(std::move(aggregator)) {
+        _aggregator->ref();
+    }
+
     ~AggregateStreamingSourceOperator() override = default;
 
     bool has_output() const override;
     bool is_finished() const override;
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
+    void set_finished(RuntimeState* state) override;
 
     Status close(RuntimeState* state) override;
 
@@ -25,8 +29,11 @@ public:
 private:
     void _output_chunk_from_hash_map(vectorized::ChunkPtr* chunk);
 
-    // It is used to perform aggregation algorithms
-    // shared by AggregateStreamingSinkOperator
+    // It is used to perform aggregation algorithms shared by
+    // AggregateStreamingSinkOperator. It is
+    // - prepared at SinkOperator::prepare(),
+    // - reffed at constructor() of both sink and source operator,
+    // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     mutable bool _is_finished = false;

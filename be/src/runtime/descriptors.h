@@ -78,7 +78,6 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
 
 class SlotDescriptor {
 public:
-    // virtual ~SlotDescriptor() {};
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
     TypeDescriptor& type() { return _type; }
@@ -274,8 +273,8 @@ public:
     int num_null_bytes() const { return _num_null_bytes; }
     const std::vector<SlotDescriptor*>& slots() const { return _slots; }
     std::vector<SlotDescriptor*>& slots() { return _slots; }
-    const std::vector<SlotDescriptor*>& string_slots() const { return _string_slots; }
-    const std::vector<SlotDescriptor*>& no_string_slots() const { return _no_string_slots; }
+    const std::vector<SlotDescriptor*>& decoded_slots() const { return _decoded_slots; }
+    std::vector<SlotDescriptor*>& decoded_slots() { return _decoded_slots; }
     bool has_varlen_slots() const { return _has_varlen_slots; }
     const TableDescriptor* table_desc() const { return _table_desc; }
     void set_table_desc(TableDescriptor* table_desc) { _table_desc = table_desc; }
@@ -299,11 +298,10 @@ private:
     int _byte_size;
     int _num_null_slots;
     int _num_null_bytes;
-    int _num_materialized_slots;
-    std::vector<SlotDescriptor*> _slots;        // contains all slots
-    std::vector<SlotDescriptor*> _string_slots; // contains only materialized string slots
-    // contains only materialized slots except string slots
-    std::vector<SlotDescriptor*> _no_string_slots;
+    std::vector<SlotDescriptor*> _slots; // contains all slots
+    // For a low cardinality string column with global dict,
+    // The type in _slots is int, in _decode_slots is varchar
+    std::vector<SlotDescriptor*> _decoded_slots;
 
     // Provide quick way to check if there are variable length slots.
     // True if _string_slots or _collection_slots have entries.

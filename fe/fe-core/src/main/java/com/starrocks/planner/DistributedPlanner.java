@@ -40,7 +40,6 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TPartitionType;
@@ -445,7 +444,7 @@ public class DistributedPlanner {
         // Push down the predicates constructed by the right child when the
         // join op is inner join or left semi join
         if (ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
-                && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin())) {
+                && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin() || node.getJoinOp().isRightJoin())) {
             node.setIsPushDown(true);
         } else {
             node.setIsPushDown(false);
@@ -454,11 +453,6 @@ public class DistributedPlanner {
 
     private boolean canColocateJoin(HashJoinNode node, PlanFragment leftChildFragment, PlanFragment rightChildFragment,
                                     List<String> cannotReason) {
-        if (Config.disable_colocate_join) {
-            cannotReason.add("Disabled");
-            return false;
-        }
-
         if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
             cannotReason.add("Session disabled");
             return false;

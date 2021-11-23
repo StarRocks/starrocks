@@ -31,22 +31,23 @@ public:
                                const std::vector<ExprContext*>& dst_exprs)
             : Operator(id, "intersect_build_sink", plan_node_id),
               _intersect_ctx(std::move(intersect_ctx)),
-              _dst_exprs(dst_exprs) {}
+              _dst_exprs(dst_exprs) {
+        _intersect_ctx->ref();
+    }
 
     bool need_input() const override { return !is_finished(); }
 
     bool has_output() const override { return false; }
 
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _intersect_ctx->is_finished(); }
 
-    void finish(RuntimeState* state) override {
-        if (!_is_finished) {
-            _is_finished = true;
-            _intersect_ctx->finish_build_ht();
-        }
+    void set_finishing(RuntimeState* state) override {
+        _is_finished = true;
+        _intersect_ctx->finish_build_ht();
     }
 
     Status prepare(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
