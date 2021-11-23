@@ -61,6 +61,24 @@ public class MVRewriteTest {
         UtFrameUtils.createMinStarRocksCluster(runningDir);
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
+        starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
+                "  `order_dt` date NOT NULL DEFAULT '9999-12-31',\n" +
+                "  `order_no` varchar(32) NOT NULL DEFAULT '',\n" +
+                "  `org_order_no` varchar(64) NOT NULL DEFAULT '',\n" +
+                "  `bank_transaction_id` varchar(32) NOT NULL DEFAULT '',\n" +
+                "  `up_trade_no` varchar(32) NOT NULL DEFAULT '',\n" +
+                "  `mchnt_no` varchar(15) NOT NULL DEFAULT '',\n" +
+                "  `pay_st` tinyint(4) NOT NULL DEFAULT '1'\n" +
+                ") ENGINE=mysql\n" +
+                "PROPERTIES\n" +
+                "    (\n" +
+                "    \"host\" = \"127.0.0.1\",\n" +
+                "    \"port\" = \"3306\",\n" +
+                "    \"user\" = \"mysql_user\",\n" +
+                "    \"password\" = \"mysql_password\",\n" +
+                "    \"database\" = \"test\",\n" +
+                "    \"table\" = \"ods_order\"\n" +
+                "    )");
     }
 
     @Before
@@ -99,6 +117,7 @@ public class MVRewriteTest {
 
     @AfterClass
     public static void afterClass() throws Exception {
+        starRocksAssert.dropTable("ods_order");
         UtFrameUtils.cleanStarRocksFeDir(baseDir);
     }
 
@@ -1144,7 +1163,8 @@ public class MVRewriteTest {
         query = "select deptno, sum(cast(salary as bigint)) as ssalary from " + EMPS_TABLE_NAME + " group by deptno";
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
 
-        query = "select deptno, sum(cast(salary as decimal(9, 3))) as ssalary from " + EMPS_TABLE_NAME + " group by deptno";
+        query = "select deptno, sum(cast(salary as decimal(9, 3))) as ssalary from " + EMPS_TABLE_NAME +
+                " group by deptno";
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
     }
 
@@ -1164,5 +1184,15 @@ public class MVRewriteTest {
                 "round(percentile_approx(k12, 0.99),0),round(percentile_approx(k13, 0.99),0) " +
                 "from all_type_table";
         starRocksAssert.withMaterializedView(mvSQL).query(query).explainContains("rollup: percentile_mv");
+    }
+
+    @Test
+    public void testWithMysql() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select empid, deptno, sum(salary) "
+                + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
+        String query =
+                "select * from ods_order where bank_transaction_id not in (select sum(cast(salary as smallint)) as ssalary from " +
+                        EMPS_TABLE_NAME + " group by deptno)";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
     }
 }
