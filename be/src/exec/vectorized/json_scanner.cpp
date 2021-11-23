@@ -26,6 +26,9 @@
 
 namespace starrocks::vectorized {
 
+static std::vector<Slice> literal_0_slice_vector{Slice("0")};
+static std::vector<Slice> literal_1_slice_vector{Slice("1")};
+
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
@@ -255,7 +258,7 @@ Status JsonReader::close() {
  *      ------------------
  *      value1     10
  *      value2     30
- *  
+ *
  * Case 2 : Json with JsonPath
  * {
  *   "RECORDS":[
@@ -292,7 +295,12 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
                     ColumnPtr& column = chunk->get_column_by_slot_id(slot_desc->id());
                     const char* column_name = slot_desc->col_name().c_str();
                     if (!objectValue->IsObject() || !objectValue->HasMember(column_name)) {
-                        column->append_nulls(1);
+                        if (strcmp(column_name, "__op") == 0) {
+                            // special treatment for __op column, fill default value '0' rather than null
+                            column->append_strings(literal_0_slice_vector);
+                        } else {
+                            column->append_nulls(1);
+                        }
                     } else {
                         _construct_column((*objectValue)[column_name], column.get(), slot_desc->type());
                     }
@@ -398,11 +406,11 @@ void JsonReader::_construct_column(const rapidjson::Value& objectValue, Column* 
         break;
     }
     case rapidjson::Type::kFalseType: {
-        column->append_strings(std::vector<Slice>{Slice("0")});
+        column->append_strings(literal_0_slice_vector);
         break;
     }
     case rapidjson::Type::kTrueType: {
-        column->append_strings(std::vector<Slice>{Slice("1")});
+        column->append_strings(literal_1_slice_vector);
         break;
     }
     case rapidjson::Type::kNumberType: {
