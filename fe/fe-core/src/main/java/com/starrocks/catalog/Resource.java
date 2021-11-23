@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateResourceStmt;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -76,9 +77,7 @@ public abstract class Resource implements Writable {
                 resource = new OdbcCatalogResource(stmt.getResourceName());
                 break;
             default:
-                throw new DdlException("Unrecognized resource type: " + type + ". " + "Only " +
-                        Arrays.toString(Arrays.stream(ResourceType.values())
-                                .filter(t -> t != ResourceType.UNKNOWN).toArray()) + "are supported.");
+                throw new DdlException("Unsupported resource type: " + type);
         }
 
         resource.setProperties(stmt.getProperties());
