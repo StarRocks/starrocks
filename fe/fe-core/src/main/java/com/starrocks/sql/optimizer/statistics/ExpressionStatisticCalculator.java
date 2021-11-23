@@ -3,9 +3,11 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -45,9 +47,29 @@ public class ExpressionStatisticCalculator {
             if (value.isPresent()) {
                 return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
                         operator.getType().getSlotSize(), 1);
+            } else if (operator.getType().isStringType()) {
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
             } else {
                 return ColumnStatistic.unknown();
             }
+        }
+
+        @Override
+        public ColumnStatistic visitCaseWhenOperator(CaseWhenOperator caseWhenOperator, Void context) {
+            // 1. compute children column statistics
+            int whenClauseSize = caseWhenOperator.getWhenClauseSize();
+            List<ColumnStatistic> childrenColumnStatistics = Lists.newArrayList();
+            for (int i = 0; i < whenClauseSize; ++i) {
+                childrenColumnStatistics.add(caseWhenOperator.getThenClause(i).accept(this, context));
+            }
+            if (caseWhenOperator.hasElse()) {
+                childrenColumnStatistics.add(caseWhenOperator.getElseClause().accept(this, context));
+            }
+            // 2. use sum of then clause and else clause's distinct values as column distinctValues
+            double distinctValues = childrenColumnStatistics.stream().mapToDouble(
+                    ColumnStatistic::getDistinctValuesCount).sum();
+            return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
+                    caseWhenOperator.getType().getSlotSize(), distinctValues);
         }
 
         @Override
@@ -67,8 +89,7 @@ public class ExpressionStatisticCalculator {
                 return binaryExpressionCalculate(call, childrenColumnStatistics.get(0),
                         childrenColumnStatistics.get(1));
             } else {
-                // TODO: Multiple Arithmetic calculations support later
-                return childrenColumnStatistics.get(0);
+                return multiaryExpressionCalculate(call, childrenColumnStatistics);
             }
         }
 
@@ -126,6 +147,19 @@ public class ExpressionStatisticCalculator {
                 default:
                     // return child column statistic default
                     return left;
+            }
+        }
+
+        private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,
+                                                            List<ColumnStatistic> childColumnStatisticList) {
+            switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.IF:
+                    double distinctValues = childColumnStatisticList.get(1).getDistinctValuesCount() +
+                            childColumnStatisticList.get(2).getDistinctValuesCount();
+                    return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
+                            callOperator.getType().getSlotSize(), distinctValues);
+                default:
+                    return childColumnStatisticList.get(0);
             }
         }
 
