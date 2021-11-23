@@ -429,7 +429,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
-                "  |  cardinality: 600000000"));
+                        "  |  cardinality: 600000000"));
     }
 
     @Test
@@ -624,5 +624,44 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select count(*) from supplier";
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("count-->[0.0, 1000000.0, 0.0, 8.0, 1.0] ESTIMATE"));
+    }
+
+    @Test
+    public void testCaseWhenCardinalityEstimate() throws Exception {
+        String sql = "select (case when `O_ORDERKEY` = 0 then 'ALGERIA' when `O_ORDERKEY` = 1 then 'ARGENTINA' " +
+                "else 'others' end) a from orders group by 1";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3"));
+        Assert.assertTrue(plan.contains("* case-->[-Infinity, Infinity, 0.0, 16.0, 3.0]"));
+
+        sql = "select (case when `O_ORDERKEY` = 0 then 'ALGERIA' when `O_ORDERKEY` = 1 then 'ARGENTINA' end) a " +
+                "from orders group by 1";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 2"));
+        Assert.assertTrue(plan.contains("* case-->[-Infinity, Infinity, 0.0, 16.0, 2.0]"));
+
+        sql = "select (case when `O_ORDERKEY` = 0 then O_ORDERSTATUS when `O_ORDERKEY` = 1 then 'ARGENTINA' " +
+                "else 'other' end) a from orders group by 1";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* case-->[-Infinity, Infinity, 0.0, 16.0, 5.0] ESTIMATE"));
+    }
+
+    @Test
+    public void testIFFunctionCardinalityEstimate() throws Exception {
+        String sql = "select (case when `O_ORDERKEY` = 0 then 'ALGERIA' else 'others' end) a from orders group by 1";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* case-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE"));
+
+        sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', 'others') a from orders group by 1";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE"));
+
+        sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', 'others')) a from orders group by 1";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE"));
+
+        sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0] ESTIMATE"));
     }
 }
