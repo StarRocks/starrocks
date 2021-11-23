@@ -174,11 +174,22 @@ public class Load {
      * 5. init slot descs and expr map for load plan
      */
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+            Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+            Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
+            Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+            boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+            List<String> columnsFromPath) throws UserException {
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
+                srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
+                columnsFromPath, false);
+    }
+
+    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                    Map<String, Pair<String, List<String>>> columnToHadoopFunction,
                                    Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-                                   List<String> columnsFromPath) throws UserException {
+                                   List<String> columnsFromPath, boolean isStreamLoadJson) throws UserException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -208,6 +219,17 @@ public class Load {
         // to the columnExprs will not affect the original columnExprs.
         List<ImportColumnDesc> copiedColumnExprs = Lists.newArrayList(columnExprs);
 
+        // If user does not specify the file field names, generate it by using base schema of table.
+        // So that the following process can be unified
+        boolean specifyFileFieldNames = copiedColumnExprs.stream().anyMatch(p -> p.isColumn());
+        if (!specifyFileFieldNames) {
+            List<Column> columns = tbl.getBaseSchema();
+            for (Column column : columns) {
+                ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
+                copiedColumnExprs.add(columnDesc);
+            }
+        }
+
         if (tableSupportOpColumn(tbl)) {
             boolean found = false;
             for (ImportColumnDesc c : copiedColumnExprs) {
@@ -229,8 +251,8 @@ public class Load {
                                 throw new AnalysisException("load op type string not supported: " + ops);
                             }
                             c.reset(Load.LOAD_OP_COLUMN, new IntLiteral(op));
-                        } else {
-                            throw new AnalysisException("const load op type column should only be upsert/delete");
+                        } else if (!(expr instanceof IntLiteral)) {
+                            throw new AnalysisException("const load op type column should only be upsert(0)/delete(1)");
                         }
                     }
                     LOG.info("load __op column expr: " + (expr != null ? expr.toSql() : "null"));
@@ -238,21 +260,14 @@ public class Load {
                 }
             }
             if (!found) {
-                copiedColumnExprs
-                        .add(new ImportColumnDesc(Load.LOAD_OP_COLUMN, new IntLiteral(TOpType.UPSERT.getValue())));
+                // stream load json will automatically check __op field in json object iff:
+                // 1. streamload using json
+                // 2. __op is not specified
+                copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_OP_COLUMN,
+                        isStreamLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
             }
         }
 
-        // If user does not specify the file field names, generate it by using base schema of table.
-        // So that the following process can be unified
-        boolean specifyFileFieldNames = copiedColumnExprs.stream().anyMatch(p -> p.isColumn());
-        if (!specifyFileFieldNames) {
-            List<Column> columns = tbl.getBaseSchema();
-            for (Column column : columns) {
-                ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
-                copiedColumnExprs.add(columnDesc);
-            }
-        }
         // generate a map for checking easily
         // columnExprMap should be case insensitive map, because column list in load sql is case insensitive.
         // for such case:
