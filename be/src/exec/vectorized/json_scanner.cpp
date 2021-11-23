@@ -410,7 +410,7 @@ void JsonReader::_construct_column(const rapidjson::Value& objectValue, Column* 
         break;
     }
     case rapidjson::Type::kTrueType: {
-        column->append_strings(literal_0_slice_vector);
+        column->append_strings(literal_1_slice_vector);
         break;
     }
     case rapidjson::Type::kNumberType: {
