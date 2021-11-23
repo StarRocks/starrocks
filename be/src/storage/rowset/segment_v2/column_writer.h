@@ -255,7 +255,8 @@ private:
 class ArrayColumnWriter final : public ColumnWriter {
 public:
     explicit ArrayColumnWriter(const ColumnWriterOptions& opts, std::unique_ptr<Field> field,
-                               ScalarColumnWriter* null_writer, ScalarColumnWriter* offset_writer,
+                               std::unique_ptr<ScalarColumnWriter> null_writer,
+                               std::unique_ptr<ScalarColumnWriter> offset_writer,
                                std::unique_ptr<ColumnWriter> element_writer);
     ~ArrayColumnWriter() override = default;
 

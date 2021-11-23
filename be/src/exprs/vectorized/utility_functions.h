@@ -22,6 +22,11 @@ public:
     DEFINE_VECTORIZED_FN(sleep);
 
     DEFINE_VECTORIZED_FN(last_query_id);
+
+    /**
+     * returns uuid.
+     */
+    DEFINE_VECTORIZED_FN(uuid);
 };
 
 } // namespace vectorized

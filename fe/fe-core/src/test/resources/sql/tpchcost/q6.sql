@@ -10,18 +10,16 @@ where
   and l_quantity < 24 ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:19: sum(18: expr)
+OUTPUT EXPRS:19: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
 
 4:AGGREGATE (merge finalize)
-|  output: sum(19: sum(18: expr))
+|  output: sum(19: sum)
 |  group by:
-|  use vectorized: true
 |
 3:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -34,11 +32,9 @@ UNPARTITIONED
 2:AGGREGATE (update serialize)
 |  output: sum(18: expr)
 |  group by:
-|  use vectorized: true
 |
 1:Project
 |  <slot 18> : 6: L_EXTENDEDPRICE * 7: L_DISCOUNT
-|  use vectorized: true
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -51,6 +47,5 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=8142251
 avgRowSize=36.0
 numNodes=0
-use vectorized: true
 [end]
 

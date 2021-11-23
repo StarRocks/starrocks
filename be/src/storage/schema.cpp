@@ -22,6 +22,7 @@
 #include "storage/schema.h"
 
 #include "storage/row_block2.h"
+#include "util/scoped_cleanup.h"
 
 namespace starrocks {
 
@@ -46,9 +47,15 @@ void Schema::_copy_from(const Schema& other) {
     // Deep copy _cols
     // TODO(lingbin): really need clone?
     _cols.resize(other._cols.size(), nullptr);
+    ScopedCleanup release_guard([&] {
+        for (auto col : _cols) {
+            delete col;
+        }
+    });
     for (auto cid : _col_ids) {
         _cols[cid] = other._cols[cid]->clone();
     }
+    release_guard.cancel();
 }
 
 void Schema::_init(const std::vector<TabletColumn>& cols, const std::vector<ColumnId>& col_ids,

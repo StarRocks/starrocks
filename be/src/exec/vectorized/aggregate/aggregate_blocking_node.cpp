@@ -163,17 +163,21 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
     auto& agg_node = _tnode.agg_node;
-    size_t degree_of_parallelism;
     if (agg_node.need_finalize) {
-        // Parallelism of finalize must be 1
-        degree_of_parallelism = 1;
-        operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
-    } else {
-        // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
-        // and we may set other parallelism for source operator in many special cases
-        degree_of_parallelism =
-                down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
+        // If finalize aggregate with group by clause, then it can be paralized
+        if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
+            std::vector<ExprContext*> group_by_expr_ctxs;
+            Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+            operators_with_sink =
+                    context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, group_by_expr_ctxs);
+        } else {
+            operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
+        }
     }
+    // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
+    // and we may set other parallelism for source operator in many special cases
+    size_t degree_of_parallelism =
+            down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
     // shared by sink operator and source operator
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);

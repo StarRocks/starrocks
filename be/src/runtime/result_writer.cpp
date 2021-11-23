@@ -21,10 +21,6 @@
 
 #include "runtime/result_writer.h"
 
-namespace starrocks {
-
-const std::string ResultWriter::NULL_IN_CSV = "\\N";
-
-}
+namespace starrocks {}
 
 /* vim: set ts=4 sw=4 sts=4 tw=100 expandtab : */

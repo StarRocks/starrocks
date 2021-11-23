@@ -40,6 +40,9 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -259,12 +262,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     table.getTableLevelColumnStats(requiredColumns.stream().
                             map(ColumnRefOperator::getName).collect(Collectors.toList()));
             List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                            computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                    computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                     .collect(Collectors.toList());
             columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
+                    new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                            hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                            hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("hive table {} get column failed. error : {}", table.getName(), e);
@@ -628,9 +631,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         builder.addColumnStatistics(groupStatisticsMap);
         rowCount = min(inputStatistics.getOutputRowCount(), rowCount);
         builder.setOutputRowCount(rowCount);
-
+        // use inputStatistics and aggregateNode cardinality to estimate aggregate call operator column statistics.
+        // because of we need cardinality to estimate count function.
+        double estimateCount = rowCount;
         aggregations.forEach((key, value) -> builder
-                .addColumnStatistic(key, ExpressionStatisticCalculator.calculate(value, inputStatistics)));
+                .addColumnStatistic(key, ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount)));
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
@@ -890,7 +895,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeRepeatNode(ExpressionContext context, List<ColumnRefOperator> outputGrouping,
-                                   List<List<Long>> groupingIds, List<Set<ColumnRefOperator>> repeatColumnRef) {
+                                   List<List<Long>> groupingIds, List<List<ColumnRefOperator>> repeatColumnRef) {
         Preconditions.checkState(context.arity() == 1);
         Preconditions.checkState(outputGrouping.size() == groupingIds.size());
         Statistics.Builder builder = Statistics.builder();
@@ -1181,6 +1186,24 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         builder.setOutputRowCount(node.getLimit());
 
         context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, ExpressionContext context) {
+        context.setStatistics(context.getChildStatistics(1));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalCTEConsume(LogicalCTEConsumeOperator node, ExpressionContext context) {
+        Preconditions.checkState(false);
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalCTEProduce(LogicalCTEProduceOperator node, ExpressionContext context) {
+        context.setStatistics(context.getChildStatistics(0));
         return visitOperator(node, context);
     }
 }

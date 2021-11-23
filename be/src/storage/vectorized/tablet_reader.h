@@ -10,6 +10,7 @@
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/delete_predicates.h"
+#include "storage/vectorized/row_source_mask.h"
 #include "storage/vectorized/seek_range.h"
 #include "storage/vectorized/tablet_reader_params.h"
 
@@ -21,6 +22,8 @@ class RowsetReadOptions;
 class TabletReader final : public ChunkIterator {
 public:
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema);
+    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
+                 RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override { close(); }
 
     Status prepare();
@@ -39,6 +42,7 @@ public:
 
 public:
     Status do_get_next(Chunk* chunk) override;
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
 
 private:
     using PredicateList = std::vector<const ColumnPredicate*>;
@@ -67,6 +71,11 @@ private:
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     OlapReaderStatistics _stats;
+
+    // used for vertical compaction
+    bool _is_vertical_merge = false;
+    bool _is_key = false;
+    RowSourceMaskBuffer* _mask_buffer = nullptr;
 };
 
 } // namespace starrocks::vectorized

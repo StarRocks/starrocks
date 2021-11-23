@@ -695,16 +695,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int load_parallel_instance_num = 1;
-    /**
-     * use vectorized load if true
-     * Only support broker load with orc file and export job
-     */
-    @ConfField(mutable = true)
-    public static boolean vectorized_load_enable = true;
-
-    // use vectorized load for csv/json/parquet and spark load
-    @ConfField(mutable = true)
-    public static boolean enable_vectorized_file_load = true;
 
     /**
      * Export checker's running interval.
@@ -763,13 +753,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_connection_scheduler_threads_num = 4096;
-
-    /**
-     * Deprecated after 0.10
-     */
-    @ConfField
-    public static boolean disable_colocate_join = false;
-
     /**
      * Limit on the number of expr children of an expr tree.
      * Exceed this limit may cause long analysis time while holding database read lock.
@@ -1278,10 +1261,11 @@ public class Config extends ConfigBase {
     public static long hive_meta_store_timeout_s = 10L;
 
     /**
-     * Used to split object storage files into smaller blocks for hive external table
+     * Used to split files stored in dfs such as object storage
+     * or hdfs into smaller files for hive external table
      */
     @ConfField(mutable = true)
-    public static long object_storage_block_size = 64L * 1024L * 1024L;
+    public static long hive_max_split_size = 64L * 1024L * 1024L;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
@@ -1306,5 +1290,19 @@ public class Config extends ConfigBase {
      */
     @ConfField()
     public static int broker_client_timeout_ms = 10000;
+
+    /**
+     * Unused config field, leave it here for backward compatibility
+     */
+    @Deprecated
+    @ConfField(mutable = true)
+    public static boolean vectorized_load_enable = true; 
+
+    /**
+     * Unused config field, leave it here for backward compatibility
+     */
+    @Deprecated
+    @ConfField(mutable = true)
+    public static boolean enable_vectorized_file_load = true;
 }
 

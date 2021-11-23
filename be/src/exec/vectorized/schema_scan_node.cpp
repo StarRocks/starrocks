@@ -5,7 +5,6 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
-#include "exec/text_converter.hpp"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"

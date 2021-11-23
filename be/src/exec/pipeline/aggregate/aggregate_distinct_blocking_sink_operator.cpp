@@ -6,20 +6,16 @@ namespace starrocks::pipeline {
 
 Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    // _aggregator is shared by sink operator and source operator
-    // we must only prepare it at sink operator
     RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), get_runtime_profile(), _mem_tracker.get()));
     return _aggregator->open(state);
 }
 
-bool AggregateDistinctBlockingSinkOperator::is_finished() const {
-    return _is_finished;
+Status AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
+    RETURN_IF_ERROR(_aggregator->unref(state));
+    return Operator::close(state);
 }
 
-void AggregateDistinctBlockingSinkOperator::finish(RuntimeState* state) {
-    if (_is_finished) {
-        return;
-    }
+void AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());

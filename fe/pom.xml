@@ -41,7 +41,7 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <jprotobuf.version>2.2.11</jprotobuf.version>
+        <jprotobuf.version>2.4.12</jprotobuf.version>
         <skip.plugin>false</skip.plugin>
     </properties>
 
@@ -308,7 +308,7 @@ under the License.
             <dependency>
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf-rpc-core</artifactId>
-                <version>4.1.6</version>
+                <version>4.1.8</version>
                 <exclusions>
                     <exclusion>
                         <groupId>com.baidu</groupId>

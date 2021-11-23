@@ -34,10 +34,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator.findOrCreateColumnRefForExpr;
@@ -247,11 +245,16 @@ class QueryTransformer {
             }
         }
 
-        List<WindowTransformer.SortGroup> sortedGroups =
+        List<WindowTransformer.PartitionGroup> partitionGroups =
                 WindowTransformer.reorderWindowOperator(windowOperators, columnRefFactory, subOpt);
-        for (WindowTransformer.SortGroup sortGroup : sortedGroups) {
-            for (LogicalWindowOperator logicalWindowOperator : sortGroup.getWindowOperators()) {
-                subOpt = subOpt.withNewRoot(logicalWindowOperator);
+        for (WindowTransformer.PartitionGroup partitionGroup : partitionGroups) {
+            for (WindowTransformer.SortGroup sortGroup : partitionGroup.getSortGroups()) {
+                for (LogicalWindowOperator logicalWindowOperator : sortGroup.getWindowOperators()) {
+                    LogicalWindowOperator newLogicalWindowOperator =
+                            new LogicalWindowOperator.Builder().withOperator(logicalWindowOperator)
+                                    .setEnforceSortColumns(sortGroup.getEnforceSortColumns()).build();
+                    subOpt = subOpt.withNewRoot(newLogicalWindowOperator);
+                }
             }
         }
 
@@ -293,8 +296,10 @@ class QueryTransformer {
         boolean groupAllConst = groupByExpressions.stream().allMatch(Expr::isConstant);
 
         for (Expr groupingItem : groupByExpressions) {
-            // grouping columns save one least
-            if (groupingItem.isConstant() && !(groupAllConst && groupByColumnRefs.isEmpty())) {
+            //Grouping columns save one least
+            //Grouping set type aggregation cannot delete constant aggregation columns
+            if (groupingItem.isConstant() && !(groupAllConst && groupByColumnRefs.isEmpty()) &&
+                    groupingSetsList == null) {
                 continue;
             }
 
@@ -317,7 +322,7 @@ class QueryTransformer {
             CallOperator aggOperator = (CallOperator) aggCallOperator;
 
             ColumnRefOperator colRef =
-                    columnRefFactory.create(aggOperator.toString(), aggregate.getType(), aggregate.isNullable());
+                    columnRefFactory.create(aggOperator.getFnName(), aggregate.getType(), aggregate.isNullable());
             aggregationsMap.put(colRef, aggOperator);
             groupingTranslations.put(aggregate, colRef);
         }
@@ -343,10 +348,10 @@ class QueryTransformer {
              * that needs to be repeatedly calculated.
              * This column reference is come from the child of repeat operator
              */
-            List<Set<ColumnRefOperator>> repeatColumnRefList = new ArrayList<>();
+            List<List<ColumnRefOperator>> repeatColumnRefList = new ArrayList<>();
 
             for (List<Expr> grouping : groupingSetsList) {
-                Set<ColumnRefOperator> repeatColumnRef = new HashSet<>();
+                List<ColumnRefOperator> repeatColumnRef = new ArrayList<>();
                 BitSet groupingIdBitSet = new BitSet(groupByColumnRefs.size());
                 groupingIdBitSet.set(0, groupByExpressions.size(), true);
 
@@ -365,8 +370,21 @@ class QueryTransformer {
 
             //Build grouping_id(all grouping columns)
             ColumnRefOperator grouping = columnRefFactory.create("GROUPING_ID", Type.BIGINT, false);
-            groupingIds.add(groupingIdsBitSets.stream().map(bitset ->
-                    Utils.convertBitSetToLong(bitset, groupByColumnRefs.size())).collect(Collectors.toList()));
+            List<Long> groupingID = new ArrayList<>();
+            for (BitSet bitSet : groupingIdsBitSets) {
+                long gid = Utils.convertBitSetToLong(bitSet, groupByColumnRefs.size());
+
+                // Under normal circumstances, grouping_id is unlikely to be duplicated,
+                // but if there are duplicate columns in grouping sets, the grouping_id of the two columns may be the same,
+                // eg: grouping sets((v1), (v1))
+                // causing the data to be aggregated in advance.
+                // So add pow here to ensure that the grouping_id is not repeated, to ensure that the data will not be aggregated in advance
+                while (groupingID.contains(gid)) {
+                    gid += Math.pow(2, groupByColumnRefs.size());
+                }
+                groupingID.add(gid);
+            }
+            groupingIds.add(groupingID);
             groupByColumnRefs.add(grouping);
             repeatOutput.add(grouping);
 
@@ -384,7 +402,7 @@ class QueryTransformer {
 
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
                             .translate(slotRef, subOpt.getExpressionMapping());
-                    for (Set<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
+                    for (List<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
                         if (repeatColumns.contains(groupingKey)) {
                             for (int repeatColIdx = 0; repeatColIdx < repeatColumnRefList.size(); ++repeatColIdx) {
                                 tempGroupingIdsBitSets.get(repeatColIdx).set(childIdx,
@@ -397,7 +415,7 @@ class QueryTransformer {
                 groupingTranslations.put(groupingFunction, grouping);
 
                 groupingIds.add(tempGroupingIdsBitSets.stream().map(bitset ->
-                        Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
+                                Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
                         .collect(Collectors.toList()));
                 groupByColumnRefs.add(grouping);
                 repeatOutput.add(grouping);

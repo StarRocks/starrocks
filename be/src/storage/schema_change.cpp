@@ -938,7 +938,9 @@ bool RowBlockMerger::merge(const std::vector<RowBlock*>& row_block_arr, RowsetWr
 
     row_cursor.allocate_memory_for_string_type(_tablet->tablet_schema());
 
-    while (!_heap.empty()) {
+    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    bool bg_worker_stopped = storage_engine->bg_worker_stopped();
+    while (!_heap.empty() && !bg_worker_stopped) {
         init_row_with_others(&row_cursor, *(_heap.top().row_cursor), mem_pool.get(), agg_object_pool.get());
 
         if (!_pop_heap()) {
@@ -976,7 +978,13 @@ bool RowBlockMerger::merge(const std::vector<RowBlock*>& row_block_arr, RowsetWr
         // so we should release memory immediately
         mem_pool->clear();
         agg_object_pool = std::make_unique<ObjectPool>();
+        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     }
+
+    if (bg_worker_stopped) {
+        return false;
+    }
+
     if (rowset_writer->flush() != OLAP_SUCCESS) {
         LOG(WARNING) << "failed to finalizing writer.";
         process_err();
@@ -1128,7 +1136,10 @@ bool SchemaChangeDirectly::process(RowsetReaderSharedPtr rowset_reader, RowsetWr
 
     RowBlock* ref_row_block = nullptr;
     rowset_reader->next_block(&ref_row_block);
-    while (ref_row_block != nullptr && ref_row_block->has_remaining()) {
+
+    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    bool bg_worker_stopped = storage_engine->bg_worker_stopped();
+    while (!bg_worker_stopped && ref_row_block != nullptr && ref_row_block->has_remaining()) {
 #ifndef BE_TEST
         Status st = tls_thread_status.mem_tracker()->check_mem_limit("DirectSchemaChange");
         if (!st.ok()) {
@@ -1171,6 +1182,12 @@ bool SchemaChangeDirectly::process(RowsetReaderSharedPtr rowset_reader, RowsetWr
 
         ref_row_block->clear();
         rowset_reader->next_block(&ref_row_block);
+        bg_worker_stopped = storage_engine->bg_worker_stopped();
+    }
+
+    if (bg_worker_stopped) {
+        result = false;
+        goto DIRECTLY_PROCESS_ERR;
     }
 
     if (OLAP_SUCCESS != rowset_writer->flush()) {
@@ -1457,7 +1474,7 @@ bool SchemaChangeWithSorting::_internal_sorting(const std::vector<RowBlock*>& ro
     context.partition_id = new_tablet->partition_id();
     context.tablet_schema_hash = new_tablet->schema_hash();
     context.rowset_type = new_rowset_type;
-    context.rowset_path_prefix = new_tablet->tablet_path();
+    context.rowset_path_prefix = new_tablet->schema_hash_path();
     context.tablet_schema = &(new_tablet->tablet_schema());
     context.rowset_state = VISIBLE;
     context.version = version;
@@ -1870,7 +1887,7 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
             // And in this case, linked schema change will not be used.
             writer_context.rowset_type = BETA_ROWSET;
         }
-        writer_context.rowset_path_prefix = new_tablet->tablet_path();
+        writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
         writer_context.tablet_schema = &(new_tablet->tablet_schema());
         writer_context.rowset_state = VISIBLE;
         writer_context.version = rs_reader->version();

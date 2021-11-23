@@ -274,6 +274,19 @@ void ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     _next_output_row += count;
 }
 
+DataSegment* ChunksSorterFullSort::get_result_data_segment() {
+    return _sorted_segment.get();
+}
+
+uint64_t ChunksSorterFullSort::get_partition_rows() const {
+    return _sorted_permutation.size();
+}
+
+// Is used to index sorted datas.
+Permutation* ChunksSorterFullSort::get_permutation() const {
+    return &_sorted_permutation;
+}
+
 /*
  * _next_output_row index the next row we need to get,  
  * _sorted_permutation means all the result datas. In this case, 

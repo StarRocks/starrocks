@@ -43,8 +43,10 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -88,7 +90,7 @@ public abstract class SetOperationNode extends PlanNode {
 
     protected final TupleId tupleId_;
 
-    protected List<Map<Integer, Integer>> passThroughSlotMaps = Lists.newArrayList();
+    protected List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps = Lists.newArrayList();
 
     protected SetOperationNode(PlanNodeId id, TupleId tupleId, String planNodeName) {
         super(id, tupleId.asList(), planNodeName);
@@ -145,8 +147,8 @@ public abstract class SetOperationNode extends PlanNode {
         this.firstMaterializedChildIdx_ = firstMaterializedChildIdx_;
     }
 
-    public void setPassThroughSlotMaps(List<Map<Integer, Integer>> passThroughSlotMaps) {
-        this.passThroughSlotMaps = passThroughSlotMaps;
+    public void setOutputSlotIdToChildSlotIdMaps(List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps) {
+        this.outputSlotIdToChildSlotIdMaps = outputSlotIdToChildSlotIdMaps;
     }
 
     @Override
@@ -258,7 +260,7 @@ public abstract class SetOperationNode extends PlanNode {
             SlotRef childSlotRef = childExprList.get(i).unwrapSlotRef(false);
             slotMaps.put(setOpSlotRef.getSlotId().asInt(), childSlotRef.getSlotId().asInt());
         }
-        passThroughSlotMaps.add(slotMaps);
+        outputSlotIdToChildSlotIdMaps.add(slotMaps);
 
         return true;
     }
@@ -359,7 +361,7 @@ public abstract class SetOperationNode extends PlanNode {
             case UNION_NODE:
                 msg.union_node = new TUnionNode(
                         tupleId_.asInt(), texprLists, constTexprLists, firstMaterializedChildIdx_);
-                msg.union_node.setPass_through_slot_maps(passThroughSlotMaps);
+                msg.union_node.setPass_through_slot_maps(outputSlotIdToChildSlotIdMaps);
                 msg.node_type = TPlanNodeType.UNION_NODE;
                 break;
             case INTERSECT_NODE:
@@ -395,7 +397,7 @@ public abstract class SetOperationNode extends PlanNode {
         }
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (CollectionUtils.isNotEmpty(materializedResultExprLists_)) {
-                output.append(prefix).append("child exprs: ").append("\n");
+                output.append(prefix).append("child exprs:").append("\n");
                 for (List<Expr> exprs : materializedResultExprLists_) {
                     output.append(prefix).append("    ").append(exprs.stream().map(Expr::explain)
                             .collect(Collectors.joining(" | "))).append("\n");
@@ -428,56 +430,48 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (List<Expr> exprs : resultExprLists_) {
-            for (Expr expr : exprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-
-        for (List<Expr> exprs : constExprLists_) {
-            for (Expr expr : exprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-
-        for (List<Expr> exprs : materializedResultExprLists_) {
-            for (Expr expr : exprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-
-        for (List<Expr> exprs : materializedConstExprLists_) {
-            for (Expr expr : exprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+    public boolean canDoReplicatedJoin() {
+        return false;
     }
 
     @Override
-    public boolean canDoReplicatedJoin() {
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!probeExpr.isBoundByTupleIds(getTupleIds())) return false;
+
+        if (probeExpr instanceof SlotRef) {
+            boolean pushDown = false;
+            int probeSlotId = ((SlotRef) probeExpr).getSlotId().asInt();
+            Set<Integer> mappedProbeSlotIds = new HashSet<>();
+            for (Map<Integer, Integer> map : outputSlotIdToChildSlotIdMaps) {
+                if (map.containsKey(probeSlotId)) {
+                    mappedProbeSlotIds.add(map.get(probeSlotId));
+                }
+            }
+
+            for (int i = 0; i < materializedResultExprLists_.size(); i++) {
+                // try to push all children if any expr of a child can match `probeExpr`
+                for (Expr mexpr : materializedResultExprLists_.get(i)) {
+                    if ((mexpr instanceof SlotRef) && mappedProbeSlotIds.contains(((SlotRef) mexpr).getSlotId().asInt())) {
+                        mexpr.setUseVectorized(mexpr.isVectorized());
+                        if (children.get(i).pushDownRuntimeFilters(description, mexpr)) {
+                            pushDown = true;
+                        }
+                        break;
+                    }
+                }
+            }
+            if (pushDown) {
+                return true;
+            }
+        }
+
+        if (description.canProbeUse(this)) {
+            // can not push down to children.
+            // use runtime filter at this level.
+            description.addProbeExpr(id.asInt(), probeExpr);
+            probeRuntimeFilters.add(description);
+            return true;
+        }
         return false;
     }
 }

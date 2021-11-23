@@ -31,7 +31,6 @@ import com.starrocks.thrift.TExprNodeType;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class ArrayExpr extends Expr {
@@ -111,12 +110,6 @@ public class ArrayExpr extends Expr {
         ArrayExpr e = new ArrayExpr(targetType, newItems);
         e.analysisDone();
         return e;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        Optional<Expr> e = children.stream().filter(x -> !x.isVectorized()).findFirst();
-        return !e.isPresent();
     }
 
     @Override

@@ -5,8 +5,10 @@
 namespace starrocks {
 namespace pipeline {
 HashJoinProbeOperator::HashJoinProbeOperator(int32_t id, const string& name, int32_t plan_node_id,
-                                             HashJoiner* hash_joiner)
-        : OperatorWithDependency(id, name, plan_node_id), _hash_joiner(hash_joiner) {}
+                                             HashJoinerPtr hash_joiner)
+        : OperatorWithDependency(id, name, plan_node_id), _hash_joiner(hash_joiner) {
+    _hash_joiner->ref();
+}
 
 bool HashJoinProbeOperator::has_output() const {
     return _hash_joiner->has_output();
@@ -29,11 +31,13 @@ StatusOr<vectorized::ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* s
     return _hash_joiner->pull_chunk(state);
 }
 
-void HashJoinProbeOperator::finish(RuntimeState* state) {
-    if (!_is_finished) {
-        _hash_joiner->enter_post_probe_phase();
-        _is_finished = true;
-    }
+void HashJoinProbeOperator::set_finishing(RuntimeState* state) {
+    _is_finished = true;
+    _hash_joiner->enter_post_probe_phase();
+}
+
+void HashJoinProbeOperator::set_finished(RuntimeState* state) {
+    _hash_joiner->set_finished();
 }
 
 bool HashJoinProbeOperator::is_ready() const {
@@ -41,8 +45,8 @@ bool HashJoinProbeOperator::is_ready() const {
 }
 
 HashJoinProbeOperatorFactory::HashJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id,
-                                                           std::unique_ptr<HashJoiner>&& hash_joiner)
-        : OperatorFactory(id, "hash_join_probe", plan_node_id), _hash_joiner(std::move(hash_joiner)) {}
+                                                           HashJoinerFactoryPtr hash_joiner_factory)
+        : OperatorFactory(id, "hash_join_probe", plan_node_id), _hash_joiner_factory(hash_joiner_factory) {}
 
 Status HashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     return OperatorFactory::prepare(state);
@@ -52,7 +56,8 @@ void HashJoinProbeOperatorFactory::close(RuntimeState* state) {
 }
 
 OperatorPtr HashJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<HashJoinProbeOperator>(_id, _name, _plan_node_id, _hash_joiner.get());
+    return std::make_shared<HashJoinProbeOperator>(_id, _name, _plan_node_id,
+                                                   _hash_joiner_factory->create(driver_sequence));
 }
 
 } // namespace pipeline

@@ -190,6 +190,8 @@ public:
         return nr > 0 ? Status::OK() : Status::EndOfFile("eof");
     }
 
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
+
     void close() override {}
 
 private:

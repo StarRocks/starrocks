@@ -537,33 +537,30 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
 pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    std::shared_ptr<pipeline::CrossJoinContext> cross_join_context = std::make_shared<pipeline::CrossJoinContext>();
-
     // step 0: construct pipeline end with cross join right operator.
-    OpFactories operator_before_cross_join_right = _children[1]->decompose_to_pipeline(context);
-    operator_before_cross_join_right =
-            context->maybe_interpolate_local_passthrough_exchange(operator_before_cross_join_right);
+    OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
 
     // communication with CrossJoinLeft through shared_datas.
+    auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());
+    auto cross_join_context = std::make_shared<pipeline::CrossJoinContext>(right_source->degree_of_parallelism());
+
+    // cross_join_right as sink operator
     auto right_factory =
             std::make_shared<CrossJoinRightSinkOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
-    operator_before_cross_join_right.emplace_back(std::move(right_factory));
-    // cross_join_right as sink operator
-    context->add_pipeline(operator_before_cross_join_right);
+    right_ops.emplace_back(std::move(right_factory));
+    context->add_pipeline(right_ops);
 
     // step 1: construct pipeline end with cross join left operator(cross join left maybe not sink operator).
-    OpFactories operator_before_cross_join_left = _children[0]->decompose_to_pipeline(context);
-    operator_before_cross_join_left =
-            context->maybe_interpolate_local_passthrough_exchange(operator_before_cross_join_left);
+    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
 
     // communication with CrossJoioRight through shared_datas.
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
             std::move(_conjunct_ctxs), std::move(cross_join_context));
-    operator_before_cross_join_left.emplace_back(std::move(left_factory));
+    left_ops.emplace_back(std::move(left_factory));
 
     // return as the following pipeline
-    return operator_before_cross_join_left;
+    return left_ops;
 }
 
 } // namespace starrocks::vectorized

@@ -190,6 +190,7 @@ public class Coordinator {
     private final Set<Integer> replicateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
+    private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -529,9 +530,9 @@ public class Coordinator {
                     try {
                         PExecPlanFragmentResult result = pair.second.get(queryOptions.query_timeout * 1000L,
                                 TimeUnit.MILLISECONDS);
-                        code = TStatusCode.findByValue(result.status.status_code);
-                        if (result.status.error_msgs != null && !result.status.error_msgs.isEmpty()) {
-                            errMsg = result.status.error_msgs.get(0);
+                        code = TStatusCode.findByValue(result.status.statusCode);
+                        if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
+                            errMsg = result.status.errorMsgs.get(0);
                         }
                     } catch (ExecutionException e) {
                         LOG.warn("catch a execute exception", e);
@@ -1209,6 +1210,9 @@ public class Coordinator {
             HashJoinNode joinNode = (HashJoinNode) node;
             if (joinNode.isLocalHashBucket()) {
                 bucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
+                if (joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin()) {
+                    rightOrFullBucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
+                }
                 return true;
             }
         }
@@ -1722,10 +1726,10 @@ public class Coordinator {
                     public PExecPlanFragmentResult get() {
                         PExecPlanFragmentResult result = new PExecPlanFragmentResult();
                         PStatus pStatus = new PStatus();
-                        pStatus.error_msgs = Lists.newArrayList();
-                        pStatus.error_msgs.add(e.getMessage());
+                        pStatus.errorMsgs = Lists.newArrayList();
+                        pStatus.errorMsgs.add(e.getMessage());
                         // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.
-                        pStatus.status_code = TStatusCode.THRIFT_RPC_ERROR.getValue();
+                        pStatus.statusCode = TStatusCode.THRIFT_RPC_ERROR.getValue();
                         result.status = pStatus;
                         return result;
                     }
@@ -1790,7 +1794,7 @@ public class Coordinator {
                 params.setDesc_tbl(descTable);
                 params.setParams(new TPlanFragmentExecParams());
                 params.setResource_info(tResourceInfo);
-                params.params.setUse_vectorized(fragment.getPlanRoot().isUseVectorized());
+                params.params.setUse_vectorized(true);
                 params.params.setQuery_id(queryId);
                 params.params.setFragment_instance_id(instanceExecParam.instanceId);
                 Map<Integer, List<TScanRangeParams>> scanRanges = instanceExecParam.perNodeScanRanges;
@@ -2039,6 +2043,28 @@ public class Coordinator {
                     scanRangeParamsList.add(scanRangeParams);
                 }
             }
+            // Because of the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
+            // So if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate.
+            if (rightOrFullBucketShuffleFragmentIds.contains(fragmentId.asInt())) {
+                int bucketNum = getFragmentBucketNum(fragmentId);
+
+                for (int bucketSeq = 0; bucketSeq < bucketNum; ++bucketSeq) {
+                    if (!bucketSeqToAddress.containsKey(bucketSeq)) {
+                        Reference<Long> backendIdRef = new Reference<>();
+                        TNetworkAddress execHostport = SimpleScheduler.getHost(idToBackend, backendIdRef);
+                        if (execHostport == null) {
+                            throw new UserException("there is no scanNode Backend");
+                        }
+                        addressToBackendID.put(execHostport, backendIdRef.getRef());
+                        bucketSeqToAddress.put(bucketSeq, execHostport);
+                    }
+                    if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
+                        bucketSeqToScanRange.put(bucketSeq, Maps.newHashMap());
+                        bucketSeqToScanRange.get(bucketSeq).put(scanNode.getId().asInt(), Lists.newArrayList());
+                    }
+                }
+            }
+
             // use bucketSeqToScanRange to fill FragmentScanRangeAssignment
             for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
                 Integer bucketSeq = entry.getKey();

@@ -392,11 +392,6 @@ public class SlotRef extends Expr {
         return slotRef;
     }
 
-    @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
     /**
      * Below function is added by new analyzer
      */

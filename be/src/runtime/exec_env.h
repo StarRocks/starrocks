@@ -122,7 +122,8 @@ public:
 
     ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
-    PriorityThreadPool* pipeline_io_thread_pool() { return _pipeline_io_thread_pool; }
+    PriorityThreadPool* pipeline_scan_io_thread_pool() { return _pipeline_scan_io_thread_pool; }
+    PriorityThreadPool* pipeline_exchange_sink_thread_pool() { return _pipeline_exchange_sink_thread_pool; }
     size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
     size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
     PriorityThreadPool* etl_thread_pool() { return _etl_thread_pool; }
@@ -152,7 +153,7 @@ public:
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
-    void _destory();
+    void _destroy();
 
     Status _init_mem_tracker();
 
@@ -200,7 +201,8 @@ private:
 
     ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;
-    PriorityThreadPool* _pipeline_io_thread_pool = nullptr;
+    PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
+    PriorityThreadPool* _pipeline_exchange_sink_thread_pool = nullptr;
     std::atomic<size_t> _num_scan_operators;
     PriorityThreadPool* _etl_thread_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;

@@ -234,6 +234,15 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
     _chunk_queue.pop_front();
 
     if (!_pending_closures.empty()) {
+        // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
+        // the execution thread will hold done and will not return, block brpc from sending packets,
+        // and the execution thread will call run() to let brpc continue to send packets,
+        // and there will be memory release
+#ifndef BE_TEST
+        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
+        DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+#endif
+
         auto closure_pair = _pending_closures.front();
         closure_pair.first->Run();
         _pending_closures.pop_front();
@@ -598,7 +607,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, c
     return Status::OK();
 }
 
-DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* mem_tracker, const RowDescriptor& row_desc,
+DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
                                  std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
@@ -610,8 +619,10 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* mem_trac
           _row_desc(row_desc),
           _is_merging(is_merging),
           _num_buffered_bytes(0),
-          _mem_tracker(mem_tracker),
           _profile(std::move(profile)),
+          _instance_profile(runtime_state->runtime_profile_ptr()),
+          _query_mem_tracker(runtime_state->query_mem_tracker_ptr()),
+          _instance_mem_tracker(runtime_state->instance_mem_tracker_ptr()),
           _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
           _is_pipeline(is_pipeline) {
     // Create one queue per sender if is_merging is true.
@@ -662,7 +673,7 @@ void DataStreamRecvr::add_batch(const PRowBatch& batch, int sender_id, int be_nu
 }
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     SCOPED_TIMER(_sender_total_timer);

@@ -23,11 +23,13 @@ public class PhysicalWindowOperator extends PhysicalOperator {
     private final List<ScalarOperator> partitionExpressions;
     private final List<Ordering> orderByElements;
     private final AnalyticWindow analyticWindow;
+    private final List<Ordering> enforceOrderBy;
 
     public PhysicalWindowOperator(Map<ColumnRefOperator, CallOperator> analyticCall,
                                   List<ScalarOperator> partitionExpressions,
                                   List<Ordering> orderByElements,
                                   AnalyticWindow analyticWindow,
+                                  List<Ordering> enforceOrderBy,
                                   long limit,
                                   ScalarOperator predicate,
                                   Projection projection) {
@@ -36,6 +38,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         this.partitionExpressions = partitionExpressions;
         this.orderByElements = orderByElements;
         this.analyticWindow = analyticWindow;
+        this.enforceOrderBy = enforceOrderBy;
 
         this.limit = limit;
         this.predicate = predicate;
@@ -56,6 +59,10 @@ public class PhysicalWindowOperator extends PhysicalOperator {
 
     public AnalyticWindow getAnalyticWindow() {
         return analyticWindow;
+    }
+
+    public List<Ordering> getEnforceOrderBy() {
+        return enforceOrderBy;
     }
 
     @Override

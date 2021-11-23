@@ -80,16 +80,6 @@ Status ProjectNode::prepare(RuntimeState* state) {
     _expr_compute_timer = ADD_TIMER(runtime_profile(), "ExprComputeTime");
     _common_sub_expr_compute_timer = ADD_TIMER(runtime_profile(), "CommonSubExprComputeTime");
 
-    GlobalDictMaps* mdict_maps = state->mutable_global_dict_map();
-    _dict_optimize_parser.set_mutable_dict_maps(mdict_maps);
-
-    auto init_dict_optimize = [&](std::vector<ExprContext*>& expr_ctxs, std::vector<SlotId>& target_slots) {
-        _dict_optimize_parser.rewrite_exprs(&expr_ctxs, state, target_slots);
-    };
-
-    init_dict_optimize(_common_sub_expr_ctxs, _common_sub_slot_ids);
-    init_dict_optimize(_expr_ctxs, _slot_ids);
-
     return Status::OK();
 }
 
@@ -100,6 +90,16 @@ Status ProjectNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(_children[0]->open(state));
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
+
+    GlobalDictMaps* mdict_maps = state->mutable_query_global_dict_map();
+    _dict_optimize_parser.set_mutable_dict_maps(mdict_maps);
+
+    auto init_dict_optimize = [&](std::vector<ExprContext*>& expr_ctxs, std::vector<SlotId>& target_slots) {
+        _dict_optimize_parser.rewrite_exprs(&expr_ctxs, state, target_slots);
+    };
+
+    init_dict_optimize(_common_sub_expr_ctxs, _common_sub_slot_ids);
+    init_dict_optimize(_expr_ctxs, _slot_ids);
     return Status::OK();
 }
 

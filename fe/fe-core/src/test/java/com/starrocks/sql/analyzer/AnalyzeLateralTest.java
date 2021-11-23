@@ -48,5 +48,8 @@ public class AnalyzeLateralTest {
         analyzeFail("select * from tarray,unnest(v2)", "Unknown table function 'unnest(BIGINT)'");
         analyzeFail("select * from tarray,unnest(foo)", "Column '`foo`' cannot be resolved");
         analyzeFail("select * from t0 cross join lateral t1", "Only support lateral join with UDTF");
+        analyzeFail("select  unnest(split('1,2,3',','))", "Table function cannot be used in expression");
+        analyzeFail("select a.* from unnest(split('1,2,3',',')) a",
+                "Table function must be used with lateral join");
     }
 }

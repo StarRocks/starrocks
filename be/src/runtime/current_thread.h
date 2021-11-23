@@ -16,7 +16,7 @@ class TUniqueId;
 class CurrentThread {
 public:
     CurrentThread() = default;
-    ~CurrentThread() { commit(); }
+    ~CurrentThread();
 
     void commit() {
         MemTracker* cur_tracker = mem_tracker();

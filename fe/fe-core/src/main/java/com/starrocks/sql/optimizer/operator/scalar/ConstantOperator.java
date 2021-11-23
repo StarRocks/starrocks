@@ -157,6 +157,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return false;
     }
 
+    public Object getValue() {
+        return value;
+    }
+
     @Override
     public List<ScalarOperator> getChildren() {
         // constant scalar operator should be the leaf node

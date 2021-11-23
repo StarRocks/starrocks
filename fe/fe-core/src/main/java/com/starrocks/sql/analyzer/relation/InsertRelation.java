@@ -6,6 +6,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class InsertRelation extends Relation {
     private final QueryRelation queryRelation;
@@ -24,7 +25,14 @@ public class InsertRelation extends Relation {
         this.targetTable = targetTable;
         this.targetPartitionIds = targetPartitionIds;
         this.targetColumn = targetColumn;
-        this.targetColumnNames = targetColumnNames;
+
+        // StarRocks tables are not case-sensitive, so targetColumnNames are converted
+        // to lowercase characters to facilitate subsequent matching.
+        if (targetColumnNames != null) {
+            this.targetColumnNames = targetColumnNames.stream().map(String::toLowerCase).collect(Collectors.toList());
+        } else {
+            this.targetColumnNames = null;
+        }
     }
 
     public QueryRelation getQueryRelation() {

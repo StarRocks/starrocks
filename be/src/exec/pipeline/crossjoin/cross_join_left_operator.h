@@ -2,14 +2,17 @@
 
 #pragma once
 
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
 class ExprContext;
+
 namespace pipeline {
-class CrossJoinContext;
+
 class CrossJoinLeftOperator final : public OperatorWithDependency {
 public:
     CrossJoinLeftOperator(int32_t id, int32_t plan_node_id, const std::vector<ExprContext*>& conjunct_ctxs,
@@ -24,9 +27,68 @@ public:
               _probe_column_count(probe_column_count),
               _build_column_count(build_column_count),
               _conjunct_ctxs(conjunct_ctxs),
-              _cross_join_context(cross_join_context) {}
+              _cross_join_context(cross_join_context) {
+        _cross_join_context->ref();
+    }
 
     ~CrossJoinLeftOperator() override = default;
+
+    Status close(RuntimeState* state) override {
+        RETURN_IF_ERROR(_cross_join_context->unref(state));
+        return Operator::close(state);
+    }
+
+    bool is_ready() const override { return _cross_join_context->is_right_finished(); }
+
+    bool has_output() const override {
+        // The probe chunk has been pushed to this operator,
+        // and isn't finished crossing join with build chunks.
+        return _probe_chunk != nullptr && !_is_curr_probe_chunk_finished();
+    }
+
+    bool need_input() const override {
+        if (!is_ready()) {
+            return false;
+        }
+
+        // If build is finished and build chunk is empty, the cross join result must be empty.
+        // Therefore, CrossJoinLeftOperator directly comes to end without the chunk from the prev operator.
+        if (_cross_join_context->is_build_chunk_empty()) {
+            return false;
+        }
+
+        return _is_curr_probe_chunk_finished();
+    }
+
+    bool is_finished() const override {
+        // If build is finished and build chunk is empty, the cross join result must be empty.
+        // Therefore, CrossJoinLeftOperator directly comes to end without the chunk from the prev operator.
+        if (is_ready() && _cross_join_context->is_build_chunk_empty()) {
+            return true;
+        }
+
+        return _is_finished && _is_curr_probe_chunk_finished();
+    }
+
+    void set_finishing(RuntimeState* state) override { _is_finished = true; }
+
+    void set_finished(RuntimeState* state) override { _cross_join_context->set_finished(); }
+
+    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+
+    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+
+private:
+    // Whether the pushed probe chunk is finished crossing join with build chunks.
+    bool _is_curr_probe_chunk_finished() const {
+        // The init value of _curr_build_index is -1. After calling push_chunk and pull_chunk,
+        // the range of _curr_build_index will be always in [0, num_build_chunks].
+        return _curr_build_index < 0 || _curr_build_index >= _cross_join_context->num_build_chunks();
+    }
+
+    void _select_build_chunk(int32_t build_index);
+
+    void _init_chunk(vectorized::ChunkPtr* chunk);
 
     void _copy_joined_rows_with_index_base_build(vectorized::ChunkPtr& chunk, size_t row_count, size_t probe_index,
                                                  size_t build_index);
@@ -43,38 +105,29 @@ public:
     void _copy_build_rows_with_index_base_probe(vectorized::ColumnPtr& dest_col, vectorized::ColumnPtr& src_col,
                                                 size_t start_row, size_t row_count);
 
-    void _init_chunk(vectorized::ChunkPtr* chunk);
-    Status prepare(RuntimeState* state) override;
+    const vectorized::Buffer<SlotDescriptor*>& _col_types;
+    const vectorized::Buffer<TupleId>& _output_build_tuple_ids;
+    const vectorized::Buffer<TupleId>& _output_probe_tuple_ids;
+    const size_t& _probe_column_count;
+    const size_t& _build_column_count;
 
-    Status close(RuntimeState* state) override;
+    const std::vector<ExprContext*>& _conjunct_ctxs;
 
-    bool has_output() const override { return _probe_chunk != nullptr; }
+    // The init value of _curr_build_index is -1. After calling push_chunk and pull_chunk,
+    // the range of _curr_build_index will be always in [0, num_build_chunks].
+    int32_t _curr_build_index = -1;
+    vectorized::Chunk* _curr_build_chunk = nullptr;
+    // Decompose right table rows into multiples of 4096 rows and remainder of 4096 rows.
+    // _curr_total_build_rows = _curr_build_rows_threshold * 4096 + _curr_build_rows_remainder.
+    size_t _curr_total_build_rows = 0;
+    // multiples of 4096.
+    size_t _curr_build_rows_threshold = 0;
+    // remainder of 4096.
+    size_t _curr_build_rows_remainder = 0;
 
-    bool need_input() const override;
-
-    bool is_finished() const override {
-        if (_is_right_complete && !_total_build_rows) {
-            return true;
-        }
-
-        return _is_finished && _probe_chunk == nullptr;
-    }
-
-    void finish(RuntimeState* state) override { _is_finished = true; }
-
-    bool is_ready() const override;
-
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-
-private:
-    // previsou saved chunk.
-    vectorized::ChunkPtr _pre_output_chunk = nullptr;
-
-    // used when scan rows in [0, _build_rows_threshold) rows.
+    // used when scan rows in [0, _curr_build_rows_threshold) rows.
     size_t _within_threshold_build_rows_index = 0;
-    // used when scan rows in [_build_rows_threshold, _number_of_built_rows) rows.
+    // used when scan rows in [_curr_build_rows_threshold, _number_of_built_rows) rows.
     size_t _beyond_threshold_build_rows_index = 0;
 
     // used as left table's chunk.
@@ -88,25 +141,7 @@ private:
     // And is used when _probe_chunk_index == _probe_chunk->num_rows().
     size_t _probe_rows_index = 0;
 
-    const vectorized::Buffer<SlotDescriptor*>& _col_types;
-    const vectorized::Buffer<TupleId>& _output_build_tuple_ids;
-    const vectorized::Buffer<TupleId>& _output_probe_tuple_ids;
-    const size_t& _probe_column_count;
-    const size_t& _build_column_count;
-
-    const std::vector<ExprContext*>& _conjunct_ctxs;
-
-    // Decompose right table rows into multiples of 4096 rows and remainder of 4096 rows.
-    size_t mutable _total_build_rows = 0;
-    // multiples of 4096
-    size_t mutable _build_rows_threshold = 0;
-    // remainder of 4096
-    size_t mutable _build_rows_remainder = 0;
-    // means right table is constructed completely.
-    bool mutable _is_right_complete = false;
-
     bool _is_finished = false;
-    vectorized::ChunkPtr _cur_chunk = nullptr;
 
     std::vector<uint32_t> _buf_selective;
 
@@ -139,6 +174,7 @@ public:
 
 private:
     void _init_row_desc();
+
     const RowDescriptor& _row_descriptor;
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;

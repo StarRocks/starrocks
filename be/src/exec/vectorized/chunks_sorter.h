@@ -3,7 +3,9 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "exec/sort_exec_exprs.h"
 #include "exprs/expr_context.h"
+#include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -17,6 +19,14 @@ using Permutation = std::vector<PermutationItem>;
 struct DataSegment {
     ChunkPtr chunk;
     Columns order_by_columns;
+
+    uint32_t _next_output_row = 0;
+    uint64_t _partitions_rows;
+
+    // used for full sort.
+    Permutation* _sorted_permutation;
+
+    bool has_next() { return _next_output_row < _partitions_rows; }
 
     DataSegment() : chunk(std::make_shared<Chunk>()) {}
 
@@ -269,6 +279,11 @@ public:
                  const std::vector<bool>* is_null_first, size_t size_of_chunk_batch = 1000);
     virtual ~ChunksSorter();
 
+    static vectorized::ChunkPtr materialize_chunk_before_sort(vectorized::Chunk* chunk,
+                                                              TupleDescriptor* materialized_tuple_desc,
+                                                              const SortExecExprs& sort_exec_exprs,
+                                                              const std::vector<OrderByType>& order_by_types);
+
     void setup_runtime(RuntimeProfile* profile, const std::string& parent_timer);
 
     // Append a Chunk for sort.
@@ -278,8 +293,17 @@ public:
     // get_next only works after done().
     virtual void get_next(ChunkPtr* chunk, bool* eos) = 0;
 
-    // This
+    virtual DataSegment* get_result_data_segment() = 0;
+
     Status finish(RuntimeState* state);
+
+    // used to get size of partition chunks.
+    virtual uint64_t get_partition_rows() const = 0;
+
+    // used to get permutation for partition chunks,
+    // and this is used only with full sort.
+    virtual Permutation* get_permutation() const = 0;
+
     bool sink_complete();
 
     // pull_chunk for pipeline.

@@ -9,15 +9,18 @@ namespace starrocks::pipeline {
 class AnalyticSinkOperator : public Operator {
 public:
     AnalyticSinkOperator(int32_t id, int32_t plan_node_id, const TPlanNode& tnode, AnalytorPtr analytor)
-            : Operator(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(analytor) {}
+            : Operator(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(std::move(analytor)) {
+        _analytor->ref();
+    }
     ~AnalyticSinkOperator() = default;
 
     bool has_output() const override { return false; }
-    bool need_input() const override { return true; }
-    bool is_finished() const override;
-    void finish(RuntimeState* state) override;
+    bool need_input() const override { return !is_finished(); }
+    bool is_finished() const override { return _is_finished || _analytor->is_finished(); }
+    void set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;

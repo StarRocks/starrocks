@@ -5,6 +5,7 @@
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/column_hash.h"
+#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -83,9 +84,9 @@ public:
     // For global dictionary optimized columns,
     // the type at the execution level is INT but at the storage level is TYPE_STRING/TYPE_CHAR,
     // so we need to pass the real type to the Table Scanner.
-    static void rewrite_descriptor(RuntimeState* runtime_state, std::vector<SlotDescriptor*> slot_descs,
-                                   std::vector<ExprContext*>& conjunct_ctxs,
-                                   const std::map<int32_t, int32_t>& dict_slots_mapping);
+    static void rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,
+                                   const std::map<int32_t, int32_t>& dict_slots_mapping,
+                                   std::vector<SlotDescriptor*>* slot_descs);
 
 private:
     template <bool is_predicate>
@@ -112,6 +113,20 @@ struct DictDecoder {
     Status decode(vectorized::Column* in, vectorized::Column* out) {
         DCHECK(in != nullptr);
         DCHECK(out != nullptr);
+
+        // handle const columns
+        if (in->is_constant()) {
+            if (in->only_null()) {
+                bool res = out->append_nulls(in->size());
+                DCHECK(res);
+                return Status::OK();
+            } else {
+                out->append_datum(in->get(0));
+                out->assign(in->size(), 0);
+                return Status::OK();
+            }
+        }
+
         if (!in->is_nullable()) {
             auto res_column = down_cast<ResultColumnType*>(out);
             auto column = down_cast<ColumnType*>(in);

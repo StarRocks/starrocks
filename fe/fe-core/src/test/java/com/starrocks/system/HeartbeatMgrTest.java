@@ -75,7 +75,7 @@ public class HeartbeatMgrTest {
             public String getResultForUrl(String urlStr, String encodedAuthInfo, int connectTimeoutMs,
                                           int readTimeoutMs) {
                 if (urlStr.contains("192.168.1.1")) {
-                    return "{\"replayedJournalId\":191224,\"queryPort\":9131,\"rpcPort\":9121,\"status\":\"OK\",\"msg\":\"Success\"}";
+                    return "{\"replayedJournalId\":191224,\"queryPort\":9131,\"rpcPort\":9121,\"status\":\"OK\",\"msg\":\"Success\",\"feStartTime\":1637288321250,\"feVersion\":\"2.0-ac45651a\"}";
                 } else {
                     return "{\"replayedJournalId\":0,\"queryPort\":0,\"rpcPort\":0,\"status\":\"FAILED\",\"msg\":\"not ready\"}";
                 }
@@ -92,6 +92,8 @@ public class HeartbeatMgrTest {
         Assert.assertEquals(9121, hbResponse.getRpcPort());
         Assert.assertEquals(9131, hbResponse.getQueryPort());
         Assert.assertEquals(HbStatus.OK, hbResponse.getStatus());
+        Assert.assertEquals(1637288321250L, hbResponse.getFeStartTime());
+        Assert.assertEquals("2.0-ac45651a", hbResponse.getFeVersion());
 
         Frontend fe2 = new Frontend(FrontendNodeType.FOLLOWER, "test2", "192.168.1.2", 9010);
         handler = new FrontendHeartbeatHandler(fe2, 12345, "abcd");

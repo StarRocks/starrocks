@@ -199,7 +199,7 @@ public class StarRocksAssert {
         }
 
         public String explainQuery() throws Exception {
-            return UtFrameUtils.getNewFragmentPlan(connectContext, sql);
+            return UtFrameUtils.getFragmentPlan(connectContext, sql);
         }
 
         public void analysisError(String keywords) {

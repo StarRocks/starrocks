@@ -40,7 +40,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.task.StreamLoadTask;
@@ -122,12 +121,6 @@ public class StreamLoadScanNode extends LoadScanNode {
                 rangeDesc.setJson_root(streamLoadTask.getJsonRoot());
             }
             rangeDesc.setStrip_outer_array(streamLoadTask.isStripOuterArray());
-        }
-        // csv/json/parquet load is controlled by Config::enable_vectorized_file_load
-        // if Config::enable_vectorized_file_load is set true,
-        // vectorized load will been enabled
-        if (rangeDesc.format_type != TFileFormatType.FORMAT_ORC && !Config.enable_vectorized_file_load) {
-            useVectorizedLoad = false;
         }
         rangeDesc.setSplittable(false);
         switch (streamLoadTask.getFileType()) {
@@ -295,17 +288,5 @@ public class StreamLoadScanNode extends LoadScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         return "StreamLoadScanNode";
-    }
-
-    @Override
-    public boolean isVectorized() {
-        // Column mapping expr already checked in finalizeParams function
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return useVectorizedLoad;
     }
 }

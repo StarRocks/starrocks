@@ -54,8 +54,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.planner.AdapterNode.checkPlanIsVectorized;
-
 public class InsertPlanner {
     public ExecPlan plan(Relation relation, ConnectContext session) {
         InsertRelation insertRelation = (InsertRelation) relation;
@@ -115,14 +113,10 @@ public class InsertPlanner {
         }
         olapTuple.computeMemLayout();
 
-        checkPlanIsVectorized(execPlan.getFragments());
-
         OlapTableSink dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
                 insertRelation.getTargetPartitionIds());
         execPlan.getFragments().get(0).setSink(dataSink);
-        // After data loading, we need to check the global dict for low cardinality string column
-        // whether update.
-        execPlan.getFragments().get(0).setGlobalDicts(globalDicts);
+        execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
         return execPlan;
     }
 
@@ -142,7 +136,7 @@ public class InsertPlanner {
                 }
                 fields.getFieldByIndex(columnIdx).setType(targetColumn.getType());
             } else {
-                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName());
+                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (row.get(idx) instanceof DefaultValueExpr) {
@@ -168,7 +162,7 @@ public class InsertPlanner {
                 columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
                         logicalPlan.getOutputColumn().get(columnIdx));
             } else {
-                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName());
+                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx == -1) {
                     ScalarOperator scalarOperator;
                     if (targetColumn.getDefaultValue() == null) {

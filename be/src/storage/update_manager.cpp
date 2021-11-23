@@ -45,6 +45,9 @@ UpdateManager::~UpdateManager() {
     if (_index_cache_mem_tracker) {
         _index_cache_mem_tracker.reset();
     }
+    if (_apply_thread_pool != nullptr) {
+        _apply_thread_pool->shutdown();
+    }
 }
 
 Status UpdateManager::init() {

@@ -27,6 +27,7 @@
 
 #include "common/logging.h"
 #include "exec/exec_node.h"
+#include "exec/file_builder.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "gen_cpp/InternalService_types.h"

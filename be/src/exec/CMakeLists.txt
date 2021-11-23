@@ -38,7 +38,6 @@ set(EXEC_FILES
     local_file_reader.cpp
     scan_node.cpp
     select_node.cpp
-    text_converter.cpp
     sort_exec_exprs.cpp
     olap_common.cpp
     tablet_info.cpp
@@ -51,7 +50,8 @@ set(EXEC_FILES
     local_file_writer.cpp
     broker_writer.cpp
     parquet_reader.cpp
-    parquet_writer.cpp
+    parquet_builder.cpp
+    plain_text_builder.cpp
     vectorized/adapter_node.cpp
     vectorized/aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
@@ -146,8 +146,8 @@ set(EXEC_FILES
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp
-    pipeline/sort/sort_sink_operator.cpp
-    pipeline/sort/sort_source_operator.cpp
+    pipeline/sort/partition_sort_sink_operator.cpp
+    pipeline/sort/local_merge_sort_source_operator.cpp
     pipeline/pipeline_driver_dispatcher.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
@@ -172,6 +172,7 @@ set(EXEC_FILES
     pipeline/set/union_const_source_operator.cpp
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
+    pipeline/hashjoin/hash_joiner_factory.cpp
     pipeline/set/except_context.cpp
     pipeline/set/except_build_sink_operator.cpp
     pipeline/set/except_probe_sink_operator.cpp

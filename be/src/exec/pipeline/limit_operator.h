@@ -19,7 +19,7 @@ public:
 
     bool is_finished() const override { return _limit == 0 && _cur_chunk == nullptr; }
 
-    void finish(RuntimeState* state) override { _limit = 0; }
+    void set_finishing(RuntimeState* state) override { _limit = 0; }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

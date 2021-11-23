@@ -22,8 +22,22 @@
 namespace starrocks::vectorized {
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
-        : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version) {
-    _delete_predicates_version = version;
+        : ChunkIterator(std::move(schema)),
+          _tablet(tablet),
+          _version(version),
+          _delete_predicates_version(version),
+          _is_vertical_merge(false) {}
+
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
+                           RowSourceMaskBuffer* mask_buffer)
+        : ChunkIterator(std::move(schema)),
+          _tablet(tablet),
+          _version(version),
+          _delete_predicates_version(version),
+          _is_vertical_merge(true),
+          _is_key(is_key),
+          _mask_buffer(mask_buffer) {
+    DCHECK(_mask_buffer);
 }
 
 void TabletReader::close() {
@@ -35,9 +49,8 @@ void TabletReader::close() {
 }
 
 Status TabletReader::prepare() {
-    _tablet->obtain_header_rdlock();
+    std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
-    _tablet->release_header_lock();
     return st;
 }
 
@@ -52,7 +65,15 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 }
 
 Status TabletReader::do_get_next(Chunk* chunk) {
-    return _collect_iter->get_next(chunk);
+    DCHECK(!_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk));
+    return Status::OK();
+}
+
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
+    DCHECK(_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
+    return Status::OK();
 }
 
 Status TabletReader::_get_segment_iterators(const RowsetReadOptions& options, std::vector<ChunkIteratorPtr>* iters) {
@@ -117,7 +138,11 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         //       |           |           |
         // SegmentIterator  ...    SegmentIterator
         //
-        _collect_iter = new_merge_iterator(seg_iters);
+        if (_is_vertical_merge && !_is_key) {
+            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+        } else {
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+        }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
         //             UnionIterator
@@ -149,13 +174,29 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
             RuntimeProfile::Counter* sort_timer = ADD_TIMER(p, "sort");
             RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "aggr");
 
-            _collect_iter = new_merge_iterator(seg_iters);
+            if (_is_vertical_merge && !_is_key) {
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+            } else {
+                _collect_iter = new_heap_merge_iterator(seg_iters);
+            }
             _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
-            _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
+            if (!_is_vertical_merge) {
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
+            } else {
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), _is_key);
+            }
             _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
-            _collect_iter = new_merge_iterator(seg_iters);
-            _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
+            if (_is_vertical_merge && !_is_key) {
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+            } else {
+                _collect_iter = new_heap_merge_iterator(seg_iters);
+            }
+            if (!_is_vertical_merge) {
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
+            } else {
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), _is_key);
+            }
         }
     } else if (keys_type == AGG_KEYS) {
         CHECK(skip_aggr);
@@ -208,8 +249,7 @@ Status TabletReader::_init_predicates(const TabletReaderParams& params) {
 Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
     PredicateParser pred_parser(_tablet->tablet_schema());
 
-    _tablet->obtain_header_rdlock();
-
+    std::shared_lock header_lock(_tablet->get_header_lock());
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
         if (pred_pb.version() > _delete_predicates_version.second) {
             continue;
@@ -220,7 +260,6 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
             TCondition cond;
             if (!DeleteHandler::parse_condition(pred_pb.sub_predicates(i), &cond)) {
                 LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
-                _tablet->release_header_lock();
                 return Status::InternalError("invalid delete condition string");
             }
             size_t idx = _tablet->tablet_schema().field_index(cond.column_name);
@@ -267,7 +306,6 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
         dels->add(pred_pb.version(), conjunctions);
     }
 
-    _tablet->release_header_lock();
     return Status::OK();
 }
 

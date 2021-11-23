@@ -68,15 +68,10 @@ public class BinaryPredicateStatisticCalculator {
         double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
         // TODO(ywb) use origin column distinct values as new column statistics now, we should re-compute column
         //  distinct values actually.
-        ColumnStatistic newEstimateColumnStatistics = ColumnStatistic.builder().
-                setAverageRowSize(columnStatistic.getAverageRowSize()).
-                setMaxValue(intersectRange.getHigh()).
-                setMinValue(intersectRange.getLow()).
-                setDistinctValuesCount(columnStatistic.getDistinctValuesCount()).
-                setType(columnStatistic.getType()).
-                build();
+        ColumnStatistic newEstimateColumnStatistics =
+                ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(0).build();
         return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                        addColumnStatistic(operator, newEstimateColumnStatistics).build()).
+                addColumnStatistic(operator, newEstimateColumnStatistics).build()).
                 orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
     }
 
@@ -214,7 +209,7 @@ public class BinaryPredicateStatisticCalculator {
                 setType(columnStatistic.getType()).
                 build();
         return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                        addColumnStatistic(operator, newEstimateColumnStatistics).build()).
+                addColumnStatistic(operator, newEstimateColumnStatistics).build()).
                 orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
     }
 }

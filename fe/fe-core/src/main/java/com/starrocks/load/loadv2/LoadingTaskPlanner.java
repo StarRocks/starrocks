@@ -138,7 +138,7 @@ public class LoadingTaskPlanner {
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
-        LOG.info("use vectorized load: {}, load job id: {}", scanNode.isUseVectorized(), loadJobId);
+        LOG.info("use vectorized load: {}, load job id: {}", true, loadJobId);
         scanNodes.add(scanNode);
         descTable.computeMemLayout();
 
@@ -154,7 +154,7 @@ public class LoadingTaskPlanner {
         sinkFragment.setParallelExecNum(parallelInstanceNum);
         // After data loading, we need to check the global dict for low cardinality string column
         // whether update.
-        sinkFragment.setGlobalDicts(globalDicts);
+        sinkFragment.setLoadGlobalDicts(globalDicts);
 
         fragments.add(sinkFragment);
 

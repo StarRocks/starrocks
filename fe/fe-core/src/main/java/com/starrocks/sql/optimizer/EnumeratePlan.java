@@ -3,9 +3,9 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.base.OutputInputProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 
 import java.util.Collections;
@@ -57,9 +57,9 @@ public class EnumeratePlan {
         int localRankOfGroupExpression = nthExecPlan - planCountOfKGroupExpression;
         // 3. compute use which output/input properties
         int planCountOfKProperties = 0;
-        for (Map.Entry<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> entry : chooseGroupExpression
+        for (Map.Entry<OutputInputProperty, Integer> entry : chooseGroupExpression
                 .getPropertiesPlanCountMap(requiredProperty).entrySet()) {
-            List<PhysicalPropertySet> inputProperties = entry.getKey().second;
+            List<PhysicalPropertySet> inputProperties = entry.getKey().getInputProperties();
 
             if (planCountOfKProperties + entry.getValue() >= localRankOfGroupExpression) {
                 // 4. compute the localProperty-rank in the property.
@@ -162,7 +162,7 @@ public class EnumeratePlan {
         for (GroupExpression physicalExpression : group.getSatisfyRequiredGroupExpressions(requiredProperty)) {
             if (physicalExpression.getInputs().isEmpty()) {
                 // It's leaf node of the plan
-                physicalExpression.addPlanCountOfProperties(new Pair<>(requiredProperty, Lists.newArrayList()), 1);
+                physicalExpression.addPlanCountOfProperties(OutputInputProperty.of(requiredProperty), 1);
             } else if (physicalExpression.hasValidSubPlan()) {
                 // count the plan count of this group expression
                 countGroupExpressionValidPlan(physicalExpression, requiredProperty);
@@ -182,7 +182,7 @@ public class EnumeratePlan {
                 childPlanCount *=
                         countGroupValidPlan(groupExpression.inputAt(childIndex), inputProperties.get(childIndex));
             }
-            groupExpression.addPlanCountOfProperties(new Pair<>(requiredProperty, inputProperties), childPlanCount);
+            groupExpression.addPlanCountOfProperties(OutputInputProperty.of(requiredProperty, inputProperties), childPlanCount);
             groupExpressionPlanCount += childPlanCount;
         }
         return groupExpressionPlanCount;

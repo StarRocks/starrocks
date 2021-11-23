@@ -10,6 +10,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/aggregate/agg_hash_variant.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
@@ -54,9 +55,7 @@ using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 // Component used to process aggregation including bloking aggregate and streaming aggregate
 // it contains common data struct and algorithm of aggregation
-// TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
-// TODO(hcf) all the data should be protected by lightweight lock
-class Aggregator {
+class Aggregator final : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
@@ -65,10 +64,11 @@ public:
     Status open(RuntimeState* state);
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
 
-    Status close(RuntimeState* state);
+    Status close(RuntimeState* state) override;
 
     std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
+    const std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
@@ -202,6 +202,9 @@ private:
     // In order batch update agg states
     vectorized::Buffer<vectorized::AggDataPtr> _tmp_agg_states;
     std::vector<AggFunctionTypes> _agg_fn_types;
+
+    // Exprs used to evaluate conjunct
+    std::vector<ExprContext*> _conjunct_ctxs;
 
     // Exprs used to evaluate group by column
     std::vector<ExprContext*> _group_by_expr_ctxs;

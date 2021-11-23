@@ -54,14 +54,14 @@ TOP-N (order by [[16: S_ACCTBAL DESC NULLS LAST, 26: N_NAME ASC NULLS FIRST, 12:
                         INNER JOIN (join-predicate [11: S_SUPPKEY = 20: PS_SUPPKEY] post-join-predicate [null])
                             SCAN (columns[17: S_COMMENT, 11: S_SUPPKEY, 12: S_NAME, 13: S_ADDRESS, 14: S_NATIONKEY, 15: S_PHONE, 16: S_ACCTBAL] predicate[null])
                             EXCHANGE BROADCAST
-                                INNER JOIN (join-predicate [19: PS_PARTKEY = 1: P_PARTKEY AND 22: PS_SUPPLYCOST = 57: min(37: PS_SUPPLYCOST)] post-join-predicate [null])
+                                INNER JOIN (join-predicate [19: PS_PARTKEY = 1: P_PARTKEY AND 22: PS_SUPPLYCOST = 57: min] post-join-predicate [null])
                                     SCAN (columns[19: PS_PARTKEY, 20: PS_SUPPKEY, 22: PS_SUPPLYCOST] predicate[null])
                                     EXCHANGE SHUFFLE[1]
                                         INNER JOIN (join-predicate [1: P_PARTKEY = 34: PS_PARTKEY] post-join-predicate [null])
                                             SCAN (columns[1: P_PARTKEY, 3: P_MFGR, 5: P_TYPE, 6: P_SIZE] predicate[6: P_SIZE = 12 AND 5: P_TYPE LIKE %COPPER])
                                             EXCHANGE SHUFFLE[34]
-                                                AGGREGATE ([GLOBAL] aggregate [{57: min(37: PS_SUPPLYCOST)=min(57: min(37: PS_SUPPLYCOST))}] group by [[34: PS_PARTKEY]] having [null]
-                                                    AGGREGATE ([LOCAL] aggregate [{57: min(37: PS_SUPPLYCOST)=min(37: PS_SUPPLYCOST)}] group by [[34: PS_PARTKEY]] having [null]
+                                                AGGREGATE ([GLOBAL] aggregate [{57: min=min(57: min)}] group by [[34: PS_PARTKEY]] having [null]
+                                                    AGGREGATE ([LOCAL] aggregate [{57: min=min(37: PS_SUPPLYCOST)}] group by [[34: PS_PARTKEY]] having [null]
                                                         INNER JOIN (join-predicate [35: PS_SUPPKEY = 40: S_SUPPKEY] post-join-predicate [null])
                                                             SCAN (columns[34: PS_PARTKEY, 35: PS_SUPPKEY, 37: PS_SUPPLYCOST] predicate[null])
                                                             EXCHANGE BROADCAST

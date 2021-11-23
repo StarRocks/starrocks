@@ -22,9 +22,13 @@ public:
 
     bool need_input() const override;
 
-    bool is_finished() const override { return _is_finished; }
+    // _is_finished is true indicates that LocalExchangeSinkOperator is finished by its preceding operator.
+    // _is_all_source_finished() returning true indicates that all its corresponding LocalExchangeSourceOperators
+    // has finished.
+    // In either case,  LocalExchangeSinkOperator is finished.
+    bool is_finished() const override { return _is_finished || _exchanger->is_all_sources_finished(); }
 
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

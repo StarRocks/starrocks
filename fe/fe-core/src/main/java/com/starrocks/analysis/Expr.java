@@ -1299,24 +1299,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return false;
     }
 
-    public void isVectorizedTrace(List<String> track) {
-        for (Expr child : children) {
-            child.isVectorizedTrace(track);
-        }
-
-        boolean childIsVectorized = true;
-        for (Expr child : children) {
-            if (!child.isVectorized()) {
-                childIsVectorized = false;
-                break;
-            }
-        }
-
-        if (!isVectorized() && childIsVectorized) {
-            track.add(toSql());
-        }
-    }
-
     /**
      * Checks whether this expr returns a boolean type or NULL type.
      * If not, throws an AnalysisException with an appropriate error message using
@@ -1933,9 +1915,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return false;
     }
 
-
     public final boolean isMonotonic() {
-        if (!isSelfMonotonic()) return false;
+        if (!isSelfMonotonic()) {
+            return false;
+        }
         for (Expr child : this.children) {
             if (!child.isMonotonic()) {
                 return false;

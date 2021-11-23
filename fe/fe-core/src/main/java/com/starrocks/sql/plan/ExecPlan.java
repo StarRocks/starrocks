@@ -7,6 +7,8 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlannerContext;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.Explain;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TExplainLevel;
 
@@ -26,10 +28,16 @@ public class ExecPlan {
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
     private int planCount = 0;
 
-    public ExecPlan(PlannerContext planCtx, ConnectContext connectContext, List<String> colNames) {
+    private final OptExpression physicalPlan;
+    private final List<ColumnRefOperator> outputColumns;
+
+    public ExecPlan(PlannerContext planCtx, ConnectContext connectContext, List<String> colNames,
+                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns) {
         this.planCtx = planCtx;
         this.connectContext = connectContext;
         this.colNames = colNames;
+        this.physicalPlan = physicalPlan;
+        this.outputColumns = outputColumns;
     }
 
     public ConnectContext getConnectContext() {
@@ -74,24 +82,29 @@ public class ExecPlan {
 
     public String getExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
-        if (planCount != 0) {
-            str.append("There are ").append(planCount).append(" plans in optimizer search space\n");
-        }
-        for (int i = 0; i < fragments.size(); ++i) {
-            PlanFragment fragment = fragments.get(i);
-            if (i > 0) {
-                // a blank line between plan fragments
-                str.append("\n");
+        if (level == null) {
+            str.append(Explain.toString(physicalPlan, outputColumns));
+        } else {
+            if (planCount != 0) {
+                str.append("There are ").append(planCount).append(" plans in optimizer search space\n");
             }
-            if (level.equals(TExplainLevel.NORMAL)) {
-                str.append("PLAN FRAGMENT ").append(i).append("\n");
-                str.append(fragment.getExplainString(TExplainLevel.NORMAL));
-            } else if (level.equals(TExplainLevel.COSTS)) {
-                str.append("PLAN FRAGMENT ").append(i).append("(").append(fragment.getFragmentId()).append(")\n");
-                str.append(fragment.getCostExplain());
-            } else {
-                str.append("PLAN FRAGMENT ").append(i).append("(").append(fragment.getFragmentId()).append(")\n");
-                str.append(fragment.getVerboseExplain());
+
+            for (int i = 0; i < fragments.size(); ++i) {
+                PlanFragment fragment = fragments.get(i);
+                if (i > 0) {
+                    // a blank line between plan fragments
+                    str.append("\n");
+                }
+                if (level.equals(TExplainLevel.NORMAL)) {
+                    str.append("PLAN FRAGMENT ").append(i).append("\n");
+                    str.append(fragment.getExplainString(TExplainLevel.NORMAL));
+                } else if (level.equals(TExplainLevel.COSTS)) {
+                    str.append("PLAN FRAGMENT ").append(i).append("(").append(fragment.getFragmentId()).append(")\n");
+                    str.append(fragment.getCostExplain());
+                } else {
+                    str.append("PLAN FRAGMENT ").append(i).append("(").append(fragment.getFragmentId()).append(")\n");
+                    str.append(fragment.getVerboseExplain());
+                }
             }
         }
         return str.toString();

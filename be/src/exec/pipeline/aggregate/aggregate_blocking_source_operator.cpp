@@ -2,6 +2,8 @@
 
 #include "aggregate_blocking_source_operator.h"
 
+#include "exec/exec_node.h"
+
 namespace starrocks::pipeline {
 
 bool AggregateBlockingSourceOperator::has_output() const {
@@ -12,14 +14,12 @@ bool AggregateBlockingSourceOperator::is_finished() const {
     return _aggregator->is_sink_complete() && _aggregator->is_ht_eos();
 }
 
-void AggregateBlockingSourceOperator::finish(RuntimeState* state) {
-    _is_finished = true;
+void AggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
+    _aggregator->set_finished();
 }
 
 Status AggregateBlockingSourceOperator::close(RuntimeState* state) {
-    // _aggregator is shared by sink operator and source operator
-    // we must only close it at source operator
-    RETURN_IF_ERROR(_aggregator->close(state));
+    RETURN_IF_ERROR(_aggregator->unref(state));
     return SourceOperator::close(state);
 }
 
@@ -50,12 +50,12 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
     // For having
     size_t old_size = chunk->num_rows();
 
-    // TODO(hcf) force annotation
-    // ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
+    ExecNode::eval_conjuncts(_aggregator->conjunct_ctxs(), chunk.get());
     _aggregator->update_num_rows_returned(-(old_size - chunk->num_rows()));
 
     DCHECK_CHUNK(chunk);
 
     return std::move(chunk);
 }
+
 } // namespace starrocks::pipeline

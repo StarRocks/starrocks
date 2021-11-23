@@ -50,6 +50,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/utils.h" // for check_dir_existed
+#include "util/defer_op.h"
 #include "util/errno.h"
 #include "util/file_utils.h"
 #include "util/monotime.h"
@@ -127,10 +128,13 @@ Status DataDir::_init_cluster_id() {
                 "open file failed");
     }
 
-    int lock_res = flock(fp->_fileno, LOCK_EX | LOCK_NB);
-    if (lock_res < 0) {
+    DeferOp close_fp([&]() {
         fclose(fp);
         fp = nullptr;
+    });
+
+    int lock_res = flock(fp->_fileno, LOCK_EX | LOCK_NB);
+    if (lock_res < 0) {
         RETURN_IF_ERROR_WITH_WARN(
                 Status::IOError(strings::Substitute("failed to flock cluster id file $0", cluster_id_path)),
                 "flock file failed");
@@ -138,7 +142,6 @@ Status DataDir::_init_cluster_id() {
 
     // obtain cluster id of all root paths
     auto st = _read_cluster_id(cluster_id_path, &_cluster_id);
-    fclose(fp);
     return st;
 }
 
@@ -507,7 +510,8 @@ OLAPStatus DataDir::load() {
         }
         RowsetSharedPtr rowset;
         OLAPStatus create_status =
-                RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->tablet_path(), rowset_meta, &rowset).ok()
+                RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->schema_hash_path(), rowset_meta, &rowset)
+                                .ok()
                         ? OLAP_SUCCESS
                         : OLAP_ERR_OTHER_ERROR;
         if (create_status != OLAP_SUCCESS) {
@@ -578,20 +582,21 @@ void DataDir::perform_path_gc_by_tablet() {
             LOG(WARNING) << "invalid tablet id " << tablet_id << " or schema hash " << schema_hash << ", path=" << path;
             continue;
         }
-        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, true);
         if (tablet != nullptr) {
             // could find the tablet, then skip check it
             continue;
         }
-        std::filesystem::path tablet_path(path);
-        std::filesystem::path data_dir_path = tablet_path.parent_path().parent_path().parent_path().parent_path();
+        std::filesystem::path schema_hash_path(path);
+        std::filesystem::path tablet_id_path = schema_hash_path.parent_path();
+        std::filesystem::path data_dir_path = tablet_id_path.parent_path().parent_path().parent_path();
         std::string data_dir_string = data_dir_path.string();
         DataDir* data_dir = StorageEngine::instance()->get_store(data_dir_string);
         if (data_dir == nullptr) {
             LOG(WARNING) << "could not find data dir for tablet path " << path;
             continue;
         }
-        _tablet_manager->try_delete_unused_tablet_path(data_dir, tablet_id, schema_hash, path);
+        _tablet_manager->try_delete_unused_tablet_path(data_dir, tablet_id, schema_hash, tablet_id_path.string());
     }
     _all_tablet_schemahash_paths.clear();
     LOG(INFO) << "finished one time path gc by tablet.";
@@ -709,10 +714,7 @@ Status DataDir::update_capacity() {
     try {
         std::filesystem::space_info path_info = std::filesystem::space(_path);
         _available_bytes = path_info.available;
-        if (_disk_capacity_bytes == 0) {
-            // disk capacity only need to be set once
-            _disk_capacity_bytes = path_info.capacity;
-        }
+        _disk_capacity_bytes = path_info.capacity;
     } catch (std::filesystem::filesystem_error& e) {
         RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("get path $0 available capacity failed, error=$1",
                                                                       _path, e.what())),

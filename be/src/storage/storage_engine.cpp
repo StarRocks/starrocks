@@ -30,6 +30,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <new>
@@ -126,7 +127,11 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 }
 
 StorageEngine::~StorageEngine() {
-    _clear();
+#ifdef BE_TEST
+    if (_s_instance == this) {
+        _s_instance = nullptr;
+    }
+#endif
 }
 
 void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
@@ -182,13 +187,22 @@ Status StorageEngine::_open() {
 }
 
 Status StorageEngine::_init_store_map() {
-    std::vector<DataDir*> tmp_stores;
+    std::vector<std::pair<bool, DataDir*>> tmp_stores;
+    ScopedCleanup release_guard([&] {
+        for (const auto& item : tmp_stores) {
+            if (item.first) {
+                delete item.second;
+            }
+        }
+    });
     std::vector<std::thread> threads;
     SpinLock error_msg_lock;
     std::string error_msg;
     for (auto& path : _options.store_paths) {
         DataDir* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
-        tmp_stores.emplace_back(store);
+        ScopedCleanup store_release_guard([&]() { delete store; });
+        tmp_stores.emplace_back(true, store);
+        store_release_guard.cancel();
         threads.emplace_back([store, &error_msg_lock, &error_msg]() {
             auto st = store->init();
             if (!st.ok()) {
@@ -205,14 +219,12 @@ Status StorageEngine::_init_store_map() {
     }
 
     if (!error_msg.empty()) {
-        for (auto store : tmp_stores) {
-            delete store;
-        }
         return Status::InternalError(strings::Substitute("init path failed, error=$0", error_msg));
     }
 
-    for (auto store : tmp_stores) {
-        _store_map.emplace(store->path(), store);
+    for (auto& store : tmp_stores) {
+        _store_map.emplace(store.second->path(), store.second);
+        store.first = false;
     }
     return Status::OK();
 }
@@ -454,24 +466,68 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
     return !tablet_info_vec.empty();
 }
 
-void StorageEngine::_clear() {
+void StorageEngine::stop() {
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& store_pair : _store_map) {
+            store_pair.second->stop_bg_worker();
+            delete store_pair.second;
+            store_pair.second = nullptr;
+        }
+        _store_map.clear();
+    }
+    _bg_worker_stopped.store(true, std::memory_order_release);
+
+    if (_update_cache_expire_thread.joinable()) {
+        _update_cache_expire_thread.join();
+    }
+    if (_unused_rowset_monitor_thread.joinable()) {
+        _unused_rowset_monitor_thread.join();
+    }
+    if (_garbage_sweeper_thread.joinable()) {
+        _garbage_sweeper_thread.join();
+    }
+    if (_disk_stat_monitor_thread.joinable()) {
+        _disk_stat_monitor_thread.join();
+    }
+    for (auto& thread : _base_compaction_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    for (auto& thread : _cumulative_compaction_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    for (auto& thread : _update_compaction_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    for (auto& thread : _tablet_checkpoint_threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    if (_fd_cache_clean_thread.joinable()) {
+        _fd_cache_clean_thread.join();
+    }
+    if (config::path_gc_check) {
+        for (auto& thread : _path_scan_threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+        for (auto& thread : _path_gc_threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+    }
+
     SAFE_DELETE(_index_stream_lru_cache);
     _file_cache.reset();
-
-    std::lock_guard<std::mutex> l(_store_lock);
-    for (auto& store_pair : _store_map) {
-        store_pair.second->stop_bg_worker();
-        delete store_pair.second;
-        store_pair.second = nullptr;
-    }
-    _store_map.clear();
-
-    _stop_bg_worker = true;
-#ifdef BE_TEST
-    if (_s_instance == this) {
-        _s_instance = nullptr;
-    }
-#endif
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
@@ -533,8 +589,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
     vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
@@ -574,8 +629,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
 
     StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
     vectorized::BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
 
     Status res = base_compaction.compact();
@@ -644,6 +698,8 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
 
     time_t now = time(nullptr);
     tm local_tm_now;
+    memset(&local_tm_now, 0, sizeof(tm));
+
     if (localtime_r(&now, &local_tm_now) == nullptr) {
         LOG(WARNING) << "fail to localtime_r time. time=" << now;
         return OLAP_ERR_OS_ERROR;
@@ -754,6 +810,8 @@ OLAPStatus StorageEngine::_do_sweep(const string& scan_root, const time_t& local
             string dir_name = item.path().filename().string();
             string str_time = dir_name.substr(0, dir_name.find('.'));
             tm local_tm_create;
+            memset(&local_tm_create, 0, sizeof(tm));
+
             if (strptime(str_time.c_str(), "%Y%m%d%H%M%S", &local_tm_create) == nullptr) {
                 LOG(WARNING) << "fail to strptime time. [time=" << str_time << "]";
                 res = OLAP_ERR_OS_ERROR;
@@ -921,20 +979,24 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         task->get_related_tablets(&tablet_infos);
         sort(tablet_infos.begin(), tablet_infos.end());
         std::vector<TabletSharedPtr> related_tablets;
+        DeferOp release_lock([&]() {
+            for (TabletSharedPtr& tablet : related_tablets) {
+                tablet->release_header_lock();
+            }
+        });
         for (TabletInfo& tablet_info : tablet_infos) {
             TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
             if (tablet != nullptr) {
-                related_tablets.push_back(tablet);
                 tablet->obtain_header_wrlock();
+                ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
+                related_tablets.push_back(tablet);
+                release_guard.cancel();
             } else {
                 LOG(WARNING) << "could not get tablet before prepare tabletid: " << tablet_info.tablet_id;
             }
         }
         // add write lock to all related tablets
         OLAPStatus prepare_status = task->prepare();
-        for (TabletSharedPtr& tablet : related_tablets) {
-            tablet->release_header_lock();
-        }
         if (prepare_status != OLAP_SUCCESS) {
             return prepare_status;
         }
@@ -955,20 +1017,24 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         task->get_related_tablets(&tablet_infos);
         sort(tablet_infos.begin(), tablet_infos.end());
         std::vector<TabletSharedPtr> related_tablets;
+        DeferOp release_lock([&]() {
+            for (TabletSharedPtr& tablet : related_tablets) {
+                tablet->release_header_lock();
+            }
+        });
         for (TabletInfo& tablet_info : tablet_infos) {
             TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
             if (tablet != nullptr) {
-                related_tablets.push_back(tablet);
                 tablet->obtain_header_wrlock();
+                ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
+                related_tablets.push_back(tablet);
+                release_guard.cancel();
             } else {
                 LOG(WARNING) << "Fail to get tablet before finish tablet_id=" << tablet_info.tablet_id;
             }
         }
         // add write lock to all related tablets
         OLAPStatus fin_status = task->finish();
-        for (TabletSharedPtr& tablet : related_tablets) {
-            tablet->release_header_lock();
-        }
         return fin_status;
     }
 }

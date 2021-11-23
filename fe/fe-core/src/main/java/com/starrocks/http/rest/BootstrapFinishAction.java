@@ -26,6 +26,7 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Version;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -45,6 +46,8 @@ public class BootstrapFinishAction extends RestBaseAction {
     public static final String REPLAYED_JOURNAL_ID = "replayedJournalId";
     public static final String QUERY_PORT = "queryPort";
     public static final String RPC_PORT = "rpcPort";
+    public static final String FE_START_TIME = "feStartTime";
+    public static final String FE_VERSION = "feVersion";
 
     public BootstrapFinishAction(ActionController controller) {
         super(controller);
@@ -91,9 +94,12 @@ public class BootstrapFinishAction extends RestBaseAction {
                 if (result.status == ActionStatus.OK) {
                     // cluster id and token are valid, return replayed journal id
                     long replayedJournalId = Catalog.getCurrentCatalog().getReplayedJournalId();
+                    long feStartTime = Catalog.getCurrentCatalog().getFeStartTime();
                     result.setMaxReplayedJournal(replayedJournalId);
                     result.setQueryPort(Config.query_port);
                     result.setRpcPort(Config.rpc_port);
+                    result.setFeStartTime(feStartTime);
+                    result.setFeVersion(Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
                 }
             }
         } else {
@@ -110,6 +116,8 @@ public class BootstrapFinishAction extends RestBaseAction {
         private long replayedJournalId = 0;
         private int queryPort = 0;
         private int rpcPort = 0;
+        private long feStartTime = 0;
+        private String feVersion;
 
         public BootstrapResult() {
             super();
@@ -141,6 +149,22 @@ public class BootstrapFinishAction extends RestBaseAction {
 
         public int getRpcPort() {
             return rpcPort;
+        }
+
+        public long getFeStartTime() {
+            return feStartTime;
+        }
+
+        public void setFeStartTime(long feStartTime) {
+            this.feStartTime = feStartTime;
+        }
+
+        public String getFeVersion() {
+            return feVersion;
+        }
+
+        public void setFeVersion(String feVersion) {
+            this.feVersion = feVersion;
         }
 
         @Override
