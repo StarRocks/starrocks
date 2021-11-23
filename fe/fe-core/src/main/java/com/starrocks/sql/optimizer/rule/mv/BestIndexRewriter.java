@@ -3,10 +3,10 @@ package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 
 public class BestIndexRewriter extends OptExpressionVisitor<OptExpression, Long> {
-
     LogicalOlapScanOperator scanOperator;
 
     public BestIndexRewriter(LogicalOlapScanOperator scanOperator) {
@@ -28,6 +28,10 @@ public class BestIndexRewriter extends OptExpressionVisitor<OptExpression, Long>
 
     @Override
     public OptExpression visitLogicalTableScan(OptExpression optExpression, Long bestIndex) {
+        if (!OperatorType.LOGICAL_OLAP_SCAN.equals(optExpression.getOp().getOpType())) {
+            return optExpression;
+        }
+
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
 
         if (olapScanOperator.equals(scanOperator)) {
