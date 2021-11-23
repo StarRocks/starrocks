@@ -99,7 +99,7 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* 
 }
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type,
-                                                      JoinRuntimeFilter* filter, size_t column_offset) {
+                                                      JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
     JoinRuntimeFilter* expr = filter;
     if (!column->is_nullable()) {
         switch (type) {
@@ -129,7 +129,9 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, P
             if (!nullable_column->is_null(j)) {                                                                 \
                 filter->insert(&data_array[j]);                                                                 \
             } else {                                                                                            \
-                filter->insert(nullptr);                                                                        \
+                if (eq_null) {                                                                                  \
+                    filter->insert(nullptr);                                                                    \
+                }                                                                                               \
             }                                                                                                   \
         }                                                                                                       \
         break;                                                                                                  \
