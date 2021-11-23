@@ -76,8 +76,9 @@ public abstract class Resource implements Writable {
                 resource = new OdbcCatalogResource(stmt.getResourceName());
                 break;
             default:
-                throw new DdlException("Unrecognized resource type: " + type + ". " +
-                        "Only " + Arrays.toString(Arrays.stream(ResourceType.values()).filter(t -> t != ResourceType.UNKNOWN).toArray()) + "are supported.");
+                throw new DdlException("Unrecognized resource type: " + type + ". " + "Only " +
+                        Arrays.toString(Arrays.stream(ResourceType.values())
+                                .filter(t -> t != ResourceType.UNKNOWN).toArray()) + "are supported.");
         }
 
         resource.setProperties(stmt.getProperties());
