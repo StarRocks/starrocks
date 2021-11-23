@@ -19,7 +19,7 @@ public:
               _pos(_buff),
               _end(_buff + std::max(kMinBuffSize, capacity)) {}
 
-    ~OutputStream() { delete[] _buff; }
+    virtual ~OutputStream() { delete[] _buff; }
 
     OutputStream(const OutputStream&) = delete;
     void operator=(const OutputStream&) = delete;
