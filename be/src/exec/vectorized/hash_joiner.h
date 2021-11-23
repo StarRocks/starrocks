@@ -136,23 +136,27 @@ private:
                                                 bool filter_all, bool hit_all, const Column::Filter& filter);
 
     void _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
-    void _process_other_conjunct_and_remove_duplicate_index(ChunkPtr* chunk);
+    void _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
     void _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
     void _process_other_conjunct(ChunkPtr* chunk);
 
     void _filter_probe_output_chunk(ChunkPtr& chunk) {
-        if (chunk && !chunk->is_empty()) {
+        // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
+        // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
+        // only remains the rows which are not hit the hash table before. Therefore, _process_other_conjunct can
+        // not be called when other_conjuncts is empty.
+        if (chunk && !chunk->is_empty() && !_other_join_conjunct_ctxs.empty()) {
             _process_other_conjunct(&chunk);
         }
 
-        if (chunk && !chunk->is_empty()) {
+        if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
         }
     }
     void _filter_post_probe_output_chunk(ChunkPtr& chunk) {
         // Post probe needn't process _other_join_conjunct_ctxs, because they
         // are `ON` predicates, which need to be processed only on probe phase.
-        if (chunk && !chunk->is_empty()) {
+        if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
         }
     }
