@@ -1267,7 +1267,7 @@ public class StmtExecutor {
             statisticsForAuditLog = new PQueryStatistics();
         }
         if (statisticsForAuditLog.scanBytes == null) {
-            statisticsForAuditLog.scanRows = 0L;
+            statisticsForAuditLog.scanBytes = 0L;
         }
         if (statisticsForAuditLog.scanRows == null) {
             statisticsForAuditLog.scanRows = 0L;
