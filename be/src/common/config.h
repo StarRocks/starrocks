@@ -646,6 +646,8 @@ CONF_Int64(pipeline_io_buffer_size, "64");
 CONF_Int16(bitmap_serialize_version, "1");
 // schema change vectorized
 CONF_Bool(enable_schema_change_vectorized, "true");
+// max hdfs file handle
+CONF_mInt32(max_hdfs_file_handle, "1000");
 
 } // namespace config
 
