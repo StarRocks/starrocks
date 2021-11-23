@@ -693,6 +693,7 @@ void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
 
     for (SlotId slot_id : _filter_null_value_columns) {
         const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);
+        if (!c->is_nullable()) continue;
         const vectorized::NullableColumn* nullable_column =
                 vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(c);
         if (!nullable_column->has_null()) continue;
@@ -705,10 +706,10 @@ void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
         // let compiler does everything.
         // let's pray for compiler,
         // till the end of the world.
-        const uint8_t* bits = nullable_column->null_column()->raw_data();
+        const uint8_t* nulls = nullable_column->null_column()->raw_data();
         uint8_t* sel = selection.data();
         for (size_t i = 0; i < before_size; i++) {
-            sel[i] &= (1 - bits[i]);
+            sel[i] &= !nulls[i];
         }
     }
     if (selection.size() == 0) return;
