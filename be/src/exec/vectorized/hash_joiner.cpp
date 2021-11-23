@@ -354,7 +354,7 @@ void HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t
     (*chunk)->filter(filter);
 }
 
-void HashJoiner::_process_other_conjunct_and_remove_duplicate_index(ChunkPtr* chunk) {
+void HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
@@ -362,10 +362,17 @@ void HashJoiner::_process_other_conjunct_and_remove_duplicate_index(ChunkPtr* ch
     _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
 
     _ht.remove_duplicate_index(&filter);
+    (*chunk)->filter(filter);
 }
 
 void HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
-    _process_other_conjunct_and_remove_duplicate_index(chunk);
+    bool filter_all = false;
+    bool hit_all = false;
+    Column::Filter filter;
+
+    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+
+    _ht.remove_duplicate_index(&filter);
     (*chunk)->set_num_rows(0);
 }
 
@@ -380,7 +387,7 @@ void HashJoiner::_process_other_conjunct(ChunkPtr* chunk) {
     case TJoinOp::LEFT_ANTI_JOIN:
     case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
     case TJoinOp::RIGHT_SEMI_JOIN:
-        _process_other_conjunct_and_remove_duplicate_index(chunk);
+        _process_semi_join_with_other_conjunct(chunk);
         break;
     case TJoinOp::RIGHT_ANTI_JOIN:
         _process_right_anti_join_with_other_conjunct(chunk);
