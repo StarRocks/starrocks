@@ -271,7 +271,6 @@ public class HdfsScanNodeTest {
         Assert.assertEquals(3, min.nodes.size());
         Assert.assertEquals(TExprNodeType.BINARY_PRED, min.nodes.get(0).node_type);
         Assert.assertEquals(TExprOpcode.GE, min.nodes.get(0).opcode);
-        Assert.assertTrue(min.nodes.get(0).use_vectorized);
         Assert.assertEquals(TExprNodeType.SLOT_REF, min.nodes.get(1).node_type);
         Assert.assertEquals(TExprNodeType.INT_LITERAL, min.nodes.get(2).node_type);
         Assert.assertEquals(2, min.nodes.get(2).int_literal.value);
@@ -280,7 +279,6 @@ public class HdfsScanNodeTest {
         Assert.assertEquals(3, max.nodes.size());
         Assert.assertEquals(TExprNodeType.BINARY_PRED, max.nodes.get(0).node_type);
         Assert.assertEquals(TExprOpcode.LE, max.nodes.get(0).opcode);
-        Assert.assertTrue(min.nodes.get(0).use_vectorized);
         Assert.assertEquals(TExprNodeType.SLOT_REF, max.nodes.get(1).node_type);
         Assert.assertEquals(TExprNodeType.INT_LITERAL, max.nodes.get(2).node_type);
         Assert.assertEquals(2, max.nodes.get(2).int_literal.value);

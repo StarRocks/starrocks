@@ -1105,7 +1105,7 @@ public class PlanFragmentTest extends PlanTestBase {
                         + "(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))]), num_children:0, "
                         + "int_literal:TIntLiteral"
                         + "(value:2), "
-                        + "output_scale:-1, use_vectorized:true, has_nullable_child:false, is_nullable:false, "
+                        + "output_scale:-1, has_nullable_child:false, is_nullable:false, "
                         + "is_monotonic:true)])]]"));
     }
 
@@ -1351,7 +1351,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from (select v1, v2 from t0) a join [shuffle] " +
                 "(select v4 from t1 limit 1) b on a.v1 = b.v4";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("join op: INNER JOIN (PARTITIONED)"));
     }
 
@@ -1360,7 +1359,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from (select v1, v2 from t0 limit 10) a join [shuffle] " +
                 "(select v4 from t1 ) b on a.v1 = b.v4";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("join op: INNER JOIN (PARTITIONED)"));
     }
 
@@ -1442,7 +1440,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(
                 "sort_tuple_slot_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode"
                         + "(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), num_children:0, slot_ref:TSlotRef"
-                        + "(slot_id:1, tuple_id:2), output_scale:-1, output_column:-1, use_vectorized:true, "
+                        + "(slot_id:1, tuple_id:2), output_scale:-1, output_column:-1, "
                         + "has_nullable_child:false, is_nullable:true, is_monotonic:true)])]"));
     }
 
@@ -1518,7 +1516,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testJoinLimitLeft() throws Exception {
         String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 limit 10";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
@@ -1561,7 +1558,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select * from t0, t1 limit 10";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
@@ -1919,7 +1915,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testCountDistinctWithSameMultiColumns() throws Exception {
         String sql = "select count(distinct t1b,t1c), count(distinct t1b,t1c) from test_all_type";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("6:AGGREGATE (merge finalize)"));
 
         sql = "select count(distinct t1b,t1c), count(distinct t1b,t1c) from test_all_type group by t1d";
@@ -2161,7 +2156,6 @@ public class PlanFragmentTest extends PlanTestBase {
         starRocksAssert.query(sql).explainContains("output: sum(1: id), bitmap_union_count(2: id2)");
 
         sql = "select count(distinct id2) from test.hll_table";
-        System.out.println(starRocksAssert.query(sql).explainQuery());
         starRocksAssert.query(sql).explainContains("hll_union_agg(2: id2)", "3: count");
 
         sql = "select sum(id) / count(distinct id2) from test.hll_table";
@@ -3666,7 +3660,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testMultiCountDistinctType() throws Exception {
         String sql = "select count(distinct t1a,t1b) from test_all_type";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("3:AGGREGATE (update serialize)\n" +
                 "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]"));
         Assert.assertTrue(plan.contains("5:AGGREGATE (merge finalize)\n" +
@@ -4287,7 +4280,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
         String sql = "select value, SUM(id) from join1 group by value";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: id)\n" +
                 "  |  group by: 3: value\n" +

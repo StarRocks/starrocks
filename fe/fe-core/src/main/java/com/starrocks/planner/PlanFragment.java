@@ -431,25 +431,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return transferQueryStatisticsWithEveryBatch;
     }
 
-    public boolean isOutPutExprsVectorized() {
-        if (outputExprs != null) {
-            for (Expr expr : outputExprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    public void setOutPutExprsUseVectorized() {
-        if (outputExprs != null) {
-            for (Expr expr : outputExprs) {
-                expr.setUseVectorized(true);
-            }
-        }
-    }
-
     public void collectBuildRuntimeFilters(PlanNode root) {
         if (root instanceof ExchangeNode) {
             return;

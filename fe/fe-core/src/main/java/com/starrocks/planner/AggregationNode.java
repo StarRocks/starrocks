@@ -358,7 +358,6 @@ public class AggregationNode extends PlanNode {
                     // push down only when both of them are slot ref and slot id match.
                     if ((gexpr instanceof SlotRef) &&
                             (((SlotRef) gexpr).getSlotId().asInt() == ((SlotRef) probeExpr).getSlotId().asInt())) {
-                        gexpr.setUseVectorized(gexpr.isVectorized());
                         if (children.get(0).pushDownRuntimeFilters(description, gexpr)) {
                             return true;
                         }
