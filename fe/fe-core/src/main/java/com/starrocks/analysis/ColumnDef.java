@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
@@ -82,7 +81,7 @@ public class ColumnDef {
         // default null
         public static DefaultValue NULL_DEFAULT_VALUE = new DefaultValue(true, null);
         // default "value", "0" means empty hll or bitmap
-        public static DefaultValue ZERO_DEFAULT_VALUE = new DefaultValue(true, ZERO);
+        public static DefaultValue EMPTY_VALUE = new DefaultValue(true, ZERO);
         // default value for date type CURRENT_TIMESTAMP
         public static DefaultValue CURRENT_TIMESTAMP_VALUE = new DefaultValue(
                 new FunctionCallExpr("now", new ArrayList<>()));
@@ -197,14 +196,14 @@ public class ColumnDef {
             if (defaultValue.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-            defaultValue = DefaultValue.ZERO_DEFAULT_VALUE;
+            defaultValue = DefaultValue.EMPTY_VALUE;
         }
 
         if (type.isBitmapType()) {
             if (defaultValue.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-            defaultValue = DefaultValue.ZERO_DEFAULT_VALUE;
+            defaultValue = DefaultValue.EMPTY_VALUE;
         }
 
         // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
