@@ -192,6 +192,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDate(datetime);
     }
 
+    @FEFunction(name = "unix_timestamp", argTypes = {}, returnType = "INT")
+    public static ConstantOperator unixTimestampNow() {
+        return unixTimestamp(now());
+    }
+
     @FEFunction.List(list = {
             @FEFunction(name = "unix_timestamp", argTypes = {"DATETIME"}, returnType = "INT"),
             @FEFunction(name = "unix_timestamp", argTypes = {"DATE"}, returnType = "INT")
