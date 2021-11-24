@@ -130,7 +130,6 @@ public class ProjectNode extends PlanNode {
                     // then replace probeExpr with kv.getValue()
                     // and push down kv.getValue()
                     if (probeExpr.isBound(kv.getKey())) {
-                        kv.getValue().setUseVectorized(kv.getValue().isVectorized());
                         if (children.get(0).pushDownRuntimeFilters(description, kv.getValue())) {
                             return true;
                         }

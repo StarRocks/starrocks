@@ -208,6 +208,9 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
     if (state != nullptr && state->query_options().__isset.runtime_filter_wait_timeout_ms) {
         _runtime_filter_collector.set_wait_timeout_ms(state->query_options().runtime_filter_wait_timeout_ms);
     }
+    if (tnode.__isset.filter_null_value_columns) {
+        _filter_null_value_columns = tnode.filter_null_value_columns;
+    }
     return Status::OK();
 }
 
@@ -672,11 +675,51 @@ void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized:
 void ExecNode::eval_join_runtime_filters(vectorized::Chunk* chunk) {
     if (chunk == nullptr) return;
     _runtime_filter_collector.evaluate(chunk);
+    eval_filter_null_values(chunk);
 }
 
 void ExecNode::eval_join_runtime_filters(vectorized::ChunkPtr* chunk) {
     if (chunk == nullptr) return;
     eval_join_runtime_filters(chunk->get());
+}
+
+void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
+    if (_filter_null_value_columns.size() == 0) return;
+    size_t before_size = chunk->num_rows();
+    if (before_size == 0) return;
+
+    // lazy allocation.
+    vectorized::Buffer<uint8_t> selection(0);
+
+    for (SlotId slot_id : _filter_null_value_columns) {
+        const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);
+        if (!c->is_nullable()) continue;
+        const vectorized::NullableColumn* nullable_column =
+                vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(c);
+        if (!nullable_column->has_null()) continue;
+        if (selection.size() == 0) {
+            selection.assign(before_size, 1);
+        }
+        // how many data() should we call? I really don't know.
+        // let compiler tells me.
+        // let compiler does vectorization.
+        // let compiler does everything.
+        // let's pray for compiler,
+        // till the end of the world.
+        const uint8_t* nulls = nullable_column->null_column()->raw_data();
+        uint8_t* sel = selection.data();
+        for (size_t i = 0; i < before_size; i++) {
+            sel[i] &= !nulls[i];
+        }
+    }
+    if (selection.size() == 0) return;
+
+    size_t after_size = SIMD::count_nonzero(selection);
+    // Those rows will be filtered out anyway, better to be filtered out here.
+    if (after_size != before_size) {
+        VLOG_FILE << "filter null values. before_size = " << before_size << ", after_size = " << after_size;
+        chunk->filter(selection);
+    }
 }
 
 void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode*>* nodes) {

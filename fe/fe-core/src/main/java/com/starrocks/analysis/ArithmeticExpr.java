@@ -355,10 +355,8 @@ public class ArithmeticExpr extends Expr {
     @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.ARITHMETIC_EXPR;
-        if (useVectorized || !type.getPrimitiveType().isDecimalOfAnyVersion()) {
-            msg.setOpcode(op.getOpcode());
-            msg.setOutput_column(outputColumn);
-        }
+        msg.setOpcode(op.getOpcode());
+        msg.setOutput_column(outputColumn);
     }
 
     @Override

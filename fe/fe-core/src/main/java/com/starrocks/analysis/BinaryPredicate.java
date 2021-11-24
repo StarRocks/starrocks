@@ -63,6 +63,9 @@ public class BinaryPredicate extends Predicate implements Writable {
     public static final com.google.common.base.Predicate<BinaryPredicate> IS_EQ_PREDICATE =
             arg -> arg.getOp() == Operator.EQ;
 
+    public static final com.google.common.base.Predicate<BinaryPredicate> IS_EQ_NULL_PREDICATE =
+            arg -> arg.getOp() == Operator.EQ_FOR_NULL;
+
     // true if this BinaryPredicate is inferred from slot equivalences, false otherwise.
     private boolean isInferred_ = false;
 

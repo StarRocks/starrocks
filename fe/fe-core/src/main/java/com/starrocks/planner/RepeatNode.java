@@ -21,6 +21,7 @@
 
 package com.starrocks.planner;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
@@ -35,6 +36,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -64,6 +66,7 @@ public class RepeatNode extends PlanNode {
     private GroupingInfo groupingInfo;
     private PlanNode input;
     private GroupByClause groupByClause;
+    private List<Integer> filter_null_value_columns = Lists.newArrayList();
 
     protected RepeatNode(PlanNodeId id, PlanNode input, GroupingInfo groupingInfo, GroupByClause groupByClause) {
         super(id, input.getTupleIds(), "REPEAT_NODE");
@@ -194,6 +197,9 @@ public class RepeatNode extends PlanNode {
         msg.node_type = TPlanNodeType.REPEAT_NODE;
         msg.repeat_node = new TRepeatNode(outputTupleDesc.getId().asInt(), repeatSlotIdList, groupingList.get(0),
                 groupingList, allSlotId);
+        if (ConnectContext.get().getSessionVariable().getEnableFilterNullValues()) {
+            msg.setFilter_null_value_columns(filter_null_value_columns);
+        }
     }
 
     @Override
@@ -233,5 +239,24 @@ public class RepeatNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {
+        // note(yan): repeat node may generate null values, and if runtime filter does not accept null value
+        // we have opportunity to filter those values out.
+        boolean slotRefWithNullValue = false;
+        SlotId slotId = null;
+        if (probeExpr instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) probeExpr;
+            if (slotRef.isNullable()) {
+                slotRefWithNullValue = true;
+                slotId = slotRef.getSlotId();
+            }
+        }
+
+        if (!description.getEqualForNull() && slotRefWithNullValue) {
+            filter_null_value_columns.add(slotId.asInt());
+        }
     }
 }

@@ -85,7 +85,6 @@ Status VectorizedInConstPredicateBuilder::create() {
 Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size_t column_offset) {
     PrimitiveType type = _expr->type().type;
     Expr* expr = _in_pred_ctx->root();
-
     DCHECK(column != nullptr);
     if (!column->is_nullable()) {
         switch (type) {
@@ -122,7 +121,9 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
                 if (!nullable_column->is_null(j)) {                                                             \
                     in_pred->insert_array(&data_array[j]);                                                      \
                 } else {                                                                                        \
-                    in_pred->insert_array(nullptr);                                                             \
+                    if (_eq_null) {                                                                             \
+                        in_pred->insert_array(nullptr);                                                         \
+                    }                                                                                           \
                 }                                                                                               \
             }                                                                                                   \
         } else {                                                                                                \
@@ -130,7 +131,9 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
                 if (!nullable_column->is_null(j)) {                                                             \
                     in_pred->insert(&data_array[j]);                                                            \
                 } else {                                                                                        \
-                    in_pred->insert(nullptr);                                                                   \
+                    if (_eq_null) {                                                                             \
+                        in_pred->insert(nullptr);                                                               \
+                    }                                                                                           \
                 }                                                                                               \
             }                                                                                                   \
         }                                                                                                       \

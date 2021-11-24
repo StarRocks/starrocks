@@ -55,6 +55,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Root of the expr node hierarchy.
@@ -115,41 +116,22 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     // Returns true if an Expr is an aggregate function that returns non-null on
     // an empty set (e.g. count).
-    public static final com.google.common.base.Predicate<Expr>
-            NON_NULL_EMPTY_AGG = new com.google.common.base.Predicate<Expr>() {
-        @Override
-        public boolean apply(Expr arg) {
-            return arg instanceof FunctionCallExpr &&
+    public static final Predicate<Expr>
+            NON_NULL_EMPTY_AGG = (com.google.common.base.Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
                     ((FunctionCallExpr) arg).returnsNonNullOnEmpty();
-        }
-    };
 
-    /* TODO(zc)
     // Returns true if an Expr is a builtin aggregate function.
-    public static final com.google.common.base.Predicate<Expr> IS_BUILTIN_AGG_FN =
-            new com.google.common.base.Predicate<Expr>() {
-                @Override
-                public boolean apply(Expr arg) {
-                    return arg instanceof FunctionCallExpr &&
-                            ((FunctionCallExpr)arg).getFnName().isBuiltin();
-                }
-            };
-    */
-    // Returns true if an Expr is a builtin aggregate function.
-    public static final com.google.common.base.Predicate<Expr> CORRELATED_SUBQUERY_SUPPORT_AGG_FN =
-            new com.google.common.base.Predicate<Expr>() {
-                @Override
-                public boolean apply(Expr arg) {
-                    if (arg instanceof FunctionCallExpr) {
-                        String fnName = ((FunctionCallExpr) arg).getFnName().getFunction();
-                        return (fnName.equalsIgnoreCase("sum")
-                                || fnName.equalsIgnoreCase("max")
-                                || fnName.equalsIgnoreCase("min")
-                                || fnName.equalsIgnoreCase("avg")
-                                || fnName.equalsIgnoreCase(FunctionSet.COUNT));
-                    } else {
-                        return false;
-                    }
+    public static final Predicate<Expr> CORRELATED_SUBQUERY_SUPPORT_AGG_FN =
+            (com.google.common.base.Predicate<Expr>) arg -> {
+                if (arg instanceof FunctionCallExpr) {
+                    String fnName = ((FunctionCallExpr) arg).getFnName().getFunction();
+                    return (fnName.equalsIgnoreCase("sum")
+                            || fnName.equalsIgnoreCase("max")
+                            || fnName.equalsIgnoreCase("min")
+                            || fnName.equalsIgnoreCase("avg")
+                            || fnName.equalsIgnoreCase(FunctionSet.COUNT));
+                } else {
+                    return false;
                 }
             };
 
@@ -222,27 +204,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 }
             };
 
-    /* TODO(zc)
-    public static final com.google.common.base.Predicate<Expr>
-            IS_NONDETERMINISTIC_BUILTIN_FN_PREDICATE =
-            new com.google.common.base.Predicate<Expr>() {
-                @Override
-                public boolean apply(Expr arg) {
-                    return arg instanceof FunctionCallExpr
-                            && ((FunctionCallExpr) arg).isNondeterministicBuiltinFn();
-                }
-            };
-
-    public static final com.google.common.base.Predicate<Expr> IS_UDF_PREDICATE =
-            new com.google.common.base.Predicate<Expr>() {
-                @Override
-                public boolean apply(Expr arg) {
-                    return arg instanceof FunctionCallExpr
-                            && !((FunctionCallExpr) arg).getFnName().isBuiltin();
-                }
-            };
-    */
-
     // id that's unique across the entire query statement and is assigned by
     // Analyzer.registerConjuncts(); only assigned for the top-level terms of a
     // conjunction, and therefore null for most Exprs
@@ -291,8 +252,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Flag to indicate whether to wrap this expr's toSql() in parenthesis. Set by parser.
     // Needed for properly capturing expr precedences in the SQL string.
     protected boolean printSqlInParens = false;
-
-    protected boolean useVectorized = true;
 
     protected Expr() {
         super();
@@ -965,14 +924,12 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             // being cast to a non-NULL type, the type doesn't matter and we can cast it
             // arbitrarily.
             NullLiteral l = NullLiteral.create(ScalarType.BOOLEAN);
-            l.setUseVectorized(useVectorized);
             l.treeToThriftHelper(container);
             return;
         }
 
         msg.type = type.toThrift();
         msg.num_children = children.size();
-        msg.setUse_vectorized(useVectorized);
         msg.setHas_nullable_child(hasNullableChild());
         msg.setIs_nullable(isNullable());
         if (fn != null) {
@@ -986,7 +943,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         toThrift(msg);
         container.addToNodes(msg);
         for (Expr child : children) {
-            child.setUseVectorized(useVectorized);
             child.treeToThriftHelper(container);
         }
 
@@ -1290,13 +1246,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public boolean isScalarSubquery() {
         Preconditions.checkState(isAnalyzed);
         return this instanceof Subquery && getType().isScalarType();
-    }
-
-    /**
-     * Returns true if expr is can use vectorized process, otherwise false.
-     */
-    public boolean isVectorized() {
-        return false;
     }
 
     /**
@@ -1780,13 +1729,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         recursiveResetChildrenResult();
         final Expr newExpr = ExpressionFunctions.INSTANCE.evalExpr(this);
         return newExpr != null ? newExpr : this;
-    }
-
-    public void setUseVectorized(boolean useVectorized) {
-        for (Expr child : children) {
-            child.setUseVectorized(useVectorized);
-        }
-        this.useVectorized = useVectorized;
     }
 
     // For a predicate, if input is Null, output is Null or false, we call it is strict.

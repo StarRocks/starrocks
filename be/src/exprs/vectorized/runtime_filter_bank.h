@@ -41,7 +41,7 @@ public:
     // ====================================
     static JoinRuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, PrimitiveType type);
     static Status fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type, JoinRuntimeFilter* filter,
-                                            size_t column_offset);
+                                            size_t column_offset, bool eq_null);
 };
 
 // how to generate & publish this runtime filter

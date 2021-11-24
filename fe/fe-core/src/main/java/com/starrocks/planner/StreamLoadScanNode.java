@@ -144,7 +144,8 @@ public class StreamLoadScanNode extends LoadScanNode {
 
         Load.initColumns(dstTable, streamLoadTask.getColumnExprDescs(), null /* no hadoop function */,
                 exprsByName, analyzer, srcTupleDesc, slotDescByName,
-                params, true, useVectorizedLoad, Lists.newArrayList());
+                params, true, useVectorizedLoad, Lists.newArrayList(),
+                streamLoadTask.getFormatType() == TFileFormatType.FORMAT_JSON);
 
         rangeDesc.setNum_of_columns_from_file(srcTupleDesc.getSlots().size());
         brokerScanRange.addToRanges(rangeDesc);
@@ -243,15 +244,6 @@ public class StreamLoadScanNode extends LoadScanNode {
                 expr.analyze(analyzer);
             }
             expr = castToSlot(dstSlotDesc, expr);
-
-            // check expr is vectorized or not.
-            if (useVectorizedLoad) {
-                if (!expr.isVectorized()) {
-                    useVectorizedLoad = false;
-                } else {
-                    expr.setUseVectorized(true);
-                }
-            }
 
             brokerScanRange.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), expr.treeToThrift());
         }

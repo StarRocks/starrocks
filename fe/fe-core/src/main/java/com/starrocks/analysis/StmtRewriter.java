@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -620,7 +621,7 @@ public class StmtRewriter {
             SelectListItem firstItem =
                     ((SelectStmt) inlineView.getViewStmt()).getSelectList().getItems().get(0);
             if (!onClauseConjuncts.isEmpty()
-                    && firstItem.getExpr().contains(Expr.NON_NULL_EMPTY_AGG)) {
+                    && firstItem.getExpr().contains(Expr.NON_NULL_EMPTY_AGG::test)) {
                 // Correlated subqueries with an aggregate function that returns non-null on
                 // an empty input are rewritten using a LEFT OUTER JOIN because we
                 // need to ensure that there is one agg value for every tuple of 'stmt'
@@ -948,7 +949,7 @@ public class StmtRewriter {
                 throw new AnalysisException("The subquery only support one item in select clause");
             }
             SelectListItem item = stmt.getSelectList().getItems().get(0);
-            if (!item.getExpr().contains(Expr.CORRELATED_SUBQUERY_SUPPORT_AGG_FN)) {
+            if (!item.getExpr().contains(Expr.CORRELATED_SUBQUERY_SUPPORT_AGG_FN::test)) {
                 throw new AnalysisException("The select item in correlated subquery of binary predicate should only "
                         + "be sum, min, max, avg and count. Current subquery:"
                         + stmt.toSql());
@@ -963,8 +964,8 @@ public class StmtRewriter {
                     + stmt.toSql());
         }
 
-        final com.google.common.base.Predicate<Expr> isSingleSlotRef =
-                new com.google.common.base.Predicate<Expr>() {
+        final Predicate<Expr> isSingleSlotRef =
+                new Predicate<Expr>() {
                     @Override
                     public boolean apply(Expr arg) {
                         return arg.unwrapSlotRef(false) != null;
@@ -1119,20 +1120,20 @@ public class StmtRewriter {
         ExprSubstitutionMap smap = new ExprSubstitutionMap();
         SelectListItem item =
                 ((SelectStmt) inlineView.getViewStmt()).getSelectList().getItems().get(0);
-        if (isCorrelated && item.getExpr().contains(Expr.NON_NULL_EMPTY_AGG)) {
+        if (isCorrelated && item.getExpr().contains(Expr.NON_NULL_EMPTY_AGG::test)) {
             // TODO: Add support for multiple agg functions that return non-null on an
             // empty input, by wrapping them with zeroifnull functions before the inline
             // view is analyzed.
-            if (!Expr.NON_NULL_EMPTY_AGG.apply(item.getExpr())
+            if (!Expr.NON_NULL_EMPTY_AGG.test(item.getExpr())
                     && (!(item.getExpr() instanceof CastExpr)
-                    || !Expr.NON_NULL_EMPTY_AGG.apply(item.getExpr().getChild(0)))) {
+                    || !Expr.NON_NULL_EMPTY_AGG.test(item.getExpr().getChild(0)))) {
                 throw new AnalysisException("Aggregate function that returns non-null on "
                         + "an empty input cannot be used in an expression in a "
                         + "correlated subquery's select list: " + subquery.toSql());
             }
 
             List<Expr> aggFns = Lists.newArrayList();
-            item.getExpr().collectAll(Expr.NON_NULL_EMPTY_AGG, aggFns);
+            item.getExpr().collectAll(Expr.NON_NULL_EMPTY_AGG::test, aggFns);
             // TODO Generalize this by making the aggregate functions aware of the
             // literal expr that they return on empty input, e.g. max returns a
             // NullLiteral whereas count returns a NumericLiteral.

@@ -786,6 +786,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return true;
     }
 
+    public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {
+    }
+
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
         if (!canPushDownRuntimeFilter()) {
             return false;
@@ -798,10 +801,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 accept = true;
             }
         }
+        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
+        if (isBound) {
+            checkRuntimeFilterOnNullValue(description, probeExpr);
+        }
         if (accept) {
             return true;
         }
-        if (probeExpr.isBoundByTupleIds(getTupleIds()) && description.canProbeUse(this)) {
+        if (isBound && description.canProbeUse(this)) {
             description.addProbeExpr(id.asInt(), probeExpr);
             probeRuntimeFilters.add(description);
             return true;
