@@ -203,10 +203,10 @@ AGGREGATE ([GLOBAL] aggregate [{5: sum(1: v1)=sum(5: sum(1: v1))}] group by [[2:
 [sql]
 select case when c1=1 then 1 end from (select '1' c1  union  all select '2') a group by rollup(case  when c1=1 then 1 end, 1 + 1);
 [result]
-AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: case, 5: expr, 6: GROUPING_ID]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: expr, 5: expr, 6: GROUPING_ID]] having [null]
     EXCHANGE SHUFFLE[4, 5, 6]
-        AGGREGATE ([LOCAL] aggregate [{}] group by [[4: case, 5: expr, 6: GROUPING_ID]] having [null]
-            REPEAT [[], [4: case], [4: case, 5: expr]]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[4: expr, 5: expr, 6: GROUPING_ID]] having [null]
+            REPEAT [[], [4: expr], [4: expr, 5: expr]]
                 UNION
                     VALUES (1)
                     VALUES (2)
