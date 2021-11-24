@@ -165,7 +165,7 @@
 |min_file_descriptor_number|60000|BE进程的文件句柄limit要求的下线|
 |index_stream_cache_capacity|10737418240|BloomFilter/Min/Max等统计信息缓存的容量|
 |storage_page_cache_limit|20G|PageCache的容量|
-|disable_storage_page_cache|false|是否开启PageCache|
+|disable_storage_page_cache|true|表示关闭PageCache|
 |base_compaction_start_hour|20|BaseCompaction开启的时间|
 |base_compaction_end_hour|7|BaseCompaction结束的时间|
 |base_compaction_check_interval_seconds|60|BaseCompaction线程轮询的间隔|
