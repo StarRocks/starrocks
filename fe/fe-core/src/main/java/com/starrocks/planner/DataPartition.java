@@ -126,19 +126,4 @@ public class DataPartition {
         str.append("\n");
         return str.toString();
     }
-
-    public void setUseVectorized(boolean flag) {
-        for (Expr expr : partitionExprs) {
-            expr.setUseVectorized(flag);
-        }
-    }
-
-    public boolean isVectorized() {
-        for (Expr expr : partitionExprs) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-        return true;
-    }
 }
