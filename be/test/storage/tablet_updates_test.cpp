@@ -809,7 +809,7 @@ TEST_F(TabletUpdatesTest, compaction) {
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 }
 
-TEST_F(TabletUpdatesTest, perform_linked_schema_change) {
+TEST_F(TabletUpdatesTest, schema_change_linked) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     _tablet2 = create_tablet2(rand(), rand());
@@ -826,12 +826,12 @@ TEST_F(TabletUpdatesTest, perform_linked_schema_change) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     _tablet2->set_tablet_state(TABLET_NOTREADY);
-    ASSERT_TRUE(_tablet2->updates()->perform_linked_schema_change(4, _tablet.get()).ok());
+    ASSERT_TRUE(_tablet2->updates()->schema_change_linked(4, _tablet.get()).ok());
 
     ASSERT_EQ(N, read_tablet(_tablet2, 4));
 }
 
-TEST_F(TabletUpdatesTest, perform_directly_schema_change) {
+TEST_F(TabletUpdatesTest, schema_change_directly) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     const auto& tablet_to_schema_change = create_tablet_to_schema_change(rand(), rand());
@@ -864,8 +864,7 @@ TEST_F(TabletUpdatesTest, perform_directly_schema_change) {
             }
         }
     }
-    ASSERT_TRUE(
-            tablet_to_schema_change->updates()->perform_directly_schema_change(4, _tablet, chunk_changer.get()).ok());
+    ASSERT_TRUE(tablet_to_schema_change->updates()->schema_change_directly(4, _tablet, chunk_changer.get()).ok());
 
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed(tablet_to_schema_change, 4, keys));
 }

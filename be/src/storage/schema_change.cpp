@@ -1602,7 +1602,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletRe
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-        Status st = new_tablet->updates()->perform_linked_schema_change(request.alter_version, base_tablet.get());
+        Status st = new_tablet->updates()->schema_change_linked(request.alter_version, base_tablet.get());
         if (!st.ok()) {
             LOG(WARNING) << "schema change new tablet load snapshot error " << st.to_string();
             return OLAP_ERR_OTHER_ERROR;

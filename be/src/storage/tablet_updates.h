@@ -155,10 +155,10 @@ public:
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
-    Status perform_linked_schema_change(int64_t request_version, Tablet* base_tablet);
+    Status schema_change_linked(int64_t request_version, Tablet* base_tablet);
 
-    Status perform_directly_schema_change(int64_t request_version, const std::shared_ptr<Tablet>& base_tablet,
-                                          vectorized::ChunkChanger* chunk_changer);
+    Status schema_change_directly(int64_t request_version, const std::shared_ptr<Tablet>& base_tablet,
+                                  vectorized::ChunkChanger* chunk_changer);
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta);
 
@@ -270,7 +270,8 @@ private:
     void _update_total_stats(const std::vector<uint32_t>& rowsets);
 
     Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
-                                     vectorized::TabletReader* tablet_reader, vectorized::ChunkChanger* chunk_changer,
+                                     const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
+                                     vectorized::ChunkChanger* chunk_changer,
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
 private:

@@ -847,8 +847,8 @@ void StorageEngine::add_unused_rowset(const RowsetSharedPtr& rowset) {
         return;
     }
 
-    VLOG(3) << "add unused rowset, rowset id:" << rowset->rowset_id() << ", version:" << rowset->version().first << "-"
-            << rowset->version().second << ", unique id:" << rowset->unique_id();
+    VLOG(3) << "add unused rowset, rowset id:" << rowset->rowset_id() << ", version:" << rowset->version()
+            << ", unique id:" << rowset->unique_id();
 
     auto rowset_id = rowset->rowset_id().to_string();
 

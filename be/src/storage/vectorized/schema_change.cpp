@@ -658,8 +658,7 @@ bool LinkedSchemaChange::process(vectorized::TabletReader* reader, RowsetWriter*
     if (status != OLAP_SUCCESS) {
         LOG(WARNING) << "fail to convert rowset."
                      << ", new_tablet=" << new_tablet->full_name() << ", base_tablet=" << base_tablet->full_name()
-                     << ", version=" << new_rowset_writer->version().first << "-"
-                     << new_rowset_writer->version().second;
+                     << ", version=" << new_rowset_writer->version();
         return false;
     }
     return true;
@@ -943,13 +942,13 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         Status status;
         if (sc_params.sc_directly) {
-            status = new_tablet->updates()->perform_directly_schema_change(request.alter_version, base_tablet,
-                                                                           sc_params.chunk_changer.get());
+            status = new_tablet->updates()->schema_change_directly(request.alter_version, base_tablet,
+                                                                   sc_params.chunk_changer.get());
         } else if (sc_params.sc_sorting) {
             LOG(WARNING) << "schema change of primary key model do not support sorting.";
             status = Status::NotSupported("schema change of primary key model do not support sorting.");
         } else {
-            status = new_tablet->updates()->perform_linked_schema_change(request.alter_version, base_tablet.get());
+            status = new_tablet->updates()->schema_change_linked(request.alter_version, base_tablet.get());
         }
         if (!status.ok()) {
             LOG(WARNING) << "schema change new tablet load snapshot error: " << status.to_string();
@@ -1153,8 +1152,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     Status status;
 
     for (int i = 0; i < sc_params.rowset_readers.size(); ++i) {
-        LOG(INFO) << "begin to convert a history rowset. version=" << sc_params.rowsets_to_change[i]->version().first
-                  << "-" << sc_params.rowsets_to_change[i]->version().second;
+        LOG(INFO) << "begin to convert a history rowset. version=" << sc_params.rowsets_to_change[i]->version();
 
         TabletSharedPtr new_tablet = sc_params.new_tablet;
         TabletSharedPtr base_tablet = sc_params.base_tablet;

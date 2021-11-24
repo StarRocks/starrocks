@@ -743,10 +743,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
     size_t idx = 0;
     size_t old_total_del = 0;
-    size_t total_del = 0;
     size_t new_del = 0;
+    size_t total_del = 0;
     string delvec_change_info;
-    KVStore* meta = _tablet.data_dir()->get_meta();
     for (auto& new_delete : new_deletes) {
         uint32_t rssid = new_delete.first;
         if (rssid >= rowset_id && rssid < rowset_id + rowset->num_segments()) {
@@ -766,7 +765,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             tsid.segment_id = rssid;
             DelVectorPtr old_del_vec;
             // TODO(cbl): should get the version before this apply version, to be safe
-            st = manager->get_latest_del_vec(meta, tsid, &old_del_vec);
+            st = manager->get_latest_del_vec(_tablet.data_dir()->get_meta(), tsid, &old_del_vec);
             if (!st.ok()) {
                 LOG(ERROR) << "_apply_rowset_commit error: get_latest_del_vec failed: " << st << " " << debug_string();
                 _set_error();
@@ -1689,23 +1688,23 @@ struct RowsetLoadInfo {
     vector<DelVectorPtr> delvecs;
 };
 
-Status TabletUpdates::perform_linked_schema_change(int64_t request_version, Tablet* base_tablet) {
+Status TabletUpdates::schema_change_linked(int64_t request_version, Tablet* base_tablet) {
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << "perform_linked_schema_change is only allowed in schema change process";
-    LOG(INFO) << "perform_linked_schema_change start tablet:" << _tablet.tablet_id()
-              << " request_version:" << request_version << " #pending:" << _pending_commits.size();
+            << "schema_change_linked is only allowed in schema change process";
+    LOG(INFO) << "schema_change_linked start tablet:" << _tablet.tablet_id() << " request_version:" << request_version
+              << " #pending:" << _pending_commits.size();
     int64_t max_version = base_tablet->updates()->max_version();
     if (max_version < request_version) {
-        LOG(WARNING) << "perform_linked_schema_change base_tablet's max_version:" << max_version
+        LOG(WARNING) << "schema_change_linked base_tablet's max_version:" << max_version
                      << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
-        return Status::InternalError("perform_linked_schema_change max_version < request version");
+        return Status::InternalError("schema_change_linked max_version < request version");
     }
     vector<RowsetSharedPtr> rowsets;
     EditVersion version;
     Status st = base_tablet->updates()->get_applied_rowsets(request_version, &rowsets, &version);
     if (!st.ok()) {
-        LOG(WARNING) << "perform_linked_schema_change get base tablet rowsets error tablet:" << base_tablet->tablet_id()
+        LOG(WARNING) << "schema_change_linked get base tablet rowsets error tablet:" << base_tablet->tablet_id()
                      << " version:" << request_version << " reason:" << st;
         return st;
     }
@@ -1806,31 +1805,30 @@ Status TabletUpdates::perform_linked_schema_change(int64_t request_version, Tabl
     index.unload();
     update_manager->index_cache().release(index_entry);
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
-    LOG(INFO) << "perform_linked_schema_change finish tablet:" << _tablet.tablet_id()
-              << " version:" << this->max_version() << " #pending:" << _pending_commits.size();
+    LOG(INFO) << "schema_change_linked finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
+              << " #pending:" << _pending_commits.size();
     return Status::OK();
 }
 
-Status TabletUpdates::perform_directly_schema_change(int64_t request_version,
-                                                     const std::shared_ptr<Tablet>& base_tablet,
-                                                     vectorized::ChunkChanger* chunk_changer) {
+Status TabletUpdates::schema_change_directly(int64_t request_version, const std::shared_ptr<Tablet>& base_tablet,
+                                             vectorized::ChunkChanger* chunk_changer) {
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << "perform_directly_schema_change is only allowed in schema change process";
-    LOG(INFO) << "perform_directly_schema_change start tablet:" << _tablet.tablet_id()
-              << " request_version:" << request_version << " #pending:" << _pending_commits.size();
+            << "schema_change_directly is only allowed in schema change process";
+    LOG(INFO) << "schema_change_directly start tablet:" << _tablet.tablet_id() << " request_version:" << request_version
+              << " #pending:" << _pending_commits.size();
     int64_t max_version = base_tablet->updates()->max_version();
     if (max_version < request_version) {
-        LOG(WARNING) << "perform_directly_schema_change base_tablet's max_version:" << max_version
+        LOG(WARNING) << "schema_change_directly base_tablet's max_version:" << max_version
                      << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
-        return Status::InternalError("perform_directly_schema_change max_version < request_version");
+        return Status::InternalError("schema_change_directly max_version < request_version");
     }
-    std::vector<RowsetSharedPtr> rowsets;
+    std::vector<RowsetSharedPtr> src_rowsets;
     EditVersion version;
-    Status status = base_tablet->updates()->get_applied_rowsets(request_version, &rowsets, &version);
+    Status status = base_tablet->updates()->get_applied_rowsets(request_version, &src_rowsets, &version);
     if (!status.ok()) {
-        LOG(WARNING) << "perform_directly_schema_change get base tablet rowsets error tablet:"
-                     << base_tablet->tablet_id() << " request_version:" << request_version << " reason:" << status;
+        LOG(WARNING) << "schema_change_directly get base tablet rowsets error tablet:" << base_tablet->tablet_id()
+                     << " request_version:" << request_version << " reason:" << status;
         return status;
     }
 
@@ -1839,40 +1837,29 @@ Status TabletUpdates::perform_directly_schema_change(int64_t request_version,
 
     auto kv_store = _tablet.data_dir()->get_meta();
     auto tablet_id = _tablet.tablet_id();
-
-    // delete old meta
-    auto data_dir = _tablet.data_dir();
-    rocksdb::WriteBatch wb;
-    RETURN_IF_ERROR(TabletMetaManager::clear_log(data_dir, &wb, tablet_id));
-    RETURN_IF_ERROR(TabletMetaManager::clear_rowset(data_dir, &wb, tablet_id));
-    RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_dir, &wb, tablet_id));
-    RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_dir, &wb, tablet_id));
-
-    std::unique_lock wrlock(_tablet.get_header_lock());
-    status = kv_store->write_batch(&wb);
-    if (!status.ok()) {
-        LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
-        return Status::InternalError("Fail to delete old meta and write new meta");
-    }
+    uint32_t next_rowset_id = 0;
+    std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
     vectorized::Schema base_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::TabletReaderParams read_params;
-    read_params.reader_type = ReaderType::READER_ALTER_TABLE;
-    read_params.skip_aggregation = false;
-    read_params.chunk_size = config::vector_chunk_size;
 
-    for (const auto& rowset : rowsets) {
-        LOG(INFO) << "begin to convert a history rowset. version=" << rowset->version().first << "-"
-                  << rowset->version().second;
+    OlapReaderStatistics stats;
 
-        std::unique_ptr<vectorized::TabletReader> tablet_reader =
-                std::make_unique<vectorized::TabletReader>(base_tablet, Version(0, version.major()), base_schema);
-        tablet_reader->set_delete_predicates_version(Version(0, max_version));
-        RETURN_IF_ERROR(tablet_reader->prepare());
-        RETURN_IF_ERROR(tablet_reader->open(read_params));
+    for (int i = 0; i < src_rowsets.size(); i++) {
+        const auto& src_rowset = src_rowsets[i];
+        LOG(INFO) << "begin to convert a history rowset. version=" << src_rowset->version();
+
+        RowsetReleaseGuard guard(src_rowset->shared_from_this());
+        auto beta_rowset = down_cast<BetaRowset*>(src_rowset.get());
+        auto res = beta_rowset->get_segment_iterators2(base_schema, base_tablet->data_dir()->get_meta(),
+                                                       version.major(), &stats);
+        if (!res.ok()) {
+            return res.status();
+        }
+
+        RowsetId rid = StorageEngine::instance()->next_rowset_id();
 
         RowsetWriterContext writer_context(kDataFormatUnknown, config::storage_format_version);
-        writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rid;
         writer_context.tablet_uid = _tablet.tablet_uid();
         writer_context.tablet_id = _tablet.tablet_id();
         writer_context.partition_id = _tablet.partition_id();
@@ -1881,9 +1868,9 @@ Status TabletUpdates::perform_directly_schema_change(int64_t request_version,
         writer_context.rowset_path_prefix = _tablet.schema_hash_path();
         writer_context.tablet_schema = &_tablet.tablet_schema();
         writer_context.rowset_state = VISIBLE;
-        writer_context.version = rowset->version();
-        writer_context.version_hash = rowset->version_hash();
-        writer_context.segments_overlap = rowset->rowset_meta()->segments_overlap();
+        writer_context.version = src_rowset->version();
+        writer_context.version_hash = src_rowset->version_hash();
+        writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
 
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
@@ -1892,7 +1879,7 @@ Status TabletUpdates::perform_directly_schema_change(int64_t request_version,
             return Status::InternalError("build rowset writer failed");
         }
 
-        status = _convert_from_base_rowset(base_tablet, tablet_reader.get(), chunk_changer, rowset_writer);
+        status = _convert_from_base_rowset(base_tablet, res.value(), chunk_changer, rowset_writer);
         if (!status.ok()) {
             LOG(WARNING) << "failed to convert from base rowset, exit alter process";
             return status;
@@ -1906,33 +1893,92 @@ Status TabletUpdates::perform_directly_schema_change(int64_t request_version,
             return Status::InternalError("failed to build rowset, exit alter process");
         }
 
-        LOG(INFO) << "new rowset has " << new_rowset->num_segments() << " segments";
-        status = rowset_commit(new_rowset->end_version(), new_rowset);
-        if (!status.ok()) {
-            LOG(WARNING) << "failed to register new version. "
-                         << " tablet=" << _tablet.full_name() << ", version=" << rowset->version().first << "-"
-                         << rowset->version().second;
-            StorageEngine::instance()->add_unused_rowset(new_rowset);
-            _tablet.release_push_lock();
-            break;
-        } else {
-            VLOG(3) << "commit new version. tablet=" << _tablet.full_name() << ", version=" << rowset->version().first
-                    << "-" << rowset->version().second;
-        }
         _tablet.release_push_lock();
 
-        VLOG(10) << "succeed to convert a history version."
-                 << " version=" << rowset->version().first << "-" << rowset->version().second;
+        auto& new_rowset_load_info = new_rowset_load_infos[i];
+        // use src_rowset's meta as base, change some fields to new tablet
+        auto& rowset_meta_pb = new_rowset_load_info.rowset_meta_pb;
+        src_rowset->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
+
+        new_rowset_load_info.num_segments = new_rowset->num_segments();
+        new_rowset_load_info.delvecs.resize(new_rowset_load_info.num_segments);
+
+        next_rowset_id += std::max(1U, (uint32_t)new_rowset_load_info.num_segments);
+        new_rowset_load_info.rowset_id = next_rowset_id;
+
+        rowset_meta_pb.set_rowset_seg_id(new_rowset_load_info.rowset_id);
+        rowset_meta_pb.set_rowset_id(0);
+        rowset_meta_pb.set_rowset_id_v2(rid.to_string());
+        rowset_meta_pb.set_partition_id(_tablet.tablet_meta()->partition_id());
+        rowset_meta_pb.set_tablet_id(_tablet.tablet_id());
+        rowset_meta_pb.set_tablet_schema_hash(_tablet.schema_hash());
+        rowset_meta_pb.set_num_segments(new_rowset_load_info.num_segments);
+
+        LOG(INFO) << "new rowset has " << new_rowset->num_segments() << " segments";
+
+        VLOG(10) << "succeed to convert a history version=" << src_rowset->version();
+    }
+
+    TabletMetaPB meta_pb;
+    _tablet.tablet_meta()->to_meta_pb(&meta_pb);
+    meta_pb.set_tablet_state(TabletStatePB::PB_RUNNING);
+    TabletUpdatesPB* updates_pb = meta_pb.mutable_updates();
+    updates_pb->clear_versions();
+    auto version_pb = updates_pb->add_versions();
+    version_pb->mutable_version()->set_major(version.major());
+    version_pb->mutable_version()->set_minor(version.minor());
+    int64_t creation_time = time(nullptr);
+    version_pb->set_creation_time(creation_time);
+    for (auto& new_rowset_load_info : new_rowset_load_infos) {
+        version_pb->mutable_rowsets()->Add(new_rowset_load_info.rowset_id);
+    }
+    version_pb->set_rowsetid_add(next_rowset_id);
+    auto apply_version_pb = updates_pb->mutable_apply_version();
+    apply_version_pb->set_major(version.major());
+    apply_version_pb->set_minor(version.minor());
+    updates_pb->set_next_log_id(1);
+    updates_pb->set_next_rowset_id(next_rowset_id);
+
+    // delete old meta & write new meta
+    auto data_dir = _tablet.data_dir();
+    rocksdb::WriteBatch wb;
+    RETURN_IF_ERROR(TabletMetaManager::clear_log(data_dir, &wb, tablet_id));
+    RETURN_IF_ERROR(TabletMetaManager::clear_rowset(data_dir, &wb, tablet_id));
+    RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_dir, &wb, tablet_id));
+    RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_dir, &wb, tablet_id));
+    RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(data_dir, &wb, meta_pb));
+    DelVector delvec;
+    for (const auto& new_rowset_load_info : new_rowset_load_infos) {
+        RETURN_IF_ERROR(
+                TabletMetaManager::put_rowset_meta(data_dir, &wb, tablet_id, new_rowset_load_info.rowset_meta_pb));
+        for (int j = 0; j < new_rowset_load_info.num_segments; j++) {
+            RETURN_IF_ERROR(TabletMetaManager::put_del_vector(data_dir, &wb, tablet_id,
+                                                              new_rowset_load_info.rowset_id + j, delvec));
+        }
+    }
+
+    std::unique_lock wrlock(_tablet.get_header_lock());
+    status = kv_store->write_batch(&wb);
+    if (!status.ok()) {
+        LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
+        return Status::InternalError("Fail to delete old meta and write new meta");
+    }
+
+    // 4. load from new meta
+    status = _load_from_pb(*updates_pb);
+    if (!status.ok()) {
+        LOG(WARNING) << "_load_from_pb failed tablet_id:" << tablet_id << " " << status;
+        return status;
     }
 
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
-    LOG(INFO) << "perform_directly_schema_change finish tablet:" << _tablet.tablet_id()
-              << " version:" << this->max_version() << " #pending:" << _pending_commits.size();
+    LOG(INFO) << "schema_change_directly finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
+              << " #pending:" << _pending_commits.size();
     return Status::OK();
 }
 
 Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
-                                                vectorized::TabletReader* tablet_reader,
+                                                const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
                                                 vectorized::ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
     vectorized::Schema base_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
@@ -1943,43 +1989,34 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
-    do {
-        Status status = tablet_reader->do_get_next(base_chunk.get());
-
-        if (!status.ok()) {
-            if (status.is_end_of_file()) {
-                break;
-            } else {
-                std::stringstream ss;
-                ss << "tablet reader failed to get next chunk, status is:" << status.to_string();
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
+    for (auto& seg_iterator : seg_iterators) {
+        if (seg_iterator.get() == nullptr) {
+            continue;
+        }
+        while (true) {
+            base_chunk->reset();
+            new_chunk->reset();
+            mem_pool->clear();
+            Status status = seg_iterator->get_next(base_chunk.get());
+            if (!status.ok()) {
+                if (status.is_end_of_file()) {
+                    break;
+                } else {
+                    std::stringstream ss;
+                    ss << "segment iterator failed to get next chunk, status is:" << status.to_string();
+                    LOG(WARNING) << ss.str();
+                    return Status::InternalError(ss.str());
+                }
             }
-        }
-
-        if (!chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), _tablet.tablet_meta(),
-                                         mem_pool.get())) {
-            LOG(WARNING) << "failed to change data in chunk";
-            return Status::InternalError("failed to change data in chunk");
-        }
-        if (rowset_writer->add_chunk(*new_chunk) != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to add chunk";
-            return Status::InternalError("failed to add chunk");
-        }
-        base_chunk->reset();
-        new_chunk->reset();
-        mem_pool->clear();
-    } while (base_chunk->num_rows() == 0);
-
-    if (base_chunk->num_rows() != 0) {
-        if (!chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), _tablet.tablet_meta(),
-                                         mem_pool.get())) {
-            LOG(WARNING) << "failed to change data in chunk";
-            return Status::InternalError("failed to change data in chunk");
-        }
-        if (rowset_writer->add_chunk(*new_chunk) != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to add chunk";
-            return Status::InternalError("failed to add chunk");
+            if (!chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), _tablet.tablet_meta(),
+                                             mem_pool.get())) {
+                LOG(WARNING) << "failed to change data in chunk";
+                return Status::InternalError("failed to change data in chunk");
+            }
+            if (rowset_writer->add_chunk(*new_chunk) != OLAP_SUCCESS) {
+                LOG(WARNING) << "failed to add chunk";
+                return Status::InternalError("failed to add chunk");
+            }
         }
     }
 
