@@ -25,11 +25,9 @@ public:
             : ChunkIterator(child->schema(), child->chunk_size()),
               _child(std::move(child)),
               _pre_aggregate_factor(factor),
-              _aggregator(&_schema, _chunk_size, _pre_aggregate_factor / 100),
               _fetch_finish(false) {
         CHECK_LT(_schema.num_key_fields(), std::numeric_limits<uint16_t>::max());
 
-        _curr_chunk = ChunkHelper::new_chunk(_schema, _chunk_size);
 #ifndef NDEBUG
         // ensure that the key fields are the first |num_key_fields| and sorted by id.
         for (size_t i = 0; i < _schema.num_key_fields(); i++) {
@@ -48,11 +46,14 @@ public:
 
     void close() override;
 
-    size_t merged_rows() const override { return _aggregator.merged_rows(); }
+    size_t merged_rows() const override { return _aggregator->merged_rows(); }
 
     virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
-        ChunkIterator::init_encoded_schema(dict_maps);
-        return _child->init_encoded_schema(dict_maps);
+        RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
+        RETURN_IF_ERROR(_child->init_encoded_schema(dict_maps));
+        _curr_chunk = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
+        _aggregator = std::make_unique<ChunkAggregator>(&encoded_schema(), _chunk_size, _pre_aggregate_factor / 100);
+        return Status::OK();
     }
 
 protected:
@@ -70,7 +71,7 @@ private:
 
     double _pre_aggregate_factor;
 
-    ChunkAggregator _aggregator;
+    std::unique_ptr<ChunkAggregator> _aggregator;
 
     bool _fetch_finish;
 };
@@ -78,7 +79,7 @@ private:
 Status AggregateIterator::do_get_next(Chunk* chunk) {
     while (!_fetch_finish) {
         // fetch chunk
-        if (_aggregator.source_exhausted()) {
+        if (_aggregator->source_exhausted()) {
             _curr_chunk->reset();
 
             Status st = _child->get_next(_curr_chunk.get());
@@ -93,9 +94,9 @@ Status AggregateIterator::do_get_next(Chunk* chunk) {
             DCHECK(_curr_chunk->num_rows() != 0);
 
             _chunk_nums++;
-            _aggregator.update_source(_curr_chunk);
+            _aggregator->update_source(_curr_chunk);
 
-            if (!_aggregator.is_do_aggregate()) {
+            if (!_aggregator->is_do_aggregate()) {
                 chunk->swap_chunk(*_curr_chunk);
                 _result_chunk++;
                 return Status::OK();
@@ -105,21 +106,21 @@ Status AggregateIterator::do_get_next(Chunk* chunk) {
         }
 
         // try aggregate
-        _aggregator.aggregate();
+        _aggregator->aggregate();
 
         // if finish, return
-        if (!_aggregator.source_exhausted() && _aggregator.is_finish()) {
-            chunk->swap_chunk(*_aggregator.aggregate_result());
-            _aggregator.aggregate_reset();
+        if (!_aggregator->source_exhausted() && _aggregator->is_finish()) {
+            chunk->swap_chunk(*_aggregator->aggregate_result());
+            _aggregator->aggregate_reset();
             _result_chunk++;
 
             return Status::OK();
         }
     }
 
-    if (_aggregator.has_aggregate_data()) {
-        _aggregator.aggregate();
-        chunk->swap_chunk(*_aggregator.aggregate_result());
+    if (_aggregator->has_aggregate_data()) {
+        _aggregator->aggregate();
+        chunk->swap_chunk(*_aggregator->aggregate_result());
         _result_chunk++;
 
         return Status::OK();
@@ -131,7 +132,7 @@ Status AggregateIterator::do_get_next(Chunk* chunk) {
 void AggregateIterator::close() {
     _curr_chunk.reset();
     _child->close();
-    _aggregator.close();
+    _aggregator->close();
 }
 
 ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, int factor) {

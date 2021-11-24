@@ -74,6 +74,7 @@ TEST_F(AggregateIteratorTest, agg_max) {
                                                             COL_VARCHAR(v5));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
@@ -152,6 +153,7 @@ TEST_F(AggregateIteratorTest, agg_min) {
                                                             COL_VARCHAR(v5));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
@@ -225,6 +227,7 @@ TEST_F(AggregateIteratorTest, agg_sum) {
                                                             COL_DECIMAL(v2));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
@@ -303,6 +306,7 @@ TEST_F(AggregateIteratorTest, agg_replace) {
                                                             COL_VARCHAR(v5));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
@@ -355,6 +359,7 @@ TEST_F(AggregateIteratorTest, agg_max_no_duplicate) {
                                                             COL_SMALLINT(v1));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
@@ -405,6 +410,7 @@ TEST_F(AggregateIteratorTest, agg_max_empty) {
                                                             COL_SMALLINT(v1));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.is_end_of_file());
@@ -433,6 +439,7 @@ TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
                                                             COL_SMALLINT(v1));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
@@ -477,6 +484,7 @@ TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
                                                             COL_SMALLINT(v1));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
@@ -519,6 +527,7 @@ TEST_F(AggregateIteratorTest, agg_boolean_key) {
                                                             COL_SMALLINT(v1));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
@@ -558,6 +567,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
         auto v1 = std::vector<int16_t>{1, 2, 3, 4, 5, 6};
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -587,6 +597,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
         auto v1 = std::vector<int16_t>{1, 2, 3, 4, 5, 6};
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -611,6 +622,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
         auto v1 = std::vector<int16_t>{1, 2, 3, 4, 5, 6};
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -653,6 +665,7 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
         auto v1 = std::vector<int16_t>{1, 2, 3, 4};
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DATE(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -680,6 +693,7 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
         auto v1 = std::vector<int16_t>{1, 2, 3, 4};
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DATE(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -704,6 +718,7 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
         auto v1 = std::vector<int16_t>{1, 2, 3, 4};
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DATE(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -745,6 +760,7 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
         auto v1 = std::vector<int16_t>{1, 2, 3, 4};
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DECIMAL(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -772,6 +788,7 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
         auto v1 = std::vector<int16_t>{1, 2, 3, 4};
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DECIMAL(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -796,6 +813,7 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
         auto v1 = std::vector<int16_t>{1, 2, 3, 4};
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DECIMAL(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -842,6 +860,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
         auto child_iter =
                 std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk1), COL_DATE(pk2), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -871,6 +890,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
         auto child_iter =
                 std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk1), COL_DATE(pk2), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -900,6 +920,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
         auto child_iter =
                 std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk1), COL_DATE(pk2), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -926,6 +947,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
         auto child_iter =
                 std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk1), COL_DATE(pk2), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
@@ -980,6 +1002,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, pkd1, pkd2, vd1);
 
         auto agg_iter = new_aggregate_iterator(child_iter);
+        ASSERT_TRUE(agg_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS).ok());
         ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
