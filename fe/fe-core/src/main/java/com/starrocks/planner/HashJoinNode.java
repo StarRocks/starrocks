@@ -76,15 +76,10 @@ public class HashJoinNode extends PlanNode {
     private boolean isShuffleHashBucket = false;
 
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
+    private final List<Integer> filter_null_value_columns = Lists.newArrayList();
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
-    }
-
-    private static final int runtimeFilterMaxSize = 64 * 1024 * 1024;
-
-    public static int getRuntimeFilterMaxSize() {
-        return runtimeFilterMaxSize;
     }
 
     public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
@@ -166,13 +161,15 @@ public class HashJoinNode extends PlanNode {
             // then it's hard to estimate right bloom filter size, or it's too big.
             // so we'd better to skip this global runtime filter.
             long card = inner.getCardinality();
-            if (card <= 0 || card > runtimeFilterMaxSize) {
+            if (card <= 0 || card > RuntimeFilterDescription.BuildMaxSize) {
                 return;
             }
         }
 
         for (int i = 0; i < eqJoinConjuncts.size(); ++i) {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
+            Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
+                    BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct));
             joinConjunct.setUseVectorized(joinConjunct.isVectorized());
             RuntimeFilterDescription rf = new RuntimeFilterDescription();
             rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
@@ -181,6 +178,7 @@ public class HashJoinNode extends PlanNode {
             rf.setJoinMode(distrMode);
             rf.setEqualCount(eqJoinConjuncts.size());
             rf.setBuildCardinality(inner.getCardinality());
+            rf.setEqualForNull(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct));
 
             Expr left = joinConjunct.getChild(0);
             Expr right = joinConjunct.getChild(1);
@@ -405,6 +403,9 @@ public class HashJoinNode extends PlanNode {
         }
         msg.hash_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
+        if (ConnectContext.get().getSessionVariable().getEnableFilterNullValues()) {
+            msg.setFilter_null_value_columns(filter_null_value_columns);
+        }
     }
 
     @Override
@@ -494,5 +495,24 @@ public class HashJoinNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {
+        // note(yan): outer join may generate null values, and if runtime filter does not accept null value
+        // we have opportunity to filter those values out.
+        boolean slotRefWithNullValue = false;
+        SlotId slotId = null;
+        if (probeExpr instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) probeExpr;
+            if (slotRef.isNullable()) {
+                slotRefWithNullValue = true;
+                slotId = slotRef.getSlotId();
+            }
+        }
+
+        if (joinOp.isOuterJoin() && !description.getEqualForNull() && slotRefWithNullValue) {
+            filter_null_value_columns.add(slotId.asInt());
+        }
     }
 }

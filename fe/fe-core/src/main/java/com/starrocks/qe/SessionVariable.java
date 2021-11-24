@@ -164,6 +164,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
+    public static final String ENABLE_FILTER_NULL_VALUES = "enable_filter_null_values";
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
@@ -404,6 +405,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_FILTER_NULL_VALUES)
+    private boolean enableFilterNullValues = false;
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
@@ -722,6 +726,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableColumnExprPredicate() {
         return enableColumnExprPredicate;
+    }
+
+    public boolean getEnableFilterNullValues() {
+        return enableFilterNullValues;
     }
 
     public boolean isCboCteReuse() {
