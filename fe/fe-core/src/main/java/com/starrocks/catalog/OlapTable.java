@@ -624,7 +624,7 @@ public class OlapTable extends Table {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
         for (Column column : partitionColumns) {
-            partitionColumnNames.add(column.getName().toLowerCase());
+            partitionColumnNames.add(column.getName());
         }
         return partitionColumnNames;
     }
