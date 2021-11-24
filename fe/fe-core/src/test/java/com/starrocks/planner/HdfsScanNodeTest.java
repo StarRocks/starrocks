@@ -94,7 +94,8 @@ public class HdfsScanNodeTest {
         partitionCols.add(partitionCol);
 
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
-        PartitionKey partitionKey = PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
+        PartitionKey partitionKey =
+                PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
         partitionKeys.put(partitionKey, 0L);
 
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
@@ -206,7 +207,8 @@ public class HdfsScanNodeTest {
         partitionCols.add(partitionCol);
 
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
-        PartitionKey partitionKey = PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
+        PartitionKey partitionKey =
+                PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
         partitionKeys.put(partitionKey, 0L);
 
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
@@ -249,7 +251,6 @@ public class HdfsScanNodeTest {
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
-        Assert.assertTrue(scanNode.isVectorized());
         TPlanNode tPlanNode = new TPlanNode();
         scanNode.toThrift(tPlanNode);
         System.out.println(tPlanNode);
@@ -270,7 +271,6 @@ public class HdfsScanNodeTest {
         Assert.assertEquals(3, min.nodes.size());
         Assert.assertEquals(TExprNodeType.BINARY_PRED, min.nodes.get(0).node_type);
         Assert.assertEquals(TExprOpcode.GE, min.nodes.get(0).opcode);
-        Assert.assertTrue(min.nodes.get(0).use_vectorized);
         Assert.assertEquals(TExprNodeType.SLOT_REF, min.nodes.get(1).node_type);
         Assert.assertEquals(TExprNodeType.INT_LITERAL, min.nodes.get(2).node_type);
         Assert.assertEquals(2, min.nodes.get(2).int_literal.value);
@@ -279,7 +279,6 @@ public class HdfsScanNodeTest {
         Assert.assertEquals(3, max.nodes.size());
         Assert.assertEquals(TExprNodeType.BINARY_PRED, max.nodes.get(0).node_type);
         Assert.assertEquals(TExprOpcode.LE, max.nodes.get(0).opcode);
-        Assert.assertTrue(min.nodes.get(0).use_vectorized);
         Assert.assertEquals(TExprNodeType.SLOT_REF, max.nodes.get(1).node_type);
         Assert.assertEquals(TExprNodeType.INT_LITERAL, max.nodes.get(2).node_type);
         Assert.assertEquals(2, max.nodes.get(2).int_literal.value);

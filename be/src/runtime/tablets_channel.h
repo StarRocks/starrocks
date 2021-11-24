@@ -56,7 +56,6 @@ struct TabletsChannelKey {
 
 std::ostream& operator<<(std::ostream& os, const TabletsChannelKey& key);
 
-class DeltaWriter;
 class OlapTableSchemaParam;
 
 // Write channel for a particular (load, index).
@@ -67,9 +66,6 @@ public:
     ~TabletsChannel();
 
     Status open(const PTabletWriterOpenRequest& params);
-
-    // no-op when this channel has been closed or cancelled
-    Status add_batch(const PTabletWriterAddBatchRequest& batch);
 
     // no-op when this channel has been closed or cancelled
     Status add_chunk(const PTabletWriterAddChunkRequest& batch);
@@ -132,20 +128,16 @@ private:
     // currently it's OK.
     Status _close_status;
 
-    // tablet_id -> TabletChannel
-    std::unordered_map<int64_t, DeltaWriter*> _tablet_writers;
-
     std::unordered_set<int64_t> _partition_ids;
 
     std::unique_ptr<MemTracker> _mem_tracker;
 
     static std::atomic<uint64_t> _s_tablet_writer_count;
 
-    bool _is_vectorized = true;
     vectorized::RuntimeChunkMeta _chunk_meta;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel
-    std::unordered_map<int64_t, vectorized::DeltaWriter*> _vectorized_tablet_writers;
+    std::unordered_map<int64_t, vectorized::DeltaWriter*> _delta_writers;
 
     vectorized::GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;

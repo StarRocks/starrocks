@@ -28,7 +28,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 6:MERGING-EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -41,15 +40,12 @@ UNPARTITIONED
 5:SORT
 |  order by: <slot 9> 9: L_RETURNFLAG ASC, <slot 10> 10: L_LINESTATUS ASC
 |  offset: 0
-|  use vectorized: true
 |
 4:AGGREGATE (merge finalize)
 |  output: sum(20: sum), sum(21: sum), sum(22: sum), sum(23: sum), avg(24: avg), avg(25: avg), avg(26: avg), count(27: count)
 |  group by: 9: L_RETURNFLAG, 10: L_LINESTATUS
-|  use vectorized: true
 |
 3:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -63,7 +59,6 @@ HASH_PARTITIONED: 9: L_RETURNFLAG, 10: L_LINESTATUS
 |  STREAMING
 |  output: sum(5: L_QUANTITY), sum(6: L_EXTENDEDPRICE), sum(18: expr), sum(19: expr), avg(5: L_QUANTITY), avg(6: L_EXTENDEDPRICE), avg(7: L_DISCOUNT), count(*)
 |  group by: 9: L_RETURNFLAG, 10: L_LINESTATUS
-|  use vectorized: true
 |
 1:Project
 |  <slot 5> : 5: L_QUANTITY
@@ -76,7 +71,6 @@ HASH_PARTITIONED: 9: L_RETURNFLAG, 10: L_LINESTATUS
 |  common expressions:
 |  <slot 28> : 1.0 - 7: L_DISCOUNT
 |  <slot 29> : 6: L_EXTENDEDPRICE * 28: subtract
-|  use vectorized: true
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -89,7 +83,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=54.0
 numNodes=0
-use vectorized: true
 [fragment statistics]
 PLAN FRAGMENT 0(F02)
 Output Exprs:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum | 21: sum | 22: sum | 23: sum | 24: avg | 25: avg | 26: avg | 27: count
@@ -108,7 +101,7 @@ column statistics:
 * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-* count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
+* count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 
 PLAN FRAGMENT 1(F01)
 
@@ -130,7 +123,7 @@ OutPut Exchange Id: 06
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
+|  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 |
 4:AGGREGATE (merge finalize)
 |  aggregate: sum[([20: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([21: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([22: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([23: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([24: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([25: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([26: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], count[([27: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
@@ -146,7 +139,7 @@ OutPut Exchange Id: 06
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
+|  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 |
 3:EXCHANGE
 cardinality: 3
@@ -172,7 +165,7 @@ OutPut Exchange Id: 03
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN
+|  * count-->[0.0, 6.0E8, 0.0, 8.0, 3.375] ESTIMATE
 |
 1:Project
 |  output columns:

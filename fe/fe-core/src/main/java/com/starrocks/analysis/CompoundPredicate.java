@@ -94,17 +94,6 @@ public class CompoundPredicate extends Predicate {
     }
 
     @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         super.analyzeImpl(analyzer);
 

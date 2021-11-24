@@ -136,8 +136,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
                                     request.params.debug_action, _plan);
     }
 
-    if (request.fragment.__isset.global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_global_dict(request.fragment.global_dicts));
+    if (request.fragment.__isset.query_global_dicts) {
+        RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
 
     // set #senders of exchange nodes before calling Prepare()

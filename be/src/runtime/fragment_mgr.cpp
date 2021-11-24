@@ -29,7 +29,6 @@
 #include <sstream>
 
 #include "common/object_pool.h"
-#include "common/resource_tls.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"

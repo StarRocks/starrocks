@@ -50,8 +50,6 @@ public:
 
     int64_t get_written_rows() const { return _written_rows; }
 
-    static const std::string NULL_IN_CSV;
-
 protected:
     int64_t _written_rows = 0; // number of rows written
 };

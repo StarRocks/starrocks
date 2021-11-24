@@ -53,4 +53,8 @@ public abstract class RelationVisitor<R, C> {
     public R visitInsert(InsertRelation node, C context) {
         return null;
     }
+
+    public R visitCTE(CTERelation node, C context) {
+        return null;
+    }
 }

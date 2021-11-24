@@ -24,7 +24,6 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "common/object_pool.h"
-#include "exec/text_converter.hpp"
 #include "exprs/expr.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "runtime/descriptors.h"

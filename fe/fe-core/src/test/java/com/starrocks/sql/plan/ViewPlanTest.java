@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import org.checkerframework.checker.units.qual.A;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -1587,7 +1586,25 @@ public class ViewPlanTest extends PlanTestBase {
         sql = "select case when c1=1 then 1 end from " +
                 "(select '1' c1  union  all select '2') a " +
                 "group by grouping sets((case when c1=1 then 1 end, c1), (case  when c1=1 then 1 end));";
-        testView(sql);
+
+        String viewName = "view" + INDEX.getAndIncrement();
+        String createView = "create view " + viewName + " as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from " + viewName);
+
+        Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 1 lines [[2, 4], [4]]") || sqlPlan.contains("" +
+                "  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 1 lines [[4], [2, 4]]"));
+
+        Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 1 lines [[2, 4], [4]]") || viewPlan.contains("" +
+                "  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 1 lines [[4], [2, 4]]"));
+
+        starRocksAssert.dropView(viewName);
     }
 
     @Test
@@ -1601,7 +1618,30 @@ public class ViewPlanTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 3 lines [[], [2], [4], [2, 4]]\n") ||
+                sqlPlan.contains("  6:REPEAT_NODE\n" +
+                        "  |  repeat: repeat 3 lines [[], [4], [2], [2, 4]]\n"));
+        Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 3 lines [[], [2], [4], [2, 4]]\n") ||
+                viewPlan.contains("  6:REPEAT_NODE\n" +
+                        "  |  repeat: repeat 3 lines [[], [4], [2], [2, 4]]\n"));
         starRocksAssert.dropView(viewName);
+    }
+
+    @Test
+    public void testUnionWith() throws Exception {
+        String sql = "with a as (select 1 c1 union all select 2 ), b as (select 1 c1 union all select 2 ) " +
+                "select * from a union all select * from b;";
+
+        String createView = "create view test_view16 (c_1) as with a as (select 1 c1 union all select 2 ), " +
+                "b as (select 1 c1 union all select 2 ) select * from a union all select * from b;";
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from test_view16;");
+        Assert.assertEquals(sqlPlan, viewPlan);
+
+        starRocksAssert.dropView("test_view16");
     }
 }

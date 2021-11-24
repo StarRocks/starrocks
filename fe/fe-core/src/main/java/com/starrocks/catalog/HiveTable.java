@@ -504,7 +504,6 @@ public class HiveTable extends Table {
             tPartition.setFile_format(hivePartitions.get(i).getFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
-            keys.forEach(v -> v.setUseVectorized(true));
             tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();

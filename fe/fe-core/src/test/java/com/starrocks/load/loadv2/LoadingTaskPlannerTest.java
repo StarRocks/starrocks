@@ -88,8 +88,6 @@ public class LoadingTaskPlannerTest {
     // config
     private int loadParallelInstanceNum;
     private int maxBrokerConcurrency;
-    private boolean enableVectorizedLoad;
-    private boolean enableVectorizedFileLoad;
 
     // backends
     private ImmutableMap<Long, Backend> idToBackend;
@@ -108,8 +106,6 @@ public class LoadingTaskPlannerTest {
 
         loadParallelInstanceNum = Config.load_parallel_instance_num;
         maxBrokerConcurrency = Config.max_broker_concurrency;
-        enableVectorizedLoad = Config.vectorized_load_enable;
-        enableVectorizedFileLoad = Config.enable_vectorized_file_load;
 
         // backends
         Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
@@ -126,8 +122,6 @@ public class LoadingTaskPlannerTest {
     public void tearDown() {
         Config.load_parallel_instance_num = loadParallelInstanceNum;
         Config.max_broker_concurrency = maxBrokerConcurrency;
-        Config.vectorized_load_enable = enableVectorizedLoad;
-        Config.enable_vectorized_file_load = enableVectorizedFileLoad;
     }
 
     @Test
@@ -183,8 +177,6 @@ public class LoadingTaskPlannerTest {
 
         // load_parallel_instance_num: 1
         Config.load_parallel_instance_num = 1;
-        Config.vectorized_load_enable = true;
-        Config.enable_vectorized_file_load = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
                 false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
         planner.plan(loadId, fileStatusesList, 2);
@@ -287,8 +279,6 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
-        Config.enable_vectorized_file_load = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
                 false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
         planner.plan(loadId, fileStatusesList, 1);
@@ -317,7 +307,6 @@ public class LoadingTaskPlannerTest {
         TExprNode node = k1Expr.nodes.get(0);
         Assert.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
         Assert.assertEquals(TPrimitiveType.TINYINT, node.type.types.get(0).scalar_type.type);
-        Assert.assertTrue(node.use_vectorized);
 
         // 2.2 check k2 from path
         TExpr k2Expr = exprOfDestSlot.get(1);
@@ -325,11 +314,9 @@ public class LoadingTaskPlannerTest {
         TExprNode castNode = k2Expr.nodes.get(0);
         Assert.assertEquals(TExprNodeType.CAST_EXPR, castNode.node_type);
         Assert.assertEquals(TPrimitiveType.INT, castNode.fn.ret_type.types.get(0).scalar_type.type);
-        Assert.assertTrue(castNode.use_vectorized);
         node = k2Expr.nodes.get(1);
         Assert.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
         Assert.assertEquals(TPrimitiveType.VARCHAR, node.type.types.get(0).scalar_type.type);
-        Assert.assertTrue(node.use_vectorized);
 
         // 2.3 check k3 mapping
         TExpr k3Expr = exprOfDestSlot.get(2);
@@ -346,7 +333,6 @@ public class LoadingTaskPlannerTest {
         node = k3Expr.nodes.get(3);
         Assert.assertEquals(TExprNodeType.INT_LITERAL, node.node_type);
         Assert.assertEquals(5, node.int_literal.value);
-        Assert.assertTrue(node.use_vectorized);
     }
 
     @Test
@@ -416,7 +402,6 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
                 false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
         planner.plan(loadId, fileStatusesList, 1);
@@ -502,7 +487,6 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
                 false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
         planner.plan(loadId, fileStatusesList, 1);
@@ -607,7 +591,6 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
                 false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
         planner.plan(loadId, fileStatusesList, 1);
@@ -699,7 +682,6 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
                 false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
         planner.plan(loadId, fileStatusesList, 1);

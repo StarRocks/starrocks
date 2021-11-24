@@ -68,4 +68,5 @@ add_library(Exprs
   vectorized/info_func.cpp
   vectorized/runtime_filter.cpp
   vectorized/runtime_filter_bank.cpp
+  vectorized/in_const_predicate.cpp
 )

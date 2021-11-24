@@ -45,7 +45,6 @@ public class SelectNode extends PlanNode {
     public SelectNode(PlanNodeId id, PlanNode child, List<Expr> conjuncts) {
         super(id, child.getTupleIds(), "SELECT");
         addChild(child);
-        this.tblRefIds = child.tblRefIds;
         this.nullableTupleIds = child.nullableTupleIds;
         this.conjuncts.addAll(conjuncts);
     }
@@ -86,23 +85,6 @@ public class SelectNode extends PlanNode {
     @Override
     public int getNumInstances() {
         return children.get(0).getNumInstances();
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     @Override

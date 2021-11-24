@@ -28,6 +28,9 @@ public enum OperatorType {
     LOGICAL_VALUES,
     LOGICAL_REPEAT,
     LOGICAL_TABLE_FUNCTION,
+    LOGICAL_CTE_ANCHOR,
+    LOGICAL_CTE_PRODUCE,
+    LOGICAL_CTE_CONSUME,
 
     /**
      * Physical operator
@@ -56,6 +59,10 @@ public enum OperatorType {
     PHYSICAL_TABLE_FUNCTION,
     PHYSICAL_DECODE,
     PHYSICAL_LIMIT,
+    PHYSICAL_CTE_ANCHOR,
+    PHYSICAL_CTE_PRODUCE,
+    PHYSICAL_CTE_CONSUME,
+    PHYSICAL_NO_OP,
 
     /**
      * Scalar operator

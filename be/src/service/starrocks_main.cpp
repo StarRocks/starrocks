@@ -39,7 +39,6 @@
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/logging.h"
-#include "common/resource_tls.h"
 #include "common/status.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
@@ -180,9 +179,9 @@ int main(int argc, char** argv) {
     // add logger for thrift internal
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
-    starrocks::init_daemon(argc, argv, paths);
+    std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
+    daemon->init(argc, argv, paths);
 
-    starrocks::ResourceTls::init();
     if (!starrocks::BackendOptions::init()) {
         exit(-1);
     }
@@ -271,6 +270,10 @@ int main(int argc, char** argv) {
     while (!starrocks::k_starrocks_exit) {
         sleep(10);
     }
+
+    daemon->stop();
+    daemon.reset();
+
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
     delete heartbeat_thrift_server;
@@ -284,6 +287,7 @@ int main(int argc, char** argv) {
 
     engine->stop();
     delete engine;
+    exec_env->set_storage_engine(nullptr);
 
     starrocks::ExecEnv::destroy(exec_env);
 

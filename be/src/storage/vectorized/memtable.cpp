@@ -293,7 +293,8 @@ void MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::uni
     indexes[TOpType::UPSERT].reserve(nupsert);
     indexes[TOpType::DELETE].reserve(ndel);
     for (uint32_t i = 0; i < nrows; i++) {
-        indexes[ops[i]].push_back(i);
+        // ops == 0: upsert  otherwise: delete
+        indexes[ops[i] == TOpType::UPSERT ? TOpType::UPSERT : TOpType::DELETE].push_back(i);
     }
     *upserts = src->clone_empty_with_schema(nupsert);
     (*upserts)->append_selective(*src, indexes[TOpType::UPSERT].data(), 0, nupsert);

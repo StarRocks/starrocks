@@ -155,7 +155,7 @@ public class ReplayFromDumpTest {
                 "  |       cardinality: 73049\n" +
                 "  |    \n" +
                 "  18:UNION\n" +
-                "  |  child exprs: \n" +
+                "  |  child exprs:\n" +
                 "  |      [143, INT, true] | [164, DECIMAL64(7,2), true]\n" +
                 "  |      [179, INT, true] | [200, DECIMAL64(7,2), true]\n"));
     }

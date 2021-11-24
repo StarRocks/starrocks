@@ -3,9 +3,14 @@
 #include "exec/vectorized/hdfs_scanner.h"
 
 #include <hdfs/hdfs.h>
+#include <unistd.h>
 
+#include <algorithm>
 #include <memory>
+#include <mutex>
+#include <thread>
 
+#include "common/status.h"
 #include "env/env_hdfs.h"
 #include "exec/exec_node.h"
 #include "exec/parquet/file_reader.h"
@@ -95,6 +100,7 @@ void HdfsScanner::_build_file_read_param() {
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    RETURN_IF_CANCELLED(_runtime_state);
 #ifndef BE_TEST
     SCOPED_TIMER(_scanner_params.parent->_scan_timer);
 #endif
@@ -116,29 +122,40 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_is_open) {
         return Status::OK();
     }
+#ifndef BE_TEST
+    RETURN_IF_ERROR(down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->open());
+#endif
     _build_file_read_param();
     auto status = do_open(runtime_state);
     if (status.ok()) {
         _is_open = true;
+#ifndef BE_TEST
+        (*_scanner_params.open_limit)++;
+#endif
         LOG(INFO) << "open file success: " << _scanner_params.fs->file_name();
     }
     return status;
 }
 
-Status HdfsScanner::close(RuntimeState* runtime_state) {
+void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
+    DCHECK(!has_pending_token());
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
     Expr::close(_conjunct_ctxs, runtime_state);
     Expr::close(_min_max_conjunct_ctxs, runtime_state);
     for (auto& it : _conjunct_ctxs_by_slot) {
         Expr::close(it.second, runtime_state);
     }
-    auto status = do_close(runtime_state);
-    if (status.ok()) {
-        _is_closed = true;
+    do_close(runtime_state);
+#ifndef BE_TEST
+    down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->close();
+    if (_is_open) {
+        (*_scanner_params.open_limit)--;
     }
-    return status;
+#endif
+    _scanner_params.fs.reset();
+    _is_closed = true;
 }
 
 #ifndef BE_TEST
@@ -168,8 +185,12 @@ static void get_hdfs_statistics(hdfsFile file, HdfsReadStats* stats) {
 
 void HdfsScanner::update_counter() {
 #ifndef BE_TEST
+    // _scanner_params.fs is null means scanner open failed
+    if (_scanner_params.fs == nullptr) return;
+
     HdfsReadStats hdfs_stats;
     auto hdfs_file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->hdfs_file();
+    if (hdfs_file == nullptr) return;
     // Hdfslib only supports obtaining statistics of hdfs file system.
     // For other systems such as s3, calling this function will cause be crash.
     if (_scanner_params.parent->_is_hdfs_fs) {

@@ -456,7 +456,9 @@ CONF_mInt64(write_buffer_size, "104857600");
 // user should set these configs properly if necessary.
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
 CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
-CONF_Int64(compaction_mem_limit, "2147483648");                  // 2G
+CONF_Int64(compaction_max_memory_limit, "-1");
+CONF_Int32(compaction_max_memory_limit_percent, "100");
+CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 
 // update interval of tablet stat cache
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
@@ -632,18 +634,24 @@ CONF_Int64(pipeline_yield_max_chunks_moved, "100");
 // yield PipelineDriver when maximum time in nano-seconds has spent
 // in current execution round.
 CONF_Int64(pipeline_yield_max_time_spent, "100000000");
-// the number of io threads pipeline engine.
-CONF_Int64(pipeline_io_thread_pool_thread_num, "3");
-// queue size of io thread pool for pipeline engine.
-CONF_Int64(pipeline_io_thread_pool_queue_size, "102400");
+// the number of scan threads pipeline engine.
+CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
+// queue size of scan thread pool for pipeline engine.
+CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
+// the number of exchange threads pipeline engine.
+CONF_Int64(pipeline_exchange_thread_pool_thread_num, "0");
+// queue size of exchange thread pool for pipeline engine.
+CONF_Int64(pipeline_exchange_thread_pool_queue_size, "102400");
 // the number of execution threads for pipeline engine.
-CONF_Int64(pipeline_exec_thread_pool_thread_num, "3");
+CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 // schema change vectorized
 CONF_Bool(enable_schema_change_vectorized, "true");
+// max hdfs file handle
+CONF_mInt32(max_hdfs_file_handle, "1000");
 
 } // namespace config
 

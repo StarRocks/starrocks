@@ -58,10 +58,6 @@ public:
     // open a new load channel if not exist
     Status open(const PTabletWriterOpenRequest& request);
 
-    // this batch must belong to a index in one transaction
-    Status add_batch(const PTabletWriterAddBatchRequest& request,
-                     google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec);
-
     Status add_chunk(const PTabletWriterAddChunkRequest& request,
                      google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec);
 

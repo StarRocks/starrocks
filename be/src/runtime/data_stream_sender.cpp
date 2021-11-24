@@ -480,12 +480,9 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     _profile = _pool->add(new RuntimeProfile(title.str()));
     SCOPED_TIMER(_profile->total_time_counter());
     _profile->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
-    if (_part_type == TPartitionType::UNPARTITIONED || _part_type == TPartitionType::RANDOM) {
-        // Randomize the order we open/transmit to channels to avoid thundering herd problems.
-        srand(reinterpret_cast<uint64_t>(this));
-        std::shuffle(_channels.begin(), _channels.end(), std::mt19937(std::random_device()()));
-    } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
-               _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+
+    if (_part_type == TPartitionType::HASH_PARTITIONED ||
+        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
     } else {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
@@ -493,6 +490,12 @@ Status DataStreamSender::prepare(RuntimeState* state) {
             RETURN_IF_ERROR(iter->prepare(state, _row_desc));
         }
     }
+
+    // Randomize the order we open/transmit to channels to avoid thundering herd problems.
+    _channel_indices.resize(_channels.size());
+    std::iota(_channel_indices.begin(), _channel_indices.end(), 0);
+    srand(reinterpret_cast<uint64_t>(this));
+    std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_sent_counter = ADD_COUNTER(profile(), "BytesSent", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(profile(), "UncompressedBytes", TUnit::BYTES);
@@ -555,8 +558,8 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
             construct_brpc_attachment(&_chunk_request, &attachment);
-            for (auto channel : _channels) {
-                RETURN_IF_ERROR(channel->send_chunk_request(&_chunk_request, attachment));
+            for (auto idx : _channel_indices) {
+                RETURN_IF_ERROR(_channels[idx]->send_chunk_request(&_chunk_request, attachment));
             }
             _current_request_bytes = 0;
             _chunk_request.clear_chunks();
@@ -617,7 +620,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
             }
         }
 
-        for (int i = 0; i < num_channels; ++i) {
+        for (int i : _channel_indices) {
             size_t from = _channel_row_idx_start_points[i];
             size_t size = _channel_row_idx_start_points[i + 1] - from;
             if (size == 0) {

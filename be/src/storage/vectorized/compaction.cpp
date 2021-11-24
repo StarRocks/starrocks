@@ -68,7 +68,7 @@ Status Compaction::do_compaction_impl() {
 
     // 2. write combined rows to output rowset
     Statistics stats;
-    auto res = merge_rowsets(_mem_tracker->limit(), &stats);
+    auto res = merge_rowsets(config::compaction_memory_limit_per_worker, &stats);
 
     if (!res.ok()) {
         LOG(WARNING) << "fail to do " << compaction_name() << ". res=" << res.to_string()

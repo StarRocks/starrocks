@@ -110,7 +110,6 @@ public class ExchangeNode extends PlanNode {
     public final void computeTupleIds() {
         clearTupleIds();
         tupleIds.addAll(getChild(0).getTupleIds());
-        tblRefIds.addAll(getChild(0).getTblRefIds());
         nullableTupleIds.addAll(getChild(0).getNullableTupleIds());
     }
 
@@ -166,23 +165,6 @@ public class ExchangeNode extends PlanNode {
     @Override
     public int getNumInstances() {
         return numInstances;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     @Override

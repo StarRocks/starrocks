@@ -201,11 +201,6 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     }
 
     @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
-    @Override
     public int compareTo(LiteralExpr o) {
         return compareLiteral(o);
     }

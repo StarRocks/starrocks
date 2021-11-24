@@ -37,8 +37,9 @@ public class MetaScanNode extends ScanNode {
     private final OlapTable olapTable;
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
-    public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable, Map<Integer, String> columnIdToNames) {
-        super(id, desc,"MetaScan");
+    public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
+                        Map<Integer, String> columnIdToNames) {
+        super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.columnIdToNames = columnIdToNames;
     }
@@ -113,11 +114,6 @@ public class MetaScanNode extends ScanNode {
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         return result;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        return true;
     }
 
     @Override

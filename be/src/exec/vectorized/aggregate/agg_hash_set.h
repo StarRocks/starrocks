@@ -24,7 +24,7 @@ using Int32AggHashSet = phmap::flat_hash_set<int32_t, StdHashWithSeed<int32_t, s
 template <PhmapSeed seed>
 using Int64AggHashSet = phmap::flat_hash_set<int64_t, StdHashWithSeed<int64_t, seed>>;
 template <PhmapSeed seed>
-using Int128AggHashSet = phmap::flat_hash_set<int128_t, StdHashWithSeed<int128_t, seed>>;
+using Int128AggHashSet = phmap::flat_hash_set<int128_t, Hash128WithSeed<seed>>;
 template <PhmapSeed seed>
 using DateAggHashSet = phmap::flat_hash_set<DateValue, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>

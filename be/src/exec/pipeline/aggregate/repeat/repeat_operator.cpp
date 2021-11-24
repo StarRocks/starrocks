@@ -3,6 +3,7 @@
 #include "exec/pipeline/aggregate/repeat/repeat_operator.h"
 
 #include "column/chunk.h"
+#include "exec/exec_node.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::pipeline {
@@ -26,67 +27,29 @@ bool RepeatOperator::has_output() const {
 }
 
 StatusOr<vectorized::ChunkPtr> RepeatOperator::pull_chunk(RuntimeState* state) {
-    if (_repeat_times_last > 0) {
-        Columns columns = _curr_columns;
-        // get a suitable chunk.
-        _curr_chunk->set_columns(columns);
+    ChunkPtr curr_chunk = _curr_chunk->clone_empty(_curr_chunk->num_rows());
+    curr_chunk->append_safe(*_curr_chunk, 0, _curr_chunk->num_rows());
+    extend_and_update_columns(&curr_chunk);
+    ExecNode::eval_conjuncts(_conjunct_ctxs, curr_chunk.get());
+    return curr_chunk;
+}
 
-        // unneed to extend, because columns has been extended at first access.
-        // update virtual columns for grouping_id and grouping()/grouping_id() columns.
-        for (int i = 0; i < _grouping_list.size(); ++i) {
-            // _grouping_columns needs to be referenced more than once, so it cannot be moved.
-            auto grouping_column =
-                    (_curr_chunk->num_rows() == config::vector_chunk_size)
-                            ? _grouping_columns[i][_repeat_times_last]
-                            : generate_repeat_column(_grouping_list[i][_repeat_times_last], _curr_chunk->num_rows());
+void RepeatOperator::extend_and_update_columns(ChunkPtr* curr_chunk) {
+    // extend virtual columns for gourping_id and grouping()/grouping_id() columns.
+    for (int i = 0; i < _grouping_list.size(); ++i) {
+        auto grouping_column = generate_repeat_column(_grouping_list[i][_repeat_times_last], (*curr_chunk)->num_rows());
 
-            _curr_chunk->update_column(grouping_column, _tuple_desc->slots()[i]->id());
-        }
-
-        // update columns for unneed columns.
-        const std::vector<SlotId>& null_slot_ids = _null_slot_ids[_repeat_times_last];
-        for (auto slot_id : null_slot_ids) {
-            // _column_null needs to be referenced more than once, so it cannot be moved.
-            auto null_column = (_curr_chunk->num_rows() == config::vector_chunk_size)
-                                       ? _column_null
-                                       : ColumnHelper::create_const_null_column(_curr_chunk->num_rows());
-
-            _curr_chunk->update_column(null_column, slot_id);
-        }
-
-        // tranform to the next.
-        ++_repeat_times_last;
-        return _curr_chunk;
-    } else {
-        // extend virtual columns for grouping_id and grouping()/grouping_id() columns.
-        for (int i = 0; i < _grouping_list.size(); ++i) {
-            // _grouping_columns needs to be referenced more than once, so it cannot be moved.
-            auto grouping_column =
-                    (_curr_chunk->num_rows() == config::vector_chunk_size)
-                            ? _grouping_columns[i][_repeat_times_last]
-                            : generate_repeat_column(_grouping_list[i][_repeat_times_last], _curr_chunk->num_rows());
-
-            _curr_chunk->append_column(grouping_column, _tuple_desc->slots()[i]->id());
-        }
-
-        // save original exgtended columns.
-        _curr_columns = _curr_chunk->columns();
-
-        // update columns for unneed columns.
-        const std::vector<SlotId>& null_slot_ids = _null_slot_ids[_repeat_times_last];
-        for (auto slot_id : null_slot_ids) {
-            // _column_null needs to be referenced more than once, so it cannot be moved.
-            auto null_column = (_curr_chunk->num_rows() == config::vector_chunk_size)
-                                       ? _column_null
-                                       : ColumnHelper::ColumnHelper::create_const_null_column(_curr_chunk->num_rows());
-
-            _curr_chunk->update_column(null_column, slot_id);
-        }
-
-        // tranform to the next.
-        ++_repeat_times_last;
-        return _curr_chunk;
+        (*curr_chunk)->append_column(grouping_column, _tuple_desc->slots()[i]->id());
     }
+
+    // update columns for unneed columns.
+    const std::vector<SlotId>& null_slot_ids = _null_slot_ids[_repeat_times_last];
+    for (auto slot_id : null_slot_ids) {
+        auto null_column = ColumnHelper::create_const_null_column((*curr_chunk)->num_rows());
+
+        (*curr_chunk)->update_column(null_column, slot_id);
+    }
+    ++_repeat_times_last;
 }
 
 Status RepeatOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {

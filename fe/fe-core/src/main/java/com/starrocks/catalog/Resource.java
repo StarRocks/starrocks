@@ -75,7 +75,7 @@ public abstract class Resource implements Writable {
                 resource = new OdbcCatalogResource(stmt.getResourceName());
                 break;
             default:
-                throw new DdlException("Only support spark and hive resource.");
+                throw new DdlException("Unsupported resource type: " + type);
         }
 
         resource.setProperties(stmt.getProperties());

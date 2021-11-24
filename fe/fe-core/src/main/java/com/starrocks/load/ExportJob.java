@@ -349,9 +349,6 @@ public class ExportJob implements Writable {
                 break;
         }
         fragment.setOutputExprs(createOutputExprs());
-        if (Config.vectorized_load_enable && fragment.isOutPutExprsVectorized()) {
-            fragment.setOutPutExprsUseVectorized();
-        }
 
         scanNode.setFragmentId(fragment.getFragmentId());
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,

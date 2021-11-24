@@ -107,7 +107,18 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             }
         }
         OptExprBuilder optExprBuilder = visit(relation);
+        optExprBuilder = visitCTE(relation, optExprBuilder);
         return new LogicalPlan(optExprBuilder, outputColumn, correlation);
+    }
+
+    public OptExprBuilder visitCTE(Relation node, OptExprBuilder builder) {
+        if (!(node instanceof QueryRelation)) {
+            return builder;
+        }
+
+        Scope scope = ((QueryRelation) node).getOutputScope();
+
+        return builder;
     }
 
     @Override

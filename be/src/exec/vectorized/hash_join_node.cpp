@@ -421,6 +421,16 @@ Status HashJoinNode::_build(RuntimeState* state) {
     return Status::OK();
 }
 
+static inline bool check_chunk_zero_and_create_new(ChunkPtr* chunk) {
+    if ((*chunk)->num_rows() <= 0) {
+        // TODO: It's better to reuse the chunk object.
+        // Use a new chunk to continue call _ht.probe.
+        *chunk = std::make_shared<Chunk>();
+        return true;
+    }
+    return false;
+}
+
 Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>& probe_timer, ChunkPtr* chunk,
                             bool& eos) {
     while (true) {
@@ -512,21 +522,16 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             _probing_chunk = nullptr;
         }
 
-        if ((*chunk)->num_rows() <= 0) {
-            // TODO: It's better to reuse the chunk object.
-            // Use a new chunk to continue call _ht.probe.
-            *chunk = std::make_shared<Chunk>();
+        eval_join_runtime_filters(chunk);
+
+        if (check_chunk_zero_and_create_new(chunk)) {
             continue;
         }
 
         if (!_other_join_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_other_join_conjunct_evaluate_timer);
             _process_other_conjunct(chunk);
-
-            if ((*chunk)->num_rows() <= 0) {
-                // TODO: It's better to reuse the chunk object.
-                // Use a new chunk to continue call _ht.probe.
-                *chunk = std::make_shared<Chunk>();
+            if (check_chunk_zero_and_create_new(chunk)) {
                 continue;
             }
         }
@@ -535,10 +540,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             SCOPED_TIMER(_where_conjunct_evaluate_timer);
             eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 
-            if ((*chunk)->num_rows() <= 0) {
-                // TODO: It's better to reuse the chunk object.
-                // Use a new chunk to continue call _ht.probe.
-                *chunk = std::make_shared<Chunk>();
+            if (check_chunk_zero_and_create_new(chunk)) {
                 continue;
             }
         }
@@ -555,6 +557,8 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     while (!_build_eos) {
         RETURN_IF_ERROR(_ht.probe_remain(chunk, &_right_table_has_remain));
 
+        eval_join_runtime_filters(chunk);
+
         if ((*chunk)->num_rows() <= 0) {
             // right table already have no remain data
             _build_eos = true;
@@ -565,10 +569,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
         if (!_conjunct_ctxs.empty()) {
             eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 
-            if ((*chunk)->num_rows() <= 0) {
-                // TODO: It's better to reuse the chunk object.
-                // Use a new chunk to continue call _ht.probe_remain.
-                *chunk = std::make_shared<Chunk>();
+            if (check_chunk_zero_and_create_new(chunk)) {
                 _build_eos = !_right_table_has_remain;
                 continue;
             }
@@ -726,12 +727,13 @@ Status HashJoinNode::_push_down_in_filter(RuntimeState* state) {
             ColumnPtr column = _ht.get_key_columns()[i];
             Expr* probe_expr = _probe_expr_ctxs[i]->root();
             // create and fill runtime IN filter.
-            ExprContext* filter =
-                    RuntimeFilterHelper::create_runtime_in_filter(state, _pool, probe_expr, _is_null_safes[i]);
-            if (filter == nullptr) continue;
-            RETURN_IF_ERROR(
-                    RuntimeFilterHelper::fill_runtime_in_filter(column, probe_expr, filter, kHashJoinKeyColumnOffset));
-            _runtime_in_filters.push_back(filter);
+            VectorizedInConstPredicateBuilder builder(state, _pool, probe_expr);
+            builder.set_eq_null(_is_null_safes[i]);
+            builder.use_as_join_runtime_filter();
+            Status st = builder.create();
+            if (!st.ok()) continue;
+            builder.add_values(column, kHashJoinKeyColumnOffset);
+            _runtime_in_filters.push_back(builder.get_in_const_predicate());
         }
     }
 
@@ -760,9 +762,11 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         if (filter == nullptr) continue;
         filter->set_join_mode(rf_desc->join_mode());
         filter->init(_ht.get_row_count());
-        ColumnPtr column = _ht.get_key_columns()[rf_desc->build_expr_order()];
-        RETURN_IF_ERROR(
-                RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter, kHashJoinKeyColumnOffset));
+        int expr_order = rf_desc->build_expr_order();
+        ColumnPtr column = _ht.get_key_columns()[expr_order];
+        bool eq_null = _is_null_safes[expr_order];
+        RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter,
+                                                                       kHashJoinKeyColumnOffset, eq_null));
         rf_desc->set_runtime_filter(filter);
     }
 

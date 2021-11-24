@@ -1031,7 +1031,6 @@ public class SingleNodePlanner {
                 if (analyzer.hasEmptyResultSet()) {
                     return unionNode;
                 }
-                unionNode.setTblRefIds(Lists.newArrayList(inlineViewRef.getId()));
                 unionNode.addConstExprList(selectStmt.getBaseTblResultExprs());
                 unionNode.init(analyzer);
                 return unionNode;
@@ -1039,10 +1038,6 @@ public class SingleNodePlanner {
         }
 
         PlanNode rootNode = createQueryPlan(inlineViewRef.getViewStmt(), inlineViewRef.getAnalyzer());
-        // TODO: we should compute the "physical layout" of the view's descriptor, so that
-        // the avg row size is available during optimization; however, that means we need to
-        // select references to its resultExprs from the enclosing scope(s)
-        rootNode.setTblRefIds(Lists.newArrayList(inlineViewRef.getId()));
 
         // The output smap is the composition of the inline view's smap and the output smap
         // of the inline view's plan root. This ensures that all downstream exprs referencing
@@ -1482,8 +1477,8 @@ public class SingleNodePlanner {
                                             List<Expr> joinConjuncts,
                                             Reference<String> errMsg, JoinOperator op) {
         joinConjuncts.clear();
-        final List<TupleId> lhsIds = left.getTblRefIds();
-        final List<TupleId> rhsIds = right.getTblRefIds();
+        final List<TupleId> lhsIds = left.getTupleIds();
+        final List<TupleId> rhsIds = right.getTupleIds();
         List<Expr> candidates;
         candidates = analyzer.getEqJoinConjuncts(lhsIds, rhsIds);
         if (candidates == null) {

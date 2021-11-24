@@ -714,10 +714,7 @@ Status DataDir::update_capacity() {
     try {
         std::filesystem::space_info path_info = std::filesystem::space(_path);
         _available_bytes = path_info.available;
-        if (_disk_capacity_bytes == 0) {
-            // disk capacity only need to be set once
-            _disk_capacity_bytes = path_info.capacity;
-        }
+        _disk_capacity_bytes = path_info.capacity;
     } catch (std::filesystem::filesystem_error& e) {
         RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("get path $0 available capacity failed, error=$1",
                                                                       _path, e.what())),

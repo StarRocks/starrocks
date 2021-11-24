@@ -16,7 +16,9 @@ public:
                                const int32_t dependency_index)
             : SourceOperator(id, "except_output_source", plan_node_id),
               _except_ctx(std::move(except_ctx)),
-              _dependency_index(dependency_index) {}
+              _dependency_index(dependency_index) {
+        _except_ctx->ref();
+    }
 
     bool has_output() const override {
         return _except_ctx->is_dependency_finished(_dependency_index) && !_except_ctx->is_output_finished();
@@ -26,8 +28,7 @@ public:
         return _except_ctx->is_dependency_finished(_dependency_index) && _except_ctx->is_output_finished();
     }
 
-    // Finish is noop.
-    void set_finishing(RuntimeState* state) override {}
+    void set_finished(RuntimeState* state) override { _except_ctx->set_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

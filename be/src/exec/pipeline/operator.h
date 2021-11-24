@@ -39,7 +39,7 @@ public:
     // data inside is processed.
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
     // This method will be exactly invoked once in the whole life cycle
-    virtual void set_finishing(RuntimeState* state) = 0;
+    virtual void set_finishing(RuntimeState* state) {}
 
     // set_finished is used to shutdown both input and output stream of a operator and after its invocation
     // buffered data inside the operator is cleared.

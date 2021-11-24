@@ -8,6 +8,8 @@ import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -97,6 +99,17 @@ public class LogicalProperty implements Property {
         public Integer visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
             return 1;
         }
+
+        @Override
+        public Integer visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, ExpressionContext context) {
+            Preconditions.checkState(context.arity() != 2);
+            return context.getChildLeftMostScanTabletsNum(1);
+        }
+
+        @Override
+        public Integer visitLogicalCTEConsume(LogicalCTEConsumeOperator node, ExpressionContext context) {
+            return 2;
+        }
     }
 
     static class OneTabletExecutorVisitor extends OperatorVisitor<Boolean, ExpressionContext> {
@@ -147,6 +160,17 @@ public class LogicalProperty implements Property {
 
         @Override
         public Boolean visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
+            return false;
+        }
+
+        @Override
+        public Boolean visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, ExpressionContext context) {
+            Preconditions.checkState(context.arity() != 2);
+            return context.isExecuteInOneTablet(1);
+        }
+
+        @Override
+        public Boolean visitLogicalCTEConsume(LogicalCTEConsumeOperator node, ExpressionContext context) {
             return false;
         }
     }

@@ -138,7 +138,7 @@ public class StreamLoadPlanner {
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
-        LOG.info("use vectorized load: {}, load job id: {}", scanNode.isUseVectorized(), loadId);
+        LOG.info("use vectorized load: {}, load job id: {}", true, loadId);
         descTable.computeMemLayout();
 
         // create dest sink
@@ -153,7 +153,7 @@ public class StreamLoadPlanner {
         fragment.setSink(olapTableSink);
         // After data loading, we need to check the global dict for low cardinality string column
         // whether update.
-        fragment.setGlobalDicts(globalDicts);
+        fragment.setLoadGlobalDicts(globalDicts);
 
         fragment.finalize(null, false);
 

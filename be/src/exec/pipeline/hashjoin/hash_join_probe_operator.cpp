@@ -6,7 +6,9 @@ namespace starrocks {
 namespace pipeline {
 HashJoinProbeOperator::HashJoinProbeOperator(int32_t id, const string& name, int32_t plan_node_id,
                                              HashJoinerPtr hash_joiner)
-        : OperatorWithDependency(id, name, plan_node_id), _hash_joiner(hash_joiner) {}
+        : OperatorWithDependency(id, name, plan_node_id), _hash_joiner(hash_joiner) {
+    _hash_joiner->ref();
+}
 
 bool HashJoinProbeOperator::has_output() const {
     return _hash_joiner->has_output();
@@ -30,10 +32,12 @@ StatusOr<vectorized::ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* s
 }
 
 void HashJoinProbeOperator::set_finishing(RuntimeState* state) {
-    if (!_is_finished) {
-        _hash_joiner->enter_post_probe_phase();
-        _is_finished = true;
-    }
+    _is_finished = true;
+    _hash_joiner->enter_post_probe_phase();
+}
+
+void HashJoinProbeOperator::set_finished(RuntimeState* state) {
+    _hash_joiner->set_finished();
 }
 
 bool HashJoinProbeOperator::is_ready() const {

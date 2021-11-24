@@ -124,13 +124,13 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select col_decimal128p20s3 * 3.14 from db1.decimal_table";
         String expectString = "TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:5))]), opcode:MULTIPLY, num_children:2," +
-                " output_scale:-1, output_column:-1, use_vectorized:true, has_nullable_child:true, is_nullable:true, is_monotonic:true)," +
+                " output_scale:-1, output_column:-1, has_nullable_child:true, is_nullable:true, is_monotonic:true)," +
                 " TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType" +
                 "(type:DECIMAL128, precision:20, scale:3))]), num_children:0, slot_ref:TSlotRef(slot_id:3, tuple_id:0)," +
-                " output_scale:-1, output_column:-1, use_vectorized:true, has_nullable_child:false, is_nullable:true, is_monotonic:true)," +
+                " output_scale:-1, output_column:-1, has_nullable_child:false, is_nullable:true, is_monotonic:true)," +
                 " TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:" +
                 "TScalarType(type:DECIMAL128, precision:38, scale:2))]), num_children:0, decimal_literal:" +
-                "TDecimalLiteral(value:3.14), output_scale:-1, use_vectorized:true, has_nullable_child:false," +
+                "TDecimalLiteral(value:3.14), output_scale:-1, has_nullable_child:false," +
                 " is_nullable:false, is_monotonic:true)";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));

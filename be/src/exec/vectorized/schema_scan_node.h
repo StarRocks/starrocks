@@ -8,7 +8,6 @@
 #include "runtime/descriptors.h"
 
 namespace starrocks {
-class TextConverter;
 class TupleDescriptor;
 class RuntimeState;
 class Status;

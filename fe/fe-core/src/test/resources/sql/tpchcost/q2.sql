@@ -51,7 +51,6 @@ RESULT SINK
 
 38:MERGING-EXCHANGE
 limit: 100
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -65,7 +64,6 @@ UNPARTITIONED
 |  order by: <slot 16> 16: S_ACCTBAL DESC, <slot 26> 26: N_NAME ASC, <slot 12> 12: S_NAME ASC, <slot 1> 1: P_PARTKEY ASC
 |  offset: 0
 |  limit: 100
-|  use vectorized: true
 |
 36:Project
 |  <slot 1> : 1: P_PARTKEY
@@ -76,17 +74,14 @@ UNPARTITIONED
 |  <slot 16> : 16: S_ACCTBAL
 |  <slot 17> : 17: S_COMMENT
 |  <slot 26> : 26: N_NAME
-|  use vectorized: true
 |
 35:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 11: S_SUPPKEY = 20: PS_SUPPKEY
-|  use vectorized: true
 |
 |----34:EXCHANGE
-|       use vectorized: true
 |
 9:Project
 |  <slot 11> : 11: S_SUPPKEY
@@ -96,17 +91,14 @@ UNPARTITIONED
 |  <slot 16> : 16: S_ACCTBAL
 |  <slot 17> : 17: S_COMMENT
 |  <slot 26> : 26: N_NAME
-|  use vectorized: true
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 14: S_NATIONKEY = 25: N_NATIONKEY
-|  use vectorized: true
 |
 |----7:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: supplier
@@ -118,7 +110,6 @@ tabletList=10111
 cardinality=1000000
 avgRowSize=197.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -132,7 +123,6 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 20: PS_SUPPKEY
 |  <slot 1> : 1: P_PARTKEY
 |  <slot 3> : 3: P_MFGR
 |  <slot 20> : 20: PS_SUPPKEY
-|  use vectorized: true
 |
 32:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -140,10 +130,8 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 20: PS_SUPPKEY
 |  colocate: false, reason:
 |  equal join conjunct: 22: PS_SUPPLYCOST = 57: min
 |  equal join conjunct: 19: PS_PARTKEY = 1: P_PARTKEY
-|  use vectorized: true
 |
 |----31:EXCHANGE
-|       use vectorized: true
 |
 10:OlapScanNode
 TABLE: partsupp
@@ -155,7 +143,6 @@ tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 cardinality=80000000
 avgRowSize=24.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -169,37 +156,30 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 1: P_PARTKEY
 |  <slot 1> : 1: P_PARTKEY
 |  <slot 3> : 3: P_MFGR
 |  <slot 57> : 57: min
-|  use vectorized: true
 |
 29:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 34: PS_PARTKEY = 1: P_PARTKEY
-|  use vectorized: true
 |
 |----28:EXCHANGE
-|       use vectorized: true
 |
 25:AGGREGATE (update finalize)
 |  output: min(37: PS_SUPPLYCOST)
 |  group by: 34: PS_PARTKEY
-|  use vectorized: true
 |
 24:Project
 |  <slot 34> : 34: PS_PARTKEY
 |  <slot 37> : 37: PS_SUPPLYCOST
-|  use vectorized: true
 |
 23:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 35: PS_SUPPKEY = 40: S_SUPPKEY
-|  use vectorized: true
 |
 |----22:EXCHANGE
-|       use vectorized: true
 |
 11:OlapScanNode
 TABLE: partsupp
@@ -211,7 +191,6 @@ tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 cardinality=80000000
 avgRowSize=24.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -224,7 +203,6 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 1: P_PARTKEY
 27:Project
 |  <slot 1> : 1: P_PARTKEY
 |  <slot 3> : 3: P_MFGR
-|  use vectorized: true
 |
 26:OlapScanNode
 TABLE: part
@@ -237,7 +215,6 @@ tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=100000
 avgRowSize=62.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 5
 OUTPUT EXPRS:
@@ -249,17 +226,14 @@ UNPARTITIONED
 
 21:Project
 |  <slot 40> : 40: S_SUPPKEY
-|  use vectorized: true
 |
 20:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 43: S_NATIONKEY = 48: N_NATIONKEY
-|  use vectorized: true
 |
 |----19:EXCHANGE
-|       use vectorized: true
 |
 12:OlapScanNode
 TABLE: supplier
@@ -271,7 +245,6 @@ tabletList=10111
 cardinality=1000000
 avgRowSize=8.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -283,17 +256,14 @@ UNPARTITIONED
 
 18:Project
 |  <slot 48> : 48: N_NATIONKEY
-|  use vectorized: true
 |
 17:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 50: N_REGIONKEY = 53: R_REGIONKEY
-|  use vectorized: true
 |
 |----16:EXCHANGE
-|       use vectorized: true
 |
 13:OlapScanNode
 TABLE: nation
@@ -305,7 +275,6 @@ tabletList=10185
 cardinality=25
 avgRowSize=8.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 7
 OUTPUT EXPRS:
@@ -317,7 +286,6 @@ UNPARTITIONED
 
 15:Project
 |  <slot 53> : 53: R_REGIONKEY
-|  use vectorized: true
 |
 14:OlapScanNode
 TABLE: region
@@ -330,7 +298,6 @@ tabletList=10106
 cardinality=1
 avgRowSize=29.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 8
 OUTPUT EXPRS:
@@ -343,17 +310,14 @@ UNPARTITIONED
 6:Project
 |  <slot 25> : 25: N_NATIONKEY
 |  <slot 26> : 26: N_NAME
-|  use vectorized: true
 |
 5:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 27: N_REGIONKEY = 30: R_REGIONKEY
-|  use vectorized: true
 |
 |----4:EXCHANGE
-|       use vectorized: true
 |
 1:OlapScanNode
 TABLE: nation
@@ -365,7 +329,6 @@ tabletList=10185
 cardinality=25
 avgRowSize=33.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 9
 OUTPUT EXPRS:
@@ -377,7 +340,6 @@ UNPARTITIONED
 
 3:Project
 |  <slot 30> : 30: R_REGIONKEY
-|  use vectorized: true
 |
 2:OlapScanNode
 TABLE: region
@@ -390,7 +352,6 @@ tabletList=10106
 cardinality=1
 avgRowSize=29.0
 numNodes=0
-use vectorized: true
 [fragment statistics]
 PLAN FRAGMENT 0(F17)
 Output Exprs:16: S_ACCTBAL | 12: S_NAME | 26: N_NAME | 1: P_PARTKEY | 3: P_MFGR | 13: S_ADDRESS | 15: S_PHONE | 17: S_COMMENT

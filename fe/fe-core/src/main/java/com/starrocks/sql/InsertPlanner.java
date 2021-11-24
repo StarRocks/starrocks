@@ -54,8 +54,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.planner.AdapterNode.checkPlanIsVectorized;
-
 public class InsertPlanner {
     public ExecPlan plan(Relation relation, ConnectContext session) {
         InsertRelation insertRelation = (InsertRelation) relation;
@@ -83,6 +81,7 @@ public class InsertPlanner {
 
         //6. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
+
         Optimizer optimizer = new Optimizer();
         OptExpression optimizedPlan = optimizer.optimize(
                 session,
@@ -93,7 +92,7 @@ public class InsertPlanner {
 
         //7. Build fragment exec plan
         PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
                 optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
                 insertRelation.getQueryRelation().getColumnOutputNames());
 
@@ -115,24 +114,10 @@ public class InsertPlanner {
         }
         olapTuple.computeMemLayout();
 
-        checkPlanIsVectorized(execPlan.getFragments());
-
         OlapTableSink dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
                 insertRelation.getTargetPartitionIds());
         execPlan.getFragments().get(0).setSink(dataSink);
-        if (!globalDicts.isEmpty()) {
-            // 1 After data loading, we need to check the global dict for low cardinality string column
-            // whether update.
-
-            // 2 If there are query global dicts in top query fragment, we shouldn't override it with
-            // load global dicts. we will invalidate it in CacheDictManager
-
-            // TODO(kks): we could handle this better
-            if (execPlan.getFragments().get(0).getGlobalDicts().isEmpty()) {
-                execPlan.getFragments().get(0).setGlobalDicts(globalDicts);
-            }
-        }
-
+        execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
         return execPlan;
     }
 
@@ -152,7 +137,7 @@ public class InsertPlanner {
                 }
                 fields.getFieldByIndex(columnIdx).setType(targetColumn.getType());
             } else {
-                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName());
+                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (row.get(idx) instanceof DefaultValueExpr) {
@@ -178,7 +163,7 @@ public class InsertPlanner {
                 columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
                         logicalPlan.getOutputColumn().get(columnIdx));
             } else {
-                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName());
+                int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx == -1) {
                     ScalarOperator scalarOperator;
                     if (!targetColumn.hasDefaultValue()) {

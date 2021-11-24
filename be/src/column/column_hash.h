@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #if defined(__x86_64__)
 #include <nmmintrin.h>
 #endif
@@ -274,5 +276,26 @@ inline uint64_t crc_hash_uint128(uint64_t value0, uint64_t value1, uint64_t seed
 #endif
     return hash;
 }
+
+// https://github.com/HowardHinnant/hash_append/issues/7
+template <typename T>
+inline void hash_combine(uint64_t& seed, const T& val) {
+    seed ^= std::hash<T>{}(val) + 0x9e3779b97f4a7c15LLU + (seed << 12) + (seed >> 4);
+}
+
+inline uint64_t hash_128(uint64_t seed, int128_t val) {
+    size_t low = val;
+    size_t high = val >> 64;
+    hash_combine(seed, low);
+    hash_combine(seed, high);
+    return seed;
+}
+
+template <PhmapSeed seed>
+struct Hash128WithSeed {
+    std::size_t operator()(int128_t value) const {
+        return phmap_mix_with_seed<sizeof(size_t), seed>()(hash_128(seed, value));
+    }
+};
 
 } // namespace starrocks::vectorized

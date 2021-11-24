@@ -2,10 +2,14 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -24,8 +28,10 @@ public class ExpressionStatisticsCalculatorTest {
         double max = 100.0;
         double distinctValue = 100;
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.DATE, "id_date", true);
-        Statistics statistics = builder.addColumnStatistic(columnRefOperator, ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
-                setDistinctValuesCount(distinctValue).setNullsFraction(0).setAverageRowSize(10).build()).build();
+        Statistics statistics = builder.addColumnStatistic(columnRefOperator,
+                ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
+                        setDistinctValuesCount(distinctValue).setNullsFraction(0).setAverageRowSize(10).build())
+                .build();
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(columnRefOperator, statistics);
         Assert.assertEquals(columnStatistic.getMaxValue(), max, 0.0001);
         Assert.assertEquals(columnStatistic.getMinValue(), min, 0.0001);
@@ -41,11 +47,13 @@ public class ExpressionStatisticsCalculatorTest {
 
         ConstantOperator constantOperator1 = ConstantOperator.createDate(LocalDateTime.of(2021, 1, 1, 0, 0, 0));
         ColumnStatistic columnStatistic1 = ExpressionStatisticCalculator.calculate(constantOperator1, null);
-        Assert.assertEquals(columnStatistic1.getMaxValue(), getLongFromDateTime(constantOperator1.getDatetime()), 0.001);
+        Assert.assertEquals(columnStatistic1.getMaxValue(), getLongFromDateTime(constantOperator1.getDatetime()),
+                0.001);
 
         ConstantOperator constantOperator2 = ConstantOperator.createChar("123");
         ColumnStatistic columnStatistic2 = ExpressionStatisticCalculator.calculate(constantOperator2, null);
-        Assert.assertTrue(columnStatistic2.isUnknown());
+        Assert.assertTrue(columnStatistic2.isInfiniteRange());
+        Assert.assertEquals(columnStatistic2.getDistinctValuesCount(), 1, 0.001);
     }
 
     @Test
@@ -57,8 +65,10 @@ public class ExpressionStatisticsCalculatorTest {
         double min = 0.0;
         double max = 100.0;
         double distinctValue = 100;
-        Statistics statistics = builder.addColumnStatistic(columnRefOperator, ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
-                setDistinctValuesCount(distinctValue).setNullsFraction(0).setAverageRowSize(10).build()).build();
+        Statistics statistics = builder.addColumnStatistic(columnRefOperator,
+                ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
+                        setDistinctValuesCount(distinctValue).setNullsFraction(0).setAverageRowSize(10).build())
+                .setOutputRowCount(100).build();
         // test max function
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assert.assertEquals(columnStatistic.getMaxValue(), max, 0.001);
@@ -68,6 +78,12 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assert.assertEquals(columnStatistic.getMaxValue(), min, 0.001);
         Assert.assertEquals(columnStatistic.getMinValue(), min, 0.001);
+        // test count function
+        callOperator = new CallOperator("count", Type.INT, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics, 10);
+        Assert.assertEquals(columnStatistic.getMaxValue(), statistics.getOutputRowCount(), 0.001);
+        Assert.assertEquals(columnStatistic.getMinValue(), 0.0, 0.001);
+        Assert.assertEquals(columnStatistic.getDistinctValuesCount(), 10, 0.001);
     }
 
     @Test
@@ -127,5 +143,25 @@ public class ExpressionStatisticsCalculatorTest {
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(-100, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(100, columnStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testCaseWhenOperator() {
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
+        BinaryPredicateOperator whenOperator1 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRefOperator,
+                        ConstantOperator.createInt(1));
+        ConstantOperator constantOperator1 = ConstantOperator.createChar("1");
+        BinaryPredicateOperator whenOperator2 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRefOperator,
+                        ConstantOperator.createInt(2));
+        ConstantOperator constantOperator2 = ConstantOperator.createChar("2");
+
+        CaseWhenOperator caseWhenOperator =
+                new CaseWhenOperator(Type.VARCHAR, null, ConstantOperator.createChar("others", Type.VARCHAR),
+                        ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(caseWhenOperator, new Statistics(100,
+                Maps.newHashMap()));
+        Assert.assertEquals(columnStatistic.getDistinctValuesCount(), 3, 0.001);
     }
 }

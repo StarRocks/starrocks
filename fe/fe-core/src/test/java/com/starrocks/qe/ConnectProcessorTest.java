@@ -132,8 +132,8 @@ public class ConnectProcessorTest {
             fieldListPacket = serializer.toByteBuffer();
         }
 
-        statistics.scan_bytes = 0L;
-        statistics.scan_rows = 0L;
+        statistics.scanBytes = 0L;
+        statistics.scanRows = 0L;
 
         MetricRepo.init();
     }

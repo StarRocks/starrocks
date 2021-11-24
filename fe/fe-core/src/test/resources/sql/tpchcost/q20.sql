@@ -78,6 +78,8 @@ OutPut Exchange Id: 25
 22:HASH JOIN
 |  join op: RIGHT SEMI JOIN (PARTITIONED)
 |  equal join conjunct: [15: PS_SUPPKEY, INT, false] = [1: S_SUPPKEY, INT, false]
+|  build runtime filters:
+|  - filter_id = 4, build_expr = (1: S_SUPPKEY), remote = true
 |  cardinality: 1561188
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -238,6 +240,7 @@ actualRows=0, avgRowSize=20.0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (14: PS_PARTKEY)
+- filter_id = 4, probe_expr = (15: PS_SUPPKEY)
 column statistics:
 * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE

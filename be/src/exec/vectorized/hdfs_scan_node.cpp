@@ -2,12 +2,16 @@
 
 #include "exec/vectorized/hdfs_scan_node.h"
 
+#include <atomic>
 #include <memory>
 
 #include "env/env_hdfs.h"
+#include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter.h"
+#include "fmt/core.h"
+#include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
@@ -18,6 +22,7 @@
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {
+
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {}
 
@@ -189,6 +194,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.parent = this;
+    scanner_params.open_limit = hdfs_file_desc.open_limit;
 
     HdfsScanner* scanner = nullptr;
     if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::PARQUET) {
@@ -196,7 +202,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::ORC) {
         scanner = _pool->add(new HdfsOrcScanner());
     } else {
-        string msg = "unsupported hdfs file format: " + hdfs_file_desc.hdfs_file_format;
+        std::string msg = fmt::format("unsupported hdfs file format: {}", hdfs_file_desc.hdfs_file_format);
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
@@ -266,7 +272,57 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     DeferOp op([&] {
         tls_thread_status.set_mem_tracker(prev_tracker);
         _running_threads.fetch_sub(1, std::memory_order_release);
+
+        if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
+            _result_chunks.shutdown();
+        }
     });
+
+    // if global status was not ok
+    // we need fast failure
+    if (!_get_status().ok()) {
+        scanner->release_pending_token(&_pending_token);
+        scanner->close(_runtime_state);
+        _closed_scanners.fetch_add(1, std::memory_order_release);
+        _close_pending_scanners();
+        return;
+    }
+
+    int concurrency_limit = config::max_hdfs_file_handle;
+
+    // There is a situation where once a resource overrun has occurred,
+    // the scanners that were previously overrun are basically in a pending state,
+    // so even if there are enough resources to follow, they cannot be fully utilized,
+    // and we need to schedule the scanners that are in a pending state as well.
+    if (scanner->has_pending_token()) {
+        int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
+        int need_put = concurrency - _running_threads;
+        int left_resource = concurrency_limit - scanner->open_limit();
+        if (left_resource > 0) {
+            need_put = std::min(left_resource, need_put);
+            std::lock_guard<std::mutex> l(_mtx);
+            while (need_put-- > 0 && !_pending_scanners.empty()) {
+                if (!_submit_scanner(_pending_scanners.pop(), false)) {
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!scanner->has_pending_token()) {
+        scanner->acquire_pending_token(&_pending_token);
+    }
+
+    // if opened file greater than this. scanner will push back to pending list.
+    // We can't have all scanners in the pending state, we need to
+    // make sure there is at least one thread on each SCAN NODE that can be running
+    if (!scanner->is_open() && scanner->open_limit() > concurrency_limit) {
+        if (!scanner->has_pending_token()) {
+            std::lock_guard<std::mutex> l(_mtx);
+            _pending_scanners.push(scanner);
+            return;
+        }
+    }
 
     Status status = scanner->open(_runtime_state);
     scanner->set_keep_priority(false);
@@ -281,6 +337,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             std::lock_guard<std::mutex> l(_mtx);
             if (_chunk_pool.empty()) {
                 scanner->set_keep_priority(true);
+                scanner->release_pending_token(&_pending_token);
                 _pending_scanners.push(scanner);
                 scanner = nullptr;
                 break;
@@ -310,20 +367,23 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
         if (status.ok() && resubmit) {
             if (!_submit_scanner(scanner, false)) {
                 std::lock_guard<std::mutex> l(_mtx);
+                scanner->release_pending_token(&_pending_token);
                 _pending_scanners.push(scanner);
             }
         } else if (status.ok()) {
             DCHECK(scanner == nullptr);
         } else if (status.is_end_of_file()) {
+            scanner->release_pending_token(&_pending_token);
             scanner->close(_runtime_state);
             _closed_scanners.fetch_add(1, std::memory_order_release);
             std::lock_guard<std::mutex> l(_mtx);
-            scanner = _pending_scanners.empty() ? nullptr : _pending_scanners.pop();
-            if (scanner != nullptr && !_submit_scanner(scanner, false)) {
-                _pending_scanners.push(scanner);
+            auto nscanner = _pending_scanners.empty() ? nullptr : _pending_scanners.pop();
+            if (nscanner != nullptr && !_submit_scanner(nscanner, false)) {
+                _pending_scanners.push(nscanner);
             }
         } else {
             _update_status(status);
+            scanner->release_pending_token(&_pending_token);
             scanner->close(_runtime_state);
             _closed_scanners.fetch_add(1, std::memory_order_release);
             _close_pending_scanners();
@@ -331,14 +391,11 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     } else {
         // sometimes state == ok but global_status was not ok
         if (scanner != nullptr) {
+            scanner->release_pending_token(&_pending_token);
             scanner->close(_runtime_state);
             _closed_scanners.fetch_add(1, std::memory_order_release);
             _close_pending_scanners();
         }
-    }
-
-    if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
-        _result_chunks.shutdown();
     }
 }
 
@@ -440,9 +497,7 @@ Status HdfsScanNode::close(RuntimeState* state) {
 
     _close_pending_scanners();
     for (auto* hdfsFile : _hdfs_files) {
-        if (hdfsFile->hdfs_fs != nullptr && hdfsFile->hdfs_file != nullptr) {
-            hdfsCloseFile(hdfsFile->hdfs_fs, hdfsFile->hdfs_file);
-        }
+        hdfsFile->fs.reset();
     }
 
     Expr::close(_min_max_conjunct_ctxs, state);
@@ -546,31 +601,27 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
 
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         hdfs_file_desc->hdfs_fs = nullptr;
-        hdfs_file_desc->hdfs_file = nullptr;
         hdfs_file_desc->fs = std::move(file);
         hdfs_file_desc->partition_id = scan_range.partition_id;
         hdfs_file_desc->path = scan_range.relative_path;
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;
+        hdfs_file_desc->open_limit = nullptr;
         _hdfs_files.emplace_back(hdfs_file_desc);
     } else {
         hdfsFS hdfs;
-        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs));
-        auto* file = hdfsOpenFile(hdfs, native_file_path.c_str(), O_RDONLY, 0, 0, 0);
-        if (file == nullptr) {
-            return Status::InternalError(strings::Substitute("open file failed, file=$0", native_file_path));
-        }
-
+        std::atomic<int32_t>* open_limit = nullptr;
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs, &open_limit));
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         hdfs_file_desc->hdfs_fs = hdfs;
-        hdfs_file_desc->hdfs_file = file;
-        hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, file, native_file_path);
+        hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, native_file_path);
         hdfs_file_desc->partition_id = scan_range.partition_id;
         hdfs_file_desc->path = scan_range.relative_path;
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;
+        hdfs_file_desc->open_limit = open_limit;
         _hdfs_files.emplace_back(hdfs_file_desc);
     }
 

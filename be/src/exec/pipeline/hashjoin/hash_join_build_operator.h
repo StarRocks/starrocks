@@ -15,6 +15,7 @@ class HashJoinBuildOperator final : public Operator {
 public:
     HashJoinBuildOperator(int32_t id, const string& name, int32_t plan_node_id, HashJoinerPtr hash_joiner);
     ~HashJoinBuildOperator() = default;
+
     Status prepare(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
 
@@ -22,14 +23,13 @@ public:
         CHECK(false) << "has_output not supported in HashJoinBuildOperator";
         return false;
     }
-
     bool need_input() const override { return !is_finished(); }
 
-    bool is_finished() const override { return _is_finished; }
+    void set_finishing(RuntimeState* state) override;
+    bool is_finished() const override { return _is_finished || _hash_joiner->is_finished(); }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-    void set_finishing(RuntimeState* state) override;
 
 private:
     HashJoinerPtr _hash_joiner;

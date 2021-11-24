@@ -38,7 +38,6 @@ set(EXEC_FILES
     local_file_reader.cpp
     scan_node.cpp
     select_node.cpp
-    text_converter.cpp
     sort_exec_exprs.cpp
     olap_common.cpp
     tablet_info.cpp
@@ -51,7 +50,8 @@ set(EXEC_FILES
     local_file_writer.cpp
     broker_writer.cpp
     parquet_reader.cpp
-    parquet_writer.cpp
+    parquet_builder.cpp
+    plain_text_builder.cpp
     vectorized/adapter_node.cpp
     vectorized/aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp

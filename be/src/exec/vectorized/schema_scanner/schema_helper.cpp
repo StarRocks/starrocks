@@ -5,7 +5,6 @@
 #include <boost/thread/thread.hpp>
 #include <sstream>
 
-#include "exec/text_converter.hpp"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/PlanNodes_types.h"

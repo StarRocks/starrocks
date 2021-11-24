@@ -11,12 +11,15 @@ namespace starrocks::pipeline {
 class AnalyticSourceOperator : public SourceOperator {
 public:
     AnalyticSourceOperator(int32_t id, int32_t plan_node_id, AnalytorPtr analytor)
-            : SourceOperator(id, "analytic_source", plan_node_id), _analytor(std::move(analytor)) {}
+            : SourceOperator(id, "analytic_source", plan_node_id), _analytor(std::move(analytor)) {
+        _analytor->ref();
+    }
     ~AnalyticSourceOperator() override = default;
 
     bool has_output() const override;
     bool is_finished() const override;
-    void set_finishing(RuntimeState* state) override;
+
+    void set_finished(RuntimeState* state) override;
 
     Status close(RuntimeState* state) override;
 
@@ -26,8 +29,6 @@ private:
     // It is used to perform analytic algorithms
     // shared by AnalyticSinkOperator
     AnalytorPtr _analytor = nullptr;
-    // Whether prev operator has no output
-    bool _is_finished = false;
 };
 
 class AnalyticSourceOperatorFactory final : public SourceOperatorFactory {

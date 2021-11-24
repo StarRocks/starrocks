@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "column/column_hash.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
@@ -112,7 +114,12 @@ template <typename SliceKey, PhmapSeed seed>
 class FixedSizeSliceKeyHash {
 public:
     std::size_t operator()(const SliceKey& s) const {
-        return phmap_mix_with_seed<sizeof(size_t), seed>()(std::hash<decltype(s.u.value)>()(s.u.value));
+        if constexpr (sizeof(SliceKey) == 8) {
+            return phmap_mix_with_seed<sizeof(size_t), seed>()(std::hash<size_t>()(s.u.value));
+        } else {
+            static_assert(sizeof(s.u.value) == 16);
+            return Hash128WithSeed<seed>()(s.u.value);
+        }
     }
 };
 

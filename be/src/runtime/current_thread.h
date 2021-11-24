@@ -7,7 +7,6 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "storage/storage_engine.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -17,13 +16,9 @@ class TUniqueId;
 class CurrentThread {
 public:
     CurrentThread() = default;
-    ~CurrentThread() { commit(); }
+    ~CurrentThread();
 
     void commit() {
-        StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
-        if (storage_engine != nullptr && storage_engine->bg_worker_stopped()) {
-            return;
-        }
         MemTracker* cur_tracker = mem_tracker();
         if (_cache_size != 0 && cur_tracker != nullptr) {
             cur_tracker->consume(_cache_size);

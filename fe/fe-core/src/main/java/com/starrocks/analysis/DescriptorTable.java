@@ -175,9 +175,7 @@ public class DescriptorTable {
             }
         }
 
-        for (Table table : referencedTables) {
-            referencedTbls.add(table);
-        }
+        referencedTbls.addAll(referencedTables);
 
         for (Table tbl : referencedTbls) {
             result.addToTableDescriptors(

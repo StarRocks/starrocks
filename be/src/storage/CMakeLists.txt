@@ -34,7 +34,6 @@ add_library(Olap STATIC
     comparison_predicate.cpp
     decimal12.cpp
     delete_handler.cpp
-    delta_writer.cpp
     del_vector.cpp
     generic_iterators.cpp
     hll.cpp
@@ -42,7 +41,6 @@ add_library(Olap STATIC
     iterators.cpp
     key_coder.cpp
     lru_cache.cpp
-    memtable.cpp
     memtable_flush_executor.cpp
     merger.cpp
     null_predicate.cpp
@@ -91,6 +89,7 @@ add_library(Olap STATIC
     rowset/segment_v2/column_reader.cpp
     rowset/segment_v2/column_writer.cpp
     rowset/segment_v2/default_value_column_iterator.cpp
+    rowset/segment_v2/dictcode_column_iterator.cpp
     rowset/segment_v2/encoding_info.cpp
     rowset/segment_v2/scalar_column_iterator.cpp
     rowset/segment_v2/index_page.cpp

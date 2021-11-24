@@ -171,8 +171,12 @@ public abstract class QueryStmt extends StatementBase {
         if (hasWithClause()) {
             withClause_.analyze(analyzer);
         }
+        analyzeOutfile();
+    }
+
+    public void analyzeOutfile() throws AnalysisException {
         if (hasOutFileClause()) {
-            outFileClause.analyze(analyzer);
+            outFileClause.analyze();
         }
     }
 

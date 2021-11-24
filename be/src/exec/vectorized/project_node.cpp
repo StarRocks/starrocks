@@ -91,7 +91,7 @@ Status ProjectNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
 
-    GlobalDictMaps* mdict_maps = state->mutable_global_dict_map();
+    GlobalDictMaps* mdict_maps = state->mutable_query_global_dict_map();
     _dict_optimize_parser.set_mutable_dict_maps(mdict_maps);
 
     auto init_dict_optimize = [&](std::vector<ExprContext*>& expr_ctxs, std::vector<SlotId>& target_slots) {

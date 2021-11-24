@@ -14,14 +14,12 @@ bool AggregateBlockingSourceOperator::is_finished() const {
     return _aggregator->is_sink_complete() && _aggregator->is_ht_eos();
 }
 
-void AggregateBlockingSourceOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
+void AggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
+    _aggregator->set_finished();
 }
 
 Status AggregateBlockingSourceOperator::close(RuntimeState* state) {
-    // _aggregator is shared by sink operator and source operator
-    // we must only close it at source operator
-    RETURN_IF_ERROR(_aggregator->close(state));
+    RETURN_IF_ERROR(_aggregator->unref(state));
     return SourceOperator::close(state);
 }
 
@@ -59,4 +57,5 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
 
     return std::move(chunk);
 }
+
 } // namespace starrocks::pipeline

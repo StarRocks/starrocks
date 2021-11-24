@@ -152,6 +152,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
+    public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -163,6 +164,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
+    public static final String ENABLE_FILTER_NULL_VALUES = "enable_filter_null_values";
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
@@ -291,6 +293,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_USE_NTH_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private int useNthExecPlan = 0;
+
+    @VarAttr(name = CBO_CTE_REUSE)
+    private boolean cboCteReuse = false;
+
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -399,6 +405,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_FILTER_NULL_VALUES)
+    private boolean enableFilterNullValues = false;
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
@@ -717,6 +726,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableColumnExprPredicate() {
         return enableColumnExprPredicate;
+    }
+
+    public boolean getEnableFilterNullValues() {
+        return enableFilterNullValues;
+    }
+
+    public boolean isCboCteReuse() {
+        return cboCteReuse;
+    }
+
+    public void setCboCteReuse(boolean cboCteReuse) {
+        this.cboCteReuse = cboCteReuse;
     }
 
     // Serialize to thrift object

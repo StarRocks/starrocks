@@ -103,52 +103,6 @@ Status LoadChannelMgr::open(const PTabletWriterOpenRequest& params) {
 
 static void dummy_deleter(const CacheKey& key, void* value) {}
 
-Status LoadChannelMgr::add_batch(const PTabletWriterAddBatchRequest& request,
-                                 google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec,
-                                 int64_t* wait_lock_time_ns) {
-    UniqueId load_id(request.id());
-    // 1. get load channel
-    std::shared_ptr<LoadChannel> channel;
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        auto it = _load_channels.find(load_id);
-        if (it == _load_channels.end()) {
-            auto* handle = _lastest_success_channel->lookup(load_id.to_string());
-            // success only when eos be true
-            if (handle != nullptr) {
-                _lastest_success_channel->release(handle);
-                if (request.has_eos() && request.eos()) {
-                    return Status::OK();
-                }
-            }
-            return Status::InternalError(
-                    strings::Substitute("fail to add batch in load channel. unknown load_id=$0", load_id.to_string()));
-        }
-        channel = it->second;
-    }
-
-    // 2. check if mem consumption exceed limit
-    _handle_mem_exceed_limit(channel);
-
-    // 3. add batch to load channel
-    // batch may not exist in request(eg: eos request without batch),
-    // this case will be handled in load channel's add batch method.
-    RETURN_IF_ERROR(channel->add_batch(request, tablet_vec));
-
-    // 4. handle finish
-    if (channel->is_finished()) {
-        LOG(INFO) << "removing load channel " << load_id << " because it's finished";
-        {
-            std::lock_guard<std::mutex> l(_lock);
-            _load_channels.erase(load_id);
-            auto* handle = _lastest_success_channel->insert(load_id.to_string(), nullptr, 1, dummy_deleter);
-            _lastest_success_channel->release(handle);
-        }
-        VLOG(1) << "removed load channel " << load_id;
-    }
-    return Status::OK();
-}
-
 Status LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request,
                                  google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec,
                                  int64_t* wait_lock_time_ns) {

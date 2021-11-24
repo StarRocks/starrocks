@@ -1,10 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -15,10 +15,10 @@ import java.util.Optional;
  */
 public class Scope {
     private Scope parent;
-    private RelationId relationId;
-    private RelationFields relationFields;
+    private final RelationId relationId;
+    private final RelationFields relationFields;
 
-    private Map<String, QueryRelation> namedQueries = new HashMap<>();
+    private Map<String, QueryRelation> cteQueries = Maps.newLinkedHashMap();
 
     public Scope(RelationId relationId, RelationFields relation) {
         this.relationId = relationId;
@@ -86,20 +86,24 @@ public class Scope {
         return new ResolvedField(this, field, hierarchyFieldIndex);
     }
 
-    public void addNamedQueries(String name, QueryRelation view) {
-        namedQueries.put(name, view);
+    public void addCteQueries(String name, QueryRelation view) {
+        cteQueries.put(name, view);
     }
 
-    public Optional<QueryRelation> getNamedQueries(String name) {
-        if (namedQueries.containsKey(name)) {
-            return Optional.of(namedQueries.get(name));
+    public Optional<QueryRelation> getCteQueries(String name) {
+        if (cteQueries.containsKey(name)) {
+            return Optional.of(cteQueries.get(name));
         }
 
         if (parent != null) {
-            return parent.getNamedQueries(name);
+            return parent.getCteQueries(name);
         }
 
         return Optional.empty();
+    }
+
+    public Map<String, QueryRelation> getAllCteQueries() {
+        return cteQueries;
     }
 
     public Scope getParent() {

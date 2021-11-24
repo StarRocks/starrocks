@@ -26,5 +26,4 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/test/olap")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/test/olap")
 
 ADD_BE_TEST(delete_handler_test)
-ADD_BE_TEST(delta_writer_test)
 ADD_BE_TEST(options_test)

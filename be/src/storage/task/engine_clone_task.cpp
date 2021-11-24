@@ -295,7 +295,7 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
                                        int timeout_s, const std::vector<Version>* missed_versions,
                                        std::string* snapshot_path, int32_t* snapshot_format) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot should be stopped as soon as possible.");
     }
 
@@ -338,7 +338,7 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
 
 Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const std::string& snapshot_path) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot should be stopped as soon as possible.");
     }
 
@@ -353,7 +353,7 @@ Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const
 Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& remote_url_prefix,
                                         const std::string& local_path) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The download should be stopped as soon as possible.");
     }
 
@@ -382,7 +382,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     // The header file's name is end of .hdr.
     for (int i = 0; i < file_name_list.size() - 1; ++i) {
         bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-        if (!bg_worker_stopped) {
+        if (bg_worker_stopped) {
             return Status::InternalError(
                     "Process is going to quit. The download should be stopped as soon as possible.");
         }
@@ -458,7 +458,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, int64_t committed_version,
                                       bool incremental_clone) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone should be stopped as soon as possible.");
     }
 
@@ -512,7 +512,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         // link files from clone dir, if file exists, skip it
         for (const string& clone_file : clone_files) {
             bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-            if (!bg_worker_stopped) {
+            if (bg_worker_stopped) {
                 return Status::InternalError(
                         "Process is going to quit. The clone should be stopped as soon as possible.");
             }
@@ -560,7 +560,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta& cloned_tablet_meta,
                                                 int64_t committed_version) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone should be stopped as soon as possible.");
     }
 
@@ -597,7 +597,7 @@ Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta
 
 Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone should be stopped as soon as possible.");
     }
 
@@ -691,7 +691,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
 
 Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string& clone_dir) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot should be stopped as soon as possible.");
     }
 

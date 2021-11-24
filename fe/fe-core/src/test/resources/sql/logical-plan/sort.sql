@@ -41,9 +41,9 @@ logical limit (10)
 [sql]
 select v1+2 as v, * from t0 order by v+1;
 [result]
-logical project (col,col,col)
+logical project (col,col,col,col)
     logical sort (col)
-        logical project (col,col,col,col + 1)
+        logical project (col,col,col,col,col + 1)
             logical project (col,col,col,col + 2)
                 logical project (col,col,col)
                     logical scan

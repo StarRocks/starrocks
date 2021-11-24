@@ -47,6 +47,10 @@ For detailed instructions, please refer to [deploy](https://github.com/StarRocks
 * [StarRocks official website](https://www.starrocks.com)
 * [StarRocks documentation](https://docs.starrocks.com)
 
+## Community
+* [StarRocks slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg)
+* [StarRocks telegram group](https://t.me/joinchat/73R83y0JOnJkMTll)
+
 ## LICENSE
 
 Code in this repository is provided under the [Elastic License 2.0](https://www.elastic.co/cn/licensing/elastic-license). Some portions are available under open source licenses. Please see our [FAQ](https://www.starrocks.com/en-US/product/license-FAQ).

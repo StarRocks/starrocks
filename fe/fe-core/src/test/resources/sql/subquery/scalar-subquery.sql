@@ -15,7 +15,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 7:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -27,17 +26,14 @@ UNPARTITIONED
 
 6:Project
 |  <slot 1> : 1: v1
-|  use vectorized: true
 |
 5:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: v2 = 5: v2
-|  use vectorized: true
 |
 |----4:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: t0
@@ -49,7 +45,6 @@ tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=2.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -61,10 +56,8 @@ UNPARTITIONED
 
 3:ASSERT NUMBER OF ROWS
 |  assert number of rows: LE 1
-|  use vectorized: true
 |
 2:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -84,7 +77,6 @@ tabletList=10033,10035,10037
 cardinality=1
 avgRowSize=1.0
 numNodes=0
-use vectorized: true
 [end]
 
 [sql]
@@ -116,7 +108,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 8:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -128,7 +119,6 @@ UNPARTITIONED
 
 7:Project
 |  <slot 1> : 1: v1
-|  use vectorized: true
 |
 6:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -136,10 +126,8 @@ UNPARTITIONED
 |  colocate: false, reason:
 |  equal join conjunct: 3: v3 = 6: v3
 |  other join predicates: 2: v2 < 7: sum
-|  use vectorized: true
 |
 |----5:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: t0
@@ -151,7 +139,6 @@ tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=3.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -164,10 +151,8 @@ UNPARTITIONED
 4:AGGREGATE (merge finalize)
 |  output: sum(7: sum)
 |  group by: 6: v3
-|  use vectorized: true
 |
 3:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -181,7 +166,6 @@ HASH_PARTITIONED: 6: v3
 |  STREAMING
 |  output: sum(5: v2)
 |  group by: 6: v3
-|  use vectorized: true
 |
 1:OlapScanNode
 TABLE: t3
@@ -193,7 +177,6 @@ tabletList=10033,10035,10037
 cardinality=1
 avgRowSize=2.0
 numNodes=0
-use vectorized: true
 [end]
 
 [sql]
@@ -237,7 +220,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 10:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -249,7 +231,6 @@ UNPARTITIONED
 
 9:Project
 |  <slot 1> : 1: v1
-|  use vectorized: true
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -258,17 +239,14 @@ UNPARTITIONED
 |  equal join conjunct: 3: v3 = 6: v3
 |  equal join conjunct: 11: abs = 10: abs
 |  other join predicates: CAST(2: v2 AS LARGEINT) < 8: sum
-|  use vectorized: true
 |
 |----7:EXCHANGE
-|       use vectorized: true
 |
 1:Project
 |  <slot 1> : 1: v1
 |  <slot 2> : 2: v2
 |  <slot 3> : 3: v3
 |  <slot 11> : abs(1: v1)
-|  use vectorized: true
 |
 0:OlapScanNode
 TABLE: t0
@@ -280,7 +258,6 @@ tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=4.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -293,10 +270,8 @@ UNPARTITIONED
 6:AGGREGATE (merge finalize)
 |  output: sum(8: sum)
 |  group by: 6: v3, 10: abs
-|  use vectorized: true
 |
 5:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -310,13 +285,11 @@ HASH_PARTITIONED: 6: v3, 10: abs
 |  STREAMING
 |  output: sum(7: abs)
 |  group by: 6: v3, 10: abs
-|  use vectorized: true
 |
 3:Project
 |  <slot 6> : 6: v3
 |  <slot 7> : abs(5: v2)
 |  <slot 10> : abs(4: v1)
-|  use vectorized: true
 |
 2:OlapScanNode
 TABLE: t3
@@ -328,7 +301,6 @@ tabletList=10033,10035,10037
 cardinality=1
 avgRowSize=5.0
 numNodes=0
-use vectorized: true
 [end]
 
 [sql]

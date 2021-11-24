@@ -8,7 +8,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class DecodeRewriteTest extends PlanTestBase{
+public class DecodeRewriteTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
@@ -53,7 +53,6 @@ public class DecodeRewriteTest extends PlanTestBase{
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
     }
-
 
     @Test
     public void testDecodeNodeRewrite() throws Exception {
@@ -110,8 +109,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         String sql = "select L_COMMENT from lineitem group by L_COMMENT";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:Decode\n" +
-                "  |  <dict id 18> : <string id 16>\n" +
-                "  |  use vectorized: true"));
+                "  |  <dict id 18> : <string id 16>\n"));
     }
 
     @Test
@@ -120,7 +118,6 @@ public class DecodeRewriteTest extends PlanTestBase{
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 4> : <string id 2>\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  <slot 4> : 4: dept_name"));
@@ -169,7 +166,7 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
                 "  |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE\n" +
-                "  |  * count-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE"));
+                "  |  * count-->[0.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE"));
     }
 
     @Test
@@ -242,12 +239,12 @@ public class DecodeRewriteTest extends PlanTestBase{
         plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+                "query_global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+                "query_global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -284,7 +281,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(*), S_ADDRESS from supplier group by S_ADDRESS";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("node_type:DECODE_NODE, num_children:1, limit:-1, row_tuples:[3, 2]"));
+        Assert.assertTrue(plan.contains("node_type:DECODE_NODE, num_children:1, limit:-1, row_tuples:[3]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -306,8 +303,7 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <dict id 15> : <string id 9>\n" +
                 "  |  string functions:\n" +
                 "  |  <function id 14> : upper(13: S_ADDRESS)\n" +
-                "  |  <function id 15> : lower(14: upper)\n" +
-                "  |  use vectorized: true"));
+                "  |  <function id 15> : lower(14: upper)\n"));
 
         sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);
@@ -352,7 +348,6 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <dict id 7> : <string id 3>\n" +
                 "  |  <dict id 8> : <string id 6>"));
 
-
         sql = "SELECT * \n" +
                 "FROM   emp \n" +
                 "WHERE  EXISTS (SELECT dept.dept_id \n" +
@@ -375,15 +370,16 @@ public class DecodeRewriteTest extends PlanTestBase{
 
     @Test
     public void testJoinGlobalDict() throws Exception {
-        String sql = "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
+        String sql =
+                "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("enable_column_expr_predicate:false, dict_string_id_to_int_ids:{}"));
         Assert.assertTrue(plan.contains("P_MFGR IN ('MFGR#1', 'MFGR#2'), enable_column_expr_predicate:false, " +
                 "dict_string_id_to_int_ids:{}"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), global_dicts:[TGlobalDict(columnId:28"));
+                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
         Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]))), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), global_dicts:[TGlobalDict(columnId:28"));
+                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
     }
 
     @Test
@@ -435,5 +431,23 @@ public class DecodeRewriteTest extends PlanTestBase{
         sql = "select count(t.a) from(select S_ADDRESS <=> 'kks' as a from supplier) as t";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("[3: S_ADDRESS, VARCHAR, false] <=> 'kks'"));
+    }
+
+    @Test
+    public void testSubqueryWithLimit() throws Exception {
+        String sql = "select t0.S_ADDRESS from (select S_ADDRESS, S_NATIONKEY from supplier_nullable limit 10) t0" +
+                " inner join supplier on t0.S_NATIONKEY = supplier.S_NATIONKEY;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 17> : <string id 3>"));
+    }
+
+    @Test
+    public void testDecodeWithCast() throws Exception {
+        String sql = "select reverse(conv(cast(S_ADDRESS as bigint), NULL, NULL)) from supplier";
+        String plan = getFragmentPlan(sql);
+        // Currently, we disable cast operator
+        Assert.assertFalse(plan.contains("Decode"));
+        Assert.assertTrue(plan.contains("reverse(conv(CAST(3: S_ADDRESS AS BIGINT), NULL, NULL))"));
     }
 }

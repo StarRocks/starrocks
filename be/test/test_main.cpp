@@ -80,6 +80,7 @@ int main(int argc, char** argv) {
     // delete engine
     engine->stop();
     delete engine;
+    exec_env->set_storage_engine(nullptr);
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);

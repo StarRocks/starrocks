@@ -27,7 +27,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 6:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -41,20 +40,16 @@ UNPARTITIONED
 |  <slot 4> : 4: v4
 |  <slot 5> : 5: v5
 |  <slot 6> : 6: v6
-|  use vectorized: true
 |
 4:HASH JOIN
 |  join op: RIGHT SEMI JOIN (PARTITIONED)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: v2 = 5: v5
-|  use vectorized: true
 |
 |----3:EXCHANGE
-|       use vectorized: true
 |
 1:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -74,7 +69,6 @@ tabletList=10015,10017,10019
 cardinality=1
 avgRowSize=3.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -94,7 +88,6 @@ tabletList=10006,10008,10010
 cardinality=10000
 avgRowSize=1.0
 numNodes=0
-use vectorized: true
 [end]
 
 [sql]

@@ -75,7 +75,6 @@ public class ExpressionMapping {
     public void put(Expr expression, ColumnRefOperator variable) {
         if (expression instanceof FieldReference) {
             fieldMappings[((FieldReference) expression).getFieldIndex()] = variable;
-            return;
         }
 
         if (expression instanceof SlotRef) {

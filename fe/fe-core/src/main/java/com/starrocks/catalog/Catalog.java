@@ -442,6 +442,8 @@ public class Catalog {
 
     private long imageJournalId;
 
+    private long feStartTime;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -506,6 +508,10 @@ public class Catalog {
 
     public DynamicPartitionScheduler getDynamicPartitionScheduler() {
         return this.dynamicPartitionScheduler;
+    }
+
+    public long getFeStartTime() {
+        return feStartTime;
     }
 
     private static class SingletonHolder {
@@ -860,6 +866,7 @@ public class Catalog {
         while (true) {
             if (isReady()) {
                 LOG.info("catalog is ready. FE type: {}", feType);
+                feStartTime = System.currentTimeMillis();
                 break;
             }
 
@@ -1298,9 +1305,7 @@ public class Catalog {
         tabletChecker.start();
         tabletScheduler.start();
         // Colocate tables balancer
-        if (!Config.disable_colocate_join) {
-            ColocateTableBalancer.getInstance().start();
-        }
+        ColocateTableBalancer.getInstance().start();
         // Publish Version Daemon
         publishVersionDaemon.start();
         // Start txn cleaner
@@ -3927,9 +3932,6 @@ public class Catalog {
         try {
             String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
             if (colocateGroup != null) {
-                if (Config.disable_colocate_join) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_FEATURE_DISABLED);
-                }
                 String fullGroupName = db.getId() + "_" + colocateGroup;
                 ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
                 if (groupSchema != null) {
