@@ -51,6 +51,7 @@ void TabletReader::close() {
 Status TabletReader::prepare() {
     std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
+    _stats.rowsets_read_number += _rowsets.size();
     return st;
 }
 

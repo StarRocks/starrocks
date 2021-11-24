@@ -290,12 +290,16 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
     COUNTER_UPDATE(_parent->_index_load_timer, _reader->stats().index_load_ns);
 
-    COUNTER_UPDATE(_parent->_total_pages_num_counter, _reader->stats().total_pages_num);
+    COUNTER_UPDATE(_parent->_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_parent->_cached_pages_num_counter, _reader->stats().cached_pages_num);
 
     COUNTER_UPDATE(_parent->_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_parent->_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_UPDATE(_parent->_rowsets_read_number, _reader->stats().rowsets_read_number);
+    COUNTER_UPDATE(_parent->_segments_read_number, _reader->stats().segments_read_number);
+    COUNTER_UPDATE(_parent->_total_columns_data_page_number, _reader->stats().total_columns_data_page_number);
 
     COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.predicates.size());
 

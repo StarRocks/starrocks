@@ -37,6 +37,7 @@ ScalarColumnIterator::~ScalarColumnIterator() = default;
 Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
     RETURN_IF_ERROR(_reader->ensure_index_loaded(_opts.reader_type));
+    _opts.stats->total_columns_data_page_number += _reader->num_data_pages();
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
         return Status::OK();

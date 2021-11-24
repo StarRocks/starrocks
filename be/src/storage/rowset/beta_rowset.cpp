@@ -275,6 +275,9 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
 
     std::vector<vectorized::ChunkIteratorPtr> tmp_seg_iters;
     tmp_seg_iters.reserve(num_segments());
+    if (options.stats) {
+        options.stats->segments_read_number += num_segments();
+    }
     for (auto& seg_ptr : segments()) {
         if (seg_ptr->num_rows() == 0) {
             continue;

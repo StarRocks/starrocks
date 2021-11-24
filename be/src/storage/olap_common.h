@@ -428,6 +428,10 @@ struct OlapReaderStatistics {
     int64_t bitmap_index_filter_timer = 0;
 
     int64_t rows_del_vec_filtered = 0;
+
+    int64_t rowsets_read_number = 0;
+    int64_t segments_read_number = 0;
+    int64_t total_columns_data_page_number = 0;
 };
 
 typedef uint32_t ColumnId;
