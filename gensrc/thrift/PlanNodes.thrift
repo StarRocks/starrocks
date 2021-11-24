@@ -848,8 +848,10 @@ struct TPlanNode {
   // runtime filters be probed by this node.
   55: optional list<TRuntimeFilterDescription> probe_runtime_filters
   56: optional TDecodeNode decode_node
-  // a set of TPlanNodeIds of whom generate local runtime filters that take effects on this node 
+  // a set of TPlanNodeIds of whom generate local runtime filters that take effects on this node
   57: optional set<Types.TPlanNodeId> local_rf_waiting_set
+  // Columns that null values can be filtered out
+  58: optional list<Types.TSlotId> filter_null_value_columns;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
