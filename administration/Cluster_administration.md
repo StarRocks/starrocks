@@ -327,118 +327,9 @@ BE、FE启动顺序不能颠倒。因为如果升级导致新旧 FE、BE 不兼�
 
 #### 回滚方案
 
->注意：从标准版DorisDB-1.17.2 及之前版本升级至社区版StarRocks-1.x.x,在进行回滚时可能会丢失数据，如果有此类需求请联系小助手。
+>注意：从标准版DorisDB升级至社区版StarRocks，暂时不支持回滚，建议先在测试环境验证测试没问题后再升级线上。如有遇到问题无法解决，可以添加下面企业微信寻求帮助。
 
 ![二维码](../assets/8.3.1.png)
-
->如果遇到上线异常需要启动回滚方案。回滚方案需要按照升级的逆顺序来进行。先回滚BROKER，再回滚FE，再回滚BE。顺序不能错。
-
-##### 回滚Broker
-
-1. 停止当前节点的broker
-
-    ```bash
-    cd ${DSDB_HOME}/apache_hdfs_broker && ./bin/stop_broker.sh
-    ```
-
-2. 删除刚刚部署的lib和bin文件
-
-    ```bash
-    rm -r ${DSDB_HOME}/apache_hdfs_broker/lib
-    rm -r ${DSDB_HOME}/apache_hdfs_broker/bin
-    ```
-
-3. 恢复备份的lib
-
-    ```bash
-    cd ${DSDB_UPGRADE_HOME}
-    cp -r DorisDB-backups/apache_hdfs_broker/bin ${DSDB_HOME}/apache_hdfs_broker/
-    cp -r DorisDB-backups/apache_hdfs_broker/lib ${DSDB_HOME}/apache_hdfs_broker/
-    ```
-
-4. 启动当前Broker
-
-    ```bash
-    cd ${DSDB_HOME}/apache_hdfs_broker && ./bin/start_broker.sh --daemon
-    ```
-
-5. 观察Broker进程是否运行正常  
-
-    a. 在MySQL Client中执行show broker 查看是否成功启动  
-
-    b. 查看broker/log  
-
-    c. /broker.INFO 是否运行正常  
-
-##### 回滚FE
-
-> 注意：需要先回滚Master，然后Follower，再Observer
-
-1. 先将当前节点FE停止
-
-    ```bash
-    cd ${DSDB_HOME}/fe && ./bin/stop_fe.sh
-    ```
-
-2. 删除刚刚部署的内容
-
-    ```bash
-    rm -r ${DSDB_HOME}/fe/lib
-    ```
-
-3. 恢复备份的lib和bin
-
-    ```bash
-    cp -r ${DSDB_UPGRADE_HOME}/DorisDB-backups/fe/lib ${DSDB_HOME}/fe/
-    cp -r ${DSDB_UPGRADE_HOME}/DorisDB-backups/fe/bin ${DSDB_HOME}/fe/
-    ```
-
-4. 重新启动FE
-
-    ```bash
-    cd ${DSDB_HOME}/fe && ./bin/start_fe.sh --daemon
-    ```
-
-5. 观察FE进程是否运行正常
-
-    a. 在MySQL Client中执行show frontends 查看是否成功启动，并且版本信息是否成功回滚  
-
-    b. 查看fe/log/fe.INFO 是否运行正常
-
-##### 回滚BE
-
-需要逐台回滚BE
-
-1. 先将BE停止
-
-    ```bash
-    # 停止BE
-    cd ${DSDB_HOME}/be && ./bin/stop_be.sh
-    ```
-
-2. 删除刚刚部署的lib和bin文件
-
-    ```bash
-    rm -r ${DSDB_HOME}/be/lib
-    rm -r ${DSDB_HOME}/be/bin
-    ```
-
-3. 恢复备份的lib
-
-    ```bash
-    cp -r ${DSDB_UPGRADE_HOME}/DorisDB-backups/be/lib ${DSDB_HOME}/be/lib
-    cp -r ${DSDB_UPGRADE_HOME}/DorisDB-backups/be/bin ${DSDB_HOME}/be/bin
-    ```
-
-4. 杀掉BE，靠supervisor启动
-
-    ```bash
-    # 启动BE
-    cd ${DSDB_HOME}/be && ./bin/start_be.sh --daemon
-    ```
-
-5. 观察BE进程是否运行正常  
-    观察内容与升级时观察内容一致，除BE的版本信息外  
 
 ### 从 ApacheDoris 升级为 DorisDB 标准版操作手册
 
@@ -717,9 +608,6 @@ BE、FE启动顺序不能颠倒。因为如果升级导致新旧 FE、BE 不兼�
 
     * 如果是修改源码升级的，需要等元数据产生新image之后(meta/image目录下有image.xxx的新文件产生)，将fe的lib包替换回发布包。
 
-5. 部署 DorisDBManager
-    观察一段时间以后，再部署企业版的管理页面来管理集群。
-
 #### FAQs
 
 1. 大量表有segmentV1的格式，需要转换，改怎么操作？
@@ -730,5 +618,4 @@ BE、FE启动顺序不能颠倒。因为如果升级导致新旧 FE、BE 不兼�
     需要先升级 BE、再升级 FE，因为DorisDB的标准版中BE是兼容FE的。升级BE的过程中，需要进行灰度升级，先升级一台BE，过一天观察无误，再升级其他FE。
 3. 升级出问题是否能进行回滚？
 
-    BE如果写入数据可以进行回滚，回滚方式就是用旧版本再升级替换一下。
-    FE目前支持回滚到1.13(包括)以后的任意版本。
+    暂时不支持回滚，建议先在测试环境验证测试没问题后再升级线上。如有遇到问题无法解决，可以官网联系寻求帮助。
