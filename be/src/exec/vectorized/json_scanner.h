@@ -91,7 +91,7 @@ private:
 
     // Reorder column to accelerate simdjson iteration.
     void _reorder_column(std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::document_reference& doc);
-    
+
     Status _filter_object_with_json_root(simdjson::ondemand::object& obj);
 
 private:

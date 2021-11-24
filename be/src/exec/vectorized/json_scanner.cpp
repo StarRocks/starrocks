@@ -563,7 +563,6 @@ Status JsonReader::_process_array_with_json_path(Chunk* chunk, const std::vector
 
 Status JsonReader::_process_object(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                    simdjson::ondemand::object& obj) {
-    
     bool op_col_added = false;
     for (SlotDescriptor* slot_desc : slot_descs) {
         if (slot_desc == nullptr) {
