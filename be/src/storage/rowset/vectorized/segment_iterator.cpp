@@ -599,7 +599,7 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowid, size_
     }
 
     if (rowid !=  nullptr) {
-        rowid->reserve(range.span_size() + n);
+        rowid->reserve(rowid->size() + range.span_size());
         vectorized::SparseRangeIterator iter = range.new_iterator();
         while (iter.has_more()) {
             vectorized::Range r = iter.next(n);
@@ -611,7 +611,7 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowid, size_
 
     _cur_rowid = cur_rowid;
     _chunk_rowid_start = chunk_rowid_start;
-    _opts.stats->raw_rows_read += n;
+    _opts.stats->raw_rows_read += range.span_size();
     chunk->check_or_die();
     return Status::OK();
 }
