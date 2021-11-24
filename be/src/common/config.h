@@ -639,7 +639,7 @@ CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 // queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // the number of exchange threads pipeline engine.
-CONF_Int64(pipeline_exchange_thread_pool_thread_num, "0");
+CONF_Int64(pipeline_exchange_thread_pool_thread_num, "2");
 // queue size of exchange thread pool for pipeline engine.
 CONF_Int64(pipeline_exchange_thread_pool_queue_size, "102400");
 // the number of execution threads for pipeline engine.

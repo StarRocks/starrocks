@@ -31,7 +31,7 @@
 namespace starrocks {
 
 // RefCountClosure with call back
-template <typename T>
+template <typename T, typename C = void>
 class CallBackClosure : public google::protobuf::Closure {
 public:
     CallBackClosure() : _refs(0) {}
@@ -50,6 +50,9 @@ public:
 
     void addFailedHandler(std::function<void()> fn) { _failed_handler = std::move(fn); }
     void addSuccessHandler(std::function<void(const T&)> fn) { _success_handler = fn; }
+    void set_context(const C& ctx) { _ctx = ctx; }
+    C& context() { return _ctx; }
+    const C& context() const { return _ctx; }
 
     void Run() noexcept override {
         try {
@@ -77,5 +80,6 @@ private:
     std::atomic<int> _refs;
     std::function<void()> _failed_handler;
     std::function<void(const T&)> _success_handler;
+    C _ctx;
 };
 } // namespace starrocks
