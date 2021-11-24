@@ -124,7 +124,7 @@ inline Status HeapMergeIterator::_init() {
     DCHECK(_chunk_size > 0);
     DCHECK_EQ(_children.size(), _chunk_pool.size());
     for (size_t i = 0; i < _children.size(); i++) {
-        _chunk_pool[i] = ChunkHelper::new_chunk(_schema, _chunk_size);
+        _chunk_pool[i] = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
         RETURN_IF_ERROR(_fill_heap(i));
     }
     _inited = true;

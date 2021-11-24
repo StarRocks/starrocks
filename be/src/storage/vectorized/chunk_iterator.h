@@ -67,12 +67,11 @@ public:
     const Schema& encoded_schema() const { return _encoded_schema; }
 
     virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
+        _encoded_schema.reserve(schema().num_fields());
         for (const auto& field : schema().fields()) {
             const auto cid = field->id();
-            const auto& name = field->name();
-            bool is_nullable = field->is_nullable();
             if (dict_maps.count(cid)) {
-                _encoded_schema.append(std::make_shared<Field>(cid, name, OLAP_FIELD_TYPE_INT, -1, -1, is_nullable));
+                _encoded_schema.append(Field::convert_to_dict_field(*field));
             } else {
                 _encoded_schema.append(field);
             }

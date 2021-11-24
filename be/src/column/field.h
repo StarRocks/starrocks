@@ -2,10 +2,12 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "storage/olap_common.h"
 #include "storage/types.h"
 
 namespace starrocks::vectorized {
@@ -77,6 +79,13 @@ public:
     const Field& get_sub_field(int i) const { return _sub_fields[i]; }
 
     ColumnPtr create_column() const;
+
+    static FieldPtr convert_to_dict_field(const Field& field) {
+        DCHECK(field.type()->type() == OLAP_FIELD_TYPE_VARCHAR);
+        FieldPtr res = std::make_shared<Field>(field);
+        res->_type = get_type_info(OLAP_FIELD_TYPE_INT);
+        return res;
+    }
 
 private:
     Field() = default;

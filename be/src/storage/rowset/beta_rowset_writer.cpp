@@ -301,6 +301,7 @@ Status BetaRowsetWriter::_final_merge() {
     } else {
         itr = new_aggregate_iterator(new_merge_iterator(seg_iterators), 0);
     }
+    itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
 
     auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
