@@ -23,6 +23,45 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testInsert() throws Exception {
+        String explainString = getInsertExecPlan("insert into t0 values(1,2,3)");
+        System.out.println(explainString);
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: expr | 2: expr | 3: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  OLAP TABLE SINK\n" +
+                "    TUPLE ID: 1\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 2 | 3"));
+
+        explainString = getInsertExecPlan("insert into t0(v1) values(1),(2)");
+        System.out.println(explainString);
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: expr | 2: expr | 3: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  OLAP TABLE SINK\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: expr\n" +
+                "  |  <slot 2> : NULL\n" +
+                "  |  <slot 3> : NULL\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "     use vectorized: true"));
+    }
+
+    @Test
     public void testInsertMvSum() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `test_insert_mv_sum` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -209,6 +248,10 @@ public class InsertPlanTest extends PlanTestBase {
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().equals("Column has no default value, column=k5"));
         }
+
+        sql = "insert into duplicate_table_with_default(K1,k2,k3) values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
+        explainString = getInsertExecPlan(sql);
+        Assert.assertTrue(explainString.contains("<slot 1> : 1: expr"));
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {

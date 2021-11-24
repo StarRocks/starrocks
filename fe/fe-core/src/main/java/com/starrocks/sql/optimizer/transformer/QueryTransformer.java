@@ -364,8 +364,21 @@ class QueryTransformer {
 
             //Build grouping_id(all grouping columns)
             ColumnRefOperator grouping = columnRefFactory.create("GROUPING_ID", Type.BIGINT, false);
-            groupingIds.add(groupingIdsBitSets.stream().map(bitset ->
-                    Utils.convertBitSetToLong(bitset, groupByColumnRefs.size())).collect(Collectors.toList()));
+            List<Long> groupingID = new ArrayList<>();
+            for (BitSet bitSet : groupingIdsBitSets) {
+                long gid = Utils.convertBitSetToLong(bitSet, groupByColumnRefs.size());
+
+                // Under normal circumstances, grouping_id is unlikely to be duplicated,
+                // but if there are duplicate columns in grouping sets, the grouping_id of the two columns may be the same,
+                // eg: grouping sets((v1), (v1))
+                // causing the data to be aggregated in advance.
+                // So add pow here to ensure that the grouping_id is not repeated, to ensure that the data will not be aggregated in advance
+                while (groupingID.contains(gid)) {
+                    gid += Math.pow(2, groupByColumnRefs.size());
+                }
+                groupingID.add(gid);
+            }
+            groupingIds.add(groupingID);
             groupByColumnRefs.add(grouping);
             repeatOutput.add(grouping);
 
