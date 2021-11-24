@@ -7,6 +7,8 @@ namespace starrocks::pipeline {
 Status ExceptContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
     _build_pool = std::make_unique<MemPool>();
 
+    RETURN_IF_ERROR(_hash_set->init());
+
     _dst_tuple_desc = state->desc_tbl().get_tuple_descriptor(_dst_tuple_id);
     _dst_nullables.reserve(build_exprs.size());
     for (auto build_expr : build_exprs) {
