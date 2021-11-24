@@ -381,7 +381,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         case simdjson::ondemand::json_type::object: {
             // Reorder the column as the order of the key in json, which makes it faster to iterate the json.
             if (!ordered) {
-                _reorder_column(ordered_slot_descs, doc);
+                _reorder_column(&ordered_slot_descs, &doc);
                 ordered = true;
                 // Rewind document to go through it again.
                 doc.rewind();
@@ -405,7 +405,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
                 return Status::DataQualityError(err_msg.c_str());
             }
 
-            RETURN_IF_ERROR(_filter_object_with_json_root(obj));
+            RETURN_IF_ERROR(_filter_object_with_json_root(&obj));
 
             if (_scanner->_json_paths.empty()) {
                 RETURN_IF_ERROR(_process_object(chunk, ordered_slot_descs, obj));
@@ -426,18 +426,19 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
     return Status::OK();
 }
 
-// Reorder the slot_descs as the key order in json document.
-void JsonReader::_reorder_column(std::vector<SlotDescriptor*>& slot_descs,
-                                 simdjson::ondemand::document_reference& doc) {
+// Try to reorder the slot_descs as the key order in json document.
+// Nothing would be done if got any error.
+void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs,
+                                 simdjson::ondemand::document_reference* doc) {
     simdjson::ondemand::object obj;
-    auto err = doc.get_object().get(obj);
+    auto err = (*doc).get_object().get(obj);
     if (err) {
         return;
     }
 
     std::map<std::string, SlotDescriptor*> slot_desc_dict;
 
-    for (auto& desc : slot_descs) {
+    for (const auto& desc : *slot_descs) {
         slot_desc_dict[desc->col_name()] = desc;
     }
 
@@ -459,13 +460,13 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>& slot_descs,
 
         auto itr = slot_desc_dict.find(key);
         if (itr == slot_desc_dict.end()) {
-            return;
+            continue;
         }
 
         ordered_slot_descs.push_back(itr->second);
     }
 
-    std::swap(ordered_slot_descs, slot_descs);
+    std::swap(ordered_slot_descs, *slot_descs);
     return;
 }
 
@@ -501,7 +502,7 @@ Status JsonReader::_process_array(Chunk* chunk, const std::vector<SlotDescriptor
                 return Status::DataQualityError(err_msg.c_str());
             }
 
-            RETURN_IF_ERROR(_filter_object_with_json_root(obj));
+            RETURN_IF_ERROR(_filter_object_with_json_root(&obj));
 
             RETURN_IF_ERROR(_process_object(chunk, slot_descs, obj));
         } else {
@@ -548,7 +549,7 @@ Status JsonReader::_process_array_with_json_path(Chunk* chunk, const std::vector
                 return Status::DataQualityError(err_msg.c_str());
             }
 
-            RETURN_IF_ERROR(_filter_object_with_json_root(obj));
+            RETURN_IF_ERROR(_filter_object_with_json_root(&obj));
 
             RETURN_IF_ERROR(_process_object_with_json_path(chunk, slot_descs, obj));
         } else {
@@ -614,18 +615,18 @@ Status JsonReader::_process_object_with_json_path(Chunk* chunk, const std::vecto
     return Status::OK();
 }
 
-Status JsonReader::_filter_object_with_json_root(simdjson::ondemand::object& obj) {
+Status JsonReader::_filter_object_with_json_root(simdjson::ondemand::object* obj) {
     if (!_scanner->_root_paths.empty()) {
         // json root filter.
         simdjson::ondemand::value val;
-        if (!JsonFunctions::extract_from_object(obj, _scanner->_root_paths, val)) {
+        if (!JsonFunctions::extract_from_object(*obj, _scanner->_root_paths, val)) {
             std::string err_msg = "Invalid json root";
             _state->append_error_msg_to_file("", err_msg);
             _counter->num_rows_filtered++;
             return Status::DataQualityError(err_msg.c_str());
         }
 
-        auto err = val.get_object().get(obj);
+        auto err = val.get_object().get(*obj);
         if (err) {
             std::string err_msg = strings::Substitute("Failed to filter json with json root. code=$0, error=$1", err,
                                                       simdjson::error_message(err));
