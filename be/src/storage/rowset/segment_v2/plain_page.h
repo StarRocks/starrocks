@@ -26,9 +26,9 @@
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
 #include "storage/types.h"
+#include "storage/vectorized/range.h"
 #include "util/coding.h"
 #include "util/faststring.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks {
 namespace segment_v2 {
@@ -234,11 +234,12 @@ public:
             _cur_idx = iter.begin();
             vectorized::Range r = iter.next(nread);
             size_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
-            int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE], max_fetch * SIZE_OF_TYPE);
+            int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE],
+                                        max_fetch * SIZE_OF_TYPE);
             DCHECK_EQ(max_fetch, n);
             _cur_idx += max_fetch;
         }
-        return Status::OK();     
+        return Status::OK();
     }
 
     size_t count() const override {

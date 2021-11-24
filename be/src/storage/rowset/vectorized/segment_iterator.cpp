@@ -213,8 +213,8 @@ private:
 
     Status _read_by_column(size_t n, Chunk* result, vector<rowid_t>* rowids);
 
-    Status _read_column(size_t n, rowid_t cur_rowid, uint32_t col_id, SparseRangeIterator range_iter,
-                        Chunk* result, vector<rowid_t>* rowids);
+    Status _read_column(size_t n, rowid_t cur_rowid, uint32_t col_id, SparseRangeIterator range_iter, Chunk* result,
+                        vector<rowid_t>* rowids);
 
 private:
     std::shared_ptr<Segment> _segment;
@@ -584,7 +584,7 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowid, size_
         RETURN_IF_ERROR(_context->seek_columns(_cur_rowid));
     }
 
-    while((read_num < n) && _range_iter.has_more()) {
+    while ((read_num < n) && _range_iter.has_more()) {
         Range r = _range_iter.next(n - read_num);
         read_num += r.span_size();
         chunk_rowid_start = r.begin();
@@ -598,7 +598,7 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowid, size_
         RETURN_IF_ERROR(_context->read_columns(chunk, range));
     }
 
-    if (rowid !=  nullptr) {
+    if (rowid != nullptr) {
         rowid->reserve(rowid->size() + range.span_size());
         vectorized::SparseRangeIterator iter = range.new_iterator();
         while (iter.has_more()) {
@@ -661,7 +661,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_final_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
-
 
     while ((chunk_start < chunk_capacity) & _range_iter.has_more()) {
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));

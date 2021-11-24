@@ -30,7 +30,7 @@ public:
     Status next_batch(vectorized::SparseRange& range, Column* dst) override {
         return _col_iter->next_dict_codes(range, dst);
     }
-    
+
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
         return _col_iter->fetch_values_by_rowid(rowids, size, values);
     }

@@ -35,8 +35,8 @@
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/types.h"
-#include "util/phmap/phmap.h"
 #include "storage/vectorized/range.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 namespace segment_v2 {

@@ -292,8 +292,9 @@ public:
         if (_options.is_decoded) {
             if (_data.size != _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE) {
                 std::stringstream ss;
-                ss << "Size information unmatched, _data.size:" << _data.size
-                   << ", _num_elements:" << _num_elements << ", expected size is " << _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE;
+                ss << "Size information unmatched, _data.size:" << _data.size << ", _num_elements:" << _num_elements
+                   << ", expected size is "
+                   << _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE;
                 return Status::InternalError(ss.str());
             }
         }
@@ -470,8 +471,8 @@ inline Status BitShufflePageDecoder<Type>::next_batch(vectorized::SparseRange& r
         return Status::OK();
     }
 
-    if (range.size() == 1 && _options.enable_direct_copy && !_is_decoded && range.span_size() >= _num_elements && _cur_index <= 0 &&
-        dst->capacity() - dst->size() >= _num_element_after_padding) {
+    if (range.size() == 1 && _options.enable_direct_copy && !_is_decoded && range.span_size() >= _num_elements &&
+        _cur_index <= 0 && dst->capacity() - dst->size() >= _num_element_after_padding) {
         // if the page is not decoded and to read the whole page data
         // decode the page directly to dst to save mem copy from _decoded to dst
         // Now this can be used to optimize compaction

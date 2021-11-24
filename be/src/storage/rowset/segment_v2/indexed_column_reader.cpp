@@ -73,7 +73,7 @@ Status IndexedColumnReader::load_index_page(fs::ReadableBlock* rblock, const Pag
                                             IndexPageReader* reader) {
     Slice body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(read_page(rblock, PagePointer(pp), handle, &body, &footer));
+    RETURN_IF_ERROR(read_page(rblock, PagePointer(pp), handle, &body, &footer, false));
     RETURN_IF_ERROR(reader->parse(body, footer.index_page_footer()));
     return Status::OK();
 }
@@ -118,11 +118,13 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
     Slice body;
     PageFooterPB footer;
     size_t type = _reader->encoding_info()->encoding();
-    bool is_decoded = _reader->use_page_cache() && (type == EncodingTypePB::DICT_ENCODING ||  type == EncodingTypePB::BIT_SHUFFLE);
+    bool is_decoded =
+            _reader->use_page_cache() && (type == EncodingTypePB::DICT_ENCODING || type == EncodingTypePB::BIT_SHUFFLE);
     RETURN_IF_ERROR(_reader->read_page(_rblock.get(), pp, &handle, &body, &footer, true));
     // parse data page
     // note that page_index is not used in IndexedColumnIterator, so we pass 0
-    return parse_page(&_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0, is_decoded);
+    return parse_page(&_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0,
+                      is_decoded);
 }
 
 Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {

@@ -196,8 +196,9 @@ Status ScalarColumnIterator::next_batch(vectorized::SparseRange& range, vectoriz
     vectorized::SparseRange read_range;
 
     if (range.begin() != _current_ordinal) {
-        LOG(INFO) << "seek failed" << ", range begin is " << range.begin() << ", _current ordinal is " << _current_ordinal;
-        return Status::InternalError("seek failed");
+        std::stringstream ss;
+        ss << "seek failed, range begin is " << range.begin() << ", _current ordinal is " << _current_ordinal;
+        return Status::InternalError(ss.str());
     }
 
     while (iter.has_more()) {
@@ -225,25 +226,17 @@ Status ScalarColumnIterator::next_batch(vectorized::SparseRange& range, vectoriz
         }
 
         if (iter.begin() >= end_ord) {
-            Status st = _page->read(dst, read_range);
-            if (!st.ok()) {
-                LOG(INFO) << "page read next batch failed";
-                return st;
-            }
+            RETURN_IF_ERROR(_page->read(dst, read_range));
             read_range.clear();
         }
     }
     if (!read_range.empty()) {
-        Status st = _page->read(dst, read_range);
-        if (!st.ok()) {
-            LOG(INFO) << "page read next batch failed";
-            return st;
-        }
+        RETURN_IF_ERROR(_page->read(dst, read_range));
         read_range.clear();
     }
     dst->set_delete_state(contain_deleted_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     _opts.stats->bytes_read += (dst->byte_size() - prev_bytes);
-    
+
     return Status::OK();
 }
 
@@ -265,8 +258,8 @@ Status ScalarColumnIterator::_load_dict_page() {
     // read dictionary page
     Slice dict_data;
     PageFooterPB dict_footer;
-    RETURN_IF_ERROR(
-            _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
+    RETURN_IF_ERROR(_reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data,
+                                       &dict_footer, false));
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
     if (_reader->column_type() == OLAP_FIELD_TYPE_CHAR) {
@@ -297,7 +290,8 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
     // if enable page cache, bitshuffle encoding page will be decoded after read
     // otherwise bitshuffle encoding page will be decoded in page_decoder init
     size_t type = _reader->encoding_info()->encoding();
-    bool is_decoded = _opts.use_page_cache && (type == EncodingTypePB::DICT_ENCODING ||  type == EncodingTypePB::BIT_SHUFFLE);
+    bool is_decoded =
+            _opts.use_page_cache && (type == EncodingTypePB::DICT_ENCODING || type == EncodingTypePB::BIT_SHUFFLE);
     RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer, true));
     RETURN_IF_ERROR(parse_page(&_page, std::move(handle), page_body, footer.data_page_footer(),
                                _reader->encoding_info(), iter.page(), iter.page_index(), is_decoded));
@@ -437,7 +431,8 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(vectorized::SparseRange& 
     vectorized::SparseRange read_range;
 
     if (range.begin() != _current_ordinal) {
-        LOG(INFO) << "seek failed" << ", range begin is " << range.begin() << ", _current ordinal is " << _current_ordinal;
+        LOG(INFO) << "seek failed"
+                  << ", range begin is " << range.begin() << ", _current ordinal is " << _current_ordinal;
         return Status::InternalError("seek failed");
     }
 
@@ -474,7 +469,7 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(vectorized::SparseRange& 
             }
             //LOG(INFO) << "last read rowid is " << read_range.end() << ", end ord of cur page is " << end_ord << ", next row_id is " << iter.begin();
             read_range.clear();
-        }        
+        }
     }
 
     if (!read_range.empty()) {

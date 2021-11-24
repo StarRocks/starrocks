@@ -30,13 +30,13 @@
 #include "gutil/strings/substitute.h"
 #include "storage/fs/block_manager.h"
 #include "storage/page_cache.h"
+#include "storage/rowset/segment_v2/bitshuffle_wrapper.h"
 #include "util/block_compression.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/faststring.h"
 #include "util/runtime_profile.h"
 #include "util/scoped_cleanup.h"
-#include "storage/rowset/segment_v2/bitshuffle_wrapper.h"
 
 namespace starrocks::segment_v2 {
 
@@ -196,16 +196,18 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         opts.stats->uncompressed_bytes_read += body_size;
     }
 
-    if (opts.use_page_cache && (opts.encoding_type == EncodingTypePB::DICT_ENCODING || opts.encoding_type == EncodingTypePB::BIT_SHUFFLE)) {
+    if (opts.use_page_cache &&
+        (opts.encoding_type == EncodingTypePB::DICT_ENCODING || opts.encoding_type == EncodingTypePB::BIT_SHUFFLE)) {
         size_t dict_header_size = 4;
         size_t bitshuffle_header_size = 16;
         size_t type = EncodingTypePB::BIT_SHUFFLE;
         if (opts.encoding_type == EncodingTypePB::DICT_ENCODING) {
             type = decode_fixed32_le((const uint8_t*)&page_slice.data[0]);
             if (type != EncodingTypePB::DICT_ENCODING && type != EncodingTypePB::PLAIN_ENCODING) {
-                return Status::InternalError(strings::Substitute("error encoding type, expected is:$0, actual is:$1", DICT_ENCODING, type));
+                return Status::InternalError(
+                        strings::Substitute("error encoding type, expected is:$0, actual is:$1", DICT_ENCODING, type));
             }
-        } else  {
+        } else {
             dict_header_size = 0;
         }
 
@@ -214,29 +216,31 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
             size_t compressed_size = decode_fixed32_le((const uint8_t*)&page_slice[4 + dict_header_size]);
             size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)&page_slice[8 + dict_header_size]);
             size_t size_of_element = decode_fixed32_le((const uint8_t*)&page_slice[12 + dict_header_size]);
-        
+
             size_t header_size = dict_header_size + bitshuffle_header_size;
             size_t data_size = num_element_after_padding * size_of_element;
             size_t null_size = footer->data_page_footer().nullmap_size();
 
-            std::unique_ptr<char[]> decompressed_page(
-                    new char[header_size + data_size + null_size + footer_size + 4 + vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
+            std::unique_ptr<char[]> decompressed_page(new char[header_size + data_size + null_size + footer_size + 4 +
+                                                               vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
             // append dict_Header and bitshuffle_header
             memcpy(decompressed_page.get(), page_slice.data, header_size);
-            Slice compressed_body(page_slice.data + header_size, page_slice.size - 4 - footer_size - header_size - null_size);
+            Slice compressed_body(page_slice.data + header_size,
+                                  page_slice.size - 4 - footer_size - header_size - null_size);
             Slice decompressed_body(&(decompressed_page.get()[header_size]), data_size);
             {
                 SCOPED_RAW_TIMER(&opts.stats->decompress_ns);
                 int64_t bytes = bitshuffle::decompress_lz4(compressed_body.data, decompressed_body.data,
-                                               num_element_after_padding, size_of_element, 0);
+                                                           num_element_after_padding, size_of_element, 0);
                 if (bytes != compressed_body.size) {
-                    return Status::Corruption(
-                        strings::Substitute("decompress failed: expected number of bytes consumed=&0 vs real consumed=$1",
-                                            compressed_body.size, bytes));
+                    return Status::Corruption(strings::Substitute(
+                            "decompress failed: expected number of bytes consumed=&0 vs real consumed=$1",
+                            compressed_body.size, bytes));
                 }
             }
             // append null_flag and footer and footer size
-            memcpy(decompressed_body.data + decompressed_body.size, page_slice.data + page_slice.size - 4 - footer_size - null_size, null_size + footer_size + 4);
+            memcpy(decompressed_body.data + decompressed_body.size,
+                   page_slice.data + page_slice.size - 4 - footer_size - null_size, null_size + footer_size + 4);
             // free memory of compressed page
             page = std::move(decompressed_page);
             page_slice = Slice(page.get(), header_size + data_size + null_size + footer_size + 4);

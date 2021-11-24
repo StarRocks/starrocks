@@ -208,7 +208,6 @@ public:
         return Status::OK();
     }
 
-
 private:
     friend Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
@@ -264,7 +263,6 @@ public:
         return Status::OK();
     }
 
-
     Status read(ColumnBlockView* block, size_t* count) override {
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
         RETURN_IF_ERROR(_data_decoder->next_batch(count, block));
@@ -300,7 +298,8 @@ public:
 
     Status read_dict_codes(vectorized::Column* column, vectorized::SparseRange& range) override {
         if (_offset_in_page != range.begin()) {
-            LOG(INFO) << "update offset in page failed" << ", offset_in_page is " << _offset_in_page << ", range begin is " << range.begin();
+            LOG(INFO) << "update offset in page failed"
+                      << ", offset_in_page is " << _offset_in_page << ", range begin is " << range.begin();
             return Status::InternalError("update offset in page failed");
         }
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());

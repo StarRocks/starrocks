@@ -32,10 +32,10 @@
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
+#include "storage/vectorized/range.h"
 #include "util/coding.h"
 #include "util/faststring.h"
 #include "util/slice.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks {
 namespace segment_v2 {
