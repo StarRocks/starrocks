@@ -2,13 +2,12 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Table;
+import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -23,13 +22,13 @@ public class MockTpchStatisticStorage implements StatisticStorage {
     private final int tpchScala;
 
     public MockTpchStatisticStorage(int tpchScala) {
-        tableStatistics = new HashMap<>();
+        tableStatistics = new CaseInsensitiveMap<>();
         mockTpchStatistics();
         this.tpchScala = tpchScala;
     }
 
     private void mockTpchStatistics() {
-        ImmutableMap.Builder<String, ColumnStatistic> tableCustomer = ImmutableMap.builder();
+        Map<String, ColumnStatistic> tableCustomer = new CaseInsensitiveMap<>();
         // C_CUSTKEY   BIGINT
         tableCustomer.put("c_custkey", new ColumnStatistic(1, 150000, 0, 8, 150000));
         // C_NAME      VARCHAR(25)
@@ -46,9 +45,9 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tableCustomer.put("c_mktsegment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 10, 5));
         // C_COMMENT VARCHAR(117)
         tableCustomer.put("c_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 117, 149968));
-        tableStatistics.put("customer", tableCustomer.build());
+        tableStatistics.put("customer", tableCustomer);
 
-        ImmutableMap.Builder<String, ColumnStatistic> tableLineitem = ImmutableMap.builder();
+        Map<String, ColumnStatistic> tableLineitem = new CaseInsensitiveMap<>();
         // L_ORDERKEY      BIGINT
         tableLineitem.put("l_orderkey", new ColumnStatistic(1, 6000000, 0, 8, 1500000));
         // L_PARTKEY       BIGINT
@@ -84,9 +83,47 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tableLineitem.put("l_shipmode", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 10, 7));
         // L_COMMENT       VARCHAR(44)
         tableLineitem.put("l_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 44, 4580667));
-        tableStatistics.put("lineitem", tableLineitem.build());
+        tableStatistics.put("lineitem", tableLineitem);
 
-        ImmutableMap.Builder<String, ColumnStatistic> tableNation = ImmutableMap.builder();
+        CaseInsensitiveMap<String, ColumnStatistic> tableLineitemPartition = new CaseInsensitiveMap<>();
+        // L_ORDERKEY      BIGINT
+        tableLineitemPartition.put("L_ORDERKEY", new ColumnStatistic(1, 6000000, 0, 8, 1500000));
+        // L_PARTKEY       BIGINT
+        tableLineitemPartition.put("L_PARTKEY", new ColumnStatistic(1, 200000, 0, 8, 200000));
+        // L_SUPPKEY       INT
+        tableLineitemPartition.put("L_SUPPKEY", new ColumnStatistic(1, 10000, 0, 4, 10000));
+        // L_LINENUMBER    INT
+        tableLineitemPartition.put("L_LINENUMBER", new ColumnStatistic(1, 7, 0, 4, 7));
+        // L_QUANTITY      DOUBLE
+        tableLineitemPartition.put("L_QUANTITY", new ColumnStatistic(1, 50, 0, 8, 50));
+        // L_EXTENDEDPRICE DOUBLE
+        tableLineitemPartition.put("L_EXTENDEDPRICE", new ColumnStatistic(901, 104949.5, 0, 8, 932377));
+        // L_DISCOUNT      DOUBLE
+        tableLineitemPartition.put("L_DISCOUNT", new ColumnStatistic(0, 0.1, 0, 8, 11));
+        // L_TAX           DOUBLE
+        tableLineitemPartition.put("L_TAX", new ColumnStatistic(0, 0.08, 0, 8, 9));
+        // L_RETURNFLAG    CHAR(1)
+        tableLineitemPartition.put("L_RETURNFLAG", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 3));
+        // L_LINESTATUS    CHAR(1)
+        tableLineitemPartition.put("L_LINESTATUS", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 2));
+        // L_SHIPDATE      DATE
+        tableLineitemPartition.put("L_SHIPDATE", new ColumnStatistic(getLongFromDateTime(formatDateFromString("1992-01-02")),
+                getLongFromDateTime(formatDateFromString("1998-12-01")), 0, 4, 2526));
+        // L_COMMITDATE    DATE
+        tableLineitemPartition.put("L_COMMITDATE", new ColumnStatistic(getLongFromDateTime(formatDateFromString("1992-01-31")),
+                getLongFromDateTime(formatDateFromString("1998-10-31")), 0, 4, 2466));
+        // L_RECEIPTDATE   DATE
+        tableLineitemPartition.put("L_RECEIPTDATE", new ColumnStatistic(getLongFromDateTime(formatDateFromString("1992-01-03")),
+                getLongFromDateTime(formatDateFromString("1998-12-31")), 0, 4, 2554));
+        // L_SHIPINSTRUCT  CHAR(25)
+        tableLineitemPartition.put("L_SHIPINSTRUCT", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 25, 4));
+        // L_SHIPMODE      CHAR(10)
+        tableLineitemPartition.put("L_SHIPMODE", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 10, 7));
+        // L_COMMENT       VARCHAR(44)
+        tableLineitemPartition.put("L_COMMENT", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 44, 4580667));
+        tableStatistics.put("lineitem_partition", tableLineitemPartition);
+
+        Map<String, ColumnStatistic> tableNation = new CaseInsensitiveMap<>();
         // N_NATIONKEY  INT
         tableNation.put("n_nationkey", new ColumnStatistic(0, 24, 0, 4, 25));
         // N_NAME      CHAR(25)
@@ -95,9 +132,9 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tableNation.put("n_regionkey", new ColumnStatistic(0, 4, 0, 4, 5));
         // N_COMMENT   VARCHAR(152)
         tableNation.put("n_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 0, 25));
-        tableStatistics.put("nation", tableNation.build());
+        tableStatistics.put("nation", tableNation);
 
-        ImmutableMap.Builder<String, ColumnStatistic> tableOrders = ImmutableMap.builder();
+        CaseInsensitiveMap<String, ColumnStatistic> tableOrders = new CaseInsensitiveMap<>();
         // O_ORDERKEY      BIGINT
         tableOrders.put("o_orderkey", new ColumnStatistic(1, 6000000, 0, 8, 1500000));
         // O_CUSTKEY       BIGINT
@@ -117,9 +154,9 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tableOrders.put("o_shippriority", new ColumnStatistic(0, 0, 0, 4, 1));
         // O_COMMENT       VARCHAR(79)
         tableOrders.put("o_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 79, 1482071));
-        tableStatistics.put("orders", tableOrders.build());
+        tableStatistics.put("orders", tableOrders);
 
-        ImmutableMap.Builder<String, ColumnStatistic> tablePart = ImmutableMap.builder();
+        CaseInsensitiveMap<String, ColumnStatistic> tablePart = new CaseInsensitiveMap<>();
         // P_PARTKEY     BIGINT
         tablePart.put("p_partkey", new ColumnStatistic(1, 200000, 0, 8, 200000));
         // P_NAME        VARCHAR(55)
@@ -138,9 +175,9 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tablePart.put("p_retailprice", new ColumnStatistic(901, 2098.99, 0, 8, 20899));
         // P_COMMENT     VARCHAR(23
         tablePart.put("p_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 0, 131753));
-        tableStatistics.put("part", tablePart.build());
+        tableStatistics.put("part", tablePart);
 
-        ImmutableMap.Builder<String, ColumnStatistic> tablePartSupp = ImmutableMap.builder();
+        CaseInsensitiveMap<String, ColumnStatistic> tablePartSupp = new CaseInsensitiveMap<>();
         // PS_PARTKEY    BIGINT
         tablePartSupp.put("ps_partkey", new ColumnStatistic(1, 200000, 0, 8, 200000));
         // PS_SUPPKEY    BIGINT
@@ -151,18 +188,18 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tablePartSupp.put("ps_supplycost", new ColumnStatistic(1, 1000, 0, 8, 99864));
         // PS_COMMENT    VARCHAR(199)
         tablePartSupp.put("ps_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 199, 799124));
-        tableStatistics.put("partsupp", tablePartSupp.build());
+        tableStatistics.put("partsupp", tablePartSupp);
 
-        ImmutableMap.Builder<String, ColumnStatistic> tableRegion = ImmutableMap.builder();
+        CaseInsensitiveMap<String, ColumnStatistic> tableRegion = new CaseInsensitiveMap<>();
         // R_REGIONKEY INT
         tableRegion.put("r_regionkey", new ColumnStatistic(0, 4, 0, 4, 5));
         // R_NAME     CHAR(25)
         tableRegion.put("r_name", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 25, 5));
         // R_COMMENT   VARCHAR(152)
         tableRegion.put("r_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 152, 5));
-        tableStatistics.put("region", tableRegion.build());
+        tableStatistics.put("region", tableRegion);
 
-        ImmutableMap.Builder<String, ColumnStatistic> tableSupplier = ImmutableMap.builder();
+        CaseInsensitiveMap<String, ColumnStatistic> tableSupplier = new CaseInsensitiveMap<>();
         // S_SUPPKEY   INT
         tableSupplier.put("s_suppkey", new ColumnStatistic(1, 10000, 0, 4, 10000));
         // S_NAME      CHAR(25)
@@ -177,18 +214,18 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tableSupplier.put("s_acctbal", new ColumnStatistic(-998.22, 9999.72, 0, 8, 9955));
         // S_COMMENT   VARCHAR(101)
         tableSupplier.put("s_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 101, 10000));
-        tableStatistics.put("supplier", tableSupplier.build());
+        tableStatistics.put("supplier", tableSupplier);
     }
 
     @Override
     public ColumnStatistic getColumnStatistic(Table table, String column) {
-        if (tableStatistics.get(table.getName().toLowerCase()) == null) {
+        if (tableStatistics.get(table.getName()) == null) {
             return ColumnStatistic.unknown();
         }
-        ColumnStatistic statistic = tableStatistics.get(table.getName().toLowerCase()).get(column.toLowerCase());
+        ColumnStatistic statistic = tableStatistics.get(table.getName()).get(column);
         if (statistic != null) {
-            if (table.getName().toLowerCase().equals("region") ||
-                    table.getName().toLowerCase().equals("nation") ||
+            if (table.getName().equalsIgnoreCase("region") ||
+                    table.getName().equalsIgnoreCase("nation") ||
                     column.toLowerCase().contains("nationkey") ||
                     column.toLowerCase().contains("regionkey")) {
                 return statistic;
