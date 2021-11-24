@@ -685,4 +685,16 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0] ESTIMATE"));
     }
+
+    @Test
+    public void testPartitionColumnColumnStatistics() throws Exception {
+        String sql = "select L_SHIPDATE, count(1) from lineitem_partition where L_SHIPDATE = '1992-01-01' group by L_SHIPDATE";
+        String plan = getCostExplain(sql);
+        // check L_SHIPDATE is not unknown
+        Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
+
+        sql = "select count(1) from lineitem_partition where L_SHIPDATE = '1992-01-01'";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
+    }
 }

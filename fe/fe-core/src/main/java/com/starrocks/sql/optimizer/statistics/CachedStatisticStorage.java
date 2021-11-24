@@ -305,7 +305,7 @@ public class CachedStatisticStorage implements StatisticStorage {
 
         @Override
         public int hashCode() {
-            return Objects.hash(tableId, column);
+            return Objects.hash(tableId, column.toUpperCase());
         }
     }
 
