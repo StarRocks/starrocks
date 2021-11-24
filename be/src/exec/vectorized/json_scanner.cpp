@@ -348,7 +348,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
             if (err) {
                 std::string err_msg = strings::Substitute("Failed to parse json as array. code=$0, error=$1", err,
                                                           simdjson::error_message(err));
-                _state->append_error_msg_to_file(JsonFunctions::minify_json_to_string(doc), err_msg);
+                _state->append_error_msg_to_file("", err_msg);
                 _counter->num_rows_filtered++;
                 return Status::DataQualityError(err_msg.c_str());
             }
@@ -358,7 +358,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
             if (err) {
                 std::string err_msg = strings::Substitute("Failed to parse json as array. code=$0, error=$1", err,
                                                           simdjson::error_message(err));
-                _state->append_error_msg_to_file(JsonFunctions::minify_json_to_string(doc), err_msg);
+                _state->append_error_msg_to_file("", err_msg);
                 _counter->num_rows_filtered++;
                 return Status::DataQualityError(err_msg.c_str());
             }
@@ -400,7 +400,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
             if (err) {
                 std::string err_msg = strings::Substitute("Failed to parse json as object. code=$0, error=$1", err,
                                                           simdjson::error_message(err));
-                _state->append_error_msg_to_file(JsonFunctions::minify_json_to_string(doc), err_msg);
+                _state->append_error_msg_to_file("", err_msg);
                 _counter->num_rows_filtered++;
                 return Status::DataQualityError(err_msg.c_str());
             }
