@@ -283,7 +283,7 @@ public class CachedStatisticStorage implements StatisticStorage {
 
         public CacheKey(long tableId, String column) {
             this.tableId = tableId;
-            this.column = column;
+            this.column = column.toUpperCase();
         }
 
         @Override
@@ -300,12 +300,12 @@ public class CachedStatisticStorage implements StatisticStorage {
             if (tableId != cacheKey.tableId) {
                 return false;
             }
-            return column.equalsIgnoreCase(cacheKey.column);
+            return column.equals(cacheKey.column);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(tableId, column.toUpperCase());
+            return Objects.hash(tableId, column);
         }
     }
 
