@@ -26,7 +26,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-14:MERGING-EXCHANGE
+15:MERGING-EXCHANGE
 use vectorized: true
 
 PLAN FRAGMENT 1
@@ -34,20 +34,20 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 20: count(10: O_ORDERKEY)
 
 STREAM DATA SINK
-EXCHANGE ID: 14
+EXCHANGE ID: 15
 UNPARTITIONED
 
-13:SORT
+14:SORT
 |  order by: <slot 21> 21: count() DESC, <slot 20> 20: count(10: O_ORDERKEY) DESC
 |  offset: 0
 |  use vectorized: true
 |
-12:AGGREGATE (update finalize)
-|  output: count(*)
+13:AGGREGATE (merge finalize)
+|  output: count(21: count())
 |  group by: 20: count(10: O_ORDERKEY)
 |  use vectorized: true
 |
-11:EXCHANGE
+12:EXCHANGE
 use vectorized: true
 
 PLAN FRAGMENT 2
@@ -55,9 +55,15 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 1: C_CUSTKEY
 
 STREAM DATA SINK
-EXCHANGE ID: 11
+EXCHANGE ID: 12
 HASH_PARTITIONED: 20: count(10: O_ORDERKEY)
 
+11:AGGREGATE (update serialize)
+|  STREAMING
+|  output: count(*)
+|  group by: 20: count(10: O_ORDERKEY)
+|  use vectorized: true
+|
 10:Project
 |  <slot 20> : 20: count(10: O_ORDERKEY)
 |  use vectorized: true
