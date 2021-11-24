@@ -283,7 +283,7 @@ public class CachedStatisticStorage implements StatisticStorage {
 
         public CacheKey(long tableId, String column) {
             this.tableId = tableId;
-            this.column = column.toUpperCase();
+            this.column = column;
         }
 
         @Override

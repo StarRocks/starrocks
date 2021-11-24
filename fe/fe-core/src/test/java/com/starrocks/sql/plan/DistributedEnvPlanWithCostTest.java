@@ -688,12 +688,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testPartitionColumnColumnStatistics() throws Exception {
-        String sql = "select L_SHIPDATE, count(1) from lineitem_partition where L_SHIPDATE = '1992-01-01' group by L_SHIPDATE";
+        String sql = "select l_shipdate, count(1) from lineitem_partition where l_shipdate = '1992-01-01' group by l_shipdate";
         String plan = getCostExplain(sql);
         // check L_SHIPDATE is not unknown
         Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
 
-        sql = "select count(1) from lineitem_partition where L_SHIPDATE = '1992-01-01'";
+        sql = "select count(1) from lineitem_partition where l_shipdate = '1992-01-01'";
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
     }
