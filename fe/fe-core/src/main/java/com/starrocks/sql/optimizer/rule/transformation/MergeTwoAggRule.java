@@ -80,15 +80,17 @@ public class MergeTwoAggRule extends TransformationRule {
                 return false;
             }
 
-            // max/min on grouping column is equals with direct aggregate on column
-            if (!aggCallMapBelow.containsKey(ref) && !FunctionSet.MAX.equalsIgnoreCase(call.getFnName()) &&
-                    !FunctionSet.MIN.equalsIgnoreCase(call.getFnName())) {
-                return false;
-            }
-
-            if (!aggCallMapBelow.get(ref).getFnName().equalsIgnoreCase(call.getFnName()) ||
-                    aggCallMapBelow.get(ref).isDistinct()) {
-                return false;
+            if (!aggCallMapBelow.containsKey(ref)) {
+                // max/min on grouping column is equals with direct aggregate on column
+                if (!FunctionSet.MAX.equalsIgnoreCase(call.getFnName()) &&
+                        !FunctionSet.MIN.equalsIgnoreCase(call.getFnName())) {
+                    return false;
+                }
+            } else {
+                if (!aggCallMapBelow.get(ref).getFnName().equalsIgnoreCase(call.getFnName()) ||
+                        aggCallMapBelow.get(ref).isDistinct()) {
+                    return false;
+                }
             }
         }
 
