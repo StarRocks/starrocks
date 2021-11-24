@@ -233,7 +233,10 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
-    if (!_pending_closures.empty()) {
+    // A Requet may contain multiple Chunks.
+    // The consumption of a Chunk does not necessarily require the sender to send it immediately.
+    // It should be determined according to the current memory usage.
+    if (!_pending_closures.empty() && !_recvr->exceeds_limit()) {
         // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
         // the execution thread will hold done and will not return, block brpc from sending packets,
         // and the execution thread will call run() to let brpc continue to send packets,

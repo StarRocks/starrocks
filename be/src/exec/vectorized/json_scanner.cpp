@@ -27,6 +27,9 @@
 
 namespace starrocks::vectorized {
 
+static std::vector<Slice> literal_0_slice_vector{Slice("0")};
+static std::vector<Slice> literal_1_slice_vector{Slice("1")};
+
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
@@ -284,7 +287,7 @@ Status JsonReader::close() {
  *      ------------------
  *      value1     10
  *      value2     30
- *  
+ *
  * Case 2 : Json with JsonPath
  * {
  *   "RECORDS":[
@@ -560,6 +563,8 @@ Status JsonReader::_process_array_with_json_path(Chunk* chunk, const std::vector
 
 Status JsonReader::_process_object(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                    simdjson::ondemand::object& obj) {
+    
+    bool op_col_added = false;
     for (SlotDescriptor* slot_desc : slot_descs) {
         if (slot_desc == nullptr) {
             continue;
@@ -571,7 +576,12 @@ Status JsonReader::_process_object(Chunk* chunk, const std::vector<SlotDescripto
         simdjson::ondemand::value val;
         auto err = obj.find_field_unordered(col_name).get(val);
         if (err) {
-            column->append_nulls(1);
+            if (!op_col_added && col_name == "__op") {
+                // special treatment for __op column, fill default value '0' rather than null
+                column->append_strings(literal_0_slice_vector);
+            } else {
+                column->append_nulls(1);
+            }
             continue;
         }
 
@@ -687,9 +697,9 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
         }
 
         if (ok) {
-            column->append_strings(std::vector<Slice>{Slice("1")});
+            column->append_strings(literal_1_slice_vector);
         } else {
-            column->append_strings(std::vector<Slice>{Slice("0")});
+            column->append_strings(literal_0_slice_vector);
         }
         break;
     }
