@@ -1462,6 +1462,17 @@ public class OlapTable extends Table {
         tableProperty.buildInMemory();
     }
 
+    public boolean hasDelete() {
+        return tableProperty.hasDelete();
+    }
+
+    public void setHasDelete() {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.setHasDelete(true);
+    }
+
     // return true if partition with given name already exist, both in partitions and temp partitions.
     // return false otherwise
     public boolean checkPartitionNameExist(String partitionName) {

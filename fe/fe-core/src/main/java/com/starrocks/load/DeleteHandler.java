@@ -353,7 +353,9 @@ public class DeleteHandler implements Writable {
     private void commitJob(DeleteJob job, Database db, long timeoutMs) throws DdlException, QueryStateException {
         TransactionStatus status = null;
         try {
-            unprotectedCommitJob(job, db, timeoutMs);
+            if (unprotectedCommitJob(job, db, timeoutMs)) {
+                updateTableDeleteInfo(Catalog.getCurrentCatalog(), db.getId(), job.getDeleteInfo().getTableId());
+            }
             status = Catalog.getCurrentGlobalTransactionMgr().
                     getTransactionState(db.getId(), job.getTransactionId()).getTransactionStatus();
         } catch (UserException e) {
@@ -744,6 +746,7 @@ public class DeleteHandler implements Writable {
         }
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
+        updateTableDeleteInfo(catalog, dbId, deleteInfo.getTableId());
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
         lock.writeLock().lock();
@@ -761,6 +764,7 @@ public class DeleteHandler implements Writable {
         }
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
+        updateTableDeleteInfo(catalog, dbId, deleteInfo.getTableId());
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
         lock.writeLock().lock();
@@ -769,6 +773,19 @@ public class DeleteHandler implements Writable {
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    private void updateTableDeleteInfo(Catalog catalog, long dbId, long tableId) {
+        Database db = catalog.getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            return;
+        }
+        OlapTable olapTable = (OlapTable) table;
+        olapTable.setHasDelete();
     }
 
     // for delete handler, we only persist those delete already finished.
