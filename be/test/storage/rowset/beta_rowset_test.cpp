@@ -701,6 +701,8 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
         ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
         auto seg_iterator = res.value();
 
+        seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+
         auto chunk = vectorized::ChunkHelper::new_chunk(seg_iterator->schema(), 100);
 
         size_t count = 0;
