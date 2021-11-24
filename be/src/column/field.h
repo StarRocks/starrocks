@@ -83,7 +83,7 @@ public:
     static FieldPtr convert_to_dict_field(const Field& field) {
         DCHECK(field.type()->type() == OLAP_FIELD_TYPE_VARCHAR);
         FieldPtr res = std::make_shared<Field>(field);
-        res->_type = get_type_info(OLAP_FIELD_TYPE_INT, -1, -1);
+        res->_type = get_type_info(OLAP_FIELD_TYPE_INT);
         return res;
     }
 
