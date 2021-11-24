@@ -144,9 +144,9 @@ public class ResourceMgr implements Writable {
 
             for (Map.Entry<String, Resource> entry : nameToResource.entrySet()) {
                 Resource resource = entry.getValue();
-                // Since nameToResource.entrySet is not thread safe, resource may be dropped
-                // during show resources.So that We should do a null pointer check here.
-                // If resource is not null then we should check resource privs.
+                // Since `nameToResource.entrySet` may chang after it is called, resource
+                // may be dropped during `show resources`.So that We should do a null pointer
+                // check here. If resource is not null then we should check resource privs.
                 if (resource == null || !Catalog.getCurrentCatalog().getAuth().checkResourcePriv(
                         ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
                     continue;
