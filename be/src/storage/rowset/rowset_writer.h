@@ -124,6 +124,7 @@ public:
 
 protected:
     vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
+    const uint64_t MAX_SEGMENT_SIZE = static_cast<uint64_t>(config::max_segment_file_size * config::segment_file_scale);
 
 private:
     RowsetWriter(const RowsetWriter&) = delete;
