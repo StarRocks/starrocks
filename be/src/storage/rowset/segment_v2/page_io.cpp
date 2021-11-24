@@ -236,7 +236,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
                 }
             }
             // append null_flag and footer and footer size
-            memcpy(decompressed_body.data + decompressed_body.size, page_slice.data + body_size - null_size, null_size + footer_size + 4);
+            memcpy(decompressed_body.data + decompressed_body.size, page_slice.data + page_slice.size - 4 - footer_size - null_size, null_size + footer_size + 4);
             // free memory of compressed page
             page = std::move(decompressed_page);
             page_slice = Slice(page.get(), header_size + data_size + null_size + footer_size + 4);
