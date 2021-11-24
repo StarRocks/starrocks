@@ -290,7 +290,11 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
 
             for (auto a : arr) {
                 simdjson::ondemand::json_type tp;
-                a.type().get(tp);
+                err = a.type().get(tp);
+                if (err) {
+                    result.append_null();
+                    continue;
+                }
 
                 if (tp != simdjson::ondemand::json_type::object) {
                     result.append_null();
