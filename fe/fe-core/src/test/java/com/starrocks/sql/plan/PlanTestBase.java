@@ -349,6 +349,42 @@ public class PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `lineitem_partition` (\n" +
+                        "  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `L_QUANTITY` double NOT NULL COMMENT \"\",\n" +
+                        "  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n" +
+                        "  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n" +
+                        "  `L_TAX` double NOT NULL COMMENT \"\",\n" +
+                        "  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n" +
+                        "  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n" +
+                        "  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n" +
+                        "  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n" +
+                        "  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n" +
+                        "  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n" +
+                        "  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n" +
+                        "  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n" +
+                        "  `PAD` char(1) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`L_ORDERKEY`, `L_PARTKEY`, `L_SUPPKEY`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PARTITION BY RANGE(`L_SHIPDATE`)\n" +
+                        "(PARTITION p1992 VALUES [('1992-01-01'), ('1993-01-01')),\n" +
+                        "PARTITION p1993 VALUES [('1993-01-01'), ('1994-01-01')),\n" +
+                        "PARTITION p1994 VALUES [('1994-01-01'), ('1995-01-01')),\n" +
+                        "PARTITION p1995 VALUES [('1995-01-01'), ('1996-01-01')),\n" +
+                        "PARTITION p1996 VALUES [('1996-01-01'), ('1997-01-01')),\n" +
+                        "PARTITION p1997 VALUES [('1997-01-01'), ('1998-01-01')),\n" +
+                        "PARTITION p1998 VALUES [('1998-01-01'), ('1999-01-01')))\n" +
+                        "DISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 48\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        ");");
+
         starRocksAssert.withTable("CREATE TABLE `emp` (\n" +
                 "  `id` bigint NULL COMMENT \"\",\n" +
                 "  `emp_name` varchar(20) NULL COMMENT \"\",\n" +
