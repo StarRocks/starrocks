@@ -133,18 +133,26 @@ public class PlanFragmentBuilder {
         createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).visit(plan, execPlan), execPlan,
                 outputColumns);
         execPlan.setPlanCount(plan.getPlanCount());
-        try {
-            List<PlanFragment> fragments = execPlan.getFragments();
-            for (PlanFragment fragment : fragments) {
-                fragment.finalize(null, false);
-            }
-            Collections.reverse(fragments);
-            checkPlanIsVectorized(fragments);
-        } catch (UserException e) {
-            throw new StarRocksPlannerException("Create fragment fail, " + e.getMessage(), INTERNAL_ERROR);
-        }
+        return finalizeFragments(execPlan);
+    }
 
-        return execPlan;
+    public ExecPlan createPhysicalPlanWithoutOutputFragment(OptExpression plan, PlannerContext plannerContext,
+                                                            ConnectContext connectContext,
+                                                            List<ColumnRefOperator> outputColumns,
+                                                            ColumnRefFactory columnRefFactory,
+                                                            List<String> colNames) {
+        ExecPlan execPlan = new ExecPlan(plannerContext, connectContext, colNames, plan, outputColumns);
+        PlanFragment root = new PhysicalPlanTranslator(columnRefFactory).visit(plan, execPlan);
+
+        List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
+                .buildExecExpression(variable,
+                        new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr()))
+        ).collect(Collectors.toList());
+        root.setOutputExprs(outputExprs);
+        execPlan.getOutputExprs().addAll(outputExprs);
+
+        execPlan.setPlanCount(plan.getPlanCount());
+        return finalizeFragments(execPlan);
     }
 
     public ExecPlan createStatisticPhysicalPlan(OptExpression plan, PlannerContext plannerContext,
@@ -176,7 +184,7 @@ public class PlanFragmentBuilder {
         }
 
         List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
-                .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
+                        .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
                 .collect(Collectors.toList());
         execPlan.getOutputExprs().addAll(outputExprs);
 
@@ -198,6 +206,21 @@ public class PlanFragmentBuilder {
 
         exchangeFragment.setOutputExprs(outputExprs);
         execPlan.getFragments().add(exchangeFragment);
+    }
+
+    private ExecPlan finalizeFragments(ExecPlan execPlan) {
+        try {
+            List<PlanFragment> fragments = execPlan.getFragments();
+            for (PlanFragment fragment : fragments) {
+                fragment.finalize(null, false);
+            }
+            Collections.reverse(fragments);
+            checkPlanIsVectorized(fragments);
+        } catch (UserException e) {
+            throw new StarRocksPlannerException("Create fragment fail, " + e.getMessage(), INTERNAL_ERROR);
+        }
+
+        return execPlan;
     }
 
     private static class PhysicalPlanTranslator extends OptExpressionVisitor<PlanFragment, ExecPlan> {
@@ -1050,7 +1073,7 @@ public class PlanFragmentBuilder {
                 }
                 List<Expr> distributeExpressions =
                         partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
             } else {
@@ -1287,7 +1310,7 @@ public class PlanFragmentBuilder {
 
                 List<Expr> eqJoinConjuncts =
                         eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
 
                 for (Expr expr : eqJoinConjuncts) {
@@ -1299,13 +1322,13 @@ public class PlanFragmentBuilder {
                 List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getJoinPredicate());
                 otherJoin.removeAll(eqOnPredicates);
                 List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 // 3. Get conjuncts
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
                 List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 if (joinOperator.isLeftOuterJoin()) {
@@ -1366,14 +1389,14 @@ public class PlanFragmentBuilder {
                             .map(columnRefFactory::getColumnRef).collect(Collectors.toList());
                     List<Expr> leftJoinExprs =
                             leftPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                     .collect(Collectors.toList());
 
                     List<ScalarOperator> rightPredicates = rightOnPredicateColumns.stream()
                             .map(columnRefFactory::getColumnRef).collect(Collectors.toList());
                     List<Expr> rightJoinExprs =
                             rightPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                     .collect(Collectors.toList());
 
                     DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
@@ -1607,7 +1630,7 @@ public class PlanFragmentBuilder {
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                             .collect(Collectors.toList());
 
             List<OrderByElement> orderByElements = node.getOrderByElements().stream().map(e -> new OrderByElement(
@@ -1770,7 +1793,7 @@ public class PlanFragmentBuilder {
 
             //RepeatSlotIdList
             List<Set<Integer>> repeatSlotIdList = new ArrayList<>();
-            for (Set<ColumnRefOperator> repeat : repeatOperator.getRepeatColumnRef()) {
+            for (List<ColumnRefOperator> repeat : repeatOperator.getRepeatColumnRef()) {
                 repeatSlotIdList.add(
                         repeat.stream().map(ColumnRefOperator::getId).collect(Collectors.toSet()));
             }

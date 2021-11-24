@@ -892,7 +892,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeRepeatNode(ExpressionContext context, List<ColumnRefOperator> outputGrouping,
-                                   List<List<Long>> groupingIds, List<Set<ColumnRefOperator>> repeatColumnRef) {
+                                   List<List<Long>> groupingIds, List<List<ColumnRefOperator>> repeatColumnRef) {
         Preconditions.checkState(context.arity() == 1);
         Preconditions.checkState(outputGrouping.size() == groupingIds.size());
         Statistics.Builder builder = Statistics.builder();

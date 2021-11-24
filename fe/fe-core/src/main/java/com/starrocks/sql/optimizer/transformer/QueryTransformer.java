@@ -34,10 +34,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator.findOrCreateColumnRefForExpr;
@@ -350,10 +348,10 @@ class QueryTransformer {
              * that needs to be repeatedly calculated.
              * This column reference is come from the child of repeat operator
              */
-            List<Set<ColumnRefOperator>> repeatColumnRefList = new ArrayList<>();
+            List<List<ColumnRefOperator>> repeatColumnRefList = new ArrayList<>();
 
             for (List<Expr> grouping : groupingSetsList) {
-                Set<ColumnRefOperator> repeatColumnRef = new HashSet<>();
+                List<ColumnRefOperator> repeatColumnRef = new ArrayList<>();
                 BitSet groupingIdBitSet = new BitSet(groupByColumnRefs.size());
                 groupingIdBitSet.set(0, groupByExpressions.size(), true);
 
@@ -372,8 +370,21 @@ class QueryTransformer {
 
             //Build grouping_id(all grouping columns)
             ColumnRefOperator grouping = columnRefFactory.create("GROUPING_ID", Type.BIGINT, false);
-            groupingIds.add(groupingIdsBitSets.stream().map(bitset ->
-                    Utils.convertBitSetToLong(bitset, groupByColumnRefs.size())).collect(Collectors.toList()));
+            List<Long> groupingID = new ArrayList<>();
+            for (BitSet bitSet : groupingIdsBitSets) {
+                long gid = Utils.convertBitSetToLong(bitSet, groupByColumnRefs.size());
+
+                // Under normal circumstances, grouping_id is unlikely to be duplicated,
+                // but if there are duplicate columns in grouping sets, the grouping_id of the two columns may be the same,
+                // eg: grouping sets((v1), (v1))
+                // causing the data to be aggregated in advance.
+                // So add pow here to ensure that the grouping_id is not repeated, to ensure that the data will not be aggregated in advance
+                while (groupingID.contains(gid)) {
+                    gid += Math.pow(2, groupByColumnRefs.size());
+                }
+                groupingID.add(gid);
+            }
+            groupingIds.add(groupingID);
             groupByColumnRefs.add(grouping);
             repeatOutput.add(grouping);
 
@@ -391,7 +402,7 @@ class QueryTransformer {
 
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
                             .translate(slotRef, subOpt.getExpressionMapping());
-                    for (Set<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
+                    for (List<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
                         if (repeatColumns.contains(groupingKey)) {
                             for (int repeatColIdx = 0; repeatColIdx < repeatColumnRefList.size(); ++repeatColIdx) {
                                 tempGroupingIdsBitSets.get(repeatColIdx).set(childIdx,
