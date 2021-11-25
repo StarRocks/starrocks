@@ -49,9 +49,8 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         if (!thrift_sink.__isset.stream_sink) {
             return Status::InternalError("Missing data stream sink.");
         }
-        bool send_query_statistics_with_every_batch = params.__isset.send_query_statistics_with_every_batch
-                                                              ? params.send_query_statistics_with_every_batch
-                                                              : false;
+        bool send_query_statistics_with_every_batch =
+                params.__isset.send_query_statistics_with_every_batch && params.send_query_statistics_with_every_batch;
         // TODO: figure out good buffer size based on size of output row
         *sink = std::make_unique<DataStreamSender>(pool, params.use_vectorized, params.sender_id, row_desc,
                                                    thrift_sink.stream_sink, params.destinations, 16 * 1024,
@@ -91,15 +90,15 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
     case TDataSinkType::OLAP_TABLE_SINK: {
         Status status;
         DCHECK(thrift_sink.__isset.olap_table_sink);
-        *sink = std::make_unique<stream_load::OlapTableSink>(pool, row_desc, output_exprs, &status,
-                                                             params.use_vectorized);
+        LOG_IF(WARNING, !params.use_vectorized) << "Ignore option use_vectorized=false";
+        *sink = std::make_unique<stream_load::OlapTableSink>(pool, row_desc, output_exprs, &status);
         RETURN_IF_ERROR(status);
         break;
     }
 
     default:
         std::stringstream error_msg;
-        std::map<int, const char*>::const_iterator i = _TDataSinkType_VALUES_TO_NAMES.find(thrift_sink.type);
+        auto i = _TDataSinkType_VALUES_TO_NAMES.find(thrift_sink.type);
         const char* str = "Unknown data sink type ";
 
         if (i != _TDataSinkType_VALUES_TO_NAMES.end()) {
