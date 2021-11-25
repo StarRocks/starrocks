@@ -119,3 +119,19 @@ Flink导入报错，定位原为磁盘不足，扩容磁盘后，不能对数据
 ## 新扩容节点的FE状态正常，但是Manager"诊断"页面下该FE节点日志展示报错："Failed to search log."
 
 Manager默认30秒内去获取新部署FE的路径配置，如果FE启动较慢或由于其他原因导致30s内未响应就会出现上述问题。检查Manager Web日志，日志目录例如：`/starrocks-manager-xxx/center/log/webcenter/log/web/drms.INFO`，搜索日志是否有：`Failed to update fe configurations`，若有，重启对应的FE服务。重启会重新获取路径配置。
+
+## fe启动失败报错：exceeds max permissable delta:5000ms
+
+服务器时差超过5s，需要校准服务器时间
+
+## be节点如果有多块盘做存储，storage_root_path这个参数该怎么设置？
+
+be.conf里配置storage_root_path参数，用;隔开
+
+## 添加fe，一直显示集群id不一样，这个怎么办：invalid cluster id: 209721925
+
+这种问题是因为元数据不一致了，常见于第一次安装时没有加--helper参数，此场景需要将meta目录清空，然后通过--helper的方式重新加入集群
+
+## fe显示已经启动，有transfer：follower，但是show frontends;显示状态false
+
+jvm过小，内存始终超过一半了，没有做checkpoint。重启很慢，正常情况积累了5w个log就会做checkpoint，建议业务低峰期，修改各fe jvm参数并重启fe

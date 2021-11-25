@@ -161,3 +161,30 @@ MERGE:
 ## be/fe日志文件太多，怎么处理？
 
 调整日志级别和参数大小，详情参考文档中log相关的参数默认值和作用说明：[参数配置](/administration/Configuration.md)
+
+## 更改副本数失败：table lineorder is colocate table, cannot change replicationNum
+
+colocate table是有group的，一个组包含多个表，不支持单个表修改副本数，现在的话，需要把group内的所有表的group_with属性设置成空，然后给所有的表设置一下replication_num，然后再把所有表的group_with属性设置回去。
+
+## varchar 设置成最大值对存储有没有影响
+
+varchar是变长存储，存储跟数据实际长度有关，建表时指定不同的varchar长度对同一数据的查询性能影响很小
+
+## truncate table 失败，报错create partititon timeout
+
+目前truncate会先创建对应空分区再swap，如果存在大量创建分区任务，积压就会超时，compaction过程中会持锁很长时间，也导致建表拿不到锁，如果集群导入比较多，设置be.conf中参数tablet_map_shard_size=512，可以降低锁冲突
+
+## hive外表访问出错，Failed to specify server's Kerberos principal name
+
+在fe/be conf的hdfs-site.xml里加如下信息：
+
+```plain text
+<property>
+<name>dfs.namenode.kerberos.principal.pattern</name>
+<value>*</value>
+</property>
+```
+
+## 2021-10这种在starrocks里算日期格式么？可以用作分区字段么
+
+不可以，函数补足成2021-10-01这种再分区吧
