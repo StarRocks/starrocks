@@ -3858,7 +3858,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  6:EXCHANGE\n" +
-                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 1\n" +
                 " OUTPUT EXPRS:\n" +
@@ -3935,7 +3934,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  group by: 4: v2\n" +
                 "  |  \n" +
                 "  6:EXCHANGE\n" +
-                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
@@ -3947,8 +3945,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  5:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 4: v2\n" +
-                "  |  use vectorized: true\n"));
+                "  |  group by: 4: v2\n"));
 
         sql = "select SUM(x1) from (select v2 as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
