@@ -305,7 +305,7 @@ public class HiveTable extends Table {
     private void validate(Map<String, String> properties) throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of hive table, "
-                    + "they are: database, table and 'hive.metastore.uris'");
+                    + "they are: database, table and resource");
         }
 
         Map<String, String> copiedProps = Maps.newHashMap(properties);
@@ -322,7 +322,7 @@ public class HiveTable extends Table {
         copiedProps.remove(HIVE_TABLE);
 
         // check hive properties
-        // hive.metastore.uris or hive.resource must be set
+        // hive.resource must be set and hive.metastore.uris will be ignored if specified.
         String hiveMetastoreUris = copiedProps.get(HIVE_METASTORE_URIS);
         String resourceName = copiedProps.get(HIVE_RESOURCE);
         if (Strings.isNullOrEmpty(resourceName)) {
