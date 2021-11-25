@@ -565,11 +565,24 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testColumnNotEqualsConstant() throws Exception {
+        // check cardinality not 0
         String sql =
                 "select S_SUPPKEY,S_NAME from supplier where s_name <> 'Supplier#000000050' and s_name >= 'Supplier#000000086'";
         String plan = getCostExplain(sql);
-        // check cardinality not 0
         Assert.assertTrue(plan.contains("cardinality: 500000"));
+
+        // test_all_type column statistics are unknown
+        sql = "select t1a,t1b from test_all_type where t1a <> 'xxx'";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+
+        sql = "select t1b,t1c from test_all_type where t1c <> 10";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+
+        sql = "select t1b,t1c from test_all_type where id_date <> '2020-01-01'";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
     }
 
     @Test
