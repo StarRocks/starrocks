@@ -183,6 +183,11 @@ set(EXEC_FILES
     pipeline/set/intersect_output_source_operator.cpp
 )
 
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+
 set(EXEC_FILES
     ${EXEC_FILES}
     vectorized/mysql_scan_node.cpp

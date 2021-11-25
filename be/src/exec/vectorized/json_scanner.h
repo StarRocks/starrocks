@@ -3,20 +3,12 @@
 #pragma once
 
 #include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <rapidjson/document.h>
-DIAGNOSTIC_POP
-
-#include <rapidjson/error/en.h>
-#include <rapidjson/stringbuffer.h>
-#include <rapidjson/writer.h>
-
 #include "env/env.h"
 #include "env/env_stream_pipe.h"
 #include "env/env_util.h"
 #include "exec/vectorized/file_scanner.h"
 #include "runtime/stream_load/load_stream_mgr.h"
+#include "simdjson.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
 
@@ -83,7 +75,24 @@ public:
 
 private:
     Status _read_and_parse_json();
-    void _construct_column(const rapidjson::Value& objectValue, Column* column, const TypeDescriptor& type_desc);
+
+    void _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc);
+
+    Status _process_array(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::array& arr);
+
+    Status _process_array_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
+                                         simdjson::ondemand::array& arr);
+
+    Status _process_object(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
+                           simdjson::ondemand::object& obj);
+
+    Status _process_object_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
+                                          simdjson::ondemand::object& obj);
+
+    // Reorder column to accelerate simdjson iteration.
+    void _reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdjson::ondemand::document_reference* doc);
+
+    Status _filter_object_with_json_root(simdjson::ondemand::object* obj);
 
 private:
     RuntimeState* _state = nullptr;
@@ -99,18 +108,19 @@ private:
     std::vector<std::vector<JsonPath>> _json_paths;
     std::vector<JsonPath> _root_paths;
 
-    rapidjson::Document _origin_json_doc;  // origin json document object from parsed json string
-    rapidjson::Value* _json_doc = nullptr; // _json_doc equals _final_json_doc iff not set `json_root`
+    std::unique_ptr<uint8_t[]> _json_binary_ptr;
+
+    simdjson::ondemand::parser _parser;
+    simdjson::ondemand::document_stream _doc_stream;
+    simdjson::ondemand::document_stream::iterator _doc_stream_itr;
 
     // only used in unit test.
     // TODO: The semantics of Streaming Load And Routine Load is non-consistent.
     //       Import a json library supporting streaming parse.
 #if BE_TEST
     size_t _buf_size = 1048576; // 1MB, the buf size for parsing json in unit test
-#else
-    size_t _buf_size = 104857600; // 100MB, the max size rapidjson can parse
-#endif
     raw::RawVector<char> _buf;
+#endif
 };
 
 } // namespace starrocks::vectorized

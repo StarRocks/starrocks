@@ -63,6 +63,7 @@ protected:
     }
 
     void SetUp() override {
+        config::vector_chunk_size = 4096;
         _profile = _pool.add(new RuntimeProfile("test"));
         _counter = _pool.add(new ScannerCounter());
         _state = _pool.add(new RuntimeState(TQueryGlobals()));
@@ -71,9 +72,6 @@ protected:
                                                starrocks_home + "./be/test/exec/test_data/json_scanner/test2.json",
                                                starrocks_home + "./be/test/exec/test_data/json_scanner/test3.json",
                                                starrocks_home + "./be/test/exec/test_data/json_scanner/test4.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test5.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test6.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test7.json",
                                                starrocks_home + "./be/test/exec/test_data/json_scanner/test8.json"};
     }
 
@@ -152,13 +150,8 @@ TEST_F(JsonScannerTest, test_json_with_path) {
 
 TEST_F(JsonScannerTest, test_one_level_array) {
     std::vector<TypeDescriptor> types;
-    TypeDescriptor t1(TYPE_ARRAY);
-    t1.children.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(t1);
-
-    TypeDescriptor t2(TYPE_ARRAY);
-    t2.children.emplace_back(TYPE_INT);
-    types.emplace_back(t2);
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -181,15 +174,12 @@ TEST_F(JsonScannerTest, test_one_level_array) {
     EXPECT_EQ(2, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[['10.10.0.1', '10.20.1.1'], [10, 20]]", chunk->debug_row(0));
+    EXPECT_EQ("['[\"10.10.0.1\",\"10.20.1.1\"]', '[10,20]']", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_two_level_array) {
     std::vector<TypeDescriptor> types;
-    TypeDescriptor t1(TYPE_ARRAY);
-    t1.children.emplace_back(TYPE_ARRAY);
-    t1.children.back().children.emplace_back(TYPE_BIGINT);
-    types.emplace_back(t1);
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -211,99 +201,7 @@ TEST_F(JsonScannerTest, test_two_level_array) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[[[10, 20], [30, 40]]]", chunk->debug_row(0));
-}
-
-TEST_F(JsonScannerTest, test_invalid_column_in_array) {
-    std::vector<TypeDescriptor> types;
-    TypeDescriptor t1(TYPE_ARRAY);
-    t1.children.emplace_back(TYPE_ARRAY);
-    t1.children.back().children.emplace_back(TYPE_SMALLINT);
-    types.emplace_back(t1);
-
-    std::vector<TBrokerRangeDesc> ranges;
-    TBrokerRangeDesc range;
-    range.format_type = TFileFormatType::FORMAT_JSON;
-    range.strip_outer_array = true;
-    range.__isset.strip_outer_array = true;
-    range.__isset.jsonpaths = false;
-    range.__isset.json_root = false;
-    range.__set_path("./be/test/exec/test_data/json_scanner/test5.json");
-    ranges.emplace_back(range);
-
-    auto scanner = create_json_scanner(types, ranges, {"value"});
-
-    Status st;
-    st = scanner->open();
-    ASSERT_TRUE(st.ok());
-
-    ChunkPtr chunk = scanner->get_next().value();
-    EXPECT_EQ(1, chunk->num_columns());
-    EXPECT_EQ(1, chunk->num_rows());
-
-    EXPECT_EQ("[[[NULL, 20], [30, 40]]]", chunk->debug_row(0));
-}
-
-TEST_F(JsonScannerTest, test_invalid_nested_level1) {
-    // the nested level in schema is larger than json
-    std::vector<TypeDescriptor> types;
-    TypeDescriptor t1(TYPE_ARRAY);
-    t1.children.emplace_back(TYPE_ARRAY);
-    t1.children.back().children.emplace_back(TYPE_TINYINT);
-    types.emplace_back(t1);
-
-    std::vector<TBrokerRangeDesc> ranges;
-    TBrokerRangeDesc range;
-    range.format_type = TFileFormatType::FORMAT_JSON;
-    range.strip_outer_array = true;
-    range.__isset.strip_outer_array = true;
-    range.__isset.jsonpaths = false;
-    range.__isset.json_root = false;
-    range.__set_path("./be/test/exec/test_data/json_scanner/test6.json");
-    ranges.emplace_back(range);
-
-    auto scanner = create_json_scanner(types, ranges, {"value"});
-
-    Status st;
-    st = scanner->open();
-    ASSERT_TRUE(st.ok());
-
-    ChunkPtr chunk = scanner->get_next().value();
-
-    EXPECT_EQ(1, chunk->num_columns());
-    EXPECT_EQ(1, chunk->num_rows());
-
-    EXPECT_EQ("[[NULL, NULL, NULL, NULL]]", chunk->debug_row(0));
-}
-
-TEST_F(JsonScannerTest, test_invalid_nested_level2) {
-    // the nested level in schema is less than json
-    std::vector<TypeDescriptor> types;
-    TypeDescriptor t1(TYPE_ARRAY);
-    t1.children.emplace_back(TYPE_LARGEINT);
-    types.emplace_back(t1);
-
-    std::vector<TBrokerRangeDesc> ranges;
-    TBrokerRangeDesc range;
-    range.format_type = TFileFormatType::FORMAT_JSON;
-    range.strip_outer_array = true;
-    range.__isset.strip_outer_array = true;
-    range.__isset.jsonpaths = false;
-    range.__isset.json_root = false;
-    range.__set_path("./be/test/exec/test_data/json_scanner/test7.json");
-    ranges.emplace_back(range);
-
-    auto scanner = create_json_scanner(types, ranges, {"value"});
-
-    Status st;
-    st = scanner->open();
-    ASSERT_TRUE(st.ok());
-
-    ChunkPtr chunk = scanner->get_next().value();
-    EXPECT_EQ(1, chunk->num_columns());
-    EXPECT_EQ(1, chunk->num_rows());
-
-    EXPECT_EQ("[[NULL, NULL]]", chunk->debug_row(0));
+    EXPECT_EQ("['[[10,20],[30,40]]']", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_json_with_long_string) {
@@ -332,6 +230,75 @@ TEST_F(JsonScannerTest, test_json_with_long_string) {
     EXPECT_EQ(1, chunk->num_rows());
 
     EXPECT_EQ("['{\"area\":\"beijing\",\"country\":\"china\"}', '[\"478472290\",\"478473274\"]']", chunk->debug_row(0));
+}
+
+TEST_F(JsonScannerTest, test_ndjson) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "kind", "ip", "value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("['v1', 'server', NULL, NULL]", chunk->debug_row(0));
+    EXPECT_EQ("['v2', 'server', NULL, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("['v3', 'server', NULL, NULL]", chunk->debug_row(2));
+    EXPECT_EQ("['v4', 'server', NULL, NULL]", chunk->debug_row(3));
+    EXPECT_EQ("['v5', 'server', NULL, NULL]", chunk->debug_row(4));
+}
+
+TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = "[\"$.k1\", \"$.kind\", \"$.keyname.ip\", \"$.keyname.value\"]";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "kind", "ip", "value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("['v1', 'server', '10.10.0.1', 10]", chunk->debug_row(0));
+    EXPECT_EQ("['v2', 'server', '10.10.0.2', 20]", chunk->debug_row(1));
+    EXPECT_EQ("['v3', 'server', '10.10.0.3', 30]", chunk->debug_row(2));
+    EXPECT_EQ("['v4', 'server', '10.10.0.4', 40]", chunk->debug_row(3));
+    EXPECT_EQ("['v5', 'server', '10.10.0.5', 50]", chunk->debug_row(4));
 }
 
 } // namespace starrocks::vectorized
