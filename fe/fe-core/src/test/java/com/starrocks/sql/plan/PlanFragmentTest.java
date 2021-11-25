@@ -2240,7 +2240,12 @@ public class PlanFragmentTest extends PlanTestBase {
         starRocksAssert.query(castSql).explainContains("8: k11 < '2020-03-26 00:00:00'");
 
         String castSql2 = "select str_to_date('11/09/2011', '%m/%d/%Y');";
-        starRocksAssert.query(castSql2).explainContains("constant exprs:", "'2011-11-09 00:00:00'");
+        starRocksAssert.query(castSql2).explainContains("constant exprs:", "'2011-11-09'");
+
+        String castSql3 = "select str_to_date('11/09/2011', k6) from test.baseall";
+        System.out.println(starRocksAssert.query(castSql3).explainQuery());
+        starRocksAssert.query(castSql3).explainContains("  1:Project\n" +
+                "  |  <slot 12> : str_to_date('11/09/2011', 6: k6)");
     }
 
     @Test
