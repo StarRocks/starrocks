@@ -322,7 +322,7 @@ public class HiveTable extends Table {
         copiedProps.remove(HIVE_TABLE);
 
         // check hive properties
-        // hive.resource must be set and hive.metastore.uris will be ignored if specified.
+        // resource must be set and hive.metastore.uris will be ignored if specified.
         String hiveMetastoreUris = copiedProps.get(HIVE_METASTORE_URIS);
         String resourceName = copiedProps.get(HIVE_RESOURCE);
         if (Strings.isNullOrEmpty(resourceName)) {
