@@ -157,7 +157,10 @@ template <PrimitiveType Type>
 class MockNullVectorizedExpr : public MockCostExpr {
 public:
     MockNullVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value)
-            : MockCostExpr(t), flag(0), size(size), value(value) {}
+            : MockNullVectorizedExpr(t, size, value, false) {}
+
+    MockNullVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value, bool only_null)
+            : MockCostExpr(t), only_null(only_null), flag(0), size(size), value(value) {}
 
     DEFINE_NULL_TEST_ROW_FUNCTION(BooleanVal, get_boolean_val);
     DEFINE_NULL_TEST_ROW_FUNCTION(IntVal, get_int_val);
