@@ -271,8 +271,6 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
-    } else {
-        DCHECK(false) << "shouldn't go to here";
     }
 
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
