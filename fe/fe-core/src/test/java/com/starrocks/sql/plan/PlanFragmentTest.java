@@ -241,7 +241,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select v1+20, if(false, v1, NULL) from t0 where v1 is null";
         planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 4> : 1: v1 + 20\n" +
                 "  |  <slot 5> : NULL"));
@@ -785,7 +784,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String explainString;
         queryStr = "select k2, count(k3) from nocolocate3 group by k2";
         explainString = getFragmentPlan(queryStr);
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("  3:AGGREGATE (merge finalize)\n"
                 + "  |  output: count(4: count)\n"
                 + "  |  group by: 2: k2\n"
@@ -1373,7 +1371,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from (select v1, v2 from t0 limit 10) a join [shuffle] " +
                 "(select v1, v2 from t0 limit 1) b on a.v1 = b.v1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("join op: INNER JOIN (PARTITIONED)"));
         Assert.assertTrue(plan.contains("  |----5:EXCHANGE\n" +
                 "  |       limit: 1"));
@@ -4024,12 +4021,11 @@ public class PlanFragmentTest extends PlanTestBase {
     @Test
     public void testReplicationJoinWithPartitionTable() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
-        boolean oldValue = FeConstants.runningUnitTest;
         FeConstants.runningUnitTest = true;
         String sql = "select * from join1 join pushdown_test on join1.id = pushdown_test.k1;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("INNER JOIN (BROADCAST)"));
-        FeConstants.runningUnitTest = oldValue;
+        FeConstants.runningUnitTest = false;
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
@@ -4650,5 +4646,18 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     avgRowSize=3.0\n" +
                 "     numNodes=0\n" +
                 "     use vectorized: true\n"));
+    }
+
+    @Test
+    public void testEmptyProjectCountStar() throws Exception {
+        String sql = "select count(*) from test_all_type a, test_all_type b where a.t1a is not null";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * t1a-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * t1b-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
     }
 }
