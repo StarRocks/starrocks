@@ -177,9 +177,7 @@ public:
 
     uint32_t version() const { return _opts.storage_format_version; }
 
-    // Read and load necessary column indexes into memory if it hasn't been loaded.
-    // May be called multiple times, subsequent calls will no op.
-    Status ensure_index_loaded();
+    Status load_ordinal_index_once();
 
 private:
     struct private_type {

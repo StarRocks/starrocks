@@ -538,8 +538,7 @@ Status ColumnReader::_load_bloom_filter_index_once() {
     return status;
 }
 
-
-Status ColumnReader::ensure_index_loaded() {
+Status ColumnReader::load_ordinal_index_once() {
     // Only load ordinal index.
     // Other indexes like zone map/bitmap/bloomfilter should be load when necessary
     Status status = _ordinal_index_once.call([this] {
