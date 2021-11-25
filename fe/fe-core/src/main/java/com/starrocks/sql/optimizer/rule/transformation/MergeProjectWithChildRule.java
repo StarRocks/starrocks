@@ -27,6 +27,10 @@ public class MergeProjectWithChildRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalProjectOperator logicalProjectOperator = (LogicalProjectOperator) input.getOp();
+
+        if (logicalProjectOperator.getColumnRefMap().isEmpty()) {
+            return Lists.newArrayList(input.getInputs().get(0));
+        }
         LogicalOperator child = (LogicalOperator) input.inputAt(0).getOp();
 
         ColumnRefSet projectColumns = logicalProjectOperator.getOutputColumns(

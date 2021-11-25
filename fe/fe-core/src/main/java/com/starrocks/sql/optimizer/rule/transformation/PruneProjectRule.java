@@ -7,6 +7,7 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -38,7 +39,10 @@ public class PruneProjectRule extends TransformationRule {
             }
         }
 
-        return true;
+        // For count(*), the child output columns maybe empty, we needn't apply this rule
+        LogicalOperator logicalOperator = (LogicalOperator) input.inputAt(0).getOp();
+        ColumnRefSet outputColumn = logicalOperator.getOutputColumns(new ExpressionContext(input.inputAt(0)));
+        return outputColumn.cardinality() > 0;
     }
 
     @Override
