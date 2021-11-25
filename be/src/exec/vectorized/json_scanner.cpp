@@ -338,7 +338,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
             // Expand array.
             if (!_scanner->_strip_outer_array) {
                 std::string err_msg("JSON data is an array, strip_outer_array must be set true");
-                _state->append_error_msg_to_file(JsonFunctions::minify_json_to_string(doc), err_msg);
+                _state->append_error_msg_to_file("", err_msg);
                 _counter->num_rows_filtered++;
                 return Status::DataQualityError(err_msg.c_str());
             }
@@ -389,7 +389,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 
             if (_scanner->_strip_outer_array) {
                 std::string err_msg("JSON data is an object, strip_outer_array must be set false");
-                _state->append_error_msg_to_file(JsonFunctions::minify_json_to_string(doc), err_msg);
+                _state->append_error_msg_to_file("", err_msg);
                 _counter->num_rows_filtered++;
                 return Status::DataQualityError(err_msg.c_str());
             }

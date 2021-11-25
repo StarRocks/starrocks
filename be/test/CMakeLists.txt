@@ -252,6 +252,9 @@ set(EXEC_FILES
         ./util/gc_helper_test.cpp
         )
 
+# simdjson Runtime CPU Detection: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+set_source_files_properties(        ./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif()

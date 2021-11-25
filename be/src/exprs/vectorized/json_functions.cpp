@@ -178,33 +178,6 @@ Status JsonFunctions::minify_json_to_string(simdjson::ondemand::value& val, std:
     return Status::OK();
 }
 
-std::string JsonFunctions::minify_json_to_string(simdjson::ondemand::value& val) {
-    std::unique_ptr<char[]> buf;
-    size_t buflen;
-
-    minify_json_to_string(val, buf, buflen);
-
-    return {buf.get(), buflen};
-}
-
-std::string JsonFunctions::minify_json_to_string(simdjson::ondemand::document_reference& doc) {
-    simdjson::ondemand::value val;
-    auto err = doc.get_value().get(val);
-    if (err) {
-        return "";
-    }
-
-    std::unique_ptr<char[]> buf;
-    size_t buflen;
-
-    auto st = minify_json_to_string(val, buf, buflen);
-    if (st.ok()) {
-        return "";
-    }
-
-    return {buf.get(), buflen};
-}
-
 JsonFunctionType JsonTypeTraits<TYPE_INT>::JsonType = JSON_FUN_INT;
 JsonFunctionType JsonTypeTraits<TYPE_DOUBLE>::JsonType = JSON_FUN_DOUBLE;
 JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;
