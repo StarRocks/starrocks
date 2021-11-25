@@ -10,7 +10,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -122,7 +121,10 @@ public class CacheDictManager implements IDictManager {
             .maximumSize(Config.statistic_cache_columns)
             .buildAsync(dictLoader);
 
-    private ColumnDict deserializeColumnDict(TStatisticData statisticData) throws AnalysisException {
+    private ColumnDict deserializeColumnDict(TStatisticData statisticData) {
+        if (statisticData.dict == null) {
+            throw new RuntimeException("Collect dict error in BE");
+        }
         TGlobalDict tGlobalDict = statisticData.dict;
         ImmutableMap.Builder<String, Integer> dicts = ImmutableMap.builder();
         if (tGlobalDict.isSetIds()) {
