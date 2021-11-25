@@ -964,7 +964,7 @@ alter_table_clause ::=
     {:
         RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);
     :}
-    | KW_DROP opt_tmp:isTempPartition KW_PARTITION opt_force:force opt_if_exists:ifExists ident:partitionName
+    | KW_DROP opt_tmp:isTempPartition KW_PARTITION opt_if_exists:ifExists ident:partitionName opt_force:force
     {:
         RESULT = new DropPartitionClause(ifExists, partitionName, isTempPartition, force ? force : isTempPartition);
     :}
@@ -1706,11 +1706,11 @@ revoke_stmt ::=
 // Drop statement
 drop_stmt ::=
     /* Database */
-    KW_DROP KW_DATABASE opt_force:force opt_if_exists:ifExists ident:db
+    KW_DROP KW_DATABASE opt_if_exists:ifExists ident:db opt_force:force
     {:
         RESULT = new DropDbStmt(ifExists, db, force);
     :}
-    | KW_DROP KW_SCHEMA opt_force:force opt_if_exists:ifExists ident:db
+    | KW_DROP KW_SCHEMA opt_if_exists:ifExists ident:db opt_force:force
     {:
         RESULT = new DropDbStmt(ifExists, db, !force);
     :}
