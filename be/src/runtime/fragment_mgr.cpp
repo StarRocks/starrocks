@@ -400,6 +400,12 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params) {
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb) {
+    return exec_plan_fragment(
+            params, [](auto&& PH1) { return empty_function(std::forward<decltype(PH1)>(PH1)); }, cb);
+}
+
+Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
+                                       const FinishCallback& cb) {
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
     std::shared_ptr<FragmentExecState> exec_state;
     {
@@ -440,6 +446,8 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
             _fragment_map.erase(fragment_instance_id);
         }
         return Status::InternalError(error_msg);
+    } else {
+        start_cb((*exec_state_ptr)->executor());
     }
 
     return Status::OK();
