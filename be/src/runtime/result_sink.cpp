@@ -103,6 +103,7 @@ Status ResultSink::open(RuntimeState* state) {
 }
 
 Status ResultSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    // Query memory, no longer count the memory of the final sent result set
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     return _writer->append_chunk(chunk);
 }
