@@ -64,7 +64,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.NotNull;
 
 import java.math.BigInteger;
 import java.util.Arrays;
