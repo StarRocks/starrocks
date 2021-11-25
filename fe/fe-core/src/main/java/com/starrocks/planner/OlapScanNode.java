@@ -554,6 +554,20 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
+    private String getReadColumnNames() {
+        Set<String> columnNameSet = desc.getMaterializedSlots().stream()
+                .map(slot -> slot.getColumn().getName()).collect(Collectors.toSet());
+        if (!isPreAggregation && selectedIndexId != -1) {
+            for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                if (col.isKey()) {
+                    columnNameSet.add(col.getName());
+                }
+            }
+        }
+
+        return String.join(",", columnNameSet);
+    }
+
     /**
      * We query meta to get request's data location
      * extra result info will pass to backend ScanNode
@@ -618,6 +632,10 @@ public class OlapScanNode extends ScanNode {
                 "numNodes=%s", numNodes));
         output.append("\n");
 
+        output.append(prefix).append(String.format(
+                "columnsRead=%s", getReadColumnNames()));
+        output.append("\n");
+
         return output.toString();
     }
 
@@ -678,6 +696,10 @@ public class OlapScanNode extends ScanNode {
                 "actualRows=%s", actualRows))
                 .append(", ").append(String.format(
                 "avgRowSize=%s", avgRowSize)).append("\n");
+
+        output.append(prefix).append(String.format(
+                "columnsRead=%s", getReadColumnNames()));
+        output.append("\n");
         return output.toString();
     }
 
