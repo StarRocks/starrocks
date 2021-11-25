@@ -35,7 +35,7 @@ We will continue to contribute to Apache Doris(incubating) and help to build the
 
 Because of the thirdparty dependencies, we recommend building StarRocks with the development docker image we provide.
 
-For detailed instructions, please refer to [build](https://github.com/StarRocks/docs/blob/master/development/Build_in_docker.md).
+For detailed instructions, please refer to [build](https://github.com/StarRocks/docs/blob/main/administration/Build_in_docker.md).
 
 ## Install
 
