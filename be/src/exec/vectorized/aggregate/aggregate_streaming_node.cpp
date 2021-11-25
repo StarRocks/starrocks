@@ -37,6 +37,10 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         return Status::OK();
     }
 
+    if (*chunk != nullptr) {
+        (*chunk)->reset();
+    }
+
     // TODO: merge small chunks to large chunk for optimization
     while (!_child_eos) {
         ChunkPtr input_chunk;
