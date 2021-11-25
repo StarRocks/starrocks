@@ -332,7 +332,7 @@ public:
         // - left == _num_elements when not found (all values < target)
         while (left < right) {
             size_t mid = left + (right - left) / 2;
-            void* mid_value = &_decoded[mid * SIZE_OF_TYPE];
+            const void* mid_value = get_data(mid * SIZE_OF_TYPE);
             if (TypeTraits<Type>::cmp(mid_value, value) < 0) {
                 left = mid + 1;
             } else {
@@ -342,7 +342,7 @@ public:
         if (left >= _num_elements) {
             return Status::NotFound("all value small than the value");
         }
-        void* find_value = &_decoded[left * SIZE_OF_TYPE];
+        const void* find_value = get_data(left * SIZE_OF_TYPE);
         *exact_match = TypeTraits<Type>::cmp(find_value, value) == 0;
 
         _cur_index = left;
@@ -374,8 +374,16 @@ public:
     EncodingTypePB encoding_type() const override { return BIT_SHUFFLE; }
 
 private:
+    const void* get_data(size_t pos) {
+        if (_options.use_cache) {
+            return &_data[pos];
+        } else {
+            return &_decoded[pos];
+        }
+    }
+
     void _copy_next_values(size_t n, void* data) {
-        memcpy(data, &_decoded[_cur_index * SIZE_OF_TYPE], n * SIZE_OF_TYPE);
+        memcpy(data, get_data(_cur_index * SIZE_OF_TYPE), n * SIZE_OF_TYPE);
     }
 
     Status _decode() {
@@ -403,8 +411,6 @@ private:
                 LOG(ERROR) << "bitshuffle decompress failed: " << bitshuffle_error_msg(bytes);
                 return Status::RuntimeError("Unshuffle Process failed");
             }
-        } else {
-            memcpy(to, in, _data.size - BITSHUFFLE_PAGE_HEADER_SIZE);
         }
         return Status::OK();
     }
@@ -456,7 +462,7 @@ inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized:
 
     RETURN_IF_ERROR(_decode());
     *count = std::min(*count, static_cast<size_t>(_num_elements - _cur_index));
-    int n = dst->append_numbers(&_decoded[_cur_index * SIZE_OF_TYPE], *count * SIZE_OF_TYPE);
+    int n = dst->append_numbers(get_data(_cur_index * SIZE_OF_TYPE), *count * SIZE_OF_TYPE);
     DCHECK_EQ(*count, n);
     _cur_index += *count;
     return Status::OK();

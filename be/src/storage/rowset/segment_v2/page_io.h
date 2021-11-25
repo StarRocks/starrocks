@@ -110,6 +110,9 @@ public:
     //     `footer' stores the page footer.
     static Status read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
                                            PageFooterPB* footer);
+
+    static Status decompress_bitshuffle_page(const PageReadOptions& opts, Slice& page_slice, PageFooterPB* footer,
+                                             uint32_t footer_size, std::unique_ptr<char[]>& page);
 };
 
 } // namespace segment_v2
