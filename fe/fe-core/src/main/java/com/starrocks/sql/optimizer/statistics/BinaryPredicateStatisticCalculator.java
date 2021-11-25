@@ -64,7 +64,18 @@ public class BinaryPredicateStatisticCalculator {
         StatisticRangeValues columnRange = StatisticRangeValues.from(columnStatistic);
         StatisticRangeValues intersectRange = columnRange.intersect(predicateRange);
 
-        double predicateFactor = 1.0 - columnRange.overlapPercentWith(intersectRange);
+        double intersectFactor = columnRange.overlapPercentWith(intersectRange);
+        // Column range is infinite if column data type is String or column statistics type is UNKNOWN.
+        // If column range is not both infinite, we can calculate the overlap accurately, but if column range is infinite,
+        // we assume intersect range is exist in the infinite range，the estimated value of overlap percent will be larger,
+        // and the percent of not overlap will be estimated too small.
+        if (intersectRange.isBothInfinite()) {
+            // If intersect column range is infinite, it need to adjust the intersect factor
+            intersectFactor = intersectFactor != 1.0 ? intersectFactor :
+                    StatisticsEstimateCoefficient.OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT;
+        }
+        double predicateFactor = 1.0 - intersectFactor;
+
         double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
         // TODO(ywb) use origin column distinct values as new column statistics now, we should re-compute column
         //  distinct values actually.
@@ -196,6 +207,15 @@ public class BinaryPredicateStatisticCalculator {
         StatisticRangeValues columnRange = StatisticRangeValues.from(columnStatistic);
         StatisticRangeValues intersectRange = columnRange.intersect(predicateRange);
 
+        // If column range is not both infinite, we can calculate the overlap accurately, but if column range is infinite,
+        // we assume intersect range is exist in the infinite range，the estimated value of overlap percent will be larger.
+        // eg.
+        //    column_string = 'xxx'
+        // column range of column_string is (NEGATIVE_INFINITY, POSITIVE_INFINITY, distinct_val),
+        // and column range of 'xxx' is also (NEGATIVE_INFINITY, POSITIVE_INFINITY, 1) because of we can not get min/max
+        // value of the string type. we assume that 'xxx' is exist in the column range,
+        // so the predicate factor :
+        //          pf = 1.0 / distinct_val.
         double predicateFactor = columnRange.overlapPercentWith(intersectRange);
         double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
         // TODO(ywb) use origin column distinct values as new column statistics now, we should re-compute column
