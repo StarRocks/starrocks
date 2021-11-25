@@ -325,13 +325,14 @@ public class HiveTable extends Table {
         // hive.metastore.uris or hive.resource must be set
         String hiveMetastoreUris = copiedProps.get(HIVE_METASTORE_URIS);
         String resourceName = copiedProps.get(HIVE_RESOURCE);
-        if (Strings.isNullOrEmpty(hiveMetastoreUris) && Strings.isNullOrEmpty(resourceName)) {
-            throw new DdlException("property " + HIVE_METASTORE_URIS + " or " + HIVE_RESOURCE + " must be set");
+        if (Strings.isNullOrEmpty(resourceName)) {
+            throw new DdlException("property " + HIVE_RESOURCE + " must be set");
         }
 
         if (!Strings.isNullOrEmpty(hiveMetastoreUris)) {
             copiedProps.remove(HIVE_METASTORE_URIS);
-            hiveProperties.put(HIVE_METASTORE_URIS, hiveMetastoreUris);
+            LOG.warn("property " + HIVE_METASTORE_URIS + " will be ignored " +
+                    "and hive table will be created by using property " + HIVE_RESOURCE + " only.");
         }
 
         if (!Strings.isNullOrEmpty(resourceName)) {
