@@ -34,7 +34,6 @@
 #include "runtime/current_thread.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/push_handler.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/push_handler.h"
@@ -169,26 +168,17 @@ OLAPStatus EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabl
     int64_t duration_ns = 0;
     int64_t write_bytes = 0;
     int64_t write_rows = 0;
-    bool use_vectorized = request.__isset.use_vectorized && request.use_vectorized;
     DCHECK(request.__isset.transaction_id);
-    if (use_vectorized) {
-        SCOPED_RAW_TIMER(&duration_ns);
-        vectorized::PushHandler push_handler;
-        Status st = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
-        if (!st.ok()) {
-            LOG(WARNING) << "fail to process streaming ingestion. res=" << st.to_string()
-                         << ", transaction_id=" << request.transaction_id << ", tablet=" << tablet->full_name();
-            res = OLAP_ERR_PUSH_INIT_ERROR;
-        }
-        write_bytes = push_handler.write_bytes();
-        write_rows = push_handler.write_rows();
-    } else {
-        SCOPED_RAW_TIMER(&duration_ns);
-        PushHandler push_handler;
-        res = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
-        write_bytes = push_handler.write_bytes();
-        write_rows = push_handler.write_rows();
+    SCOPED_RAW_TIMER(&duration_ns);
+    vectorized::PushHandler push_handler;
+    Status st = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to process streaming ingestion. res=" << st.to_string()
+                     << ", transaction_id=" << request.transaction_id << ", tablet=" << tablet->full_name();
+        res = OLAP_ERR_PUSH_INIT_ERROR;
     }
+    write_bytes = push_handler.write_bytes();
+    write_rows = push_handler.write_rows();
 
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "fail to push delta. res=" << res << ", transaction_id=" << request.transaction_id

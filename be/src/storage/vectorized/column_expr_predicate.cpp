@@ -138,7 +138,7 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
             return true;
         }
     }
-    VLOG_FILE << "ColumnExprPredicate: zone_map_filter succeeded. # of skipped rows = " << detail.num_rows;
+    VLOG_FILE << "ColumnExprPredicate: zone_map_filter succeeded. # of skipped rows = " << detail.num_rows();
     return false;
 }
 
