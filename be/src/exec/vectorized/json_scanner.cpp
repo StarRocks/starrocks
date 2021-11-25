@@ -463,13 +463,15 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs,
             continue;
         }
 
-        auto itr = std::find_if(slot_descs->begin(), slot_descs->end(),
-                                [key](const SlotDescriptor* desc) { return desc->col_name() == key; });
+        key_set.insert(key);
 
-        if (itr != slot_descs->end()) {
+        auto itr = std::find_if(ordered_slot_descs.begin(), ordered_slot_descs.end(),
+                                [&key](const SlotDescriptor* desc) { return desc->col_name() == key; });
+
+        if (itr != ordered_slot_descs.end()) {
             auto tmp = *itr;
-            *itr = slot_descs->at(idx);
-            slot_descs->at(idx) = tmp;
+            *itr = ordered_slot_descs.at(idx);
+            ordered_slot_descs.at(idx) = tmp;
             idx++;
         }
     }
@@ -573,7 +575,6 @@ Status JsonReader::_process_array_with_json_path(Chunk* chunk, const std::vector
 
 Status JsonReader::_process_object(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                    simdjson::ondemand::object& obj) {
-    bool op_col_added = false;
     for (SlotDescriptor* slot_desc : slot_descs) {
         if (slot_desc == nullptr) {
             continue;
@@ -585,7 +586,7 @@ Status JsonReader::_process_object(Chunk* chunk, const std::vector<SlotDescripto
         simdjson::ondemand::value val;
         auto err = obj.find_field_unordered(col_name).get(val);
         if (err) {
-            if (!op_col_added && col_name == "__op") {
+            if (col_name == "__op") {
                 // special treatment for __op column, fill default value '0' rather than null
                 column->append_strings(literal_0_slice_vector);
             } else {
