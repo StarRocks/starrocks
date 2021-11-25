@@ -75,9 +75,7 @@ NodeChannel::~NodeChannel() {
         delete _add_batch_closure;
         _add_batch_closure = nullptr;
     }
-    if (_is_vectorized) {
-        _cur_add_chunk_request.release_id();
-    }
+    _cur_add_chunk_request.release_id();
 }
 
 Status NodeChannel::init(RuntimeState* state) {
@@ -96,18 +94,13 @@ Status NodeChannel::init(RuntimeState* state) {
         _cancelled = true;
         return Status::InternalError("get rpc stub failed");
     }
-    _is_vectorized = _parent->_is_vectorized;
 
-    if (_is_vectorized) {
-        // Initialize _cur_add_chunk_request
-        _cur_add_chunk_request.set_allocated_id(&_parent->_load_id);
-        _cur_add_chunk_request.set_index_id(_index_id);
-        _cur_add_chunk_request.set_sender_id(_parent->_sender_id);
-        _cur_add_chunk_request.set_eos(false);
-        _cur_chunk = std::make_unique<vectorized::Chunk>();
-    } else {
-        return Status::InternalError("Non-vectorized execute engine is not supported");
-    }
+    // Initialize _cur_add_chunk_request
+    _cur_add_chunk_request.set_allocated_id(&_parent->_load_id);
+    _cur_add_chunk_request.set_index_id(_index_id);
+    _cur_add_chunk_request.set_sender_id(_parent->_sender_id);
+    _cur_add_chunk_request.set_eos(false);
+    _cur_chunk = std::make_unique<vectorized::Chunk>();
 
     _rpc_timeout_ms = state->query_options().query_timeout * 1000;
 
@@ -137,7 +130,6 @@ void NodeChannel::open() {
         request.set_load_mem_limit(_parent->_load_mem_limit);
     }
     request.set_load_channel_timeout_s(_parent->_load_channel_timeout_s);
-    request.set_is_vectorized(_parent->_is_vectorized);
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
@@ -278,17 +270,13 @@ Status NodeChannel::mark_close() {
         return st.clone_and_prepend("already stopped, can't mark as closed. cancelled/eos: ");
     }
 
-    if (_is_vectorized) {
-        _cur_add_chunk_request.set_eos(true);
-        {
-            std::lock_guard<std::mutex> l(_pending_batches_lock);
-            DCHECK(_cur_chunk != nullptr);
-            _mem_tracker->consume(_cur_chunk->memory_usage());
-            _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
-            _pending_batches_num++;
-        }
-    } else {
-        return Status::InternalError("Non-vectorized execute engine is not supported");
+    _cur_add_chunk_request.set_eos(true);
+    {
+        std::lock_guard<std::mutex> l(_pending_batches_lock);
+        DCHECK(_cur_chunk != nullptr);
+        _mem_tracker->consume(_cur_chunk->memory_usage());
+        _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
+        _pending_batches_num++;
     }
 
     _eos_is_produced = true;
@@ -411,13 +399,11 @@ Status NodeChannel::none_of(std::initializer_list<bool> vars) {
 
 void NodeChannel::clear_all_batches() {
     std::lock_guard<std::mutex> lg(_pending_batches_lock);
-    if (_is_vectorized) {
-        while (!_pending_chunks.empty()) {
-            _pending_chunks.pop();
-        }
-        if (_cur_chunk != nullptr) {
-            _cur_chunk.reset();
-        }
+    while (!_pending_chunks.empty()) {
+        _pending_chunks.pop();
+    }
+    if (_cur_chunk != nullptr) {
+        _cur_chunk.reset();
     }
 }
 
@@ -460,7 +446,7 @@ bool IndexChannel::has_intolerable_failure() {
 }
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& texprs,
-                             Status* status, bool is_vectorized)
+                             Status* status)
         : _pool(pool), _input_row_desc(row_desc), _filter_bitmap(1024) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
@@ -486,7 +472,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _num_repicas = table_sink.num_replicas;
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
-    _schema.reset(new OlapTableSchemaParam());
+    _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
     RETURN_IF_ERROR(_partition->init());
@@ -554,12 +540,10 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         case TYPE_DECIMAL:
             _max_decimal_val[i].to_max_decimal(slot->type().precision, slot->type().scale);
             _min_decimal_val[i].to_min_decimal(slot->type().precision, slot->type().scale);
-            _need_validate_data = true;
             break;
         case TYPE_DECIMALV2:
             _max_decimalv2_val[i].to_max_decimal(slot->type().precision, slot->type().scale);
             _min_decimalv2_val[i].to_min_decimal(slot->type().precision, slot->type().scale);
-            _need_validate_data = true;
             break;
         case TYPE_CHAR:
         case TYPE_VARCHAR:
@@ -567,16 +551,10 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         case TYPE_DATETIME:
         case TYPE_HLL:
         case TYPE_OBJECT:
-            _need_validate_data = true;
             break;
         default:
             break;
         }
-    }
-
-    // validate all column in vectorized engine
-    if (_is_vectorized) {
-        _need_validate_data = true;
     }
 
     // add all counter
@@ -641,12 +619,7 @@ Status OlapTableSink::open(RuntimeState* state) {
         }
     }
 
-    if (_is_vectorized) {
-        _sender_thread = std::thread(&OlapTableSink::_send_chunk_process, this);
-    } else {
-        return Status::InternalError("Non-vectorized execute engine is not supported");
-    }
-
+    _sender_thread = std::thread(&OlapTableSink::_send_chunk_process, this);
     return Status::OK();
 }
 
@@ -695,10 +668,8 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     SCOPED_RAW_TIMER(&_send_data_ns);
     {
         _validate_selection.assign(num_rows, VALID_SEL_OK);
-        if (_need_validate_data) {
-            SCOPED_RAW_TIMER(&_validate_data_ns);
-            _validate_data(state, chunk);
-        }
+        SCOPED_RAW_TIMER(&_validate_data_ns);
+        _validate_data(state, chunk);
     }
     {
         uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);

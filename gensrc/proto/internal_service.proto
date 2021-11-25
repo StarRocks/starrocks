@@ -133,7 +133,7 @@ message PTabletWriterOpenRequest {
     required bool need_gen_rollup = 7; // Deprecated
     optional int64 load_mem_limit = 8;
     optional int64 load_channel_timeout_s = 9;
-    optional bool is_vectorized = 20;
+    optional bool is_vectorized = 20 [deprecated = true];
 };
 
 message PTabletWriterOpenResult {
