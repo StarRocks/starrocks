@@ -3914,6 +3914,46 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
+
+        sql = "select MAX(x1) from (select v2 as x1 from t0 union select v3 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: max(8: v2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  6:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  5:AGGREGATE (update serialize)\n" +
+                "  |  output: max(4: v2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:UNION"));
+
+        sql = "select MIN(x1) from (select distinct v2 as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: v2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+
+        sql = "select MIN(x1) from (select v2 as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: v2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
     }
 
     @Test
@@ -3957,6 +3997,36 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n"));
+
+        sql = "select SUM(x1) from (select v2 as x1 from t0 union select v3 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 4: v2\n" +
+                "  |  \n" +
+                "  6:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    HASH_PARTITIONED: 4: v2\n" +
+                "\n" +
+                "  5:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 4: v2\n"));
+
+        sql = "select SUM(x1) from (select v2 as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
     }
 
     @Test
