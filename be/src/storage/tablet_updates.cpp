@@ -1689,6 +1689,7 @@ struct RowsetLoadInfo {
 };
 
 Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
+    OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
             << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
@@ -1807,12 +1808,14 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     update_manager->index_cache().release(index_entry);
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
     LOG(INFO) << "link_from: finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
-              << " #pending:" << _pending_commits.size();
+              << " base tablet:" << base_tablet->tablet_id() << " #rowset:" << rowsets.size()
+              << " #pending:" << _pending_commits.size() << ". elapsed time=" << watch.get_elapse_second() << "s.";
     return Status::OK();
 }
 
 Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                                    vectorized::ChunkChanger* chunk_changer) {
+    OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
             << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
@@ -1849,7 +1852,6 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     for (int i = 0; i < src_rowsets.size(); i++) {
         const auto& src_rowset = src_rowsets[i];
-        LOG(INFO) << "begin to convert a history rowset. version=" << src_rowset->version();
 
         RowsetReleaseGuard guard(src_rowset->shared_from_this());
         auto beta_rowset = down_cast<BetaRowset*>(src_rowset.get());
@@ -1899,27 +1901,15 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         _tablet.release_push_lock();
 
         auto& new_rowset_load_info = new_rowset_load_infos[i];
-        // use src_rowset's meta as base, change some fields to new tablet
-        auto& rowset_meta_pb = new_rowset_load_info.rowset_meta_pb;
-        src_rowset->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
-
         new_rowset_load_info.num_segments = new_rowset->num_segments();
-        new_rowset_load_info.delvecs.resize(new_rowset_load_info.num_segments);
-
-        next_rowset_id += std::max(1U, (uint32_t)new_rowset_load_info.num_segments);
         new_rowset_load_info.rowset_id = next_rowset_id;
 
+        auto& rowset_meta_pb = new_rowset_load_info.rowset_meta_pb;
+        new_rowset->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
         rowset_meta_pb.set_rowset_seg_id(new_rowset_load_info.rowset_id);
-        rowset_meta_pb.set_rowset_id(0);
         rowset_meta_pb.set_rowset_id_v2(rid.to_string());
-        rowset_meta_pb.set_partition_id(_tablet.tablet_meta()->partition_id());
-        rowset_meta_pb.set_tablet_id(_tablet.tablet_id());
-        rowset_meta_pb.set_tablet_schema_hash(_tablet.schema_hash());
-        rowset_meta_pb.set_num_segments(new_rowset_load_info.num_segments);
 
-        LOG(INFO) << "new rowset has " << new_rowset->num_segments() << " segments";
-
-        VLOG(10) << "succeed to convert a history version=" << src_rowset->version();
+        next_rowset_id += std::max(1U, (uint32_t)new_rowset_load_info.num_segments);
     }
 
     TabletMetaPB meta_pb;
@@ -1976,7 +1966,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
     LOG(INFO) << "convert_from: finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
-              << " #pending:" << _pending_commits.size();
+              << " base tablet:" << base_tablet->tablet_id() << " #rowset:" << src_rowsets.size()
+              << " #pending:" << _pending_commits.size() << ". elapsed time=" << watch.get_elapse_second() << "s.";
     return Status::OK();
 }
 
