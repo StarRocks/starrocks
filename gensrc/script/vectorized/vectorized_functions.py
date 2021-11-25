@@ -473,6 +473,7 @@ vectorized_functions = [
     [120130, "to_base64", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::to_base64"],
     [120140, "md5", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::md5"],
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum"],
+    [120160, "sha2", "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2", "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
 
       # geo function
     [120000, "ST_Point", "VARCHAR", ["DOUBLE", "DOUBLE"], "GeoFunctions::st_point"],
