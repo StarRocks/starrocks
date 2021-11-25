@@ -598,11 +598,24 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testColumnNotEqualsConstant() throws Exception {
+        // check cardinality not 0
         String sql =
                 "select S_SUPPKEY,S_NAME from supplier where s_name <> 'Supplier#000000050' and s_name >= 'Supplier#000000086'";
         String plan = getCostExplain(sql);
-        // check cardinality not 0
         Assert.assertTrue(plan.contains("cardinality: 500000"));
+
+        // test_all_type column statistics are unknown
+        sql = "select t1a,t1b from test_all_type where t1a <> 'xxx'";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+
+        sql = "select t1b,t1c from test_all_type where t1c <> 10";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+
+        sql = "select t1b,t1c from test_all_type where id_date <> '2020-01-01'";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
     }
 
     @Test
@@ -663,5 +676,17 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0] ESTIMATE"));
+    }
+
+    @Test
+    public void testPartitionColumnColumnStatistics() throws Exception {
+        String sql = "select l_shipdate, count(1) from lineitem_partition where l_shipdate = '1992-01-01' group by l_shipdate";
+        String plan = getCostExplain(sql);
+        // check L_SHIPDATE is not unknown
+        Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
+
+        sql = "select count(1) from lineitem_partition where l_shipdate = '1992-01-01'";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
     }
 }
