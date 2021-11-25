@@ -28,11 +28,13 @@
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -54,7 +56,11 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
     LOG(INFO) << "begin to execute job. label=" << ctx->label << ", txn_id=" << ctx->txn_id
               << ", query_id=" << print_id(ctx->put_result.params.params.query_id);
     auto st = _exec_env->fragment_mgr()->exec_plan_fragment(
-            ctx->put_result.params, [ctx](PlanFragmentExecutor* executor) {
+            ctx->put_result.params,
+            [ctx](PlanFragmentExecutor* executor) {
+                ctx->mem_tracker = executor->runtime_state()->instance_mem_tracker();
+            },
+            [ctx](PlanFragmentExecutor* executor) {
                 ctx->commit_infos = std::move(executor->runtime_state()->tablet_commit_infos());
                 Status status = executor->status();
                 if (status.ok()) {
