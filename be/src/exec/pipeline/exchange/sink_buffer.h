@@ -135,24 +135,16 @@ public:
                            [](const auto& entry) { return entry.second.size() > config::pipeline_io_buffer_size; });
     }
 
-    // SinkBuffer needn't input request anymore.
     bool is_finishing() const { return _is_finishing; }
 
     bool is_finished() const {
         return _is_finishing                                               // SinkBuffer needn't input request anymore,
-               && !_is_rpc_task_active                                     // and rpc task is running,
-               && _in_flight_rpc_num.load(std::memory_order_acquire) == 0; // and there isn't in flight RPC.
+               && !_is_rpc_task_active                                     // and there isn't running rpc task,
+               && _in_flight_rpc_num.load(std::memory_order_acquire) == 0; // and there isn't in-flight RPC.
     }
 
     void decrease_running_sinkers() {
         if (--_num_remaining_sinkers == 0) {
-            // decrease_running_sinkers() is called by ExchangeSinkOperator::set_finished(),
-            // and is_finishing() is called by ExchangeSinkOperator::is_finishing().
-            // - In the normal cases, decrease_running_sinkers() is called after is_finishing()
-            // returns true, so it is meaningless to set _is_finishing here.
-            // - In the abnormal cases, such as query is cancelled, decrease_running_sinkers()
-            // may be called when is_finishing() still returns false, so _is_finishing can
-            // become true earlier here.
             _is_finishing = true;
         }
     }
@@ -303,9 +295,11 @@ private:
     std::mutex _mutex;
     // Events include 'new request' and 'channel ready'
     std::queue<TUniqueId, std::list<TUniqueId>> _events;
-    // Means that SinkBuffer needn't input chunk anymore.
-    // it becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.
-    std::atomic<bool> _is_finishing = false;
+
+    // True means that SinkBuffer needn't input chunk and send chunk anymore,
+    // but there may be still RPC task or in-flight RPC running.
+    // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.
+    bool _is_finishing = false;
     bool _is_rpc_task_active = false;
     int32_t _expected_eos = 0;
 
