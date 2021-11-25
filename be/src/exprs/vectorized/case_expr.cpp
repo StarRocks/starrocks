@@ -250,9 +250,9 @@ private:
         size_t size = when_columns[0]->size();
         builder.reserve(size);
 
-        bool columns_has_null = false;
+        bool when_columns_has_null = false;
         for (ColumnPtr& column : when_columns) {
-            columns_has_null |= column->has_null();
+            when_columns_has_null |= column->has_null();
         }
 
         // max case size in use SIMD CASE WHEN implements
@@ -260,8 +260,13 @@ private:
 
         // optimization for no-nullable Arithmetic Type
         if constexpr (isArithmeticPT<ResultType>) {
+            bool then_columns_has_null = false;
+            for (const auto& column : then_columns) {
+                then_columns_has_null |= column->has_null();
+            }
+
             bool check_could_use_multi_simd_selector =
-                    !columns_has_null && when_columns.size() <= max_simd_case_when_size && _has_else_expr;
+                    !when_columns_has_null && when_columns.size() <= max_simd_case_when_size && !then_columns_has_null;
 
             if (check_could_use_multi_simd_selector) {
                 int then_column_size = then_columns.size();
@@ -301,7 +306,7 @@ private:
         }
 
         size_t view_size = when_viewers.size();
-        if (!columns_has_null) {
+        if (!when_columns_has_null) {
             for (int row = 0; row < size; ++row) {
                 int i = 0;
                 while (i < view_size && !(when_viewers[i].value(row))) {
