@@ -410,6 +410,14 @@ public class DecodeRewriteTest extends PlanTestBase{
         String sql = "select max(S_NAME) as b from supplier group by S_ADDRESS order by b";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
+
+        sql = "select substr(S_ADDRESS, 0, 1) from supplier group by substr(S_ADDRESS, 0, 1) " +
+                "order by substr(S_ADDRESS, 0, 1)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 11> : <string id 9>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 11> : substr(10: S_ADDRESS, 0, 1)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 

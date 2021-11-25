@@ -661,7 +661,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             }
         }
         PhysicalDecodeOperator decodeOperator = new PhysicalDecodeOperator(ImmutableMap.copyOf(dictToStrings),
-                context.stringFunctions);
+                Maps.newHashMap(context.stringFunctions));
         OptExpression result = OptExpression.create(decodeOperator, childExpr);
         result.setStatistics(childExpr.get(0).getStatistics());
         result.setLogicalProperty(childExpr.get(0).getLogicalProperty());
