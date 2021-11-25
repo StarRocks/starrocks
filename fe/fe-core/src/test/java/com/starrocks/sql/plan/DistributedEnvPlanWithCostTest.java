@@ -1,12 +1,21 @@
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.SqlParser;
+import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.planner.AggregationNode;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.StringReader;
 
 public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @BeforeClass
@@ -138,6 +147,79 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("AGGREGATE (merge finalize)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+
+    public static String getInsertExecPlan(String originStmt) throws Exception {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        SqlScanner input =
+                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
+        SqlParser parser = new SqlParser(input);
+        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+        connectContext.getDumpInfo().setOriginStmt(originStmt);
+        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
+
+        String ret = execPlan.getExplainString(TExplainLevel.NORMAL);
+        //        System.out.println(ret);
+        return ret;
+    }
+
+    @Test
+    public void testInsert() throws Exception {
+        String sql = "insert into test_all_type select * from test_all_type limit 5";
+        String planFragment = getInsertExecPlan(sql);
+        Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: t1a | 2: t1b | 3: t1c | 4: t1d | 5: t1e | 6: t1f | 7: t1g | 8: id_datetime | 9: id_date | 10: id_decimal\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  OLAP TABLE SINK\n" +
+                "    TUPLE ID: 1\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 5\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: test_all_type\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: test_all_type\n" +
+                "     tabletRatio=3/3\n" +
+                "     tabletList=10042,10044,10046\n" +
+                "     cardinality=5\n" +
+                "     avgRowSize=10.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 5"));
+
+
+        sql = "insert into test_all_type select * from test_all_type";
+        planFragment = getInsertExecPlan(sql);
+        Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: t1a | 2: t1b | 3: t1c | 4: t1d | 5: t1e | 6: t1f | 7: t1g | 8: id_datetime | 9: id_date | 10: id_decimal\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  OLAP TABLE SINK\n" +
+                "    TUPLE ID: 1\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: test_all_type\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: test_all_type\n" +
+                "     tabletRatio=3/3\n" +
+                "     tabletList=10042,10044,10046\n" +
+                "     cardinality=6000000\n" +
+                "     avgRowSize=10.0\n" +
+                "     numNodes=0"));
     }
 
     @Test
