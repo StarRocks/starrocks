@@ -25,7 +25,6 @@ public class InsertPlanTest extends PlanTestBase {
     @Test
     public void testInsert() throws Exception {
         String explainString = getInsertExecPlan("insert into t0 values(1,2,3)");
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: expr | 2: expr | 3: expr\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -39,7 +38,6 @@ public class InsertPlanTest extends PlanTestBase {
                 "         1 | 2 | 3"));
 
         explainString = getInsertExecPlan("insert into t0(v1) values(1),(2)");
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: expr | 2: expr | 3: expr\n" +
                 "  PARTITION: UNPARTITIONED\n" +
