@@ -290,7 +290,7 @@ public class ScalarOperatorFunctionsTest {
         Assert.assertEquals("2019-05-09T09:10:45", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("20190509-9:10:45"),
                         ConstantOperator.createVarchar("%Y%m%d-%k:%i:%S")).getDatetime().toString());
-        Assert.assertEquals("2020-02-21",
+        Assert.assertEquals("2020-02-21 00:00:00",
                 ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("2020-02-21"),
                         ConstantOperator.createVarchar("%Y-%m-%d")).toString());
 
@@ -306,9 +306,23 @@ public class ScalarOperatorFunctionsTest {
                 () -> ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("2020-2-21"),
                         ConstantOperator.createVarchar("%w")).getVarchar());
 
+        Assert.assertThrows(DateTimeParseException.class,
+                () -> ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("2020-02-21"),
+                        ConstantOperator.createVarchar("%w")).getVarchar());
+
         Assert.assertThrows("Unable to obtain LocalDateTime", DateTimeException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
                         ConstantOperator.createVarchar("%Y-%m-%d %h:%i:%s")).getDatetime().toString());
+    }
+
+    @Test
+    public void str2Date() {
+        Assert.assertEquals("2013-05-10T00:00", ScalarOperatorFunctions
+                .str2Date(ConstantOperator.createVarchar("2013,05,10"), ConstantOperator.createVarchar("%Y,%m,%d"))
+                .getDate().toString());
+        Assert.assertEquals("2013-05-17T00:00", ScalarOperatorFunctions
+                .str2Date(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).getDate().toString());
     }
 
     @Test
