@@ -417,7 +417,7 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     EXPECT_EQ(dst_datum.get_int64(), 1);
 }
 
-TEST_F(SchemaChangeTest, schema_change_directly) {
+TEST_F(SchemaChangeTest, convert_from) {
     CreateSrcTablet(1001);
     StorageEngine* engine = StorageEngine::instance();
     TCreateTabletReq create_tablet_req;

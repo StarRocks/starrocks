@@ -1688,23 +1688,24 @@ struct RowsetLoadInfo {
     vector<DelVectorPtr> delvecs;
 };
 
-Status TabletUpdates::schema_change_linked(int64_t request_version, Tablet* base_tablet) {
+Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << "schema_change_linked is only allowed in schema change process";
-    LOG(INFO) << "schema_change_linked start tablet:" << _tablet.tablet_id() << " request_version:" << request_version
+            << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
+            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    LOG(INFO) << "start link_from. "
+              << " new tablet_id:" << _tablet.tablet_id() << " request_version:" << request_version
               << " #pending:" << _pending_commits.size();
     int64_t max_version = base_tablet->updates()->max_version();
     if (max_version < request_version) {
-        LOG(WARNING) << "schema_change_linked base_tablet's max_version:" << max_version
-                     << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
-                     << " base_tablet:" << base_tablet->tablet_id();
-        return Status::InternalError("schema_change_linked max_version < request version");
+        LOG(WARNING) << "link_from: base_tablet's max_version:" << max_version << " < alter_version:" << request_version
+                     << " tablet:" << _tablet.tablet_id() << " base_tablet:" << base_tablet->tablet_id();
+        return Status::InternalError("link_from: max_version < request version");
     }
     vector<RowsetSharedPtr> rowsets;
     EditVersion version;
     Status st = base_tablet->updates()->get_applied_rowsets(request_version, &rowsets, &version);
     if (!st.ok()) {
-        LOG(WARNING) << "schema_change_linked get base tablet rowsets error tablet:" << base_tablet->tablet_id()
+        LOG(WARNING) << "link_from: get base tablet rowsets error tablet:" << base_tablet->tablet_id()
                      << " version:" << request_version << " reason:" << st;
         return st;
     }
@@ -1805,29 +1806,31 @@ Status TabletUpdates::schema_change_linked(int64_t request_version, Tablet* base
     index.unload();
     update_manager->index_cache().release(index_entry);
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
-    LOG(INFO) << "schema_change_linked finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
+    LOG(INFO) << "link_from: finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
               << " #pending:" << _pending_commits.size();
     return Status::OK();
 }
 
-Status TabletUpdates::schema_change_directly(int64_t request_version, const std::shared_ptr<Tablet>& base_tablet,
-                                             vectorized::ChunkChanger* chunk_changer) {
+Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                                   vectorized::ChunkChanger* chunk_changer) {
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << "schema_change_directly is only allowed in schema change process";
-    LOG(INFO) << "schema_change_directly start tablet:" << _tablet.tablet_id() << " request_version:" << request_version
+            << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
+            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    LOG(INFO) << "start convert_from. "
+              << " new tablet_id:" << _tablet.tablet_id() << " request_version:" << request_version
               << " #pending:" << _pending_commits.size();
     int64_t max_version = base_tablet->updates()->max_version();
     if (max_version < request_version) {
-        LOG(WARNING) << "schema_change_directly base_tablet's max_version:" << max_version
+        LOG(WARNING) << "convert_from: base_tablet's max_version:" << max_version
                      << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
-        return Status::InternalError("schema_change_directly max_version < request_version");
+        return Status::InternalError("convert_from: max_version < request_version");
     }
     std::vector<RowsetSharedPtr> src_rowsets;
     EditVersion version;
     Status status = base_tablet->updates()->get_applied_rowsets(request_version, &src_rowsets, &version);
     if (!status.ok()) {
-        LOG(WARNING) << "schema_change_directly get base tablet rowsets error tablet:" << base_tablet->tablet_id()
+        LOG(WARNING) << "convert_from: get base tablet rowsets error tablet:" << base_tablet->tablet_id()
                      << " request_version:" << request_version << " reason:" << status;
         return status;
     }
@@ -1972,7 +1975,7 @@ Status TabletUpdates::schema_change_directly(int64_t request_version, const std:
     }
 
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
-    LOG(INFO) << "schema_change_directly finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
+    LOG(INFO) << "convert_from: finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
               << " #pending:" << _pending_commits.size();
     return Status::OK();
 }

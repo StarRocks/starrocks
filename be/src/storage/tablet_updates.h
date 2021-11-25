@@ -155,10 +155,10 @@ public:
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
-    Status schema_change_linked(int64_t request_version, Tablet* base_tablet);
+    Status link_from(Tablet* base_tablet, int64_t request_version);
 
-    Status schema_change_directly(int64_t request_version, const std::shared_ptr<Tablet>& base_tablet,
-                                  vectorized::ChunkChanger* chunk_changer);
+    Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        vectorized::ChunkChanger* chunk_changer);
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta);
 
