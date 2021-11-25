@@ -292,8 +292,9 @@ public:
         if (_options.is_decoded) {
             if (_data.size != _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE) {
                 std::stringstream ss;
-                ss << "Size information unmatched, _data.size:" << _data.size
-                   << ", _num_elements:" << _num_elements << ", expected size is " << _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE;
+                ss << "Size information unmatched, _data.size:" << _data.size << ", _num_elements:" << _num_elements
+                   << ", expected size is "
+                   << _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE;
                 return Status::InternalError(ss.str());
             }
         }
@@ -385,7 +386,7 @@ private:
             _decoded.resize(_num_element_after_padding * _size_of_element);
             RETURN_IF_ERROR(_decode_to(_decoded.data()));
             // release original memory
-            if (_options.page_handle && !_options.is_decoded) {
+            if (_options.page_handle) {
                 _options.page_handle->release_memory();
             }
         }

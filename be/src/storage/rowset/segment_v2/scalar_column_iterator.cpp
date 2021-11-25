@@ -204,8 +204,8 @@ Status ScalarColumnIterator::_load_dict_page() {
     // read dictionary page
     Slice dict_data;
     PageFooterPB dict_footer;
-    RETURN_IF_ERROR(
-            _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
+    RETURN_IF_ERROR(_reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data,
+                                       &dict_footer, false));
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
     if (_reader->column_type() == OLAP_FIELD_TYPE_CHAR) {
@@ -236,7 +236,8 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
     // if enable page cache, bitshuffle encoding page will be decoded after read
     // otherwise bitshuffle encoding page will be decoded in page_decoder init
     size_t type = _reader->encoding_info()->encoding();
-    bool is_decoded = _opts.use_page_cache && (type == EncodingTypePB::DICT_ENCODING ||  type == EncodingTypePB::BIT_SHUFFLE);
+    bool is_decoded =
+            _opts.use_page_cache && (type == EncodingTypePB::DICT_ENCODING || type == EncodingTypePB::BIT_SHUFFLE);
     RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer, true));
     RETURN_IF_ERROR(parse_page(&_page, std::move(handle), page_body, footer.data_page_footer(),
                                _reader->encoding_info(), iter.page(), iter.page_index(), is_decoded));
