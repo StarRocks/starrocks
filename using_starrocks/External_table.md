@@ -84,7 +84,7 @@ PROPERTIES (
 
 ### 谓词下推
 
-StarRocks支持对ElasticSearch表进行谓词下推，把过滤条件推给ElasticSearch进行执行，让执行尽量靠近存储，提高查询性能。目前支持哪些下推的算子如下表：
+StarRocks支持对ElasticSearch表进行谓词下推，把过滤条件推给ElasticSearch进行执行，让执行尽量靠近存储，提高查询性能。目前支持下推的算子如下表：
 
 |   SQL syntax  |   ES syntax  |
 | :---: | :---: |
@@ -180,7 +180,7 @@ select * from es_table where esquery(k4, ' {
 
 ### 创建Hive资源
 
-一个Hive资源对应一个Hive集群，管理StarRocks使用的Hive集群相关配置，如Hive meta store地址等。创建Hive外表的时候需要指定使用哪个Hive资源。
+StarRocks使用Hive资源来管理使用到的Hive集群相关配置，如Hive Metastore地址等，一个Hive资源对应一个Hive集群。创建Hive外表的时候需要指定使用哪个Hive资源。
 
 ~~~sql
 -- 创建一个名为hive0的Hive资源
@@ -261,7 +261,7 @@ PROPERTIES (
     | --- | --- | ---|
     |   INT/INTEGER  | INT    |
     |   BIGINT  | BIGINT    |
-    |   TIMESTAMP  | DATETIME    |Timestamp转成Datetime，会损失精度和时区信息，<br/>根据sessionVariable中的时区转成无时区Datatime|
+    |   TIMESTAMP  | DATETIME    |TIMESTAMP转成DATETIME，会损失精度和时区信息，<br/>根据sessionVariable中的时区转成无时区Datatime|
     |  STRING  | VARCHAR   |
     |  VARCHAR  | VARCHAR   |
     |  CHAR  | CHAR   |
