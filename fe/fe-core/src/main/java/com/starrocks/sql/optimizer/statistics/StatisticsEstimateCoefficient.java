@@ -19,4 +19,6 @@ public class StatisticsEstimateCoefficient {
     public static final Double PREDICATE_UNKNOWN_FILTER_COEFFICIENT = 0.25;
     // constant value compare constant value filter coefficient
     public static final Double CONSTANT_TO_CONSTANT_PREDICATE_COEFFICIENT = 0.5;
+    // coefficient of overlap percent which overlap range is infinite
+    public static final Double OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT = 0.5;
 }
