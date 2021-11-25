@@ -314,6 +314,20 @@ build_rapidjson() {
     cp -r $TP_SOURCE_DIR/$RAPIDJSON_SOURCE/include/rapidjson $TP_INCLUDE_DIR/
 }
 
+# rapidjson
+build_simdjson() {
+    check_if_source_exist $SIMDJSON_SOURCE
+    cd $TP_SOURCE_DIR/$SIMDJSON_SOURCE
+
+    #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
+    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    $CMAKE_CMD -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" ..
+    $CMAKE_CMD --build .
+    mkdir -p $TP_INSTALL_DIR/lib && cp $TP_SOURCE_DIR/$SIMDJSON_SOURCE/$BUILD_DIR/libsimdjson.a $TP_INSTALL_DIR/lib
+
+    cp -r $TP_SOURCE_DIR/$SIMDJSON_SOURCE/include/* $TP_INCLUDE_DIR/
+}
+
 # snappy
 build_snappy() {
     check_if_source_exist $SNAPPY_SOURCE
@@ -741,6 +755,7 @@ build_gflags
 build_gtest
 build_glog
 build_rapidjson
+build_simdjson
 build_snappy
 build_gperftools
 build_curl
