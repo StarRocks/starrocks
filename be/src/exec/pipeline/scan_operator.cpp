@@ -114,12 +114,11 @@ void ScanOperator::_trigger_next_scan(RuntimeState* state) {
     PriorityThreadPool::Task task;
     _is_io_task_active.store(true, std::memory_order_release);
     task.work_function = [this, state]() {
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(state->instance_mem_tracker());
-        DeferOp op([&] {
-            tls_thread_status.set_mem_tracker(prev_tracker);
-            _is_io_task_active.store(false, std::memory_order_release);
-        });
-        _chunk_source->buffer_next_batch_chunks_blocking(_batch_size, _is_finished);
+        {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+            _chunk_source->buffer_next_batch_chunks_blocking(_batch_size, _is_finished);
+        }
+        _is_io_task_active.store(false, std::memory_order_release);
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
