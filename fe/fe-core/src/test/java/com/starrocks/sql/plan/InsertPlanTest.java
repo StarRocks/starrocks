@@ -25,7 +25,6 @@ public class InsertPlanTest extends PlanTestBase {
     @Test
     public void testInsert() throws Exception {
         String explainString = getInsertExecPlan("insert into t0 values(1,2,3)");
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: expr | 2: expr | 3: expr\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -39,7 +38,6 @@ public class InsertPlanTest extends PlanTestBase {
                 "         1 | 2 | 3"));
 
         explainString = getInsertExecPlan("insert into t0(v1) values(1),(2)");
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: expr | 2: expr | 3: expr\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -59,6 +57,33 @@ public class InsertPlanTest extends PlanTestBase {
                 "         1\n" +
                 "         2\n" +
                 "     use vectorized: true"));
+
+        explainString = getInsertExecPlan("insert into t0(v1) select v5 from t1");
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:2: v5 | 4: expr | 5: expr\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  OLAP TABLE SINK\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: v5\n" +
+                "  |  <slot 4> : NULL\n" +
+                "  |  <slot 5> : NULL\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t1\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=1.0\n" +
+                "     numNodes=0\n" +
+                "     use vectorized: true\n"));
     }
 
     @Test

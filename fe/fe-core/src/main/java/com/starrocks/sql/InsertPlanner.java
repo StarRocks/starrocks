@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -91,9 +92,17 @@ public class InsertPlanner {
 
         //7. Build fragment exec plan
         PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                insertRelation.getQueryRelation().getColumnOutputNames());
+
+        ExecPlan execPlan;
+        if (((PhysicalOperator) optimizedPlan.getOp()).getLimit() != -1) {
+            execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    insertRelation.getQueryRelation().getColumnOutputNames());
+        } else {
+            execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
+                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    insertRelation.getQueryRelation().getColumnOutputNames());
+        }
 
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
