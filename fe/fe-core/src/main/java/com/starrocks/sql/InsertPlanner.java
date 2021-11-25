@@ -94,9 +94,17 @@ public class InsertPlanner {
 
         //7. Build fragment exec plan
         PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                insertRelation.getQueryRelation().getColumnOutputNames());
+
+        ExecPlan execPlan;
+        if (optimizedPlan.getOp().hasLimit()) {
+            execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    insertRelation.getQueryRelation().getColumnOutputNames());
+        } else {
+            execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
+                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    insertRelation.getQueryRelation().getColumnOutputNames());
+        }
 
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
