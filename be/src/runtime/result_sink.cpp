@@ -26,6 +26,7 @@
 #include "common/config.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/file_result_writer.h"
 #include "runtime/mem_tracker.h"
@@ -102,6 +103,7 @@ Status ResultSink::open(RuntimeState* state) {
 }
 
 Status ResultSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     return _writer->append_chunk(chunk);
 }
 
