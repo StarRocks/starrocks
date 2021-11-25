@@ -248,7 +248,7 @@ public:
         }
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _compressed_size = decode_fixed32_le((const uint8_t*)&_data[4]);
-        if (_compressed_size != _data.size && !_options.is_decoded) {
+        if (_compressed_size != _data.size && !_options.use_cache) {
             std::stringstream ss;
             ss << "Size information unmatched, _compressed_size:" << _compressed_size
                << ", _num_elements:" << _num_elements << ", data size:" << _data.size;
@@ -289,7 +289,7 @@ public:
             ss << "invalid size info. size of element:" << _size_of_element << ", SIZE_OF_TYPE:" << SIZE_OF_TYPE;
             return Status::InternalError(ss.str());
         }
-        if (_options.is_decoded) {
+        if (_options.use_cache) {
             if (_data.size != _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE) {
                 std::stringstream ss;
                 ss << "Size information unmatched, _data.size:" << _data.size << ", _num_elements:" << _num_elements
@@ -396,7 +396,7 @@ private:
 
     Status _decode_to(uint8_t* to) {
         char* in = const_cast<char*>(&_data[BITSHUFFLE_PAGE_HEADER_SIZE]);
-        if (!_options.is_decoded) {
+        if (!_options.use_cache) {
             int64_t bytes = bitshuffle::decompress_lz4(in, to, _num_element_after_padding, _size_of_element, 0);
             if (PREDICT_FALSE(bytes < 0)) {
                 // Ideally, this should not happen.

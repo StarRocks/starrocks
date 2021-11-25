@@ -262,7 +262,7 @@ private:
 
 Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                      const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
-                     uint32_t page_index, bool is_decoded) {
+                     uint32_t page_index, bool use_cache) {
     auto page = std::make_unique<ParsedPageV1>();
     page->_page_handle = std::move(handle);
 
@@ -276,7 +276,7 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     Slice data_slice(body.data, body.size - null_size);
     PageDecoder* decoder = nullptr;
     PageDecoderOptions opts;
-    opts.is_decoded = is_decoded;
+    opts.use_cache = use_cache;
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
     RETURN_IF_ERROR(page->_data_decoder->init());
@@ -293,7 +293,7 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
 
 Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                      const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
-                     uint32_t page_index, bool is_decoded) {
+                     uint32_t page_index, bool use_cache) {
     auto page = std::make_unique<ParsedPageV2>();
     page->_page_handle = std::move(handle);
 
@@ -335,7 +335,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     PageDecoderOptions opts;
     opts.page_handle = &(page->_page_handle);
     opts.enable_direct_copy = true;
-    opts.is_decoded = is_decoded;
+    opts.use_cache = use_cache;
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
     RETURN_IF_ERROR(page->_data_decoder->init());
@@ -351,13 +351,13 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
 
 Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                   const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
-                  uint32_t page_index, bool is_decoded) {
+                  uint32_t page_index, bool use_cache) {
     uint32_t version = footer.has_format_version() ? footer.format_version() : 1;
     if (version == 1) {
-        return parse_page_v1(result, std::move(handle), body, footer, encoding, page_pointer, page_index, is_decoded);
+        return parse_page_v1(result, std::move(handle), body, footer, encoding, page_pointer, page_index, use_cache);
     }
     if (version == 2) {
-        return parse_page_v2(result, std::move(handle), body, footer, encoding, page_pointer, page_index, is_decoded);
+        return parse_page_v2(result, std::move(handle), body, footer, encoding, page_pointer, page_index, use_cache);
     }
     return Status::InternalError(strings::Substitute("Unknown page format version $0", version));
 }
