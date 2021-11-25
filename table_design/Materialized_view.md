@@ -96,7 +96,7 @@ tuple ids: 0
 
 ### **物化视图函数支持**
 
-当前的物化视图只支持对单个表的聚合。目前支持以下[聚合函数](https://cloud.google.com/bigquery/docs/reference/standard-sql/aggregate_functions)：
+当前的物化视图只支持对单个表的聚合。目前支持以下聚合函数：
 
 * COUNT
 * MAX
