@@ -256,7 +256,7 @@ public class ShowAlterStmt extends ShowStmt {
         ImmutableList<String> titleNames = null;
         if (type == AlterType.ROLLUP || type == AlterType.MATERIALIZED_VIEW) {
             titleNames = RollupProcDir.TITLE_NAMES;
-        } else if (type == AlterType.COLUMN ) {
+        } else if (type == AlterType.COLUMN) {
             titleNames = SchemaChangeProcDir.TITLE_NAMES;
         }
 
