@@ -113,6 +113,7 @@ public:
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
 public:
+    MemTracker* mem_tracker = nullptr;
     // load type, eg: ROUTINE LOAD/MANUAL LOAD
     TLoadType::type load_type;
     // load data source: eg: KAFKA/RAW
