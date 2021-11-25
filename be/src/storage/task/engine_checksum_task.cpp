@@ -43,8 +43,7 @@ EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet
 }
 
 OLAPStatus EngineChecksumTask::execute() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     OLAPStatus res = _compute_checksum();
     return res;

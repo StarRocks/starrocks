@@ -36,8 +36,7 @@ Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSh
           _refs_by_reader(0) {}
 
 Status Rowset::load() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
 
     // if the state is ROWSET_UNLOADING it means close() is called
     // and the rowset is already loaded, and the resource is not closed yet.

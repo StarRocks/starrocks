@@ -36,8 +36,7 @@ Status CumulativeCompaction::compact() {
     TRACE("rowsets picked");
     TRACE_COUNTER_INCREMENT("input_rowsets_count", _input_rowsets.size());
 
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
 
     // 3. do cumulative compaction, merge rowsets
     RETURN_IF_ERROR(do_compaction());
