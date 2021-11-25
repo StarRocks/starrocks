@@ -71,6 +71,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  <slot 2> : 2: v5\n" +
                 "  |  <slot 4> : NULL\n" +
                 "  |  <slot 5> : NULL\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t1\n" +
@@ -80,8 +81,9 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=17.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=1.0\n" +
+                "     numNodes=0\n" +
+                "     use vectorized: true\n"));
     }
 
     @Test
