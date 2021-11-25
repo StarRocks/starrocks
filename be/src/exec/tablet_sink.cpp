@@ -1088,8 +1088,7 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
 }
 
 void OlapTableSink::_send_chunk_process() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_runtime_state->instance_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
 
     SCOPED_RAW_TIMER(&_non_blocking_send_ns);
     while (true) {
