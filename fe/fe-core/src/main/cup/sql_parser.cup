@@ -1029,17 +1029,13 @@ alter_system_clause ::=
     {:
         RESULT = new AddBackendClause(hostPorts, clusterName);
     :}
-    | KW_DROP KW_BACKEND string_list:hostPorts
+    | KW_DROP KW_BACKEND string_list:hostPorts opt_force:force
     {:
-        RESULT = new DropBackendClause(hostPorts, false);
+        RESULT = new DropBackendClause(hostPorts, force);
     :}
     | KW_DROPP KW_BACKEND string_list:hostPorts
     {:
         RESULT = new DropBackendClause(hostPorts, true, true);
-    :}
-    | KW_DROP KW_BACKEND string_list:hostPorts KW_FORCE
-    {:
-        RESULT = new DropBackendClause(hostPorts, true);
     :}
     | KW_DECOMMISSION KW_BACKEND string_list:hostPorts
     {:
@@ -1729,7 +1725,7 @@ drop_stmt ::=
         RESULT = new DropFunctionStmt(functionName, args);
     :}
     /* Table */
-    | KW_DROP KW_TABLE opt_force:force opt_if_exists:ifExists table_name:name
+    | KW_DROP KW_TABLE opt_if_exists:ifExists table_name:name opt_force:force
     {:
         RESULT = new DropTableStmt(ifExists, name, force);
     :}

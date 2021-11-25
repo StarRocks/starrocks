@@ -217,11 +217,13 @@ public class SystemInfoService {
                                 .map(Tablet::getId).anyMatch(tabletIds::contains);
 
                         if (existIntersection) {
-                            String errMsg = String.format("There is a single duplication of the olap table " +
-                                    "[Such as %s.%s]" + " in the current cluster that has data on backend[%s:%d], " +
-                                    "To avoid data loss, please confirm again and use the forced DROP SQL to operate." +
-                                    "\n[ALTER SYSTEM DROP BACKEND <backends> FORCE]", db.getFullName(), table.getName(),
-                                    droppedBackend.getHost(), droppedBackend.getHeartbeatPort());
+                            String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
+                                        " have only one replica. To avoid data loss," +
+                                        " please change the replication_num of [%s.%s] to three." +
+                                        " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
+                                        " can be used to forcibly drop the backend. ",
+                                    db.getFullName(), table.getName(), droppedBackend.getHost(),
+                                    droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
                             throw new RuntimeException(errMsg);
                         }
                     });
