@@ -328,7 +328,7 @@ public class AnalyzeSingleTest {
                         "abs(`v1`)," +
                         "`v1` * `v1` / `v1` % `v1` + `v1` - `v1` DIV `v1`,`v2` & ~ `v1` | `v3` ^ 1," +
                         "`v1` + 20," +
-                        "CASE`v2` WHEN `v3` THEN 1 ELSE 0 END",
+                        "CASE `v2` WHEN `v3` THEN 1 ELSE 0 END",
                 String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess(
