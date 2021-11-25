@@ -165,9 +165,9 @@ private:
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
-    RuntimeProfile::Counter* _rowsets_read_number = nullptr;
-    RuntimeProfile::Counter* _segments_read_number = nullptr;
-    RuntimeProfile::Counter* _total_columns_data_page_number = nullptr;
+    RuntimeProfile::Counter* _rowsets_read_count = nullptr;
+    RuntimeProfile::Counter* _segments_read_count = nullptr;
+    RuntimeProfile::Counter* _total_columns_data_page_number_count = nullptr;
 };
 
 } // namespace starrocks::vectorized

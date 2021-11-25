@@ -91,10 +91,10 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _chunk_copy_timer = ADD_CHILD_TIMER(_scan_profile, "ChunkCopy", "SegmentRead");
     _decompress_timer = ADD_CHILD_TIMER(_scan_profile, "DecompressT", "SegmentRead");
     _index_load_timer = ADD_CHILD_TIMER(_scan_profile, "IndexLoad", "SegmentRead");
-    _rowsets_read_number = ADD_CHILD_COUNTER(_scan_profile, "RowsetsReadNum", TUnit::UNIT, "SegmentRead");
-    _segments_read_number = ADD_CHILD_COUNTER(_scan_profile, "SegmentsReadNum", TUnit::UNIT, "SegmentRead");
-    _total_columns_data_page_number =
-            ADD_CHILD_COUNTER(_scan_profile, "TotalColumnsDataPageNum", TUnit::UNIT, "SegmentRead");
+    _rowsets_read_count = ADD_CHILD_COUNTER(_scan_profile, "RowsetsReadCount", TUnit::UNIT, "SegmentRead");
+    _segments_read_count = ADD_CHILD_COUNTER(_scan_profile, "SegmentsReadCount", TUnit::UNIT, "SegmentRead");
+    _total_columns_data_page_count =
+            ADD_CHILD_COUNTER(_scan_profile, "TotalColumnsDataPageCount", TUnit::UNIT, "SegmentRead");
 
     // IOTime
     _io_timer = ADD_TIMER(_scan_profile, "IOTime");
@@ -393,9 +393,9 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
 
-    COUNTER_UPDATE(_rowsets_read_number, _reader->stats().rowsets_read_number);
-    COUNTER_UPDATE(_segments_read_number, _reader->stats().segments_read_number);
-    COUNTER_UPDATE(_total_columns_data_page_number, _reader->stats().total_columns_data_page_number);
+    COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
+    COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
+    COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
 
