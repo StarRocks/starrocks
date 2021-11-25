@@ -285,7 +285,7 @@ TEST_F(JsonFunctionsTest, json_minify_test) {
         size_t dstlen{};
         JsonFunctions::minify_json_to_string(val, buf_ptr, dstlen);
         ASSERT_EQ(std::string(buf_ptr.get(), dstlen), "{\"test\":[{\"val1\":1,\"val2\":2},{\"val1\":1,\"val2\":2}]}");
-        ASSERT_EQ(dstlen, 20);
+        ASSERT_EQ(dstlen, 50);
 }
 
 } // namespace vectorized

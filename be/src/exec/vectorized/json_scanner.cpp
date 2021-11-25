@@ -436,7 +436,6 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs,
         return;
     }
 
-
     std::vector<SlotDescriptor*> ordered_slot_descs(*slot_descs);
 
     std::set<std::string> key_set;
