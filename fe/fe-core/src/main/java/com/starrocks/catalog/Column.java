@@ -27,7 +27,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -128,12 +130,13 @@ public class Column implements Writable {
         this.isAggregationTypeImplicit = false;
         this.isKey = isKey;
         this.isAllowNull = isAllowNull;
-        // this for compatible previous version
         if (defaultValue != null) {
-            if (defaultValue.isExpr) {
-                this.defaultExpr = new DefaultExpr(defaultValue.expr.toSql());
+            if (defaultValue.expr instanceof StringLiteral) {
+                this.defaultValue = ((StringLiteral) defaultValue.expr).getValue();
+            } else if (defaultValue.expr instanceof NullLiteral) {
+                this.defaultExpr = null;
             } else {
-                this.defaultValue = defaultValue.value;
+                this.defaultExpr = new DefaultExpr(defaultValue.expr.toSql());
             }
         }
         this.comment = comment;

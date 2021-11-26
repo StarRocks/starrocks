@@ -46,7 +46,7 @@ public class ColumnDef {
      *     k1 INT NULL
      *     k1 INT NULL DEFAULT NULL
      *
-     * ColumnnDef will be transformed to Column in Analysis phase, and in Column, default value is a String.
+     * ColumnDef will be transformed to Column in Analysis phase, and in Column, default value is a String.
      * No matter does the user set the default value as NULL explicitly, or not set default value,
      * the default value in Column will be "null", so that StarRocks can not distinguish between "not set" and "set as null".
      *
@@ -57,21 +57,19 @@ public class ColumnDef {
      */
     public static class DefaultValue {
         public boolean isSet;
-        public boolean isExpr;
-        public String value;
         public Expr expr;
 
         public DefaultValue(boolean isSet, String value) {
             this.isSet = isSet;
-            this.value = value;
-            this.isExpr = false;
-            this.expr = null;
+            if (value == null) {
+                this.expr = NullLiteral.create(Type.VARCHAR);
+            } else {
+                this.expr = new StringLiteral(value);
+            }
         }
 
         public DefaultValue(Expr expr) {
             this.isSet = true;
-            this.value = expr.toSql();
-            this.isExpr = true;
             this.expr = expr;
         }
 
@@ -115,8 +113,14 @@ public class ColumnDef {
         return isAllowNull;
     }
 
+    // only for test
     public String getDefaultValue() {
-        return defaultValue.value;
+        if (defaultValue.expr instanceof StringLiteral)  {
+            return ((StringLiteral) defaultValue.expr).getValue();
+        } else if (defaultValue.expr instanceof NullLiteral) {
+            return null;
+        }
+        return null;
     }
 
     public String getName() {
@@ -219,15 +223,17 @@ public class ColumnDef {
             throw new AnalysisException(String.format("Invalid default value for '%s'", name));
         }
 
-        if (defaultValue.isSet && !defaultValue.isExpr && defaultValue.value != null) {
+        if (defaultValue.isSet && defaultValue.expr instanceof LiteralExpr) {
             try {
-                validateDefaultValue(type, defaultValue.value);
+                if (defaultValue.expr instanceof StringLiteral) {
+                    validateDefaultValue(type, ((StringLiteral) defaultValue.expr).getValue());
+                } else if (defaultValue.expr instanceof NullLiteral) {
+                    validateDefaultValue(type, null);
+                }
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("Invalid default value for '%s': %s", name, e.getMessage()));
             }
-        }
-
-        if (defaultValue.isSet && defaultValue.expr != null) {
+        } else if (defaultValue.isSet) {
             try {
                 validateDefaultExpr(type, defaultValue.expr);
             } catch (AnalysisException e) {
@@ -322,11 +328,7 @@ public class ColumnDef {
         }
 
         if (defaultValue.isSet) {
-            if(defaultValue.isExpr) {
-                sb.append("DEFAULT ").append(toDefaultExpr(defaultValue.expr)).append(" ");
-            } else {
-                sb.append("DEFAULT \"").append(defaultValue.value).append("\" ");
-            }
+            sb.append("DEFAULT ").append(toDefaultExpr(defaultValue.expr)).append(" ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
 
@@ -338,7 +340,11 @@ public class ColumnDef {
     }
 
     public String toDefaultExpr(Expr expr) {
-        if (expr instanceof FunctionCallExpr) {
+        if (expr instanceof StringLiteral) {
+            return ((StringLiteral) expr).getValue();
+        } else if (expr instanceof NullLiteral) {
+            return null;
+        } else if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
             return functionCallExpr.getFnName() + "()";
         }
@@ -346,13 +352,7 @@ public class ColumnDef {
     }
 
     public boolean hasDefaultValue() {
-        if (defaultValue.value != null) {
-            return true;
-        }
-        if ("now()".equalsIgnoreCase(toDefaultExpr(defaultValue.expr))) {
-            return true;
-        }
-        return false;
+        return defaultValue.expr != null;
     }
 
     @Override
