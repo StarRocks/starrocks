@@ -189,6 +189,19 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
+    private List<String> unUsedOutputStringColumns = new ArrayList<>();
+    
+    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (!slot.isMaterialized()) {
+                continue;
+            }
+            if (unUsedOutputColumnIds.contains(slot.getId().asInt())) {
+                unUsedOutputStringColumns.add(slot.getColumn().getName());
+            }
+        }
+    }
+
     /**
      * This method is mainly used to update scan range info in OlapScanNode by the new materialized selector.
      * Situation1:
@@ -714,6 +727,10 @@ public class OlapScanNode extends ScanNode {
                     ConnectContext.get().getSessionVariable().getEnableColumnExprPredicate());
         }
         msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
+
+        if (!olapTable.hasDelete()) {
+            msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
+        }
     }
 
     // export some tablets

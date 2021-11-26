@@ -27,6 +27,8 @@ struct TabletScannerParams {
     const std::vector<OlapScanRange*>* key_ranges = nullptr;
     const std::vector<ExprContext*>* conjunct_ctxs = nullptr;
 
+    const std::vector<std::string>* unused_output_columns = nullptr;
+
     bool skip_aggregation = false;
     bool need_agg_finalize = true;
 };
@@ -50,7 +52,7 @@ public:
     int64_t raw_rows_read() const { return _raw_rows_read; }
 
     // REQUIRES: `init(RuntimeState*, const TabletScannerParams&)` has been called.
-    const Schema& chunk_schema() const { return _prj_iter->encoded_schema(); }
+    const Schema& chunk_schema() const { return _prj_iter->output_schema(); }
 
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
@@ -60,6 +62,7 @@ private:
     Status _init_reader_params(const std::vector<OlapScanRange*>* key_ranges);
     Status _init_return_columns();
     Status _init_global_dicts();
+    Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     void _update_realtime_counter();
     void update_counter();
 
@@ -91,6 +94,10 @@ private:
     std::vector<uint32_t> _scanner_columns;
     // columns fetched from |_reader|.
     std::vector<uint32_t> _reader_columns;
+
+    // unused ouput columns
+    std::unordered_set<uint32_t> _unused_output_column_ids;
+
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;
     // slot descriptors for each one of |_scanner_columns|.

@@ -1463,6 +1463,9 @@ public class OlapTable extends Table {
     }
 
     public boolean hasDelete() {
+        if (tableProperty == null) {
+            return false;
+        }
         return tableProperty.hasDelete();
     }
 

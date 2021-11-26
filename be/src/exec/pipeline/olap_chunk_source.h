@@ -27,13 +27,15 @@ class OlapChunkSource final : public ChunkSource {
 public:
     OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, std::vector<ExprContext*> conjunct_ctxs,
                     RuntimeProfile* runtime_profile, const vectorized::RuntimeFilterProbeCollector& runtime_filters,
-                    std::vector<std::string> key_column_names, bool skip_aggregation)
+                    std::vector<std::string> key_column_names, bool skip_aggregation,
+                    std::vector<std::string>* unused_output_columns)
             : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _runtime_filters(runtime_filters),
               _key_column_names(std::move(key_column_names)),
               _skip_aggregation(skip_aggregation),
+              _unused_output_columns(unused_output_columns),
               _runtime_profile(runtime_profile) {
         OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
         _scan_range = olap_morsel->get_scan_range();
@@ -60,6 +62,7 @@ private:
     Status _init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
+    Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status _init_olap_reader(RuntimeState* state);
     void _init_counter(RuntimeState* state);
     Status _init_global_dicts(vectorized::TabletReaderParams* params);
@@ -99,9 +102,14 @@ private:
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 
+    const std::vector<std::string>* _unused_output_columns = nullptr;
+    std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
     using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
     std::vector<PredicatePtr> _predicate_free_pool;
+
+    // slot descriptors for each one of |output_columns|.
+    std::vector<SlotDescriptor*> _query_slots;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
