@@ -55,7 +55,7 @@ void LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     // Compute out the number of rows of the _full_chunk_queue.
     size_t full_rows_num = 0;
     while (!_full_chunk_queue.empty()) {
-        auto&& chunk = std::move(_full_chunk_queue.front());
+        auto chunk = std::move(_full_chunk_queue.front());
         _full_chunk_queue.pop();
         full_rows_num += chunk->num_rows();
     }
