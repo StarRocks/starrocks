@@ -38,6 +38,14 @@ public:
         return Status::OK();
     }
 
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        for (auto& child : _children) {
+            child->init_output_schema(unused_output_column_ids);
+        }
+        return Status::OK();
+    }
+
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override;

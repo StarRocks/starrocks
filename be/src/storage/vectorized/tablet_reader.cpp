@@ -101,6 +101,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     rs_opts.use_page_cache = params.use_page_cache;
     rs_opts.tablet_schema = &_tablet->tablet_schema();
     rs_opts.global_dictmaps = params.global_dictmaps;
+    rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -234,6 +235,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
 
     if (_collect_iter != nullptr) {
         RETURN_IF_ERROR(_collect_iter->init_encoded_schema(*params.global_dictmaps));
+        RETURN_IF_ERROR(_collect_iter->init_output_schema(*params.unused_output_column_ids));
     }
 
     return Status::OK();
