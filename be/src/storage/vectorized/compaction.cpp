@@ -58,7 +58,6 @@ Status Compaction::do_compaction_impl() {
     TRACE_COUNTER_INCREMENT("input_segments_num", segments_num);
 
     _output_version = Version(_input_rowsets.front()->start_version(), _input_rowsets.back()->end_version());
-    _tablet->compute_version_hash_from_rowsets(_input_rowsets, &_output_version_hash);
 
     LOG(INFO) << "start " << compaction_name() << ". tablet=" << _tablet->full_name()
               << ", output version is=" << _output_version.first << "-" << _output_version.second;
@@ -135,7 +134,6 @@ Status Compaction::construct_output_rowset_writer() {
     context.tablet_schema = &(_tablet->tablet_schema());
     context.rowset_state = VISIBLE;
     context.version = _output_version;
-    context.version_hash = _output_version_hash;
     context.segments_overlap = NONOVERLAPPING;
     Status st = RowsetFactory::create_rowset_writer(context, &_output_rs_writer);
     if (!st.ok()) {

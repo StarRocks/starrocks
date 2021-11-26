@@ -57,7 +57,6 @@ OLAPStatus EnginePublishVersionTask::finish() {
                                                                           &tablet_related_rs);
 
         Version version(par_ver_info.version, par_ver_info.version);
-        VersionHash version_hash = par_ver_info.version_hash;
 
         // each tablet
         for (auto& tablet_rs : tablet_related_rs) {
@@ -66,8 +65,7 @@ OLAPStatus EnginePublishVersionTask::finish() {
             const RowsetSharedPtr& rowset = tablet_rs.second;
             VLOG(1) << "begin to publish version on tablet. "
                     << "tablet_id=" << tablet_info.tablet_id << ", schema_hash=" << tablet_info.schema_hash
-                    << ", version=" << version.first << ", version_hash=" << version_hash
-                    << ", transaction_id=" << transaction_id;
+                    << ", version=" << version.first << ", transaction_id=" << transaction_id;
             // if rowset is null, it means this be received write task, but failed during write
             // and receive fe's publish version task
             // this be must return as an error tablet
@@ -94,8 +92,8 @@ OLAPStatus EnginePublishVersionTask::finish() {
                 publish_status = StorageEngine::instance()->txn_manager()->publish_txn2(transaction_id, partition_id,
                                                                                         tablet, version.second);
             } else {
-                publish_status = StorageEngine::instance()->txn_manager()->publish_txn(
-                        partition_id, tablet, transaction_id, version, version_hash);
+                publish_status = StorageEngine::instance()->txn_manager()->publish_txn(partition_id, tablet,
+                                                                                       transaction_id, version);
             }
             if (publish_status != OLAP_SUCCESS) {
                 LOG(WARNING) << "failed to publish version. rowset_id=" << rowset->rowset_id()

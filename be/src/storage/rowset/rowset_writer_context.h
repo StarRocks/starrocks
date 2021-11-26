@@ -55,7 +55,6 @@ public:
     int64_t partition_id = 0;
     int64_t txn_id = 0;
     Version version{};
-    VersionHash version_hash = 0;
     TabletUid tablet_uid = {0, 0};
     PUniqueId load_id{};
     // temporary segment files create or not, set false as default

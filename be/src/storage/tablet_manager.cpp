@@ -1109,7 +1109,6 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.tablet_schema = &tablet->tablet_schema();
             context.rowset_state = VISIBLE;
             context.version = version;
-            context.version_hash = request.version_hash;
             // there is no data in init rowset, so overlapping info is unknown.
             context.segments_overlap = OVERLAP_UNKNOWN;
 

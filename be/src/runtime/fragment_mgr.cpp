@@ -653,7 +653,6 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             TTabletVersionInfo info = iter->second;
             scan_range.tablet_id = tablet_id;
             scan_range.version = std::to_string(info.version);
-            scan_range.version_hash = std::to_string(info.version_hash);
             scan_range.schema_hash = std::to_string(info.schema_hash);
             scan_range.hosts.push_back(address);
         } else {

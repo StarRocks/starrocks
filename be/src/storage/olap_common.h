@@ -49,7 +49,6 @@ namespace starrocks {
 static const int64_t MAX_ROWSET_ID = 1L << 56;
 
 typedef int32_t SchemaHash;
-typedef int64_t VersionHash;
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;
 

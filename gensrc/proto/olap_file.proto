@@ -71,7 +71,7 @@ message RowsetMetaPB {
     // only for visible rowset.
     optional int64 end_version = 9;
     // only for visible rowset.
-    optional int64 version_hash = 10;
+    optional int64 version_hash = 10 [deprecated = true];
     // total number of rows.
     optional int64 num_rows = 11;
     // calculated by index + data
@@ -274,7 +274,7 @@ message TabletMetaPB {
 message OLAPIndexHeaderMessage {
     required int32 start_version = 1;
     required int32 end_version = 2;
-    required int64 cumulative_version_hash = 3;
+    required int64 cumulative_version_hash = 3 [deprecated = true];
 
     required uint32 segment = 4;
     required uint32 num_rows_per_block = 5;
