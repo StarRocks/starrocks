@@ -1125,6 +1125,15 @@ Status TimeFunctions::str_to_date_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
+DEFINE_UNARY_FN_WITH_IMPL(TimestampToDate, value) {
+    return DateValue{timestamp::to_julian(value._timestamp)};
+}
+
+ColumnPtr TimeFunctions::str2date(FunctionContext* context, const Columns& columns) {
+    ColumnPtr datetime = str_to_date(context, columns);
+    return VectorizedStrictUnaryFunction<TimestampToDate>::evaluate<TYPE_DATETIME, TYPE_DATE>(datetime);
+}
+
 Status TimeFunctions::format_prepare(starrocks_udf::FunctionContext* context,
                                      starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
