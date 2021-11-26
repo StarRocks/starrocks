@@ -352,8 +352,9 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
             ChunkItem item {pair.first, std::move(pair.second), nullptr};
             _chunk_queue.emplace_back(std::move(item));
         }
-        if (done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+        if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             _chunk_queue.back().closure = *done;
+            *done = nullptr;
         }
 
         _recvr->_num_buffered_bytes += total_chunk_bytes;
