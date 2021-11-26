@@ -128,8 +128,6 @@ private:
     // total buffer limit.
     bool exceeds_limit(int batch_size) { return _num_buffered_bytes + batch_size > _total_buffer_limit; }
 
-    bool exceeds_limit() { return _num_buffered_bytes > _total_buffer_limit; }
-
     // DataStreamMgr instance used to create this recvr. (Not owned)
     DataStreamMgr* _mgr;
 
