@@ -719,7 +719,9 @@ TEST_F(EncryptionFunctionsTest, sha224Test) {
         ASSERT_EQ(check_result[j], v->get_data()[j].to_string());
     }
 
-    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 TEST_F(EncryptionFunctionsTest, sha256Test) {
@@ -751,7 +753,9 @@ TEST_F(EncryptionFunctionsTest, sha256Test) {
         ASSERT_EQ(check_result[j], v->get_data()[j].to_string());
     }
 
-    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 TEST_F(EncryptionFunctionsTest, sha384Test) {
@@ -777,13 +781,16 @@ TEST_F(EncryptionFunctionsTest, sha384Test) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    std::string check_result[2] = {"eda8e790960d9ff4fdc6f481ec57bf443c147bf092086006e98a2ab0108afbaaf8e6f51d197f988dd798d2524b12de2c",
-                                   "6195d65242957bdf844e6623acabf2b0879c9cb282a9490ed332f7fdc41aedbda7802af06d07f38d7ed69449d3ff5bf8"};
+    std::string check_result[2] = {
+            "eda8e790960d9ff4fdc6f481ec57bf443c147bf092086006e98a2ab0108afbaaf8e6f51d197f988dd798d2524b12de2c",
+            "6195d65242957bdf844e6623acabf2b0879c9cb282a9490ed332f7fdc41aedbda7802af06d07f38d7ed69449d3ff5bf8"};
     for (int j = 0; j < sizeof(check_result) / sizeof(check_result[0]); ++j) {
         ASSERT_EQ(check_result[j], v->get_data()[j].to_string());
     }
 
-    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 TEST_F(EncryptionFunctionsTest, sha512Test) {
@@ -809,13 +816,18 @@ TEST_F(EncryptionFunctionsTest, sha512Test) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    std::string check_result[2] = {"9df77afa38c688166eaa7511440dd3a0b1c32918e9ae60b8c74e4b0f530852cd1a0facc610b71ebfcbe345f5fa40983fe68a686144d2c6981b8a3fab1b045cd0",
-                                   "eaf18d26b2976216790d95b2942d15b7db5f926c7d62d35f24c98b8eedbe96f2e6241e5e4fdc6b7d9e7893d94d86cd8a6f3bb6b1804c22097b337ecc24f6015e"};
+    std::string check_result[2] = {
+            "9df77afa38c688166eaa7511440dd3a0b1c32918e9ae60b8c74e4b0f530852cd1a0facc610b71ebfcbe345f5fa40983fe68a686144"
+            "d2c6981b8a3fab1b045cd0",
+            "eaf18d26b2976216790d95b2942d15b7db5f926c7d62d35f24c98b8eedbe96f2e6241e5e4fdc6b7d9e7893d94d86cd8a6f3bb6b180"
+            "4c22097b337ecc24f6015e"};
     for (int j = 0; j < sizeof(check_result) / sizeof(check_result[0]); ++j) {
         ASSERT_EQ(check_result[j], v->get_data()[j].to_string());
     }
 
-    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 TEST_F(EncryptionFunctionsTest, invalidSHATest) {
@@ -847,7 +859,9 @@ TEST_F(EncryptionFunctionsTest, invalidSHATest) {
         ASSERT_TRUE(result->is_null(j));
     }
 
-    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 } // namespace vectorized
