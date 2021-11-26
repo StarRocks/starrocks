@@ -224,17 +224,12 @@ public class SystemInfoService {
                                         db.getFullName(), table.getName(), droppedBackend.getHost(),
                                         droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
 
-                                boolean baseIntersection = partition.getBaseIndex().getTablets().stream()
-                                        .map(Tablet::getId).anyMatch(tabletIds::contains);
-                                if (baseIntersection) {
-                                    throw new RuntimeException(errMsg);
-                                }
-
                                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
                                         .forEach(rollupIdx -> {
-                                            boolean rollupIntersection = rollupIdx.getTablets().stream()
+                                            boolean existIntersection = rollupIdx.getTablets().stream()
                                                     .map(Tablet::getId).anyMatch(tabletIds::contains);
-                                            if (rollupIntersection) {
+
+                                            if (existIntersection) {
                                                 throw new RuntimeException(errMsg);
                                             }
                                         });
