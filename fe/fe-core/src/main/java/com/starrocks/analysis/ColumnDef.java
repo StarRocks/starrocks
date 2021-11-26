@@ -227,8 +227,6 @@ public class ColumnDef {
             try {
                 if (defaultValue.expr instanceof StringLiteral) {
                     validateDefaultValue(type, ((StringLiteral) defaultValue.expr).getValue());
-                } else if (defaultValue.expr instanceof NullLiteral) {
-                    validateDefaultValue(type, null);
                 }
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("Invalid default value for '%s': %s", name, e.getMessage()));
@@ -339,11 +337,11 @@ public class ColumnDef {
         return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue, comment);
     }
 
-    public String toDefaultExpr(Expr expr) {
+    private String toDefaultExpr(Expr expr) {
         if (expr instanceof StringLiteral) {
-            return ((StringLiteral) expr).getValue();
+            return "\"" + ((StringLiteral) expr).getValue() + "\"";
         } else if (expr instanceof NullLiteral) {
-            return null;
+            return "NULL";
         } else if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
             return functionCallExpr.getFnName() + "()";
@@ -352,7 +350,7 @@ public class ColumnDef {
     }
 
     public boolean hasDefaultValue() {
-        return defaultValue.expr != null;
+        return defaultValue.isSet;
     }
 
     @Override

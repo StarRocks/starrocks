@@ -78,12 +78,13 @@ public class ColumnDefTest {
     public void testReplaceIfNotNull() throws AnalysisException {
         {
             // not allow null
+            // although here is default value is NOT_SET but after analyze it will be set to NULL and allowed NULL trick.
             ColumnDef column =
                     new ColumnDef("col", intCol, false, AggregateType.REPLACE_IF_NOT_NULL, false, DefaultValue.NOT_SET,
                             "");
             column.analyze(true);
             Assert.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregateType());
-            Assert.assertEquals("`col` int(11) REPLACE_IF_NOT_NULL NULL DEFAULT \"null\" COMMENT \"\"", column.toSql());
+            Assert.assertEquals("`col` int(11) REPLACE_IF_NOT_NULL NULL DEFAULT NULL COMMENT \"\"", column.toSql());
         }
         {
             // not allow null
