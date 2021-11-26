@@ -41,6 +41,10 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         (*chunk)->reset();
     }
 
+#ifndef NDEBUG
+    static int loop = 0;
+#endif
+
     // TODO: merge small chunks to large chunk for optimization
     while (!_child_eos) {
         ChunkPtr input_chunk;
@@ -97,7 +101,8 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
 #ifndef NDEBUG
                 // chaos test for streaming or agg, The results have to be consistent
-                if (_aggregator->mem_pool()->total_allocated_bytes() % 2 == 0) {
+                loop++;
+                if (loop % 2 == 0) {
 #else
                 if (!ht_needs_expansion ||
                     _aggregator->should_expand_preagg_hash_tables(_children[0]->rows_returned(), input_chunk_size,
