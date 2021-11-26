@@ -34,6 +34,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/rest_monitor_iface.h"
+#include "runtime/mem_tracker.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
@@ -54,6 +55,7 @@ std::string to_load_error_http_path(const std::string& file_name);
 class FragmentMgr : public RestMonitorIface {
 public:
     typedef std::function<void(PlanFragmentExecutor*)> FinishCallback;
+    typedef std::function<void(PlanFragmentExecutor*)> StartSuccCallback;
 
     FragmentMgr(ExecEnv* exec_env);
     ~FragmentMgr() override;
@@ -61,8 +63,11 @@ public:
     // execute one plan fragment
     Status exec_plan_fragment(const TExecPlanFragmentParams& params);
 
-    // TODO(zc): report this is over
     Status exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb);
+
+    // TODO(zc): report this is over
+    Status exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
+                              const FinishCallback& cb);
 
     Status cancel(const TUniqueId& fragment_id) {
         return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
