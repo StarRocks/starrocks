@@ -206,28 +206,34 @@ public class SystemInfoService {
         List<Long> tabletIds = Catalog.getCurrentInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
         List<Long> dbs = catalog.getDbIds();
 
-        dbs.stream().map(catalog::getDb).forEach(db ->
+        dbs.stream().map(catalog::getDb).forEach(db -> {
+            db.readLock();
+            try {
                 db.getTables().stream()
-                .filter(table -> table.getType() == Table.TableType.OLAP)
-                .map(table -> (OlapTable) table)
-                .filter(table -> table.getTableProperty().getReplicationNum() == 1)
-                .forEach(table -> {
-                    table.getAllPartitions().forEach(partition -> {
-                        boolean existIntersection = partition.getBaseIndex().getTablets().stream()
-                                .map(Tablet::getId).anyMatch(tabletIds::contains);
+                        .filter(table -> table.getType() == Table.TableType.OLAP)
+                        .map(table -> (OlapTable) table)
+                        .filter(table -> table.getTableProperty().getReplicationNum() == 1)
+                        .forEach(table -> {
+                            table.getAllPartitions().forEach(partition -> {
+                                boolean existIntersection = partition.getBaseIndex().getTablets().stream()
+                                        .map(Tablet::getId).anyMatch(tabletIds::contains);
 
-                        if (existIntersection) {
-                            String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
-                                        " have only one replica. To avoid data loss," +
-                                        " please change the replication_num of [%s.%s] to three." +
-                                        " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
-                                        " can be used to forcibly drop the backend. ",
-                                    db.getFullName(), table.getName(), droppedBackend.getHost(),
-                                    droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
-                            throw new RuntimeException(errMsg);
-                        }
-                    });
-                }));
+                                if (existIntersection) {
+                                    String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
+                                                    " have only one replica. To avoid data loss," +
+                                                    " please change the replication_num of [%s.%s] to three." +
+                                                    " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
+                                                    " can be used to forcibly drop the backend. ",
+                                            db.getFullName(), table.getName(), droppedBackend.getHost(),
+                                            droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
+                                    throw new RuntimeException(errMsg);
+                                }
+                            });
+                        });
+            } finally {
+                db.readUnlock();
+            }
+        });
     }
 
     // final entry of dropping backend
