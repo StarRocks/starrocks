@@ -33,6 +33,7 @@ import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -215,19 +216,28 @@ public class SystemInfoService {
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
                         .forEach(table -> {
                             table.getAllPartitions().forEach(partition -> {
-                                boolean existIntersection = partition.getBaseIndex().getTablets().stream()
-                                        .map(Tablet::getId).anyMatch(tabletIds::contains);
+                                String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
+                                                " have only one replica. To avoid data loss," +
+                                                " please change the replication_num of [%s.%s] to three." +
+                                                " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
+                                                " can be used to forcibly drop the backend. ",
+                                        db.getFullName(), table.getName(), droppedBackend.getHost(),
+                                        droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
 
-                                if (existIntersection) {
-                                    String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
-                                                    " have only one replica. To avoid data loss," +
-                                                    " please change the replication_num of [%s.%s] to three." +
-                                                    " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
-                                                    " can be used to forcibly drop the backend. ",
-                                            db.getFullName(), table.getName(), droppedBackend.getHost(),
-                                            droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
+                                boolean baseIntersection = partition.getBaseIndex().getTablets().stream()
+                                        .map(Tablet::getId).anyMatch(tabletIds::contains);
+                                if (baseIntersection) {
                                     throw new RuntimeException(errMsg);
                                 }
+
+                                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
+                                        .forEach(rollupIdx -> {
+                                            boolean rollupIntersection = rollupIdx.getTablets().stream()
+                                                    .map(Tablet::getId).anyMatch(tabletIds::contains);
+                                            if (rollupIntersection) {
+                                                throw new RuntimeException(errMsg);
+                                            }
+                                        });
                             });
                         });
             } finally {
