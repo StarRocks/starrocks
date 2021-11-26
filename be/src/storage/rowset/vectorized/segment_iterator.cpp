@@ -660,6 +660,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
+
+    _build_final_chunk(_context);
+    chunk = _context->_final_chunk.get();
+
     bool need_switch_context = false;
     if (_context->_late_materialize) {
         chunk = _context->_final_chunk.get();
