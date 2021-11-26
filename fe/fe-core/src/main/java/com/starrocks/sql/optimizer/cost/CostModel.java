@@ -102,9 +102,9 @@ public class CostModel {
                     inputStatistics.getOutputSize());
         }
 
-        // Note: This method logic must consistent with SplitAggregateRule::canGenerateTwoStageAggregate
+
         boolean canGenerateOneStageAggNode(ExpressionContext context) {
-            // 1 Must do two stage aggregate if child operator is LogicalRepeatOperator
+            // 1. Must do two stage aggregate if child operator is LogicalRepeatOperator
             //   If the repeat node is used as the input node of the Exchange node.
             //   Will cause the node to be unable to confirm whether it is const during serialization
             //   (BE does this for efficiency reasons).
@@ -114,7 +114,7 @@ public class CostModel {
                 return false;
             }
 
-            // 2 Must do two stage aggregate is aggregate function has array type
+            // 2. Must do two stage aggregate is aggregate function has array type
             if (context.getOp() instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
                 if (operator.getAggregations().values().stream().anyMatch(callOperator
@@ -123,14 +123,7 @@ public class CostModel {
                 }
             }
 
-            // 3 Must do one stage aggregate If the child contains limit,
-            // the aggregation must be a single node to ensure correctness.
-            // eg. select count(*) from (select * table limit 2) t
-            if (((LogicalOperator) context.getChildOperator(0)).hasLimit()) {
-                return true;
-            }
-
-            // 4. agg distinct function with multi columns can not generate one stage aggregate
+            // 3. agg distinct function with multi columns can not generate one stage aggregate
             if (context.getOp() instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
                 if (operator.getAggregations().values().stream().anyMatch(callOperator -> callOperator.isDistinct() &&
@@ -138,7 +131,28 @@ public class CostModel {
                     return false;
                 }
             }
+            return true;
+        }
 
+        boolean mustGenerateOneStageAggNode(ExpressionContext context) {
+            // Must do one stage aggregate If the child contains limit,
+            // the aggregation must be a single node to ensure correctness.
+            // eg. select count(*) from (select * table limit 2) t
+            if (((LogicalOperator) context.getChildOperator(0)).hasLimit()) {
+                return true;
+            }
+            return false;
+        }
+
+        // Note: This method logic must consistent with SplitAggregateRule::needGenerateMultiStageAggregate
+        boolean needGenerateOneStageAggNode(ExpressionContext context) {
+            if (!canGenerateOneStageAggNode(context)) {
+                return false;
+            }
+            if (mustGenerateOneStageAggNode(context)) {
+                return true;
+            }
+            // respect user hint
             int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
             return aggStage == 1 || aggStage == 0;
         }
@@ -205,7 +219,7 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            if (!canGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
+            if (!needGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
                 return CostEstimate.infinite();
             }
 
