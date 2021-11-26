@@ -32,7 +32,7 @@
 
 namespace google::protobuf {
 class Closure;
-} // namespace google
+} // namespace google::protobuf
 
 namespace starrocks {
 

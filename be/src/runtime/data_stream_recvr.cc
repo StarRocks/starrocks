@@ -136,9 +136,7 @@ private:
 };
 
 DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int num_senders)
-        : _recvr(parent_recvr),
-          _is_cancelled(false),
-          _num_remaining_senders(num_senders) {}
+        : _recvr(parent_recvr), _is_cancelled(false), _num_remaining_senders(num_senders) {}
 
 bool DataStreamRecvr::SenderQueue::has_output() const {
     std::lock_guard<std::mutex> l(_lock);
