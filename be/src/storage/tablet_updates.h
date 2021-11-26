@@ -11,6 +11,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/rowset_writer.h"
 #include "util/blocking_queue.hpp"
 
 namespace starrocks {
@@ -30,6 +31,8 @@ class ChunkIterator;
 class CompactionState;
 class RowsetReadOptions;
 class Schema;
+class TabletReader;
+class ChunkChanger;
 } // namespace vectorized
 
 struct EditVersion {
@@ -134,7 +137,7 @@ public:
     bool check_rowset_id(const RowsetId& rowset_id) const;
 
     // Note: EditVersion history count, not like talet.version_count()
-    size_t version_history_count() const { return _versions.size(); }
+    size_t version_history_count() const { return _edit_version_infos.size(); }
 
     // get info's version, version_hash, version_count, row_count, data_size
     void get_tablet_info_extra(TTabletInfo* info);
@@ -152,7 +155,10 @@ public:
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
-    Status load_from_base_tablet(int64_t version, Tablet* base_tablet);
+    Status link_from(Tablet* base_tablet, int64_t request_version);
+
+    Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        vectorized::ChunkChanger* chunk_changer);
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta);
 
@@ -263,12 +269,17 @@ private:
 
     void _update_total_stats(const std::vector<uint32_t>& rowsets);
 
+    Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
+                                     const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
+                                     vectorized::ChunkChanger* chunk_changer,
+                                     const std::unique_ptr<RowsetWriter>& rowset_writer);
+
 private:
     Tablet& _tablet;
 
-    // |_lock| protects |_versions|, |_next_rowset_id|, |_next_log_id|, |_apply_version_idx|, |_pending_commits|.
+    // |_lock| protects |_edit_version_infos|, |_next_rowset_id|, |_next_log_id|, |_apply_version_idx|, |_pending_commits|.
     mutable std::mutex _lock;
-    std::vector<std::unique_ptr<EditVersionInfo>> _versions;
+    std::vector<std::unique_ptr<EditVersionInfo>> _edit_version_infos;
     uint32_t _next_rowset_id = 0;
     uint64_t _next_log_id = 0;
     size_t _apply_version_idx = 0;

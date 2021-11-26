@@ -150,7 +150,7 @@ inline void BaseTablet::set_creation_time(int64_t creation_time) {
 }
 
 inline bool BaseTablet::equal(int64_t id, int32_t hash) {
-    return (tablet_id() == id) && (schema_hash() == hash);
+    return tablet_id() == id && schema_hash() == hash;
 }
 
 inline const TabletSchema& BaseTablet::tablet_schema() const {

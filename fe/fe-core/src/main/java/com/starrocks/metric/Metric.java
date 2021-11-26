@@ -47,8 +47,6 @@ public abstract class Metric<T> {
         NOUNIT
     }
 
-    ;
-
     protected String name;
     protected MetricType type;
     protected MetricUnit unit;

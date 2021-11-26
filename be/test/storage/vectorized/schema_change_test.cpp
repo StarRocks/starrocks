@@ -417,7 +417,7 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     EXPECT_EQ(dst_datum.get_int64(), 1);
 }
 
-TEST_F(SchemaChangeTest, schema_change_directly) {
+TEST_F(SchemaChangeTest, convert_from) {
     CreateSrcTablet(1001);
     StorageEngine* engine = StorageEngine::instance();
     TCreateTabletReq create_tablet_req;
@@ -436,8 +436,7 @@ TEST_F(SchemaChangeTest, schema_change_directly) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;
     }
-
-    _sc_procedure = new (std::nothrow) SchemaChangeDirectly(chunk_changer);
+    _sc_procedure = new (std::nothrow) SchemaChangeDirectly(&chunk_changer);
     Version version(3, 3);
     RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
     ASSERT_TRUE(rowset != nullptr);
@@ -497,7 +496,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     column_mapping->ref_column = 3;
 
     _sc_procedure = new (std::nothrow) SchemaChangeWithSorting(
-            chunk_changer, config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024);
+            &chunk_changer, config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024);
     Version version(3, 3);
     RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
     ASSERT_TRUE(rowset != nullptr);

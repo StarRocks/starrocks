@@ -38,7 +38,6 @@ public:
     PluginLoader(std::string name, int type) : _name(std::move(name)), _type(type), _close(false) {}
 
     virtual ~PluginLoader() = default;
-    ;
 
     virtual Status install() = 0;
 
