@@ -74,6 +74,7 @@ public:
     // When a driver's sink operator is finished, the driver should wait for pending i/o task completion.
     // Otherwise, pending tasks shall reference to destructed objects in the operator or FragmentContext,
     // since FragmentContext is unregistered prematurely after all the drivers are finalized.
+    // Only source and sink operator may return true, and other operators always return false.
     virtual bool pending_finish() const { return false; }
 
     // Pull chunk from this operator
