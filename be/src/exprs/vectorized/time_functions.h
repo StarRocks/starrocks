@@ -364,11 +364,19 @@ public:
     static ColumnPtr str_to_date_uncommon(FunctionContext* context, const starrocks::vectorized::Columns& columns);
     /**
      *
+     * cast string to datetime
      * @param context
      * @param columns [BinaryColumn of TYPE_VARCHAR, BinaryColumn of TYPE_VARCHAR]  The first column holds the datetime string, the second column holds the format.
      * @return  TimestampColumn
      */
     DEFINE_VECTORIZED_FN(str_to_date);
+
+    /** 
+     * 
+     * cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
+     * 
+     */
+    DEFINE_VECTORIZED_FN(str2date);
 
     static bool is_date_format(const Slice& slice, char** start);
     static bool is_datetime_format(const Slice& slice, char** start);

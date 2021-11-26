@@ -60,6 +60,9 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.commons.lang3.StringUtils;
 
 import java.math.BigInteger;
@@ -73,6 +76,8 @@ import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpressi
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class ExpressionAnalyzer {
+    private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
+
     private final Catalog catalog;
     private final ConnectContext session;
 
@@ -469,64 +474,9 @@ public class ExpressionAnalyzer {
                             node.getFnName().getFunction());
                 }
             } else if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
-                Type commonType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argumentTypes, node.getFnName());
-                fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
-                        argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-                if (fn == null) {
-                    fn = getUdfFunction(node.getFnName(), argumentTypes);
-                }
-
-                if (fn == null) {
-                    throw new SemanticException("No matching function with signature: %s(%s).",
-                            node.getFnName().getFunction(),
-                            node.getParams().isStar() ? "*" : Joiner.on(", ")
-                                    .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
-                }
-
-                if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(node.getFnName().getFunction())) {
-                    Type argType = node.getChild(0).getType();
-                    // stddev/variance always use decimal128(38,9) to computing result.
-                    if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_VARIANCE_STDDEV_TYPE
-                            .contains(node.getFnName().getFunction()) && argType.isDecimalV3()) {
-                        argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
-                        node.setChild(0, TypeManager.addCastExpr(node.getChild(0), argType));
-                    }
-                    fn = DecimalV3FunctionAnalyzer
-                            .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
-                } else if (
-                        DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(node.getFnName().getFunction()) ||
-                                DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET
-                                        .contains(node.getFnName().getFunction()) ||
-                                node.getFnName().getFunction().equalsIgnoreCase("if")) {
-                    // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
-                    // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
-                    List<Type> argTypes;
-                    if (node.getFnName().getFunction().equalsIgnoreCase("money_format")) {
-                        argTypes = Arrays.asList(argumentTypes);
-                    } else {
-                        argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
-                                .collect(Collectors.toList());
-                    }
-
-                    Type returnType = fn.getReturnType();
-                    // Decimal v3 function return type maybe need change
-                    if (returnType.isDecimalV3() && commonType.isValid()) {
-                        returnType = commonType;
-                    }
-                    ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
-                            fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
-                            ((ScalarFunction) fn).getPrepareFnSymbol(),
-                            ((ScalarFunction) fn).getCloseFnSymbol());
-                    newFn.setFunctionId(fn.getFunctionId());
-                    newFn.setChecksum(fn.getChecksum());
-                    newFn.setBinaryType(fn.getBinaryType());
-                    newFn.setHasVarArgs(fn.hasVarArgs());
-                    newFn.setId(fn.getId());
-                    newFn.setUserVisible(fn.isUserVisible());
-
-                    fn = newFn;
-                }
+                fn = getDecimalV3Function(node, argumentTypes);
+            } else if ("str_to_date".equalsIgnoreCase(node.getFnName().getFunction())) {
+                fn = getStrToDateFunction(node, argumentTypes);
             } else {
                 fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
                         argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -551,6 +501,106 @@ public class ExpressionAnalyzer {
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
             return null;
+        }
+
+        private Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
+            /*
+             * @TODO: Determine the return type of this function
+             * If is format is constant and don't contains time part, return date type, to compatible with mysql.
+             * In fact we don't want to support str_to_date return date like mysql, reason:
+             * 1. The return type of FE/BE str_to_date function signature is datetime, return date
+             *    let type different, it's will throw unpredictable error
+             * 2. Support return date and datetime at same time in one function is complicated.
+             * 3. The meaning of the function is confusing. In mysql, will return date if format is a constant
+             *    string and it's not contains "%H/%M/%S" pattern, but it's a trick logic, if format is a variable
+             *    expression, like: str_to_date(col1, col2), and the col2 is '%Y%m%d', the result always be
+             *    datetime.
+             */
+            Function fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
+                    argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+            if (fn == null) {
+                return null;
+            }
+
+            if (!node.getChild(1).isConstant()) {
+                return fn;
+            }
+
+            ExpressionMapping expressionMapping =
+                    new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
+                            com.google.common.collect.Lists.newArrayList());
+
+            ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping);
+            if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
+                return Expr
+                        .getBuiltinFunction("str2date", argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            }
+
+            return fn;
+        }
+
+        Function getDecimalV3Function(FunctionCallExpr node, Type[] argumentTypes) {
+            Function fn;
+            Type commonType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argumentTypes, node.getFnName());
+            fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
+                    argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+            if (fn == null) {
+                fn = getUdfFunction(node.getFnName(), argumentTypes);
+            }
+
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s).",
+                        node.getFnName().getFunction(),
+                        node.getParams().isStar() ? "*" : Joiner.on(", ")
+                                .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+            }
+
+            if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(node.getFnName().getFunction())) {
+                Type argType = node.getChild(0).getType();
+                // stddev/variance always use decimal128(38,9) to computing result.
+                if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_VARIANCE_STDDEV_TYPE
+                        .contains(node.getFnName().getFunction()) && argType.isDecimalV3()) {
+                    argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+                    node.setChild(0, TypeManager.addCastExpr(node.getChild(0), argType));
+                }
+                fn = DecimalV3FunctionAnalyzer
+                        .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
+            } else if (
+                    DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(node.getFnName().getFunction()) ||
+                            DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET
+                                    .contains(node.getFnName().getFunction()) ||
+                            node.getFnName().getFunction().equalsIgnoreCase("if")) {
+                // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
+                // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
+                List<Type> argTypes;
+                if (node.getFnName().getFunction().equalsIgnoreCase("money_format")) {
+                    argTypes = Arrays.asList(argumentTypes);
+                } else {
+                    argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
+                            .collect(Collectors.toList());
+                }
+
+                Type returnType = fn.getReturnType();
+                // Decimal v3 function return type maybe need change
+                if (returnType.isDecimalV3() && commonType.isValid()) {
+                    returnType = commonType;
+                }
+                ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
+                        fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
+                        ((ScalarFunction) fn).getPrepareFnSymbol(),
+                        ((ScalarFunction) fn).getCloseFnSymbol());
+                newFn.setFunctionId(fn.getFunctionId());
+                newFn.setChecksum(fn.getChecksum());
+                newFn.setBinaryType(fn.getBinaryType());
+                newFn.setHasVarArgs(fn.hasVarArgs());
+                newFn.setId(fn.getId());
+                newFn.setUserVisible(fn.isUserVisible());
+
+                fn = newFn;
+            }
+            return fn;
         }
 
         @Override
