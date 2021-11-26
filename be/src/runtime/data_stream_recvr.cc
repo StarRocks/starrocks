@@ -132,7 +132,6 @@ private:
     std::condition_variable _data_arrival_cv;
 
     typedef std::list<ChunkItem> ChunkQueue;
-    typedef std::list<std::pair<int, ChunkUniquePtr>> TmpChunkQueue;
     ChunkQueue _chunk_queue;
     vectorized::RuntimeChunkMeta _chunk_meta;
 
@@ -214,9 +213,6 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
-    // A Requet may contain multiple Chunks.
-    // The consumption of a Chunk does not necessarily require the sender to send it immediately.
-    // It should be determined according to the current memory usage.
     if (closure != nullptr) {
         // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
         // the execution thread will hold done and will not return, block brpc from sending packets,
@@ -328,16 +324,18 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         }
     }
 
-    TmpChunkQueue chunks;
+    ChunkQueue chunks;
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     for (auto& pchunk : request.chunks()) {
-        size_t chunk_bytes = pchunk.data().size();
+        int64_t chunk_bytes = pchunk.data().size();
         ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
         RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
+        ChunkItem item {chunk_bytes, std::move(chunk), nullptr};
+
         // TODO(zc): review this chunk_bytes
-        chunks.emplace_back(chunk_bytes, std::move(chunk));
+        chunks.emplace_back(std::move(item));
 
         total_chunk_bytes += chunk_bytes;
     }
@@ -349,8 +347,7 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         wait_timer.stop();
 
         for (auto& pair : chunks) {
-            ChunkItem item {pair.first, std::move(pair.second), nullptr};
-            _chunk_queue.emplace_back(std::move(item));
+            _chunk_queue.emplace_back(std::move(pair));
         }
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             _chunk_queue.back().closure = *done;
