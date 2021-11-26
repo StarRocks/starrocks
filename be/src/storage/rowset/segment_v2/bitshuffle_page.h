@@ -374,7 +374,7 @@ public:
     EncodingTypePB encoding_type() const override { return BIT_SHUFFLE; }
 
 private:
-    const void* get_data(size_t pos) {
+    inline const void* get_data(size_t pos) {
         if (_options.use_cache) {
             return &_data[pos];
         } else {
