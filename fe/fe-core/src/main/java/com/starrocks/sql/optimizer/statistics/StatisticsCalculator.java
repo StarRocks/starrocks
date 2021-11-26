@@ -151,7 +151,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         if (limit != -1 && limit < statistics.getOutputRowCount()) {
-            statistics = new Statistics(limit, statistics.getColumnStatistics());
+            statistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
         }
 
         context.setStatistics(statistics);
@@ -685,7 +685,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         estimateStatistics = estimateStatistics(notEqJoin, builder.build());
 
         if (limit != -1 && limit < estimateStatistics.getOutputRowCount()) {
-            estimateStatistics = new Statistics(limit, estimateStatistics.getColumnStatistics());
+            estimateStatistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
         }
 
         if (outputColumns == null) {

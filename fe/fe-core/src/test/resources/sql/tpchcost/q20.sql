@@ -142,7 +142,7 @@ OutPut Exchange Id: 18
 |  9 <-> [9: N_NATIONKEY, INT, false]
 |  cardinality: 1
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 16:OlapScanNode
 table: nation, rollup: nation
@@ -153,8 +153,8 @@ tabletList=10185
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 4(F07)
 
@@ -240,7 +240,7 @@ OutPut Exchange Id: 08
 |  20 <-> [20: P_PARTKEY, INT, false]
 |  cardinality: 5000000
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |
 6:OlapScanNode
 table: part, rollup: part
@@ -251,8 +251,8 @@ tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 actualRows=0, avgRowSize=63.0
 cardinality: 5000000
 column statistics:
-* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
-* P_NAME-->[-Infinity, Infinity, 0.0, 55.0, 1.99997E7] ESTIMATE
+* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
+* P_NAME-->[-Infinity, Infinity, 0.0, 55.0, 5000000.0] ESTIMATE
 
 PLAN FRAGMENT 7(F01)
 
