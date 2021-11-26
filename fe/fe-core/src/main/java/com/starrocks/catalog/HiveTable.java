@@ -62,6 +62,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.util.Util.validateMetastoreUris;
+
 /**
  * External hive table
  * At the very beginning, hive table is only designed for spark load, and property hive.metastore.uris is used to
@@ -330,6 +332,7 @@ public class HiveTable extends Table {
         }
 
         if (!Strings.isNullOrEmpty(hiveMetastoreUris)) {
+            validateMetastoreUris(hiveMetastoreUris);
             copiedProps.remove(HIVE_METASTORE_URIS);
             LOG.warn("property " + HIVE_METASTORE_URIS + " will be ignored " +
                     "and hive table will be created by using property " + HIVE_RESOURCE + " only.");
