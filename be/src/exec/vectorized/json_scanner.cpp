@@ -469,9 +469,7 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs,
                                 [&key](const SlotDescriptor* desc) { return desc->col_name() == key; });
 
         if (itr != ordered_slot_descs.end()) {
-            auto tmp = *itr;
-            *itr = ordered_slot_descs.at(idx);
-            ordered_slot_descs.at(idx) = tmp;
+            std::swap(ordered_slot_descs[idx], *itr);
             idx++;
         }
     }
