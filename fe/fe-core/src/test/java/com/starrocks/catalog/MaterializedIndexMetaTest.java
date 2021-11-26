@@ -29,6 +29,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.OriginStatement;
@@ -69,13 +70,14 @@ public class MaterializedIndexMetaTest {
         String mvColumnName =
                 CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX + FunctionSet.BITMAP_UNION + "_" + "k1";
         List<Column> schema = Lists.newArrayList();
-        ColumnDef.DefaultValue defaultValue1 = new ColumnDef.DefaultValue(true, "1");
+        ColumnDef.DefaultValueDef defaultValue1 = new ColumnDef.DefaultValueDef(true, new StringLiteral("1"));
         schema.add(new Column("k1", Type.TINYINT, true, null, true, defaultValue1, "abc"));
         schema.add(new Column("k2", Type.SMALLINT, true, null, true, defaultValue1, "debug"));
         schema.add(new Column("k3", Type.INT, true, null, true, defaultValue1, ""));
         schema.add(new Column("k4", Type.BIGINT, true, null, true, defaultValue1, "**"));
         schema.add(new Column("k5", Type.LARGEINT, true, null, true, null, ""));
-        schema.add(new Column("k6", Type.DOUBLE, true, null, true, new ColumnDef.DefaultValue(true, "1.1"), ""));
+        schema.add(new Column("k6", Type.DOUBLE, true, null, true,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("1.1")), ""));
         schema.add(new Column("k7", Type.FLOAT, true, null, true, defaultValue1, ""));
         schema.add(new Column("k8", Type.DATE, true, null, true, defaultValue1, ""));
         schema.add(new Column("k9", Type.DATETIME, true, null, true, defaultValue1, ""));

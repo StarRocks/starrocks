@@ -55,33 +55,24 @@ public class ColumnDef {
      * even if default value saved in Column is null, the "null" value can not be loaded into this column,
      * so data correctness can be guaranteed.
      */
-    public static class DefaultValue {
+    public static class DefaultValueDef {
         public boolean isSet;
         public Expr expr;
 
-        public DefaultValue(boolean isSet, String value) {
-            this.isSet = isSet;
-            if (value == null) {
-                this.expr = NullLiteral.create(Type.VARCHAR);
-            } else {
-                this.expr = new StringLiteral(value);
-            }
-        }
-
-        public DefaultValue(Expr expr) {
+        public DefaultValueDef(boolean isSet, Expr expr) {
             this.isSet = true;
             this.expr = expr;
         }
 
         private static final String ZERO = new String(new byte[] {0});
         // no default value
-        public static DefaultValue NOT_SET = new DefaultValue(false, null);
+        public static DefaultValueDef NOT_SET = new DefaultValueDef(false, NullLiteral.create(Type.VARCHAR));
         // default null
-        public static DefaultValue NULL_DEFAULT_VALUE = new DefaultValue(true, null);
+        public static DefaultValueDef NULL_DEFAULT_VALUE = new DefaultValueDef(true, null);
         // default "value", "0" means empty hll or bitmap
-        public static DefaultValue EMPTY_VALUE = new DefaultValue(true, ZERO);
+        public static DefaultValueDef EMPTY_VALUE = new DefaultValueDef(true, new StringLiteral(ZERO));
         // default value for date type CURRENT_TIMESTAMP
-        public static DefaultValue CURRENT_TIMESTAMP_VALUE = new DefaultValue(
+        public static DefaultValueDef CURRENT_TIMESTAMP_VALUE = new DefaultValueDef(true,
                 new FunctionCallExpr("now", new ArrayList<>()));
     }
 
@@ -91,21 +82,21 @@ public class ColumnDef {
     private AggregateType aggregateType;
     private boolean isKey;
     private boolean isAllowNull;
-    private DefaultValue defaultValue;
+    private DefaultValueDef defaultValueDef;
     private final String comment;
 
     public ColumnDef(String name, TypeDef typeDef) {
-        this(name, typeDef, false, null, false, DefaultValue.NOT_SET, "");
+        this(name, typeDef, false, null, false, DefaultValueDef.NOT_SET, "");
     }
 
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
-                     boolean isAllowNull, DefaultValue defaultValue, String comment) {
+                     boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
         this.name = name;
         this.typeDef = typeDef;
         this.isKey = isKey;
         this.aggregateType = aggregateType;
         this.isAllowNull = isAllowNull;
-        this.defaultValue = defaultValue;
+        this.defaultValueDef = defaultValueDef;
         this.comment = comment;
     }
 
@@ -115,9 +106,9 @@ public class ColumnDef {
 
     // only for test
     public String getDefaultValue() {
-        if (defaultValue.expr instanceof StringLiteral)  {
-            return ((StringLiteral) defaultValue.expr).getValue();
-        } else if (defaultValue.expr instanceof NullLiteral) {
+        if (defaultValueDef.expr instanceof StringLiteral)  {
+            return ((StringLiteral) defaultValueDef.expr).getValue();
+        } else if (defaultValueDef.expr instanceof NullLiteral) {
             return null;
         }
         return null;
@@ -197,115 +188,111 @@ public class ColumnDef {
         }
 
         if (type.isHllType()) {
-            if (defaultValue.isSet) {
+            if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-            defaultValue = DefaultValue.EMPTY_VALUE;
+            defaultValueDef = DefaultValueDef.EMPTY_VALUE;
         }
 
         if (type.isBitmapType()) {
-            if (defaultValue.isSet) {
+            if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-            defaultValue = DefaultValue.EMPTY_VALUE;
+            defaultValueDef = DefaultValueDef.EMPTY_VALUE;
         }
 
         // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
         // If default value is not set, we set it NULL
         if (aggregateType == AggregateType.REPLACE_IF_NOT_NULL) {
             isAllowNull = true;
-            if (!defaultValue.isSet) {
-                defaultValue = DefaultValue.NULL_DEFAULT_VALUE;
+            if (!defaultValueDef.isSet) {
+                defaultValueDef = DefaultValueDef.NULL_DEFAULT_VALUE;
             }
         }
 
-        if (!isAllowNull && defaultValue == DefaultValue.NULL_DEFAULT_VALUE) {
+        if (!isAllowNull && defaultValueDef == DefaultValueDef.NULL_DEFAULT_VALUE) {
             throw new AnalysisException(String.format("Invalid default value for '%s'", name));
         }
 
-        if (defaultValue.isSet && defaultValue.expr instanceof LiteralExpr) {
+        if (defaultValueDef.isSet && defaultValueDef.expr instanceof LiteralExpr) {
             try {
-                if (defaultValue.expr instanceof StringLiteral) {
-                    validateDefaultValue(type, ((StringLiteral) defaultValue.expr).getValue());
+                if (defaultValueDef.expr instanceof StringLiteral) {
+                    validateDefaultValue(type, defaultValueDef.expr);
                 }
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("Invalid default value for '%s': %s", name, e.getMessage()));
             }
-        } else if (defaultValue.isSet) {
-            try {
-                validateDefaultExpr(type, defaultValue.expr);
-            } catch (AnalysisException e) {
-                throw new AnalysisException(String.format("Invalid default expr for '%s': %s", name, e.getMessage()));
+        }
+    }
+
+    public static void validateDefaultValue(Type type, Expr defaultExpr) throws AnalysisException {
+        if (defaultExpr instanceof StringLiteral) {
+            String defaultValue = ((StringLiteral) defaultExpr).getValue();
+            Preconditions.checkNotNull(defaultValue);
+            if (type.isComplexType()) {
+                throw new AnalysisException(String.format("Default value for complex type '%s' not supported", type));
             }
-        }
-    }
+            ScalarType scalarType = (ScalarType) type;
+            // check if default value is valid. if not, some literal constructor will throw AnalysisException
+            PrimitiveType primitiveType = scalarType.getPrimitiveType();
+            switch (primitiveType) {
+                case TINYINT:
+                case SMALLINT:
+                case INT:
+                case BIGINT:
+                    IntLiteral intLiteral = new IntLiteral(defaultValue, type);
+                    break;
+                case LARGEINT:
+                    LargeIntLiteral largeIntLiteral = new LargeIntLiteral(defaultValue);
+                    break;
+                case FLOAT:
+                    FloatLiteral floatLiteral = new FloatLiteral(defaultValue);
+                    if (floatLiteral.getType().isDouble()) {
+                        throw new AnalysisException("Default value will loose precision: " + defaultValue);
+                    }
+                case DOUBLE:
+                    FloatLiteral doubleLiteral = new FloatLiteral(defaultValue);
+                    break;
+                case DECIMALV2:
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    DecimalLiteral decimalLiteral = new DecimalLiteral(defaultValue);
+                    decimalLiteral.checkPrecisionAndScale(scalarType.getScalarPrecision(), scalarType.getScalarScale());
+                    break;
+                case DATE:
+                case DATETIME:
+                    DateLiteral dateLiteral = new DateLiteral(defaultValue, type);
+                    break;
+                case CHAR:
+                case VARCHAR:
+                case HLL:
+                    if (defaultValue.length() > scalarType.getLength()) {
+                        throw new AnalysisException("Default value is too long: " + defaultValue);
+                    }
+                    break;
+                case BITMAP:
+                    break;
+                case BOOLEAN:
+                    BoolLiteral boolLiteral = new BoolLiteral(defaultValue);
+                    break;
+                default:
+                    throw new AnalysisException(String.format("Cannot add default value for type '%s'", type));
+            }
+        } else if (defaultExpr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr)defaultExpr;
+            String functionName = functionCallExpr.getFnName().getFunction();
+            if (!"now".equalsIgnoreCase(functionName)) {
+                throw new AnalysisException(String.format("Default expr for function %s is not supported", functionName));
+            }
 
-    public static void validateDefaultExpr(Type type, Expr defaultExpr) throws AnalysisException  {
-        if (!(defaultExpr instanceof FunctionCallExpr)) {
-            throw new AnalysisException("Default expr currently only supported function");
-        }
-        FunctionCallExpr functionCallExpr = (FunctionCallExpr)defaultExpr;
-        String functionName = functionCallExpr.getFnName().getFunction();
-        if (!"now".equalsIgnoreCase(functionName)) {
-            throw new AnalysisException(String.format("Default expr for function %s is not supported", functionName));
-        }
-
-        if("now".equalsIgnoreCase(functionName) && !type.isDateType()) {
-            throw new AnalysisException(String.format("Default function now() for type %s is not supported", type));
-        }
-    }
-
-    public static void validateDefaultValue(Type type, String defaultValue) throws AnalysisException {
-        Preconditions.checkNotNull(defaultValue);
-        if (type.isComplexType()) {
-            throw new AnalysisException(String.format("Default value for complex type '%s' not supported", type));
-        }
-        ScalarType scalarType = (ScalarType) type;
-        // check if default value is valid. if not, some literal constructor will throw AnalysisException
-        PrimitiveType primitiveType = scalarType.getPrimitiveType();
-        switch (primitiveType) {
-            case TINYINT:
-            case SMALLINT:
-            case INT:
-            case BIGINT:
-                IntLiteral intLiteral = new IntLiteral(defaultValue, type);
-                break;
-            case LARGEINT:
-                LargeIntLiteral largeIntLiteral = new LargeIntLiteral(defaultValue);
-                break;
-            case FLOAT:
-                FloatLiteral floatLiteral = new FloatLiteral(defaultValue);
-                if (floatLiteral.getType().isDouble()) {
-                    throw new AnalysisException("Default value will loose precision: " + defaultValue);
-                }
-            case DOUBLE:
-                FloatLiteral doubleLiteral = new FloatLiteral(defaultValue);
-                break;
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-                DecimalLiteral decimalLiteral = new DecimalLiteral(defaultValue);
-                decimalLiteral.checkPrecisionAndScale(scalarType.getScalarPrecision(), scalarType.getScalarScale());
-                break;
-            case DATE:
-            case DATETIME:
-                DateLiteral dateLiteral = new DateLiteral(defaultValue, type);
-                break;
-            case CHAR:
-            case VARCHAR:
-            case HLL:
-                if (defaultValue.length() > scalarType.getLength()) {
-                    throw new AnalysisException("Default value is too long: " + defaultValue);
-                }
-                break;
-            case BITMAP:
-                break;
-            case BOOLEAN:
-                BoolLiteral boolLiteral = new BoolLiteral(defaultValue);
-                break;
-            default:
-                throw new AnalysisException(String.format("Cannot add default value for type '%s'", type));
+            if("now".equalsIgnoreCase(functionName) && !type.isDateType()) {
+                throw new AnalysisException(String.format("Default function now() for type %s is not supported", type));
+            }
+        } else if (defaultExpr instanceof NullLiteral) {
+            // nothing to check
+        } else {
+            throw new AnalysisException(String.format("Unsupported expr %s for default value", defaultExpr));
         }
     }
 
@@ -325,8 +312,8 @@ public class ColumnDef {
             sb.append("NULL ");
         }
 
-        if (defaultValue.isSet) {
-            sb.append("DEFAULT ").append(toDefaultExpr(defaultValue.expr)).append(" ");
+        if (defaultValueDef.isSet) {
+            sb.append("DEFAULT ").append(toDefaultExpr(defaultValueDef.expr)).append(" ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
 
@@ -334,7 +321,7 @@ public class ColumnDef {
     }
 
     public Column toColumn() {
-        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue, comment);
+        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment);
     }
 
     private String toDefaultExpr(Expr expr) {
@@ -350,7 +337,7 @@ public class ColumnDef {
     }
 
     public boolean hasDefaultValue() {
-        return defaultValue.isSet;
+        return defaultValueDef.isSet;
     }
 
     @Override

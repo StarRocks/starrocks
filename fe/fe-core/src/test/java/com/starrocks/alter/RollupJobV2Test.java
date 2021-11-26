@@ -34,6 +34,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.MVColumnItem;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Catalog;
@@ -382,7 +383,8 @@ public class RollupJobV2Test {
         short keysCount = 1;
         List<Column> columns = Lists.newArrayList();
         String mvColumnName = CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX + "to_bitmap_" + "c1";
-        Column column = new Column(mvColumnName, Type.BITMAP, false, AggregateType.BITMAP_UNION, false, new ColumnDef.DefaultValue(true, "1"), "");
+        Column column = new Column(mvColumnName, Type.BITMAP, false, AggregateType.BITMAP_UNION, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "");
         columns.add(column);
         RollupJobV2 rollupJobV2 = new RollupJobV2(1, 1, 1, "test", 1, 1, 1, "test", "rollup", columns, 1, 1,
                 KeysType.AGG_KEYS, keysCount,

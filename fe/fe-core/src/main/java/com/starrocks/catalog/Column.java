@@ -104,16 +104,17 @@ public class Column implements Writable {
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
                   String comment) {
-        this(name, type, isKey, aggregateType, false, new ColumnDef.DefaultValue(true, defaultValue), comment);
+        this(name, type, isKey, aggregateType, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue)), comment);
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, ColumnDef.DefaultValue defaultValue,
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, ColumnDef.DefaultValueDef defaultValue,
                   String comment) {
         this(name, type, isKey, aggregateType, false, defaultValue, comment);
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-                  ColumnDef.DefaultValue defaultValue, String comment) {
+                  ColumnDef.DefaultValueDef defaultValue, String comment) {
         this.name = name;
         if (this.name == null) {
             this.name = "";

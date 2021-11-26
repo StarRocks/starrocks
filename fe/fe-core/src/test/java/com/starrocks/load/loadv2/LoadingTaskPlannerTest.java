@@ -32,6 +32,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -615,9 +616,12 @@ public class LoadingTaskPlannerTest {
                                           @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("pk", Type.BIGINT, true, null, false, new ColumnDef.DefaultValue(true, "123"), ""));
-        columns.add(new Column("v1", Type.INT, false, null, false, new ColumnDef.DefaultValue(true, "231"), ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, new ColumnDef.DefaultValue(true, "asdf"), ""));
+        columns.add(new Column("pk", Type.BIGINT, true, null, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("123")), ""));
+        columns.add(new Column("v1", Type.INT, false, null, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("231")), ""));
+        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("asdf")), ""));
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
                 Type.BIGINT, true);

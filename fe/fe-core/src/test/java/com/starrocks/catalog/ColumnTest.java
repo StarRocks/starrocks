@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -112,8 +113,10 @@ public class ColumnTest {
 
     @Test(expected = DdlException.class)
     public void testSchemaChangeAllowed() throws DdlException {
-        Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, true, new ColumnDef.DefaultValue(true, "0"), "");
-        Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false, new ColumnDef.DefaultValue(true, "0"), "");
+        Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, true,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+        Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         oldColumn.checkSchemaChangeAllowed(newColumn);
         Assert.fail("No exception throws.");
     }
@@ -122,13 +125,15 @@ public class ColumnTest {
     public void testSchemaChangeAllowedInvolvingDecimalv3() throws DdlException {
         Column decimalColumn =
                 new Column("user", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 3), false, null, true,
-                        new ColumnDef.DefaultValue(true, "0"), "");
+                        new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
 
-        Column varcharColumn1 = new Column("user", ScalarType.createVarchar(50), false, null, true, new ColumnDef.DefaultValue(true, "0"), "");
+        Column varcharColumn1 = new Column("user", ScalarType.createVarchar(50), false, null, true,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         varcharColumn1.checkSchemaChangeAllowed(decimalColumn);
         decimalColumn.checkSchemaChangeAllowed(varcharColumn1);
 
-        Column varcharColumn2 = new Column("user", ScalarType.createVarchar(10), false, null, true, new ColumnDef.DefaultValue(true, "0"), "");
+        Column varcharColumn2 = new Column("user", ScalarType.createVarchar(10), false, null, true,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         varcharColumn2.checkSchemaChangeAllowed(decimalColumn);
         try {
             decimalColumn.checkSchemaChangeAllowed(varcharColumn2);
@@ -138,7 +143,7 @@ public class ColumnTest {
 
         Column decimalColumn2 =
                 new Column("user", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 4), false, null, true,
-                        new ColumnDef.DefaultValue(true, "0"), "");
+                        new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         decimalColumn.checkSchemaChangeAllowed(decimalColumn2);
 
         try {
@@ -148,10 +153,11 @@ public class ColumnTest {
 
         }
 
-        Column decimalv2Column = new Column("user", ScalarType.createDecimalV2Type(), false, null, true, new ColumnDef.DefaultValue(true, "0"), "");
+        Column decimalv2Column = new Column("user", ScalarType.createDecimalV2Type(), false, null, true,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         Column decimalColumn3 =
                 new Column("user", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 27, 9), false, null, true,
-                        new ColumnDef.DefaultValue(true, "0"), "");
+                        new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         decimalv2Column.checkSchemaChangeAllowed(decimalColumn3);
 
         try {
@@ -163,7 +169,7 @@ public class ColumnTest {
 
         Column decimalColumn4 =
                 new Column("user", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 13), false, null, true,
-                        new ColumnDef.DefaultValue(true, "0"), "");
+                        new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         try {
             decimalv2Column.checkSchemaChangeAllowed(decimalColumn4);
             Assert.fail("No exception throws");

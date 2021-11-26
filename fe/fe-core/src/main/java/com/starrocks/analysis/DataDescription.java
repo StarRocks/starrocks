@@ -509,7 +509,7 @@ public class DataDescription {
         }
 
         if (args.get(0) != null) {
-            ColumnDef.validateDefaultValue(column.getType(), args.get(0));
+            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(args.get(0)));
         }
     }
 
@@ -544,7 +544,7 @@ public class DataDescription {
         }
 
         if (replaceValue != null) {
-            ColumnDef.validateDefaultValue(column.getType(), replaceValue);
+            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(replaceValue));
         }
     }
 

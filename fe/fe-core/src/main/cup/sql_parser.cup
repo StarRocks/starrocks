@@ -470,7 +470,7 @@ nonterminal String keyword, ident, ident_or_text, variable_name, text_or_passwor
         collation_name_or_default, type_func_name_keyword, type_function_name, opt_file_format, time_unit;
 
 nonterminal String opt_db, procedure_or_function, opt_comment, opt_engine;
-nonterminal ColumnDef.DefaultValue opt_default_value;
+nonterminal ColumnDef.DefaultValueDef opt_default_value;
 nonterminal Boolean opt_if_exists, opt_if_not_exists;
 nonterminal Boolean opt_external;
 nonterminal Boolean opt_force;
@@ -2087,19 +2087,19 @@ index_definition_list ::=
 opt_default_value ::=
     /* Empty */
     {:
-        RESULT = ColumnDef.DefaultValue.NOT_SET;
+        RESULT = ColumnDef.DefaultValueDef.NOT_SET;
     :}
     | KW_DEFAULT STRING_LITERAL:value
     {:
-        RESULT = new ColumnDef.DefaultValue(true, value);
+        RESULT = new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
     :}
     | KW_DEFAULT KW_NULL
     {:
-        RESULT = ColumnDef.DefaultValue.NULL_DEFAULT_VALUE;
+        RESULT = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
     :}
     | KW_DEFAULT KW_CURRENT_TIMESTAMP
     {:
-        RESULT = ColumnDef.DefaultValue.CURRENT_TIMESTAMP_VALUE;
+        RESULT = ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
     :}
     ;
 
