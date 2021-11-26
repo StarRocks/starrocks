@@ -103,8 +103,12 @@ public:
 
 private:
     struct ChunkItem {
-        int64_t size = 0;
+        int64_t chunk_bytes = 0;
         ChunkUniquePtr chunk_ptr;
+        // When the memory of the ChunkQueue exceeds the limit,
+        // we have to hold closure of the request, so as not to let the sender continue to send data.
+        // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
+        // the callback is closed- >run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
     };
 
@@ -177,7 +181,7 @@ bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
         return false;
     } else {
         *chunk = _chunk_queue.front().chunk_ptr.release();
-        _recvr->_num_buffered_bytes -= _chunk_queue.front().size;
+        _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
         auto* closure = _chunk_queue.front().closure;
         VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
         _chunk_queue.pop_front();
@@ -209,7 +213,7 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
     *chunk = _chunk_queue.front().chunk_ptr.release();
     auto* closure = _chunk_queue.front().closure;
 
-    _recvr->_num_buffered_bytes -= _chunk_queue.front().size;
+    _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
