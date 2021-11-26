@@ -119,8 +119,7 @@ Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google
 
     bool eos = request->eos();
     if (request->has_row_batch()) {
-        recvr->add_batch(request->row_batch(), request->sender_id(), request->be_number(), request->packet_seq(),
-                         eos ? nullptr : done);
+        return Status::InternalError("Non-vectorized execute engine is not supported");
     }
 
     if (eos) {
