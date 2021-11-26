@@ -94,10 +94,16 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                         _aggregator->hash_map_variant().capacity() - _aggregator->hash_map_variant().capacity() / 8;
                 size_t remain_size = real_capacity - _aggregator->hash_map_variant().size();
                 bool ht_needs_expansion = remain_size < input_chunk_size;
+
+#ifndef NDEBUG
+                // chaos test for streaming or agg, The results have to be consistent
+                if (_aggregator->mem_pool()->total_allocated_bytes() % 2 == 0) {
+#else
                 if (!ht_needs_expansion ||
                     _aggregator->should_expand_preagg_hash_tables(_children[0]->rows_returned(), input_chunk_size,
                                                                   _aggregator->mem_pool()->total_allocated_bytes(),
                                                                   _aggregator->hash_map_variant().size())) {
+#endif
                     RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
