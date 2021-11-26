@@ -335,7 +335,6 @@ public class StmtRewriter {
         if (!(expr instanceof CompoundPredicate)) {
             return false;
         }
-        ;
         if (Expr.IS_OR_PREDICATE.apply(expr)) {
             return expr.contains(Subquery.class);
         }

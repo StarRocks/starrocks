@@ -37,9 +37,9 @@ public:
     // return a new range that represent the intersection of |this| and |r|.
     Range intersection(const Range& r) const;
 
-    bool has_intersection(const Range& rhs) const { return !(_end <= rhs.begin() || rhs._end <= _begin); }
+    bool has_intersection(const Range& rhs) const { return !(_end <= rhs.begin() || rhs.end() <= _begin); }
 
-    bool contains(rowid_t row) const { return row - _begin < _end - _begin; }
+    bool contains(rowid_t row) const { return row < _end; }
 
     std::string to_string() const;
 
@@ -291,11 +291,11 @@ inline bool SparseRangeIterator::has_more() const {
 
 inline Range SparseRangeIterator::next(size_t size) {
     const std::vector<Range>& ranges = _range->_ranges;
-    const Range& r = ranges[_index];
-    size = std::min<size_t>(size, r.end() - _next_rowid);
+    const Range& range = ranges[_index];
+    size = std::min<size_t>(size, range.end() - _next_rowid);
     Range ret(_next_rowid, _next_rowid + size);
     _next_rowid += size;
-    if (_next_rowid == r.end()) {
+    if (_next_rowid == range.end()) {
         ++_index;
         if (_index < ranges.size()) {
             _next_rowid = ranges[_index].begin();

@@ -1028,8 +1028,6 @@ const TypeConverter* get_type_converter(FieldType from_type, FieldType to_type) 
 template <typename SrcType>
 class BitMapTypeConverter : public MaterializeTypeConverter {
 public:
-    ;
-
     BitMapTypeConverter() = default;
     ~BitMapTypeConverter() = default;
 
@@ -1043,8 +1041,7 @@ public:
                 dst_col->append_datum(dst_datum);
                 continue;
             }
-            uint64_t origin_value;
-            origin_value = src_datum.get<SrcType>();
+            uint64_t origin_value = src_datum.get<SrcType>();
             if (origin_value < 0) {
                 LOG(WARNING) << "The input which less than zero "
                              << " is not valid, to_bitmap only support bigint value from 0 to "
@@ -1104,8 +1101,7 @@ public:
                 dst_col->append_datum(dst_datum);
                 continue;
             }
-            double origin_value;
-            origin_value = src_datum.get<SrcType>();
+            double origin_value = src_datum.get<SrcType>();
             PercentileValue percentile;
             percentile.add(origin_value);
             dst_datum.set_percentile(&percentile);
