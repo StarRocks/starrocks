@@ -23,6 +23,12 @@ Status ScanOperator::prepare(RuntimeState* state) {
                 strings::Substitute("num_scan_operators exceeds queue capacity($0) of pipeline_pool_thread",
                                     _io_threads->get_queue_capacity()));
     }
+
+    // init filtered_ouput_columns
+    for (const auto& col_name : _olap_scan_node.unused_output_column_name) {
+        _unused_output_columns.emplace_back(col_name);
+    }
+
     _pickup_morsel(state);
     return Status::OK();
 }
@@ -134,7 +140,7 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
         DCHECK(morsel);
         _chunk_source = std::make_shared<OlapChunkSource>(
                 std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, _runtime_profile.get(), _runtime_filters,
-                _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation);
+                _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation, &_unused_output_columns);
         _chunk_source->prepare(state);
         _trigger_next_scan(state);
     }
