@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.RemoveDuplicatePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedSameColumnRule;
 
@@ -45,7 +46,8 @@ public class ScalarOperatorRewriter {
             new SimplifiedSameColumnRule(),
             new SimplifiedPredicateRule(),
             new ExtractCommonPredicateRule(),
-            new ArithmeticCommutativeRule()
+            new ArithmeticCommutativeRule(),
+            new RemoveDuplicatePredicateRule()
     );
     private final ScalarOperatorRewriteContext context;
 
