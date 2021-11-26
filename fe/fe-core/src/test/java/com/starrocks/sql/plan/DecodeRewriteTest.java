@@ -144,10 +144,12 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertTrue(plan.contains("count(10: S_ADDRESS)"));
 
         sql = "select count(distinct S_ADDRESS) from supplier";
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("count(10: S_ADDRESS)"));
         Assert.assertTrue(plan.contains("HASH_PARTITIONED: 10: S_ADDRESS"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
     @Test
