@@ -1350,7 +1350,7 @@ public class Coordinator {
                     BackendSelector selector = new RelicatedBackendSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
-                } else if (hasColocate || hasBucket) {
+                } else if (scanNode instanceof OlapScanNode && (hasColocate || hasBucket)) {
                     BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment);
                     selector.computeScanRangeAssignment();
                 } else {
