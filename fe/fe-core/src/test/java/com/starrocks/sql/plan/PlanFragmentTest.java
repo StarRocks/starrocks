@@ -3940,11 +3940,14 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select MAX(x1) from (select v2 as x1 from t0 union select v3 from t0) as q";
         plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
                 "  |  output: max(8: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  6:EXCHANGE\n" +
+                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 1\n" +
                 " OUTPUT EXPRS:\n" +
@@ -3957,6 +3960,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  5:AGGREGATE (update serialize)\n" +
                 "  |  output: max(4: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:UNION"));
 
@@ -3965,6 +3969,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: min(2: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
@@ -3974,6 +3979,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: min(2: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
@@ -4023,10 +4029,13 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select SUM(x1) from (select v2 as x1 from t0 union select v3 from t0) as q";
         plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
                 "  |  group by: 4: v2\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  6:EXCHANGE\n" +
+                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
@@ -4045,9 +4054,11 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
     }
