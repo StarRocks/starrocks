@@ -30,11 +30,9 @@
 #include "runtime/query_statistics.h"
 #include "util/tuple_row_compare.h"
 
-namespace google {
-namespace protobuf {
+namespace google::protobuf {
 class Closure;
-}
-} // namespace google
+} // namespace google::protobuf
 
 namespace starrocks {
 
@@ -44,9 +42,7 @@ class SortedChunksMerger;
 
 class DataStreamMgr;
 class MemTracker;
-class RowBatch;
 class RuntimeProfile;
-class PRowBatch;
 class PTransmitChunkParams;
 
 // Single receiver of an m:n data stream.
@@ -119,10 +115,6 @@ private:
                     std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
-    void add_batch(const PRowBatch& batch, int sender_id, int be_number, int64_t packet_seq,
-                   ::google::protobuf::Closure** done);
-
-    // If receive queue is full, done is enqueue pending, and return with *done is nullptr
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     // Indicate that a particular sender is done. Delegated to the appropriate
@@ -185,30 +177,16 @@ private:
 
     // Time series of number of bytes received, samples _bytes_received_counter
     // RuntimeProfile::TimeSeriesCounter* _bytes_received_time_series_counter;
-    RuntimeProfile::Counter* _deserialize_chunk_meta_timer;
     RuntimeProfile::Counter* _deserialize_row_batch_timer;
     RuntimeProfile::Counter* _decompress_row_batch_timer;
     RuntimeProfile::Counter* _request_received_counter;
-
-    // Time spent waiting until the first batch arrives across all queues.
-    // TODO: Turn this into a wall-clock timer.
-    RuntimeProfile::Counter* _first_batch_wait_total_timer;
 
     // Total spent for senders putting data in the queue
     RuntimeProfile::Counter* _sender_total_timer = nullptr;
     RuntimeProfile::Counter* _sender_wait_lock_timer = nullptr;
 
-    // Total time (summed across all threads) spent waiting for the
-    // recv buffer to be drained so that new batches can be
-    // added. Remote plan fragments are blocked for the same amount of
-    // time.
-    RuntimeProfile::Counter* _buffer_full_total_timer;
-
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
-
-    // Total time spent waiting for data to arrive in the recv buffer
-    RuntimeProfile::Counter* _data_arrival_timer;
 
     bool _is_pipeline;
 };
