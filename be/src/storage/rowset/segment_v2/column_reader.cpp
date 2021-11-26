@@ -197,6 +197,7 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
 Status ColumnReader::get_row_ranges_by_zone_map(CondColumn* cond_column, CondColumn* delete_condition,
                                                 std::unordered_set<uint32_t>* delete_partial_filtered_pages,
                                                 RowRanges* row_ranges) {
+    RETURN_IF_ERROR(_load_zone_map_index_once());
     std::vector<uint32_t> page_indexes;
     RETURN_IF_ERROR(_get_filtered_pages(cond_column, delete_condition, delete_partial_filtered_pages, &page_indexes));
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
