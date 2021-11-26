@@ -332,7 +332,7 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
         RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
-        ChunkItem item {chunk_bytes, std::move(chunk), nullptr};
+        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
 
         // TODO(zc): review this chunk_bytes
         chunks.emplace_back(std::move(item));
