@@ -94,8 +94,7 @@ public:
 
     void process() {
         try {
-            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
 
             while (!_is_finished) {
                 {

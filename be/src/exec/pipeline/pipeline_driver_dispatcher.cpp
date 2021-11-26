@@ -66,8 +66,7 @@ void GlobalDriverDispatcher::run() {
         auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
         auto* runtime_state = runtime_state_ptr.get();
         {
-            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(runtime_state->instance_mem_tracker());
-            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 
             if (fragment_ctx->is_canceled()) {
                 VLOG_ROW << "[Driver] Canceled: driver=" << driver
