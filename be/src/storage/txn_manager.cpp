@@ -33,7 +33,6 @@
 #include "storage/data_dir.h"
 #include "storage/reader.h"
 #include "storage/rowset/rowset_meta_manager.h"
-#include "storage/schema_change.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"

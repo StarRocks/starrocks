@@ -29,7 +29,7 @@
 
 #include "storage/olap_define.h"
 #include "storage/options.h"
-#include "storage/push_handler.h"
+#include "storage/row_cursor.h"
 #include "storage/storage_engine.h"
 #include "util/file_utils.h"
 #include "util/logging.h"
