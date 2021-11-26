@@ -133,8 +133,15 @@ public class ScalarOperatorFunctions {
             return ConstantOperator.createDatetime(ldt, Type.DATETIME);
         } else {
             LocalDate ld = LocalDate.from(builder.toFormatter().parse(date.getVarchar()));
-            return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+            return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATETIME);
         }
+    }
+
+    @FEFunction(name = "str2date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATE")
+    public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
+        DateTimeFormatterBuilder builder = unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
+        LocalDate ld = LocalDate.from(builder.toFormatter().parse(date.getVarchar()));
+        return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
     @FEFunction(name = "years_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
