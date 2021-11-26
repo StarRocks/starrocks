@@ -61,14 +61,19 @@ public class ColumnDef {
 
         public DefaultValueDef(boolean isSet, Expr expr) {
             this.isSet = isSet;
-            this.expr = expr;
+            // make expr always not null
+            if (expr != null) {
+                this.expr = expr;
+            } else {
+                this.expr = NullLiteral.create(Type.VARCHAR);
+            }
         }
 
         private static final String ZERO = new String(new byte[] {0});
         // no default value
         public static DefaultValueDef NOT_SET = new DefaultValueDef(false, NullLiteral.create(Type.VARCHAR));
         // default null
-        public static DefaultValueDef NULL_DEFAULT_VALUE = new DefaultValueDef(true, null);
+        public static DefaultValueDef NULL_DEFAULT_VALUE = new DefaultValueDef(true, NullLiteral.create(Type.VARCHAR));
         // default "value", "0" means empty hll or bitmap
         public static DefaultValueDef EMPTY_VALUE = new DefaultValueDef(true, new StringLiteral(ZERO));
         // default value for date type CURRENT_TIMESTAMP
