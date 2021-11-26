@@ -31,6 +31,8 @@
 
 namespace starrocks {
 
+const int MYSQL_SINK_BATCH_SIZE = 1024;
+
 MysqlTableSink::MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
         : _pool(pool), _row_desc(row_desc), _t_output_expr(t_exprs) {}
 
@@ -46,7 +48,7 @@ Status MysqlTableSink::init(const TDataSink& t_sink) {
     _conn_info.passwd = t_mysql_sink.passwd;
     _conn_info.db = t_mysql_sink.db;
     _mysql_tbl = t_mysql_sink.table;
-    _batch_size = t_mysql_sink.batch_size;
+    _batch_size = MYSQL_SINK_BATCH_SIZE;
 
     // From the thrift expressions create the real exprs.
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs));

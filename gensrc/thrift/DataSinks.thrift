@@ -85,7 +85,6 @@ struct TMysqlTableSink {
     4: required string passwd
     5: required string db
     6: required string table
-    7: required i32 batch_size
 }
 
 struct TExportSink {

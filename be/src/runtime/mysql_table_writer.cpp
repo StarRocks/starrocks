@@ -26,6 +26,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fmt/compile.h"
@@ -111,6 +112,11 @@ Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
             APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
             APPLY_FOR_ALL_NULL_TYPE(M)
 #undef M
+        case PrimitiveType::TYPE_TIME: {
+            columns[i] = vectorized::ColumnHelper::convert_time_column_from_double_to_str(columns[i]);
+            _viewers.emplace_back(vectorized::ColumnViewer<TYPE_VARCHAR>(columns[i]));
+            break;
+        }
 
         default:
             return Status::InternalError(fmt::format("unsupport type in mysql sink:{}", type.type));
