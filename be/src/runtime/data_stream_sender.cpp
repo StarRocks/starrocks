@@ -568,7 +568,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
         // Round-robin batches among channels. Wait for the current channel to finish its
         // rpc before overwriting its batch.
         // 1. Get request of that channel
-        Channel* channel = _channels[_current_channel_idx];
+        Channel* channel = _channels[_channel_indices[_current_channel_idx]];
         bool real_sent = false;
         RETURN_IF_ERROR(channel->send_one_chunk(chunk, false, &real_sent));
         if (real_sent) {
