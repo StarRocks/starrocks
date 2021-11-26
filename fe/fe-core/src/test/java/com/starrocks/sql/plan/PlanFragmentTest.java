@@ -4233,8 +4233,16 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testArithmeticCommutative() throws Exception {
-        String sql = "select v1 from t0 where v1 + 2 > 3";
+        String sql = "select v1 from t0 where 2 / v1  > 3";
         String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 2.0 / CAST(1: v1 AS DOUBLE) > 3.0"));
+
+        sql = "select v1 from t0 where 2 * v1  > 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 2 * 1: v1 > 3"));
+
+        sql = "select v1 from t0 where v1 + 2 > 3";
+        planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 > 1"));
 
         sql = "select v1 from t0 where  v1 / 2 <=> 3";
