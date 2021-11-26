@@ -60,7 +60,7 @@ public class ColumnDef {
         public Expr expr;
 
         public DefaultValueDef(boolean isSet, Expr expr) {
-            this.isSet = true;
+            this.isSet = isSet;
             this.expr = expr;
         }
 
