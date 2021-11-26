@@ -440,7 +440,7 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs,
 
     std::set<std::string> key_set;
 
-    // index of sorted elements in the ordered_slot_descs.
+    // Index of sorted elements in the ordered_slot_descs.
     size_t idx = 0;
 
     std::ostringstream oss;
@@ -465,9 +465,11 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs,
 
         key_set.insert(key);
 
+        // Find the SlotDescriptor with the json document key.
         auto itr = std::find_if(ordered_slot_descs.begin(), ordered_slot_descs.end(),
                                 [&key](const SlotDescriptor* desc) { return desc->col_name() == key; });
 
+        // Swap the SlotDescriptor to the expected index.
         if (itr != ordered_slot_descs.end()) {
             std::swap(ordered_slot_descs[idx], *itr);
             idx++;
