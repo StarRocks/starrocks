@@ -20,7 +20,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -56,8 +55,17 @@ public class SplitAggregateRule extends TransformationRule {
         return agg.getType().isGlobal() && !agg.isSplit();
     }
 
-    // Note: This method logic must consistent with CostEstimator::canGenerateOneStageAggNode
-    private boolean needGenerateTwoStageAggregate(OptExpression input, long distinctCount) {
+    private boolean canGenerateMultiStageAggregate(OptExpression input) {
+        // Must do one stage aggregate If the child contains limit,
+        // the aggregation must be a single node to ensure correctness.
+        // eg. select count(*) from (select * table limit 2) t
+        if (input.inputAt(0).getOp().hasLimit()) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean mustGenerateMultiStageAggregate(OptExpression input, List<CallOperator> distinctAggCallOperator) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         // 1 Must do two stage aggregate if child operator is LogicalRepeatOperator
         //   If the repeat node is used as the input node of the Exchange node.
@@ -68,32 +76,36 @@ public class SplitAggregateRule extends TransformationRule {
         if (input.inputAt(0).getOp() instanceof LogicalRepeatOperator) {
             return true;
         }
-
         // 2 Must do two stage aggregate is aggregate function has array type
         if (aggregationOperator.getAggregations().values().stream().anyMatch(callOperator
                 -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()))) {
             return true;
         }
+        // 3. Must generate three, four phase aggregate for distinct aggregate with multi columns
+        boolean hasMultiColumns =
+                distinctAggCallOperator.stream().anyMatch(callOperator -> callOperator.getChildren().size() > 1);
+        if (distinctAggCallOperator.size() > 0 && hasMultiColumns) {
+            return true;
+        }
+        return false;
+    }
 
-        // 3 Must do one stage aggregate If the child contains limit,
-        // the aggregation must be a single node to ensure correctness.
-        // eg. select count(*) from (select * table limit 2) t
-        if (((LogicalOperator) input.inputAt(0).getOp()).getLimit() != -1) {
+    // Note: This method logic must consistent with CostEstimator::needGenerateOneStageAggNode
+    private boolean needGenerateMultiStageAggregate(OptExpression input, List<CallOperator> distinctAggCallOperator) {
+        // 1. check if can generate multi stage aggregate.
+        if (!canGenerateMultiStageAggregate(input)) {
             return false;
         }
-
-        // 4 Respect user hint
+        // 2. check if must generate multi stage aggregate.
+        if (mustGenerateMultiStageAggregate(input, distinctAggCallOperator)) {
+            return true;
+        }
+        // 3. Respect user hint
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         if (aggStage == 1) {
             return false;
         }
-
-        // 5 generate two, three, four phase aggregate for distinct aggregate
-        if (distinctCount > 0) {
-            return true;
-        }
-
-        // 6 If scan tablet sum leas than 1, do one phase aggregate is enough
+        // 4. If scan tablet sum leas than 1, do one phase aggregate is enough
         if (aggStage == 0 && input.getLogicalProperty().isExecuteInOneTablet()) {
             return false;
         }
@@ -137,7 +149,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .collect(Collectors.toList());
         long distinctCount = distinctAggCallOperator.size();
 
-        if (!needGenerateTwoStageAggregate(input, distinctCount)) {
+        if (!needGenerateMultiStageAggregate(input, distinctAggCallOperator)) {
             return Lists.newArrayList();
         }
 
