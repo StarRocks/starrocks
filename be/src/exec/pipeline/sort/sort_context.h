@@ -101,21 +101,10 @@ public:
 
         // get the first data
         selective_values.push_back(func(min_heap_entry));
-
-        // Swaps the value in the position first and the value in the position last-1
-        // and makes the subrange [first, last-1) into a heap.
-        std::pop_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+        _adjust_heap();
         ++rows_number;
 
         while (rows_number < needed_rows) {
-            if (min_heap_entry->has_next()) {
-                // Inserts the element at the position last-1 into the max heap defined by the range [first, last-1).
-                std::push_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
-            } else {
-                // Remove the empty data segment.
-                _data_segment_heaps.pop_back();
-            }
-
             if (min_heap_entry == _data_segment_heaps[0]) {
                 // data from the same data segment, just add selective value.
                 selective_values.push_back(func(min_heap_entry));
@@ -129,8 +118,7 @@ public:
                 selective_values.push_back(func(min_heap_entry));
             }
 
-            // Swaps the value in the position first and the value in the position last-1.
-            std::pop_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+            _adjust_heap();
             ++rows_number;
         }
 
@@ -222,6 +210,22 @@ private:
 
         // _data_segment_heaps[0] is the toppest entry.
         std::make_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+    }
+
+    void _adjust_heap() {
+        auto* min_heap_entry = _data_segment_heaps[0];
+
+        // Swaps the value in the position first and the value in the position last-1
+        // and makes the subrange [first, last-1) into a heap.
+        std::pop_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+
+        if (min_heap_entry->has_next()) {
+            // Inserts the element at the position last-1 into the max heap defined by the range [first, last-1).
+            std::push_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+        } else {
+            // Remove the empty data segment.
+            _data_segment_heaps.pop_back();
+        }
     }
 
     size_t _next_output_row = 0;
