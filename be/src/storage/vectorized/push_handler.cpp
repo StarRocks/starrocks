@@ -10,9 +10,9 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
-#include "storage/schema_change.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/schema_change.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
