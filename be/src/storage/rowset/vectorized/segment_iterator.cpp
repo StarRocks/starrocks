@@ -609,11 +609,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
 
-    const uint32_t chunk_capacity = _opts.chunk_size;
-    const int64_t prev_raw_read = _opts.stats->raw_rows_read;
-    const bool has_predicate = !_opts.predicates.empty();
     uint16_t chunk_start = 0;
-    bool need_switch_context = false;
+    const uint32_t chunk_capacity = _opts.chunk_size;
+    const bool has_predicate = !_opts.predicates.empty();
+    const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
 
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
@@ -640,7 +639,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     _opts.stats->block_load_ns += sw.elapsed_time();
 
-    int64_t total_read = _opts.stats->raw_rows_read - prev_raw_read;
+    int64_t total_read = _opts.stats->raw_rows_read - prev_raw_rows_read;
 
     if (UNLIKELY(raw_chunk_size == 0)) {
         // Return directly if chunk_start is zero, i.e, chunk is empty.
@@ -654,7 +653,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
-
+    bool need_switch_context = false;
     if (_context->_late_materialize) {
         chunk = _context->_final_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
@@ -1195,7 +1194,7 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
         ColumnIterator* column_iter = _column_iterators[cid];
         RETURN_IF_ERROR(column_iter->get_row_ranges_by_bloom_filter(preds, &_scan_range));
     }
-    _opts.stats->rows_bf_filtered += (prev_size - _scan_range.span_size());
+    _opts.stats->rows_bf_filtered += prev_size - _scan_range.span_size();
     return Status::OK();
 }
 

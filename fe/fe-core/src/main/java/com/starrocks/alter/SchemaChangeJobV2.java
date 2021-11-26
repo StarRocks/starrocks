@@ -407,8 +407,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         long originTabletId = partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId);
-                        List<Replica> shadowReplicas = shadowTablet.getReplicas();
-                        for (Replica shadowReplica : shadowReplicas) {
+                        for (Replica shadowReplica : shadowTablet.getReplicas()) {
                             AlterReplicaTask rollupTask = new AlterReplicaTask(
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, originIdxId,
@@ -553,7 +552,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
                 Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                // set replica state
+                // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     for (Replica replica : tablet.getReplicas()) {
                         replica.setState(ReplicaState.NORMAL);
@@ -562,7 +561,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                 partition.visualiseShadowIndex(shadowIdxId, originIdxId == partition.getBaseIndex().getId());
 
-                // delete origin replicas
+                // the origin tablet created by old schema can be deleted from FE meta data
                 for (Tablet originTablet : droppedIdx.getTablets()) {
                     Catalog.getCurrentInvertedIndex().deleteTablet(originTablet.getId());
                 }
