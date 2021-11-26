@@ -243,7 +243,7 @@ OutPut Exchange Id: 15
 |  50 <-> [50: R_REGIONKEY, INT, false]
 |  cardinality: 1
 |  column statistics:
-|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 13:OlapScanNode
 table: region, rollup: region
@@ -254,8 +254,8 @@ tabletList=10106
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
-* R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
-* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+* R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 6(F05)
 
@@ -270,7 +270,7 @@ OutPut Exchange Id: 08
 |  cardinality: 22765073
 |  column statistics:
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.2765072765072763E7] ESTIMATE
 |
 6:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
@@ -278,7 +278,7 @@ OutPut Exchange Id: 08
 |  cardinality: 22765073
 |  column statistics:
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.2765072765072763E7] ESTIMATE
 |
 |----5:EXCHANGE
 |       cardinality: 15000000
@@ -317,7 +317,7 @@ OutPut Exchange Id: 03
 |  11 <-> [11: O_CUSTKEY, INT, false]
 |  cardinality: 22765073
 |  column statistics:
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.2765072765072763E7] ESTIMATE
 |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 |
 1:OlapScanNode
@@ -329,7 +329,7 @@ tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 actualRows=0, avgRowSize=20.0
 cardinality: 22765073
 column statistics:
-* O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+* O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.2765072765072763E7] ESTIMATE
 * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 * O_ORDERDATE-->[7.888896E8, 8.204256E8, 0.0, 4.0, 2406.0] ESTIMATE
 [dump]

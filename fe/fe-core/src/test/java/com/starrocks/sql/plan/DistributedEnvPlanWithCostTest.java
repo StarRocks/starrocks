@@ -516,6 +516,65 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testAddProjectForJoinPrune() throws Exception {
+        String sql = "select\n" +
+                "    c_custkey,\n" +
+                "    c_name,\n" +
+                "    sum(l_extendedprice * (1 - l_discount)) as revenue,\n" +
+                "    c_acctbal,\n" +
+                "    n_name,\n" +
+                "    c_address,\n" +
+                "    c_phone,\n" +
+                "    c_comment\n" +
+                "from\n" +
+                "    customer,\n" +
+                "    orders,\n" +
+                "    lineitem,\n" +
+                "    nation\n" +
+                "where\n" +
+                "        c_custkey = o_custkey\n" +
+                "  and l_orderkey = o_orderkey\n" +
+                "  and o_orderdate >= date '1994-05-01'\n" +
+                "  and o_orderdate < date '1994-08-01'\n" +
+                "  and l_returnflag = 'R'\n" +
+                "  and c_nationkey = n_nationkey\n" +
+                "group by\n" +
+                "    c_custkey,\n" +
+                "    c_name,\n" +
+                "    c_acctbal,\n" +
+                "    c_phone,\n" +
+                "    n_name,\n" +
+                "    c_address,\n" +
+                "    c_comment\n" +
+                "order by\n" +
+                "    revenue desc limit 20;";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("11:Project\n" +
+                "  |  output columns:\n" +
+                "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
+                "  |  25 <-> [25: L_EXTENDEDPRICE, DOUBLE, false]\n" +
+                "  |  26 <-> [26: L_DISCOUNT, DOUBLE, false]\n" +
+                "  |  cardinality: 7650728\n" +
+                "  |  column statistics: \n" +
+                "  |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
+                "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
+                "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  10:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [20: L_ORDERKEY, INT, false] = [10: O_ORDERKEY, INT, false]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 1, build_expr = (10: O_ORDERKEY), remote = false\n" +
+                "  |  cardinality: 7650728\n" +
+                "  |  column statistics: \n" +
+                "  |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
+                "  |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
+                "  |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE\n" +
+                "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
+                "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE"));
+    }
+
+    @Test
     public void testNotEvalStringTypePredicateCardinality() throws Exception {
         String sql = "select\n" +
                 "            n1.n_name as supp_nation,\n" +
@@ -540,7 +599,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains(" 5:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates: ((19: N_NAME = 'CANADA') AND (24: N_NAME = 'IRAN')) OR ((19: N_NAME = 'IRAN') AND (24: N_NAME = 'CANADA'))\n" +
-                "  |  cardinality: 2"));
+                "  |  cardinality: 1"));
     }
 
     @Test

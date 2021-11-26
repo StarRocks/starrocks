@@ -50,7 +50,7 @@ column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * year-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
-* sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -66,7 +66,7 @@ OutPut Exchange Id: 24
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
-|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 22:AGGREGATE (update finalize)
 |  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
@@ -76,7 +76,7 @@ OutPut Exchange Id: 24
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
-|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 21:EXCHANGE
 cardinality: 554645
@@ -98,7 +98,7 @@ OutPut Exchange Id: 21
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -108,7 +108,7 @@ OutPut Exchange Id: 21
 |  - filter_id = 3, build_expr = (50: N_NATIONKEY), remote = true
 |  cardinality: 554645
 |  column statistics:
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
