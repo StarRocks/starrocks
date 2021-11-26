@@ -174,7 +174,7 @@ OLAPStatus BetaRowsetWriter::_add_row(const RowType& row) {
         LOG(WARNING) << "Fail to append row, " << s.to_string();
         return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
     }
-    if (PREDICT_FALSE(_segment_writer->estimate_segment_size() >= MAX_SEGMENT_SIZE ||
+    if (PREDICT_FALSE(_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
                       _segment_writer->num_rows_written() >= _context.max_rows_per_segment)) {
         RETURN_NOT_OK(_flush_segment_writer(&_segment_writer));
     }
@@ -509,7 +509,7 @@ Status BetaRowsetWriter::_flush_src_rssids() {
 OLAPStatus BetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
     if (_segment_writer == nullptr) {
         _segment_writer = _create_segment_writer();
-    } else if (_segment_writer->estimate_segment_size() >= MAX_SEGMENT_SIZE ||
+    } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
                _segment_writer->num_rows_written() + chunk.num_rows() >= _context.max_rows_per_segment) {
         RETURN_NOT_OK(_flush_segment_writer(&_segment_writer));
         _segment_writer = _create_segment_writer();
@@ -530,7 +530,7 @@ OLAPStatus BetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
 OLAPStatus BetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
     if (_segment_writer == nullptr) {
         _segment_writer = _create_segment_writer();
-    } else if (_segment_writer->estimate_segment_size() >= MAX_SEGMENT_SIZE ||
+    } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
                _segment_writer->num_rows_written() + chunk.num_rows() >= _context.max_rows_per_segment) {
         RETURN_NOT_OK(_flush_segment_writer(&_segment_writer));
         _segment_writer = _create_segment_writer();
