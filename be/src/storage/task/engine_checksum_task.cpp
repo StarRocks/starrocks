@@ -118,7 +118,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     while (st.ok() && !bg_worker_stopped) {
 #ifndef BE_TEST
-        Status st = _mem_tracker->check_mem_limit("ConsistencyCheck");
+        st = _mem_tracker->check_mem_limit("ConsistencyCheck");
         if (!st.ok()) {
             LOG(WARNING) << "failed to finish compute checksum. " << st.message() << std::endl;
             return OLAP_ERR_OTHER_ERROR;
