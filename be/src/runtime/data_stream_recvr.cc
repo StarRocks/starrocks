@@ -102,6 +102,16 @@ public:
     bool is_finished() const;
 
 private:
+    struct ChunkItem {
+        int64_t chunk_bytes = 0;
+        ChunkUniquePtr chunk_ptr;
+        // When the memory of the ChunkQueue exceeds the limit,
+        // we have to hold closure of the request, so as not to let the sender continue to send data.
+        // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
+        // the callback is closed- >run() Let the sender continue to send data
+        google::protobuf::Closure* closure = nullptr;
+    };
+
     // _add_chunks_internal is called by add_chunks and add_chunks_for_pipeline
     Status _add_chunks_internal(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
                                 const std::function<void()>& cb);
@@ -125,14 +135,12 @@ private:
     // signal arrival of new batch or the eos/cancelled condition
     std::condition_variable _data_arrival_cv;
 
-    typedef std::list<std::pair<int, ChunkUniquePtr>> ChunkQueue;
+    typedef std::list<ChunkItem> ChunkQueue;
     ChunkQueue _chunk_queue;
     vectorized::RuntimeChunkMeta _chunk_meta;
 
     std::unordered_set<int> _sender_eos_set;          // sender_id
     std::unordered_map<int, int64_t> _packet_seq_map; // be_number => packet_seq
-
-    std::deque<std::pair<google::protobuf::Closure*, MonotonicStopWatch>> _pending_closures;
 };
 
 DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int num_senders)
@@ -172,14 +180,13 @@ bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
         DCHECK_EQ(_num_remaining_senders, 0);
         return false;
     } else {
-        *chunk = _chunk_queue.front().second.release();
-        _recvr->_num_buffered_bytes -= _chunk_queue.front().first;
+        *chunk = _chunk_queue.front().chunk_ptr.release();
+        _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
+        auto* closure = _chunk_queue.front().closure;
         VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
         _chunk_queue.pop_front();
-        if (!_pending_closures.empty()) {
-            auto closure_pair = _pending_closures.front();
-            closure_pair.first->Run();
-            _pending_closures.pop_front();
+        if (closure != nullptr) {
+            closure->Run();
         }
         return true;
     }
@@ -203,15 +210,14 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
         return Status::OK();
     }
 
-    *chunk = _chunk_queue.front().second.release();
-    _recvr->_num_buffered_bytes -= _chunk_queue.front().first;
+    *chunk = _chunk_queue.front().chunk_ptr.release();
+    auto* closure = _chunk_queue.front().closure;
+
+    _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
-    // A Requet may contain multiple Chunks.
-    // The consumption of a Chunk does not necessarily require the sender to send it immediately.
-    // It should be determined according to the current memory usage.
-    if (!_pending_closures.empty() && !_recvr->exceeds_limit()) {
+    if (closure != nullptr) {
         // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
         // the execution thread will hold done and will not return, block brpc from sending packets,
         // and the execution thread will call run() to let brpc continue to send packets,
@@ -221,9 +227,7 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
         DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 #endif
 
-        auto closure_pair = _pending_closures.front();
-        closure_pair.first->Run();
-        _pending_closures.pop_front();
+        closure->Run();
     }
 
     return Status::OK();
@@ -328,12 +332,14 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     for (auto& pchunk : request.chunks()) {
-        size_t chunk_bytes = pchunk.data().size();
+        int64_t chunk_bytes = pchunk.data().size();
         ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
         RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
+        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+
         // TODO(zc): review this chunk_bytes
-        chunks.emplace_back(chunk_bytes, std::move(chunk));
+        chunks.emplace_back(std::move(item));
 
         total_chunk_bytes += chunk_bytes;
     }
@@ -347,13 +353,11 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         for (auto& pair : chunks) {
             _chunk_queue.emplace_back(std::move(pair));
         }
-        // if done is nullptr, this function can't delay this response
-        if (done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
-            MonotonicStopWatch monotonicStopWatch;
-            DCHECK(*done != nullptr);
-            _pending_closures.emplace_back(*done, monotonicStopWatch);
+        if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+            _chunk_queue.back().closure = *done;
             *done = nullptr;
         }
+
         _recvr->_num_buffered_bytes += total_chunk_bytes;
     }
     cb();
@@ -427,10 +431,12 @@ void DataStreamRecvr::SenderQueue::cancel() {
 
     {
         std::lock_guard<std::mutex> l(_lock);
-        for (auto closure_pair : _pending_closures) {
-            closure_pair.first->Run();
+        for (auto& item : _chunk_queue) {
+            if (item.closure != nullptr) {
+                item.closure->Run();
+            }
         }
-        _pending_closures.clear();
+        _chunk_queue.clear();
     }
 }
 
@@ -442,10 +448,12 @@ void DataStreamRecvr::SenderQueue::close() {
         std::lock_guard<std::mutex> l(_lock);
         _is_cancelled = true;
 
-        for (auto closure_pair : _pending_closures) {
-            closure_pair.first->Run();
+        for (auto& item : _chunk_queue) {
+            if (item.closure != nullptr) {
+                item.closure->Run();
+            }
         }
-        _pending_closures.clear();
+        _chunk_queue.clear();
     }
 }
 
