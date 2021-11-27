@@ -154,6 +154,8 @@ public:
 
     size_t num_rows() const { return _num_rows; }
 
+    int32_t num_data_pages() { return _ordinal_index.reader ? _ordinal_index.reader->num_data_pages() : 0; }
+
     ///-----------------------------------
     /// vectorized APIs
     ///-----------------------------------
