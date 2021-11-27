@@ -2180,7 +2180,6 @@ public class PlanFragmentTest extends PlanTestBase {
         starRocksAssert.query(castSql2).explainContains("constant exprs:", "'2011-11-09'");
 
         String castSql3 = "select str_to_date('11/09/2011', k6) from test.baseall";
-        System.out.println(starRocksAssert.query(castSql3).explainQuery());
         starRocksAssert.query(castSql3).explainContains("  1:Project\n" +
                 "  |  <slot 12> : str_to_date('11/09/2011', 6: k6)");
     }
@@ -4581,6 +4580,21 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testCountDistinctBoolTwoPhase() throws Exception{
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct id_bool) from test_bool";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("aggregate: multi_distinct_count[([11: id_bool, BOOLEAN, true]); " +
+                "args: BOOLEAN; result: VARCHAR;"));
+
+        sql = "select sum(distinct id_bool) from test_bool";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("aggregate: multi_distinct_sum[([11: id_bool, BOOLEAN, true]); " +
+                "args: BOOLEAN; result: VARCHAR;"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 }
