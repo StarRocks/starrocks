@@ -86,10 +86,6 @@ Status TopNNode::open(RuntimeState* state) {
     return status;
 }
 
-Status TopNNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for RowBatch is not supported");
-}
-
 Status TopNNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));

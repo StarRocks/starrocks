@@ -77,10 +77,6 @@ Status AnalyticNode::open(RuntimeState* state) {
     return _analytor->open(state);
 }
 
-Status AnalyticNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("Vector query engine don't support row_batch");
-}
-
 Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));

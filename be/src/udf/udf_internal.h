@@ -101,9 +101,6 @@ public:
     // TODO: free them at the batch level and save some copies?
     uint8_t* allocate_local(int64_t byte_size);
 
-    // Frees all allocations returned by AllocateLocal().
-    void free_local_allocations();
-
     // Returns true if there are no outstanding allocations.
     bool check_allocations_empty();
 

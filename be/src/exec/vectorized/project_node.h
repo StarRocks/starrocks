@@ -21,9 +21,6 @@ public:
     Status reset(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
 
-    // Only for compatibility
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
-
     void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) override;
     void push_down_join_runtime_filter(RuntimeState* state,
                                        vectorized::RuntimeFilterProbeCollector* collector) override;

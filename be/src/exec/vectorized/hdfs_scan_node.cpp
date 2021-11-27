@@ -422,10 +422,6 @@ void HdfsScanNode::_fill_chunk_pool(int count) {
     }
 }
 
-Status HdfsScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("HdfsScanNode don't support row_batch");
-}
-
 Status HdfsScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 

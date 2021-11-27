@@ -181,10 +181,6 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status ProjectNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("Vector query engine don't support row_batch");
-}
-
 Status ProjectNode::reset(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::reset(state));
     return Status::OK();

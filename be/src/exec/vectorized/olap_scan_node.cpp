@@ -78,10 +78,6 @@ Status OlapScanNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status OlapScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
-}
-
 // Current get_next the chunk is nullptr when eos==true
 // TODO: return the last chunk with eos=true, reduce one function call?
 Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {

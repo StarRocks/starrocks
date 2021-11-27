@@ -71,14 +71,10 @@ Status RepeatNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status RepeatNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
-}
-
 /*
  * for new chunk A.
  * It used as first time and non-first time:
- * 
+ *
  * first time(_repeat_times_last == 0):
  * step 1:
  * move A as curr_chunk
@@ -87,18 +83,18 @@ Status RepeatNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos)
  * step 2:
  * Extend multiple virtual columns for curr_chunk,
  * virtual columns is consist of gourping_id and grouping()/grouping_id() columns.
- * 
+ *
  * step 3:
  * update columns of curr_chunk for unneed columns,
  * and return reulst chunk to parent.
  *
- * 
+ *
  * non-first time, it measn _repeat_times_last in [1, _repeat_times_required):
  * step 1:
  * copy _curr_chunk as curr_chunk.
- * 
+ *
  * step 2/step 3 is the same as first time.
- * 
+ *
  */
 Status RepeatNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());

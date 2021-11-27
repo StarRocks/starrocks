@@ -20,7 +20,7 @@ class Status;
 
 namespace vectorized {
 
-class MysqlScanNode : public ScanNode {
+class MysqlScanNode final : public ScanNode {
 public:
     MysqlScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~MysqlScanNode() override = default;
@@ -34,10 +34,6 @@ public:
     // Fill the next chunk by calling next() on the _mysql_scanner,
     // converting text data in MySQL cells to binary data.
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-
-    // Fill the next row batch by calling next() on the _mysql_scanner,
-    // converting text data in MySQL cells to binary data.
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
 
     // Close the _mysql_scanner, and report errors.
     Status close(RuntimeState* state) override;
@@ -77,7 +73,6 @@ private:
     size_t _slot_num = 0;
     // Pool for allocating tuple data, including all varying-length slots.
     std::unique_ptr<MemPool> _tuple_pool;
-    // Jni helper for scanning an HBase table.
     std::unique_ptr<MysqlScanner> _mysql_scanner;
     // Current tuple.
     Tuple* _tuple = nullptr;
