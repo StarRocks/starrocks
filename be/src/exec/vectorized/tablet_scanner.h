@@ -50,6 +50,7 @@ public:
 
     RuntimeState* runtime_state() { return _runtime_state; }
     int64_t raw_rows_read() const { return _raw_rows_read; }
+    int64_t num_rows_read() const { return _num_rows_read; }
 
     // REQUIRES: `init(RuntimeState*, const TabletScannerParams&)` has been called.
     const Schema& chunk_schema() const { return _prj_iter->output_schema(); }
@@ -63,7 +64,7 @@ private:
     Status _init_return_columns();
     Status _init_global_dicts();
     Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
-    void _update_realtime_counter();
+    void _update_realtime_counter(Chunk* chunk);
     void update_counter();
 
     RuntimeState* _runtime_state = nullptr;
