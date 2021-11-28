@@ -263,6 +263,11 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             delete chunk;
             break;
         }
+        // Improve for select * from table limit x;
+        if (limit() != -1 && scanner->num_rows_read() >= limit()) {
+            status = Status::EndOfFile("limit reach");
+            break;
+        }
         if (scanner->raw_rows_read() >= raw_rows_threshold) {
             resubmit = true;
             break;
