@@ -299,7 +299,6 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
             tablet_info.tablet_id = tablet->tablet_id();
             tablet_info.schema_hash = tablet->schema_hash();
             tablet_info.version = create_tablet_req.version;
-            tablet_info.version_hash = create_tablet_req.version_hash;
             tablet_info.row_count = 0;
             tablet_info.data_size = 0;
             tablet_info.__set_path_hash(tablet->data_dir()->path_hash());
@@ -584,7 +583,6 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_signature(agent_task_req.signature);
         if (push_req.push_type == TPushType::DELETE) {
             finish_task_request.__set_request_version(push_req.version);
-            finish_task_request.__set_request_version_hash(push_req.version_hash);
         }
 
         if (status == STARROCKS_SUCCESS) {
@@ -1030,7 +1028,7 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         uint32_t checksum = 0;
         EngineChecksumTask engine_task(ExecEnv::GetInstance()->consistency_mem_tracker(),
                                        check_consistency_req.tablet_id, check_consistency_req.schema_hash,
-                                       check_consistency_req.version, check_consistency_req.version_hash, &checksum);
+                                       check_consistency_req.version, &checksum);
         OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
         if (res != OLAP_SUCCESS) {
             LOG(WARNING) << "check consistency failed. status: " << res << ", signature: " << agent_task_req.signature;
@@ -1050,7 +1048,6 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         finish_task_request.__set_task_status(task_status);
         finish_task_request.__set_tablet_checksum(static_cast<int64_t>(checksum));
         finish_task_request.__set_request_version(check_consistency_req.version);
-        finish_task_request.__set_request_version_hash(check_consistency_req.version_hash);
 
         worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req.task_type, agent_task_req.signature);
@@ -1332,12 +1329,12 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
             status_code = st.code();
             LOG(WARNING) << "Fail to make_snapshot, tablet_id=" << snapshot_request.tablet_id
                          << " schema_hash=" << snapshot_request.schema_hash << " version=" << snapshot_request.version
-                         << " version_hash=" << snapshot_request.version_hash << " status=" << st.to_string();
+                         << " status=" << st.to_string();
             error_msgs.push_back("make_snapshot failed. status: " + st.to_string());
         } else {
             LOG(INFO) << "Created snapshot tablet_id=" << snapshot_request.tablet_id
                       << " schema_hash=" << snapshot_request.schema_hash << " version=" << snapshot_request.version
-                      << " version_hash=" << snapshot_request.version_hash << " snapshot_path=" << snapshot_path;
+                      << " snapshot_path=" << snapshot_path;
             if (snapshot_request.__isset.list_files) {
                 // list and save all snapshot files
                 // snapshot_path like: data/snapshot/20180417205230.1.86400
@@ -1349,8 +1346,7 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
                     status_code = TStatusCode::RUNTIME_ERROR;
                     LOG(WARNING) << "Fail to make snapshot tablet_id" << snapshot_request.tablet_id
                                  << " schema_hash=" << snapshot_request.schema_hash
-                                 << " version=" << snapshot_request.version
-                                 << " version_hash=" << snapshot_request.version_hash << ", list file failed, "
+                                 << " version=" << snapshot_request.version << ", list file failed, "
                                  << st.get_error_msg();
                     error_msgs.push_back("make_snapshot failed. list file failed: " + st.get_error_msg());
                 }

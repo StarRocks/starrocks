@@ -45,8 +45,6 @@ public:
 
     Version version() override { return _rowset->version(); }
 
-    VersionHash version_hash() override { return _rowset->version_hash(); }
-
     RowsetSharedPtr rowset() override { return std::dynamic_pointer_cast<Rowset>(_rowset); }
 
     int64_t filtered_rows() override { return _stats->rows_del_filtered; }

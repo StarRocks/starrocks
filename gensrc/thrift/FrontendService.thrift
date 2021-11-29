@@ -694,15 +694,15 @@ struct TReplicaMeta {
     2: optional i64 backend_id
     3: optional i32 schema_hash
     4: optional i64 version
-    5: optional i64 version_hash
+    5: optional i64 version_hash // Deprecated
     6: optional i64 data_size
     7: optional i64 row_count
     8: optional string state
     9: optional i64 last_failed_version
-    10: optional i64 last_failed_version_hash
+    10: optional i64 last_failed_version_hash // Deprecated
     11: optional i64 last_failed_time
     12: optional i64 last_success_version
-    13: optional i64 last_success_version_hash
+    13: optional i64 last_success_version_hash // Deprecated
     14: optional i64 version_count
     15: optional i64 path_hash
     16: optional bool bad
@@ -718,7 +718,7 @@ struct TTabletMeta {
     7: optional i32 old_schema_hash
     8: optional i32 new_schema_hash
     9: optional i64 checked_version
-    10: optional i64 checked_version_hash
+    10: optional i64 checked_version_hash // Deprecated
     11: optional bool consistent
     12: optional list<TReplicaMeta> replicas
 }
@@ -809,12 +809,12 @@ struct TPartitionMeta {
     1: optional i64 partition_id
     2: optional string partition_name
     3: optional string state
-    4: optional i64 commit_version_hash
+    4: optional i64 commit_version_hash // Deprecated
     5: optional i64 visible_version
-    6: optional i64 visible_version_hash
+    6: optional i64 visible_version_hash // Deprecated
     7: optional i64 visible_time
     8: optional i64 next_version
-    9: optional i64 next_version_hash
+    9: optional i64 next_version_hash // Deprecated
 }
 
 struct THashDistributionInfo {

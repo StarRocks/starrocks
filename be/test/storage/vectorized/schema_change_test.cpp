@@ -74,7 +74,6 @@ class SchemaChangeTest : public testing::Test {
         writer_context.tablet_schema = &(tablet->tablet_schema());
         writer_context.rowset_state = VISIBLE;
         writer_context.version = Version(3, 3);
-        writer_context.version_hash = 0;
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
         EXPECT_EQ(OLAP_SUCCESS, rowset_writer->add_chunk(*base_chunk));
@@ -460,7 +459,6 @@ TEST_F(SchemaChangeTest, convert_from) {
     writer_context.tablet_schema = &(new_tablet->tablet_schema());
     writer_context.rowset_state = VISIBLE;
     writer_context.version = Version(3, 3);
-    writer_context.version_hash = 0;
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
@@ -520,7 +518,6 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     writer_context.tablet_schema = &(new_tablet->tablet_schema());
     writer_context.rowset_state = VISIBLE;
     writer_context.version = Version(3, 3);
-    writer_context.version_hash = 0;
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
