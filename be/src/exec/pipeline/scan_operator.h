@@ -58,7 +58,6 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     PriorityThreadPool* _io_threads = nullptr;
     std::vector<std::string> _unused_output_columns;
-    bool _initial_pickup_morsel = true;
 };
 
 class ScanOperatorFactory final : public SourceOperatorFactory {

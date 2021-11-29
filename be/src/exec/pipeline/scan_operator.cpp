@@ -48,10 +48,6 @@ bool ScanOperator::has_output() const {
         return false;
     }
 
-    if (UNLIKELY(_initial_pickup_morsel)) {
-        return true;
-    }
-
     DCHECK(_chunk_source != nullptr);
 
     // Still have buffered chunks
@@ -87,11 +83,6 @@ void ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
-    if (UNLIKELY(_initial_pickup_morsel)) {
-        _pickup_morsel(state);
-        _initial_pickup_morsel = false;
-        return nullptr;
-    }
     DCHECK(_chunk_source != nullptr);
     if (!_chunk_source->has_output()) {
         if (_chunk_source->has_next_chunk()) {
@@ -110,13 +101,8 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         _trigger_next_scan(state);
     }
 
-    if (chunk.value() != nullptr) {
-        chunk.value()->check_or_die();
-    }
     eval_runtime_bloom_filters(chunk.value().get());
-    if (chunk.value() != nullptr) {
-        chunk.value()->check_or_die();
-    }
+
     return chunk;
 }
 
