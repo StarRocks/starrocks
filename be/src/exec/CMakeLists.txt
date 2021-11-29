@@ -52,7 +52,6 @@ set(EXEC_FILES
     parquet_reader.cpp
     parquet_builder.cpp
     plain_text_builder.cpp
-    vectorized/adapter_node.cpp
     vectorized/aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp

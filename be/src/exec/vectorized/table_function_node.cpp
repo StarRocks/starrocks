@@ -83,10 +83,6 @@ Status TableFunctionNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status TableFunctionNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
-}
-
 Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());

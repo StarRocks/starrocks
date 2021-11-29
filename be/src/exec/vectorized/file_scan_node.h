@@ -43,9 +43,6 @@ public:
     // Start broker scan using ParquetScanner or BrokerScanner.
     Status open(RuntimeState* state) override;
 
-    // Fill the next row batch by calling next() on the scanner,
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
-
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
     // Close the scanner, and report errors.

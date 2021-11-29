@@ -48,10 +48,6 @@ Status CrossJoinNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status CrossJoinNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
-}
-
 Status CrossJoinNode::_get_next_probe_chunk(RuntimeState* state) {
     while (true) {
         RETURN_IF_ERROR(child(0)->get_next(state, &_probe_chunk, &_eos));
@@ -250,14 +246,14 @@ void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, 
 
 /*
 First, build a large chunk to contain the right table.
-Then the right table is divided into two parts. 
+Then the right table is divided into two parts.
 The number of rows is a multiple of 4096 (big_Chunk) and small with less than 4096 rows(small_chunk).
 
 right table is about _number_of_build_rows rows.
 big_chunk's range is    [0 - _build_chunks_size)
 small_chunk's range is  [_build_chunks_size - _number_of_build_rows)
 
-For each chunk probe in the left table, probe_chunk, 
+For each chunk probe in the left table, probe_chunk,
 we need to make it iterate with the right table, as iteratoe big_chunk and small_chunk separately.
 
 Our way is
