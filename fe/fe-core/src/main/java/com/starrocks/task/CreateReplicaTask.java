@@ -22,6 +22,7 @@
 package com.starrocks.task;
 
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -170,9 +171,10 @@ public class CreateReplicaTask extends AgentTask {
         tSchema.setStorage_type(storageType);
         tSchema.setId(indexId); // use index id as the schema id. assume schema change will assign a new index id.
 
+        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
         List<TColumn> tColumns = new ArrayList<TColumn>();
         for (Column column : columns) {
-            TColumn tColumn = column.toThrift();
+            TColumn tColumn = column.toThrift(defaultValueResolver);
             // is bloom filter column
             if (bfColumns != null && bfColumns.contains(column.getName())) {
                 tColumn.setIs_bloom_filter_column(true);

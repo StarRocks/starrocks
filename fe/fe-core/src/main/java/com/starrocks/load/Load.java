@@ -30,6 +30,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DataDescription;
+import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -295,7 +296,7 @@ public class Load {
             if (columnExprMap.containsKey(columnName)) {
                 continue;
             }
-            if (column.hasDefaultValue() || column.isAllowNull()) {
+            if (DefaultValueResolver.hasDefaultValue(column) || column.isAllowNull()) {
                 continue;
             }
             throw new DdlException("Column has no default value. column: " + columnName);
@@ -356,6 +357,7 @@ public class Load {
             }
         }
 
+        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
         // init slot desc add expr map, also transform hadoop functions
         // if use vectorized load, set src slot desc type with starrocks schema if source column is in starrocks table
         // else set varchar firstly, and try to set specific type later after expr analyzed.
@@ -365,7 +367,7 @@ public class Load {
             Column tblColumn = tbl.getColumn(columnName);
             String realColName = (tblColumn == null ? columnName : tblColumn.getName());
             if (importColumnDesc.getExpr() != null) {
-                Expr expr = transformHadoopFunctionExpr(tbl, realColName, importColumnDesc.getExpr());
+                Expr expr = transformHadoopFunctionExpr(tbl, realColName, importColumnDesc.getExpr(), defaultValueResolver);
                 exprsByName.put(realColName, expr);
             } else {
                 SlotDescriptor slotDesc = analyzer.getDescTbl().addSlotDescriptor(srcTupleDesc);
@@ -600,7 +602,8 @@ public class Load {
      * @return
      * @throws UserException
      */
-    private static Expr transformHadoopFunctionExpr(Table tbl, String columnName, Expr originExpr)
+    private static Expr transformHadoopFunctionExpr(Table tbl, String columnName, Expr originExpr,
+                                                    DefaultValueResolver defaultValueResolver)
             throws UserException {
         Column column = tbl.getColumn(columnName);
         if (column == null) {
@@ -634,8 +637,8 @@ public class Load {
                     if (funcExpr.hasChild(1)) {
                         exprs.add(funcExpr.getChild(1));
                     } else {
-                        if (column.hasDefaultValue()) {
-                            exprs.add(new StringLiteral(column.getCalculatedDefaultValue()));
+                        if (DefaultValueResolver.hasDefaultValue(column)) {
+                            exprs.add(new StringLiteral(defaultValueResolver.getCalculatedDefaultValue(column)));
                         } else {
                             if (column.isAllowNull()) {
                                 exprs.add(NullLiteral.create(Type.VARCHAR));
@@ -653,8 +656,8 @@ public class Load {
                     if (funcExpr.hasChild(1)) {
                         innerIfExprs.add(funcExpr.getChild(1));
                     } else {
-                        if (column.hasDefaultValue()) {
-                            innerIfExprs.add(new StringLiteral(column.getCalculatedDefaultValue()));
+                        if (DefaultValueResolver.hasDefaultValue(column)) {
+                            innerIfExprs.add(new StringLiteral(defaultValueResolver.getCalculatedDefaultValue(column)));
                         } else {
                             if (column.isAllowNull()) {
                                 innerIfExprs.add(NullLiteral.create(Type.VARCHAR));

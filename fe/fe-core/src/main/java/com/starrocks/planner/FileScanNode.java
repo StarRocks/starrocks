@@ -28,6 +28,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.ImportColumnDesc;
@@ -286,6 +287,7 @@ public class FileScanNode extends LoadScanNode {
         Map<String, Expr> exprMap = context.exprMap;
         Map<Integer, Integer> destSidToSrcSidWithoutTrans = Maps.newHashMap();
 
+        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
         boolean isNegative = context.fileGroup.isNegative();
         for (SlotDescriptor destSlotDesc : desc.getSlots()) {
             if (!destSlotDesc.isMaterialized()) {
@@ -302,8 +304,9 @@ public class FileScanNode extends LoadScanNode {
                     expr = new SlotRef(srcSlotDesc);
                 } else {
                     Column column = destSlotDesc.getColumn();
-                    if (column.hasDefaultValue()) {
-                        expr = new StringLiteral(destSlotDesc.getColumn().getCalculatedDefaultValue());
+                    if (DefaultValueResolver.hasDefaultValue(column)) {
+                        expr = new StringLiteral(defaultValueResolver
+                                .getCalculatedDefaultValue(destSlotDesc.getColumn()));
                     } else {
                         if (column.isAllowNull()) {
                             expr = NullLiteral.create(column.getType());

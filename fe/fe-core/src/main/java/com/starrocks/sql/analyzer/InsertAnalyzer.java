@@ -5,6 +5,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
@@ -116,7 +117,7 @@ public class InsertAnalyzer {
             }
 
             for (Column column : targetTable.getBaseSchema()) {
-                if (!column.hasDefaultValue() && !column.isAllowNull() &&
+                if (!DefaultValueResolver.hasDefaultValue(column) && !column.isAllowNull() &&
                         !mentionedColumns.contains(column.getName())) {
                     throw new SemanticException("'%s' must be explicitly mentioned in column permutation",
                             column.getName());
@@ -132,7 +133,7 @@ public class InsertAnalyzer {
                 for (List<Expr> row : valuesRelation.getRows()) {
                     for (int columnIdx = 0; columnIdx < row.size(); ++columnIdx) {
                         if (row.get(columnIdx) instanceof DefaultValueExpr &&
-                                !targetColumns.get(columnIdx).hasDefaultValue()) {
+                                !DefaultValueResolver.hasDefaultValue(targetColumns.get(columnIdx))) {
                             throw new SemanticException(
                                     "Column has no default value, column=" + targetColumns.get(columnIdx).getName());
                         }

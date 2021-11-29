@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -190,6 +191,7 @@ public class StreamLoadScanNode extends LoadScanNode {
     private void finalizeParams() throws UserException {
         boolean negative = streamLoadTask.getNegative();
         Map<Integer, Integer> destSidToSrcSidWithoutTrans = Maps.newHashMap();
+        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
         for (SlotDescriptor dstSlotDesc : desc.getSlots()) {
             if (!dstSlotDesc.isMaterialized()) {
                 continue;
@@ -209,8 +211,8 @@ public class StreamLoadScanNode extends LoadScanNode {
                     expr = new SlotRef(srcSlotDesc);
                 } else {
                     Column column = dstSlotDesc.getColumn();
-                    if (column.hasDefaultValue()) {
-                        expr = new StringLiteral(dstSlotDesc.getColumn().getCalculatedDefaultValue());
+                    if (DefaultValueResolver.hasDefaultValue(column)) {
+                        expr = new StringLiteral(defaultValueResolver.getCalculatedDefaultValue(dstSlotDesc.getColumn()));
                     } else {
                         if (column.isAllowNull()) {
                             expr = NullLiteral.create(column.getType());

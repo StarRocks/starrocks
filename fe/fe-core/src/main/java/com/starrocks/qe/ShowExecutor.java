@@ -29,6 +29,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.PartitionNames;
@@ -685,7 +686,7 @@ public class ShowExecutor {
                         final String columnType = col.getType().toString().toLowerCase();
                         final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                         final String isKey = col.isKey() ? "YES" : "NO";
-                        final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
+                        final String defaultValue = DefaultValueResolver.getMetaDefaultValue(col, Lists.newArrayList());
                         final String aggType = col.getAggregationType() == null ? "" : col.getAggregationType().toSql();
                         if (showStmt.isVerbose()) {
                             // Field Type Collation Null Key Default Extra

@@ -27,6 +27,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.ImportColumnDesc;
@@ -227,6 +228,7 @@ public class SparkLoadPendingTask extends LoadTask {
 
     private List<EtlIndex> createEtlIndexes(OlapTable table) throws LoadException {
         List<EtlIndex> etlIndexes = Lists.newArrayList();
+        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
 
         for (Map.Entry<Long, List<Column>> entry : table.getIndexIdToSchema().entrySet()) {
             long indexId = entry.getKey();
@@ -235,7 +237,7 @@ public class SparkLoadPendingTask extends LoadTask {
             // columns
             List<EtlColumn> etlColumns = Lists.newArrayList();
             for (Column column : entry.getValue()) {
-                etlColumns.add(createEtlColumn(column));
+                etlColumns.add(createEtlColumn(column, defaultValueResolver));
             }
 
             // check distribution type
@@ -275,7 +277,7 @@ public class SparkLoadPendingTask extends LoadTask {
         return etlIndexes;
     }
 
-    private EtlColumn createEtlColumn(Column column) {
+    private EtlColumn createEtlColumn(Column column, DefaultValueResolver defaultValueResolver) {
         // column name
         String name = column.getName();
         // column type
@@ -294,10 +296,10 @@ public class SparkLoadPendingTask extends LoadTask {
 
         // default value
         String defaultValue = null;
-        if (column.hasDefaultValue()) {
-            defaultValue = column.getCalculatedDefaultValue();
+        if (DefaultValueResolver.hasDefaultValue(column)) {
+            defaultValue = defaultValueResolver.getCalculatedDefaultValue(column);
         }
-        if (column.isAllowNull() && !column.hasDefaultValue()) {
+        if (column.isAllowNull() && !DefaultValueResolver.hasDefaultValue(column)) {
             defaultValue = "\\N";
         }
 

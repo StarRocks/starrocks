@@ -26,19 +26,18 @@ import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TColumn;
-import org.joda.time.DateTime;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -248,43 +247,8 @@ public class Column implements Writable {
         this.isAllowNull = isAllowNull;
     }
 
-    public String getMetaDefaultValue(List<String> extras) {
-        String defaultValue = FeConstants.null_string;
-        if (this.defaultValue != null) {
-            return defaultValue;
-        } else if (defaultExpr != null) {
-            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-                defaultValue = "CURRENT_TIMESTAMP";
-                extras.add("DEFAULT_GENERATED");
-            }
-        }
-        return defaultValue;
-    }
-
-    // if the value or expr calculated is the same for each row of a batch like now(). return true
-    // else for a batch of every row different like uuid(). return null
-    public boolean hasDefaultValue() {
-        if (defaultValue != null) {
-            return true;
-        }
-        if (defaultExpr != null && "now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            return true;
-        }
-        return false;
-    }
-
-    // if the value or expr calculated is the same for each row of a batch like now(). calculated default value
-    // else for a batch of every row different like uuid(). return null
-    public String getCalculatedDefaultValue() {
-        if (defaultValue != null) {
-            return defaultValue;
-        }
-
-        if (defaultExpr != null && "now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            return DateTime.now().toString();
-        }
-
-        return null;
+    public DefaultExpr getDefaultExpr() {
+        return defaultExpr;
     }
 
     public void setDefaultValue(String defaultValue) {
@@ -320,7 +284,7 @@ public class Column implements Writable {
         }
     }
 
-    public TColumn toThrift() {
+    public TColumn toThrift(DefaultValueResolver defaultValueResolver) {
         TColumn tColumn = new TColumn();
         tColumn.setColumn_name(this.name);
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
@@ -333,7 +297,7 @@ public class Column implements Writable {
         tColumn.setDefault_value(this.defaultValue);
         if (null != this.defaultExpr) {
             // the current default value are all computable
-            tColumn.setDefault_value(this.getCalculatedDefaultValue());
+            tColumn.setDefault_value(defaultValueResolver.getCalculatedDefaultValue(this));
         }
         // The define expr does not need to be serialized here for now.
         // At present, only serialized(analyzed) define expr is directly used when creating a materialized view.
