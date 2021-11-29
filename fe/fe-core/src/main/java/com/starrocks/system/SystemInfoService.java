@@ -29,9 +29,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -171,7 +176,10 @@ public class SystemInfoService {
         MetricRepo.generateBackendsTabletMetrics();
     }
 
-    public void dropBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
+    public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
+        List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
+        boolean needCheckUnforce = !dropBackendClause.isOldStyle() && !dropBackendClause.isForce();
+
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) == null) {
@@ -180,7 +188,7 @@ public class SystemInfoService {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            dropBackend(pair.first, pair.second);
+            dropBackend(pair.first, pair.second, needCheckUnforce);
         }
     }
 
@@ -191,16 +199,62 @@ public class SystemInfoService {
             throw new DdlException("Backend[" + backendId + "] does not exist");
         }
 
-        dropBackend(backend.getHost(), backend.getHeartbeatPort());
+        dropBackend(backend.getHost(), backend.getHeartbeatPort(), false);
+    }
+
+    private void checkUnforce(Backend droppedBackend) {
+        Catalog catalog = Catalog.getCurrentCatalog();
+        List<Long> tabletIds = Catalog.getCurrentInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
+        List<Long> dbs = catalog.getDbIds();
+
+        dbs.stream().map(catalog::getDb).forEach(db -> {
+            db.readLock();
+            try {
+                db.getTables().stream()
+                        .filter(table -> table.getType() == Table.TableType.OLAP)
+                        .map(table -> (OlapTable) table)
+                        .filter(table -> table.getTableProperty().getReplicationNum() == 1)
+                        .forEach(table -> {
+                            table.getAllPartitions().forEach(partition -> {
+                                String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
+                                                " have only one replica. To avoid data loss," +
+                                                " please change the replication_num of [%s.%s] to three." +
+                                                " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
+                                                " can be used to forcibly drop the backend. ",
+                                        db.getFullName(), table.getName(), droppedBackend.getHost(),
+                                        droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
+
+                                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
+                                        .forEach(rollupIdx -> {
+                                            boolean existIntersection = rollupIdx.getTablets().stream()
+                                                    .map(Tablet::getId).anyMatch(tabletIds::contains);
+
+                                            if (existIntersection) {
+                                                throw new RuntimeException(errMsg);
+                                            }
+                                        });
+                            });
+                        });
+            } finally {
+                db.readUnlock();
+            }
+        });
     }
 
     // final entry of dropping backend
-    public void dropBackend(String host, int heartbeatPort) throws DdlException {
+    public void dropBackend(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
         if (getBackendWithHeartbeatPort(host, heartbeatPort) == null) {
             throw new DdlException("backend does not exists[" + host + ":" + heartbeatPort + "]");
         }
 
         Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
+        if (needCheckUnforce) {
+            try {
+                checkUnforce(droppedBackend);
+            } catch (RuntimeException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
 
         // update idToBackend
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
