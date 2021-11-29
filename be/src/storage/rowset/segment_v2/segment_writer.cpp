@@ -52,9 +52,8 @@ SegmentWriter::SegmentWriter(std::unique_ptr<fs::WritableBlock> wblock, uint32_t
 
 SegmentWriter::~SegmentWriter() {}
 
-void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t* column_id, const TabletColumn& column) {
-    // TODO(zc): Do we need this column_id??
-    meta->set_column_id((*column_id)++);
+void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column) {
+    meta->set_column_id(column_id);
     meta->set_unique_id(column.unique_id());
     meta->set_type(column.type());
     meta->set_length(column.length());
@@ -66,20 +65,39 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t* column_id, c
     }
 }
 
-Status SegmentWriter::init(uint32_t write_mbytes_per_sec __attribute__((unused))) {
-    uint32_t column_id = 0;
+Status SegmentWriter::init() {
+    std::vector<uint32_t> all_column_indexes;
+    for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
+        all_column_indexes.emplace_back(i);
+    }
+    return init(all_column_indexes, true);
+}
+
+Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key) {
+    DCHECK(_column_writers.empty());
+    DCHECK(_column_indexes.empty());
+
     if (_opts.storage_format_version != 1 && _opts.storage_format_version != 2) {
         auto v = _opts.storage_format_version;
         return Status::InvalidArgument(strings::Substitute("Invalid storage_format_version $0", v));
     }
-    _column_writers.reserve(_tablet_schema->columns().size());
-    for (const auto& column : _tablet_schema->columns()) {
+
+    _column_indexes.insert(_column_indexes.end(), column_indexes.begin(), column_indexes.end());
+    _column_writers.reserve(_column_indexes.size());
+    size_t num_columns = _tablet_schema->num_columns();
+    for (uint32_t column_index : _column_indexes) {
+        if (column_index >= num_columns) {
+            return Status::InternalError(
+                    strings::Substitute("column index $0 out of range $1", column_index, num_columns));
+        }
+
+        const auto& column = _tablet_schema->column(column_index);
         ColumnWriterOptions opts;
         opts.page_format = (_opts.storage_format_version == 1) ? 1 : 2;
         opts.adaptive_page_format = (_opts.storage_format_version > 1);
         opts.meta = _footer.add_columns();
 
-        _init_column_meta(opts.meta, &column_id, column);
+        _init_column_meta(opts.meta, column_index, column);
 
         // now we create zone map for key columns
         // and not support zone map for array type.
@@ -114,7 +132,11 @@ Status SegmentWriter::init(uint32_t write_mbytes_per_sec __attribute__((unused))
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
     }
-    _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
+
+    _has_key = has_key;
+    if (_has_key) {
+        _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
+    }
     return Status::OK();
 }
 
@@ -126,12 +148,12 @@ Status SegmentWriter::append_row(const RowType& row) {
     }
 
     // At the begin of one block, so add a short key index entry
-    if ((_row_count % _opts.num_rows_per_block) == 0) {
+    if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
         std::string encoded_key;
         encode_key(&encoded_key, row, _tablet_schema->num_short_key_columns());
         RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
     }
-    ++_row_count;
+    ++_num_rows_written;
     return Status::OK();
 }
 
@@ -153,71 +175,72 @@ uint64_t SegmentWriter::estimate_segment_size() {
 }
 
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size) {
-    for (auto& column_writer : _column_writers) {
-        RETURN_IF_ERROR(column_writer->finish());
+    RETURN_IF_ERROR(finalize_columns(index_size));
+    return finalize_footer(segment_file_size);
+}
+
+Status SegmentWriter::finalize_columns(uint64_t* index_size) {
+    if (_has_key) {
+        _num_rows = _num_rows_written;
+    } else if (_num_rows != _num_rows_written) {
+        return Status::InternalError(strings::Substitute("num rows written $0 is not equal to segment num rows $1",
+                                                         _num_rows_written, _num_rows));
     }
-    RETURN_IF_ERROR(_write_data());
-    uint64_t index_offset = _wblock->bytes_appended();
-    RETURN_IF_ERROR(_write_ordinal_index());
-    RETURN_IF_ERROR(_write_zone_map());
-    RETURN_IF_ERROR(_write_bitmap_index());
-    RETURN_IF_ERROR(_write_bloom_filter_index());
-    RETURN_IF_ERROR(_write_short_key_index());
-    *index_size = _wblock->bytes_appended() - index_offset;
+    _num_rows_written = 0;
+
+    size_t num_columns = _tablet_schema->num_columns();
+    for (size_t i = 0; i < _column_indexes.size(); ++i) {
+        uint32_t column_index = _column_indexes[i];
+        if (column_index >= num_columns) {
+            return Status::InternalError(
+                    strings::Substitute("column index $0 out of range $1", column_index, num_columns));
+        }
+
+        auto& column_writer = _column_writers[i];
+        RETURN_IF_ERROR(column_writer->finish());
+        // write data
+        RETURN_IF_ERROR(column_writer->write_data());
+        // write index
+        uint64_t index_offset = _wblock->bytes_appended();
+        RETURN_IF_ERROR(column_writer->write_ordinal_index());
+        RETURN_IF_ERROR(column_writer->write_zone_map());
+        RETURN_IF_ERROR(column_writer->write_bitmap_index());
+        RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
+        *index_size += _wblock->bytes_appended() - index_offset;
+
+        // global dict
+        if (!column_writer->is_global_dict_valid()) {
+            std::string col_name(_tablet_schema->columns()[column_index].name().data(),
+                                 _tablet_schema->columns()[column_index].name().size());
+            _global_dict_columns_valid_info[col_name] = false;
+        }
+
+        // reset to release memory
+        column_writer.reset();
+    }
+    _column_writers.clear();
+    _column_indexes.clear();
+
+    if (_has_key) {
+        uint64_t index_offset = _wblock->bytes_appended();
+        RETURN_IF_ERROR(_write_short_key_index());
+        *index_size += _wblock->bytes_appended() - index_offset;
+        _index_builder.reset();
+    }
+    return Status::OK();
+}
+
+Status SegmentWriter::finalize_footer(uint64_t* segment_file_size) {
     RETURN_IF_ERROR(_write_footer());
     RETURN_IF_ERROR(_wblock->finalize());
     *segment_file_size = _wblock->bytes_appended();
     return _wblock->close();
 }
 
-// write column data to file one by one
-Status SegmentWriter::_write_data() {
-    size_t idx = 0;
-    for (auto& column_writer : _column_writers) {
-        RETURN_IF_ERROR(column_writer->write_data());
-        if (column_writer->is_global_dict_valid() == false) {
-            std::string col_name(_tablet_schema->columns()[idx].name().data(),
-                                 _tablet_schema->columns()[idx].name().size());
-            _global_dict_columns_valid_info[col_name] = false;
-        }
-        idx++;
-    }
-    return Status::OK();
-}
-
-// write ordinal index after data has been written
-Status SegmentWriter::_write_ordinal_index() {
-    for (auto& column_writer : _column_writers) {
-        RETURN_IF_ERROR(column_writer->write_ordinal_index());
-    }
-    return Status::OK();
-}
-
-Status SegmentWriter::_write_zone_map() {
-    for (auto& column_writer : _column_writers) {
-        RETURN_IF_ERROR(column_writer->write_zone_map());
-    }
-    return Status::OK();
-}
-
-Status SegmentWriter::_write_bitmap_index() {
-    for (auto& column_writer : _column_writers) {
-        RETURN_IF_ERROR(column_writer->write_bitmap_index());
-    }
-    return Status::OK();
-}
-
-Status SegmentWriter::_write_bloom_filter_index() {
-    for (auto& column_writer : _column_writers) {
-        RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
-    }
-    return Status::OK();
-}
-
 Status SegmentWriter::_write_short_key_index() {
     std::vector<Slice> body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(_index_builder->finalize(_row_count, &body, &footer));
+    RETURN_IF_ERROR(_index_builder->finalize(_num_rows, &body, &footer));
     PagePointer pp;
     // short key index page is not compressed right now
     RETURN_IF_ERROR(PageIO::write_page(_wblock.get(), body, footer, &pp));
@@ -227,7 +250,7 @@ Status SegmentWriter::_write_short_key_index() {
 
 Status SegmentWriter::_write_footer() {
     _footer.set_version(_opts.storage_format_version);
-    _footer.set_num_rows(_row_count);
+    _footer.set_num_rows(_num_rows);
 
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     std::string footer_buf;
@@ -261,15 +284,20 @@ Status SegmentWriter::append_chunk(const vectorized::Chunk& chunk) {
         RETURN_IF_ERROR(_column_writers[i]->append(*col));
     }
 
-    for (size_t i = 0; i < chunk.num_rows(); i++) {
-        // At the begin of one block, so add a short key index entry
-        if ((_row_count % _opts.num_rows_per_block) == 0) {
-            size_t keys = _tablet_schema->num_short_key_columns();
-            vectorized::SeekTuple tuple(*chunk.schema(), chunk.get(i).datums());
-            std::string encoded_key = tuple.short_key_encode(keys, 0);
-            RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
+    size_t chunk_num_rows = chunk.num_rows();
+    if (_has_key) {
+        for (size_t i = 0; i < chunk_num_rows; i++) {
+            // At the begin of one block, so add a short key index entry
+            if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
+                size_t keys = _tablet_schema->num_short_key_columns();
+                vectorized::SeekTuple tuple(*chunk.schema(), chunk.get(i).datums());
+                std::string encoded_key = tuple.short_key_encode(keys, 0);
+                RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
+            }
+            ++_num_rows_written;
         }
-        ++_row_count;
+    } else {
+        _num_rows_written += chunk_num_rows;
     }
     return Status::OK();
 }
