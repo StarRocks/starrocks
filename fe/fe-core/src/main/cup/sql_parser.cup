@@ -964,7 +964,7 @@ alter_table_clause ::=
     {:
         RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);
     :}
-    | KW_DROP opt_tmp:isTempPartition KW_PARTITION opt_force:force opt_if_exists:ifExists ident:partitionName
+    | KW_DROP opt_tmp:isTempPartition KW_PARTITION opt_if_exists:ifExists ident:partitionName opt_force:force
     {:
         RESULT = new DropPartitionClause(ifExists, partitionName, isTempPartition, force ? force : isTempPartition);
     :}
@@ -1029,13 +1029,13 @@ alter_system_clause ::=
     {:
         RESULT = new AddBackendClause(hostPorts, clusterName);
     :}
-    | KW_DROP KW_BACKEND string_list:hostPorts
+    | KW_DROP KW_BACKEND string_list:hostPorts opt_force:force
     {:
-        RESULT = new DropBackendClause(hostPorts, false);
+        RESULT = new DropBackendClause(hostPorts, force);
     :}
     | KW_DROPP KW_BACKEND string_list:hostPorts
     {:
-        RESULT = new DropBackendClause(hostPorts, true);
+        RESULT = new DropBackendClause(hostPorts, true, true);
     :}
     | KW_DECOMMISSION KW_BACKEND string_list:hostPorts
     {:
@@ -1706,11 +1706,11 @@ revoke_stmt ::=
 // Drop statement
 drop_stmt ::=
     /* Database */
-    KW_DROP KW_DATABASE opt_force:force opt_if_exists:ifExists ident:db
+    KW_DROP KW_DATABASE opt_if_exists:ifExists ident:db opt_force:force
     {:
         RESULT = new DropDbStmt(ifExists, db, force);
     :}
-    | KW_DROP KW_SCHEMA opt_force:force opt_if_exists:ifExists ident:db
+    | KW_DROP KW_SCHEMA opt_if_exists:ifExists ident:db opt_force:force
     {:
         RESULT = new DropDbStmt(ifExists, db, !force);
     :}
@@ -1725,7 +1725,7 @@ drop_stmt ::=
         RESULT = new DropFunctionStmt(functionName, args);
     :}
     /* Table */
-    | KW_DROP KW_TABLE opt_force:force opt_if_exists:ifExists table_name:name
+    | KW_DROP KW_TABLE opt_if_exists:ifExists table_name:name opt_force:force
     {:
         RESULT = new DropTableStmt(ifExists, name, force);
     :}
