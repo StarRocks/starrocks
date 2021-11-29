@@ -358,19 +358,25 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto hash_joiner_factory =
             std::make_shared<starrocks::pipeline::HashJoinerFactory>(param, context->degree_of_parallelism());
 
+    // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,
+    // Operators consuming the runtime filters will inspect this placeholder.
     context->fragment_context()->runtime_filter_hub()->add_holder(_id);
 
+    // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+    // PartialRuntimeFilterMerger
     auto&& partial_rf_merger = std::make_unique<pipeline::PartialRuntimeFilterMerger>(
             pool, _runtime_join_filter_pushdown_limit, context->degree_of_parallelism());
     auto build_op = std::make_shared<pipeline::HashJoinBuildOperatorFactory>(
             context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger));
 
+    // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(build_op.get(), context, rc_rf_probe_collector);
 
     // HashJoinProbeOperatorFactory holds the ownership of HashJoiner object.
     auto probe_op = std::make_shared<pipeline::HashJoinProbeOperatorFactory>(context->next_operator_id(), id(),
                                                                              hash_joiner_factory);
+    // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(probe_op.get(), context, rc_rf_probe_collector);
 
     auto rhs_operators = child(1)->decompose_to_pipeline(context);

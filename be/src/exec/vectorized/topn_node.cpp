@@ -172,10 +172,12 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
             down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
     auto sort_context = std::make_shared<SortContext>(_limit, degree_of_parallelism, _is_asc_order, _is_null_first);
 
+    // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     auto partition_sort_sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
             context->next_operator_id(), id(), sort_context, _sort_exec_exprs, _is_asc_order, _is_null_first, _offset,
             _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
+    // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(partition_sort_sink_operator.get(), context, rc_rf_probe_collector);
     operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
     context->add_pipeline(operators_sink_with_sort);
@@ -183,6 +185,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     OpFactories operators_source_with_sort;
     auto local_merge_sort_source_operator = std::make_shared<LocalMergeSortSourceOperatorFactory>(
             context->next_operator_id(), id(), std::move(sort_context));
+    // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(local_merge_sort_source_operator.get(), context, rc_rf_probe_collector);
     // local_merge_sort_source_operator's instance count must be 1
     local_merge_sort_source_operator->set_degree_of_parallelism(1);

@@ -154,7 +154,11 @@ public:
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
 
+    // drivers that waits for runtime filters' readiness must be marked PRECONDITION_NOT_READY and put into
+    // PipelineDriverPoller.
     void mark_precondition_not_ready();
+    // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
+    // are finished.
     void mark_precondition_ready(RuntimeState* runtime_state);
     void dispatch_operators();
     // Notify all the unfinished operators to be finished.
@@ -178,6 +182,7 @@ public:
         return !_all_dependencies_ready;
     }
 
+    // return false if all the local runtime filters are ready, otherwise return false.
     bool local_rf_block() {
         if (_all_local_rf_ready) {
             return false;
@@ -186,7 +191,8 @@ public:
                                           [](auto* holder) { return holder->is_ready(); });
         return !_all_local_rf_ready;
     }
-
+    // return true if either dependencies_block or local_rf_block return true, which means that the current driver
+    // should wait for both hash table and local runtime filters' readiness.
     bool is_precondition_block() { return dependencies_block() || local_rf_block(); }
 
     bool is_not_blocked() {

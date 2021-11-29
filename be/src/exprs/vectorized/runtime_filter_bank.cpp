@@ -301,6 +301,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk) {
     }
 }
 
+// reentrant version of do_evaluate, can be called concurrently by multiple operators that shared the same
+// RuntimeFilterProbeCollector.
 void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk,
                                               pipeline::RuntimeBloomFilterEvalContext& eval_context) {
     if ((eval_context.input_chunk_nums++ & 31) == 0) {
@@ -413,6 +415,8 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk) {
         chunk->filter(*selection);
     }
 }
+
+// reentrant version of update_selectivity, used by pipeline engine.
 void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
                                                      pipeline::RuntimeBloomFilterEvalContext& eval_context) {
     eval_context.selectivity.clear();

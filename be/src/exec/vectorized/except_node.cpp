@@ -222,6 +222,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
             context->maybe_interpolate_local_shuffle_exchange(operators_with_except_build_sink, _child_expr_lists[0]);
     operators_with_except_build_sink.emplace_back(std::make_shared<pipeline::ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
+    // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators_with_except_build_sink.back().get(), context,
                                            rc_rf_probe_collector);
     context->add_pipeline(operators_with_except_build_sink);
@@ -233,6 +234,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
                 operators_with_except_probe_sink, _child_expr_lists[i]);
         operators_with_except_probe_sink.emplace_back(std::make_shared<pipeline::ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i], i - 1));
+        // Initialize OperatorFactory's fields involving runtime filters.
         this->init_runtime_filter_for_operator(operators_with_except_probe_sink.back().get(), context,
                                                rc_rf_probe_collector);
         context->add_pipeline(operators_with_except_probe_sink);
@@ -242,6 +244,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     pipeline::OpFactories operators_with_except_output_source;
     auto except_output_source = std::make_shared<pipeline::ExceptOutputSourceOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
+    // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(except_output_source.get(), context, rc_rf_probe_collector);
     except_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
     operators_with_except_output_source.emplace_back(std::move(except_output_source));

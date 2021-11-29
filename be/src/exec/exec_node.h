@@ -200,8 +200,10 @@ public:
 
     vectorized::RuntimeFilterProbeCollector& runtime_filter_collector() { return _runtime_filter_collector; }
 
+    // local runtime filters that are conducted on this ExecNode are planned by FE.
     std::set<TPlanNodeId> local_rf_waiting_set() { return _local_rf_waiting_set; }
 
+    // initialize OperatorFactories' fields involving runtime filters.
     void init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
                                           const RcRfProbeCollectorPtr& rc_rf_probe_collector);
 

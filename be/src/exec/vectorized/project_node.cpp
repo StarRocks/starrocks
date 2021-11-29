@@ -270,11 +270,13 @@ void ProjectNode::push_down_join_runtime_filter(RuntimeState* state,
 pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
 
     operators.emplace_back(std::make_shared<ProjectOperatorFactory>(
             context->next_operator_id(), id(), std::move(_slot_ids), std::move(_expr_ctxs),
             std::move(_type_is_nullable), std::move(_common_sub_slot_ids), std::move(_common_sub_expr_ctxs)));
+    // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
