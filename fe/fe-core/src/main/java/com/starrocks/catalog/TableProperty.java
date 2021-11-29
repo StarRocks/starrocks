@@ -65,6 +65,12 @@ public class TableProperty implements Writable {
      */
     private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
 
+    // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
+    //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
+    // 2. Before checkpoint, we relay delete job journal log to persist.
+    //    After checkpoint, we relay TableProperty::write to persist.
+    private boolean hasDelete = false;
+
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
     }
@@ -149,6 +155,14 @@ public class TableProperty implements Writable {
 
     public TStorageFormat getStorageFormat() {
         return storageFormat;
+    }
+
+    public boolean hasDelete() {
+        return hasDelete;
+    }
+
+    public void setHasDelete(boolean hasDelete) {
+        this.hasDelete = hasDelete;
     }
 
     @Override
