@@ -23,14 +23,13 @@ class TupleDescriptor;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
-class IntersectNode : public ExecNode {
+class IntersectNode final : public ExecNode {
 public:
     IntersectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status get_next(RuntimeState* state, ChunkPtr* row_batch, bool* eos) override;
     Status close(RuntimeState* state) override;
 

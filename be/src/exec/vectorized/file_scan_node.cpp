@@ -92,10 +92,6 @@ Status FileScanNode::start_scanners() {
     return Status::OK();
 }
 
-Status FileScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::InternalError("Not support");
-}
-
 Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     // check if CANCELLED.

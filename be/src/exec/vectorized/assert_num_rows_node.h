@@ -20,7 +20,7 @@
 namespace starrocks::vectorized {
 
 // Node for assert row count
-class AssertNumRowsNode : public ExecNode {
+class AssertNumRowsNode final : public ExecNode {
 public:
     AssertNumRowsNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~AssertNumRowsNode() override = default;
@@ -28,7 +28,6 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
 
