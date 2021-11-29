@@ -153,19 +153,6 @@ Status SchemaScanNode::open(RuntimeState* state) {
     return _schema_scanner->start(state);
 }
 
-Status SchemaScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    if (!_is_init) {
-        return Status::InternalError("used before initialized.");
-    }
-
-    if (nullptr == state || nullptr == row_batch || nullptr == eos) {
-        return Status::InternalError("input pointer is nullptr.");
-    }
-
-    *eos = true;
-    return Status::OK();
-}
-
 Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     VLOG(1) << "SchemaScanNode::GetNext";
 

@@ -375,10 +375,6 @@ Status MysqlScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
     }
 }
 
-Status MysqlScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::InternalError("Not support");
-}
-
 Status MysqlScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();

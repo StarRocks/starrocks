@@ -45,7 +45,6 @@ namespace starrocks {
 class Expr;
 class ExprContext;
 class ObjectPool;
-class RowBatch;
 class RuntimeState;
 class SlotRef;
 class TPlan;
@@ -67,10 +66,6 @@ using vectorized::ChunkPtr;
 // All subclasses need to make sure to check RuntimeState::is_cancelled()
 // periodically in order to ensure timely termination after the cancellation
 // flag gets set.
-
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
 
 class ExecNode {
 public:
@@ -97,10 +92,6 @@ public:
     // Can be called repeatedly (after calls to close()).
     // Caller must not be holding any io buffers. This will cause deadlock.
     virtual Status open(RuntimeState* state);
-
-    virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-        return Status::NotSupported("Don't support old query engine any more");
-    }
 
     virtual Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
@@ -147,22 +138,12 @@ public:
     static Status create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
                               ExecNode** root);
 
-    // Set debug action for node with given id in 'tree'
-    static void set_debug_options(int node_id, TExecNodePhase::type phase, TDebugAction::type action, ExecNode* tree);
-
     // Collect all nodes of given 'node_type' that are part of this subtree, and return in
     // 'nodes'.
     void collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode*>* nodes);
 
     // Collect all scan node types.
     void collect_scan_nodes(std::vector<ExecNode*>* nodes);
-
-    bool _check_has_vectorized_scan_child();
-
-    // Evaluate exprs over row.  Returns true if all exprs return true.
-    // TODO: This doesn't use the vector<Expr*> signature because I haven't figured
-    // out how to deal with declaring a templated std:vector type in IR
-    static bool eval_conjuncts(ExprContext* const* ctxs, int num_ctxs, TupleRow* row);
 
     // evaluate exprs over chunk to get a filter
     // if filter_ptr is not null, save filter to filter_ptr.
@@ -214,58 +195,11 @@ public:
 
     vectorized::RuntimeFilterProbeCollector& runtime_filter_collector() { return _runtime_filter_collector; }
 
-    // Extract node id from p->name().
-    static int get_node_id_from_profile(RuntimeProfile* p);
-
     // Names of counters shared by all exec nodes
     static const std::string ROW_THROUGHPUT_COUNTER;
 
 protected:
     friend class DataSink;
-
-    /// Extends blocking queue for row batches. Row batches have a property that
-    /// they must be processed in the order they were produced, even in cancellation
-    /// paths. Preceding row batches can contain ptrs to memory in subsequent row batches
-    /// and we need to make sure those ptrs stay valid.
-    /// Row batches that are added after Shutdown() are queued in another queue, which can
-    /// be cleaned up during Close().
-    /// All functions are thread safe.
-    class RowBatchQueue : public TimedBlockingQueue<RowBatch*> {
-    public:
-        /// max_batches is the maximum number of row batches that can be queued.
-        /// When the queue is full, producers will block.
-        RowBatchQueue(int max_batches);
-        ~RowBatchQueue();
-
-        /// Adds a batch to the queue. This is blocking if the queue is full.
-        void AddBatch(RowBatch* batch);
-
-        /// Adds a batch to the queue. If the queue is full, this blocks until space becomes
-        /// available or 'timeout_micros' has elapsed.
-        /// Returns true if the element was added to the queue, false if it wasn't. If this
-        /// method returns false, the queue didn't take ownership of the batch and it must be
-        /// managed externally.
-        bool AddBatchWithTimeout(RowBatch* batch, int64_t timeout_micros);
-
-        /// Gets a row batch from the queue. Returns NULL if there are no more.
-        /// This function blocks.
-        /// Returns NULL after Shutdown().
-        RowBatch* GetBatch();
-
-        /// Deletes all row batches in cleanup_queue_. Not valid to call AddBatch()
-        /// after this is called.
-        /// Returns the number of io buffers that were released (for debug tracking)
-        int Cleanup();
-
-    private:
-        /// Lock protecting cleanup_queue_
-        // SpinLock lock_;
-        // TODO(dhc): need to modify spinlock
-        std::mutex lock_;
-
-        /// Queue of orphaned row batches
-        std::list<RowBatch*> cleanup_queue_;
-    };
 
     int _id; // unique w/in single plan tree
     TPlanNodeType::type _type;

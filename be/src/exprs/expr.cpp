@@ -75,8 +75,7 @@ Expr::Expr(const Expr& expr)
           _type(expr._type),
           _output_scale(expr._output_scale),
           _fn(expr._fn),
-          _fn_context_index(expr._fn_context_index),
-          _vector_compute_fn(expr._vector_compute_fn) {}
+          _fn_context_index(expr._fn_context_index) {}
 
 Expr::Expr(TypeDescriptor type) : Expr(type, false) {}
 
@@ -553,63 +552,6 @@ int Expr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     }
 
     return n;
-}
-
-BooleanVal Expr::get_boolean_val(ExprContext* context, TupleRow* row) {
-    return BooleanVal::null(); // (*(bool*)get_value(row));
-}
-
-TinyIntVal Expr::get_tiny_int_val(ExprContext* context, TupleRow* row) {
-    return TinyIntVal::null(); // (*(int8_t*)get_value(row));
-}
-
-SmallIntVal Expr::get_small_int_val(ExprContext* context, TupleRow* row) {
-    return SmallIntVal::null(); // (*(int16_t*)get_value(row));
-}
-
-IntVal Expr::get_int_val(ExprContext* context, TupleRow* row) {
-    return IntVal::null(); // (*(int32_t*)get_value(row));
-}
-
-BigIntVal Expr::get_big_int_val(ExprContext* context, TupleRow* row) {
-    return BigIntVal::null(); // (*(int64_t*)get_value(row));
-}
-
-LargeIntVal Expr::get_large_int_val(ExprContext* context, TupleRow* row) {
-    return LargeIntVal::null(); // (*(int64_t*)get_value(row));
-}
-
-FloatVal Expr::get_float_val(ExprContext* context, TupleRow* row) {
-    return FloatVal::null(); // (*(float*)get_value(row));
-}
-
-DoubleVal Expr::get_double_val(ExprContext* context, TupleRow* row) {
-    return DoubleVal::null(); // (*(double*)get_value(row));
-}
-
-StringVal Expr::get_string_val(ExprContext* context, TupleRow* row) {
-    StringVal val;
-    // ((StringValue*)get_value(row))->to_string_val(&val);
-    return val;
-}
-
-// TODO(zc)
-// virtual ArrayVal Expr::GetArrayVal(ExprContext* context, TupleRow*);
-DateTimeVal Expr::get_datetime_val(ExprContext* context, TupleRow* row) {
-    DateTimeVal val;
-    // ((DateTimeValue*)get_value(row))->to_datetime_val(&val);
-    return val;
-}
-
-DecimalVal Expr::get_decimal_val(ExprContext* context, TupleRow* row) {
-    DecimalVal val;
-    // ((DecimalValue*)get_value(row))->to_decimal_val(&val);
-    return val;
-}
-
-DecimalV2Val Expr::get_decimalv2_val(ExprContext* context, TupleRow* row) {
-    DecimalV2Val val;
-    return val;
 }
 
 Expr* Expr::copy(ObjectPool* pool, Expr* old_expr) {

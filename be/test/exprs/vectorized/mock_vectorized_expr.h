@@ -65,44 +65,11 @@ protected:
     int64_t _ms = 0;
 };
 
-#define DEFINE_TEST_ROW_FUNCTION(TYPE, FN)                        \
-    TYPE FN(ExprContext* context, TupleRow* ptr) override {       \
-        if constexpr (Type == TYPE_BOOLEAN || Type == TYPE_INT) { \
-            start();                                              \
-            TYPE b;                                               \
-            b.val = value;                                        \
-            stop();                                               \
-            return b;                                             \
-        } else {                                                  \
-            TYPE b;                                               \
-            return b;                                             \
-        }                                                         \
-    }
-
-#define DEFINE_NULL_TEST_ROW_FUNCTION(TYPE, FN)                   \
-    TYPE FN(ExprContext* context, TupleRow* ptr) override {       \
-        if constexpr (Type == TYPE_BOOLEAN || Type == TYPE_INT) { \
-            start();                                              \
-            TYPE b;                                               \
-            b.val = value;                                        \
-            b.is_null = flag % 2;                                 \
-            flag++;                                               \
-            stop();                                               \
-            return b;                                             \
-        } else {                                                  \
-            TYPE b;                                               \
-            return b;                                             \
-        }                                                         \
-    }
-
 template <PrimitiveType Type>
 class MockVectorizedExpr : public MockCostExpr {
 public:
     MockVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value)
             : MockCostExpr(t), size(size), value(value) {}
-
-    DEFINE_TEST_ROW_FUNCTION(BooleanVal, get_boolean_val);
-    DEFINE_TEST_ROW_FUNCTION(IntVal, get_int_val);
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
         start();
@@ -162,9 +129,6 @@ public:
     MockNullVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value, bool only_null)
             : MockCostExpr(t), only_null(only_null), flag(0), size(size), value(value) {}
 
-    DEFINE_NULL_TEST_ROW_FUNCTION(BooleanVal, get_boolean_val);
-    DEFINE_NULL_TEST_ROW_FUNCTION(IntVal, get_int_val);
-
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
         start();
         if (only_null) {
@@ -210,9 +174,6 @@ public:
     MockConstVectorizedExpr(const TExprNode& t, RunTimeCppType<Type> value) : MockCostExpr(t), value(value) {
         col = ColumnHelper::create_const_column<Type>(value, 1);
     }
-
-    DEFINE_TEST_ROW_FUNCTION(BooleanVal, get_boolean_val);
-    DEFINE_TEST_ROW_FUNCTION(IntVal, get_int_val);
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
         start();
