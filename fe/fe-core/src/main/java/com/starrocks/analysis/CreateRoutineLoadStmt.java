@@ -121,6 +121,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(JSONROOT)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
+            .add(LoadStmt.PARTIAL_UPDATE)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -302,7 +303,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 columnSeparator = (ColumnSeparator) parseNode;
                 columnSeparator.analyze(null);
             } else if (parseNode instanceof RowDelimiter) {
-                // check row delimiter 
+                // check row delimiter
                 if (rowDelimiter != null) {
                     throw new AnalysisException("repeat setting of row delimiter");
                 }

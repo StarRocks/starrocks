@@ -59,6 +59,7 @@ public class StreamLoadTask {
     private boolean stripOuterArray;
     private String jsonPaths;
     private String jsonRoot;
+    private boolean partialUpdate;
 
     // optional
     private List<ImportColumnDesc> columnExprDescs = Lists.newArrayList();
@@ -81,6 +82,7 @@ public class StreamLoadTask {
         this.jsonPaths = "";
         this.jsonRoot = "";
         this.stripOuterArray = false;
+        this.partialUpdate = false;
     }
 
     public TUniqueId getId() {
@@ -163,6 +165,14 @@ public class StreamLoadTask {
         this.jsonRoot = jsonRoot;
     }
 
+    public boolean isPartialUpdate() {
+        return partialUpdate;
+    }
+
+    public void setPartialUpdate(boolean partialUpdate) {
+        this.setPartialUpdate(partialUpdate);
+    }
+
     public static StreamLoadTask fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
             throws UserException {
         StreamLoadTask streamLoadTask = new StreamLoadTask(request.getLoadId(), request.getTxnId(),
@@ -222,6 +232,9 @@ public class StreamLoadTask {
                 jsonRoot = request.getJson_root();
             }
             stripOuterArray = request.isStrip_outer_array();
+        }
+        if (request.isSetPartial_update()) {
+            partialUpdate = request.isPartial_update();
         }
     }
 
