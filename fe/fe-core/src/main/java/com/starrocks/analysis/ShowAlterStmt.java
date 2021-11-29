@@ -254,9 +254,9 @@ public class ShowAlterStmt extends ShowStmt {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
         ImmutableList<String> titleNames = null;
-        if (type == AlterType.ROLLUP) {
+        if (type == AlterType.ROLLUP || type == AlterType.MATERIALIZED_VIEW) {
             titleNames = RollupProcDir.TITLE_NAMES;
-        } else if (type == AlterType.COLUMN || type == AlterType.MATERIALIZED_VIEW) {
+        } else if (type == AlterType.COLUMN) {
             titleNames = SchemaChangeProcDir.TITLE_NAMES;
         }
 
