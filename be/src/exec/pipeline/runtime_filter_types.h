@@ -66,7 +66,7 @@ private:
 
 class RuntimeFilterHolder {
 public:
-    void add_collector(RuntimeFilterCollectorPtr&& collector) {
+    void set_collector(RuntimeFilterCollectorPtr&& collector) {
         _collector_ownership = std::move(collector);
         _collector.store(_collector_ownership.get(), std::memory_order_release);
     }
@@ -85,8 +85,8 @@ private:
 class RuntimeFilterHub {
 public:
     void add_holder(TPlanNodeId id) { _holders.emplace(std::make_pair(id, std::make_unique<RuntimeFilterHolder>())); }
-    void add_collector(TPlanNodeId id, RuntimeFilterCollectorPtr&& collector) {
-        get_holder(id)->add_collector(std::move(collector));
+    void set_collector(TPlanNodeId id, RuntimeFilterCollectorPtr&& collector) {
+        get_holder(id)->set_collector(std::move(collector));
     }
 
     RuntimeBloomFilters& get_bloom_filters(TPlanNodeId id) {
@@ -275,7 +275,8 @@ public:
                 RETURN_IF_ERROR(total_in_filter_pred->merge(in_filter_pred));
             }
         }
-        std::remove(total_in_filters.begin(), total_in_filters.end(), nullptr);
+        total_in_filters.erase(std::remove(total_in_filters.begin(), total_in_filters.end(), nullptr),
+                               total_in_filters.end());
         return Status::OK();
     }
 

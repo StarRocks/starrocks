@@ -55,7 +55,7 @@ void HashJoinBuildOperator::set_finishing(RuntimeState* state) {
         // publish runtime bloom-filters
         state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
         // move runtime filters into RuntimeFilterHub.
-        runtime_filter_hub()->add_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(
+        runtime_filter_hub()->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(
                                                                    std::move(in_filters), std::move(bloom_filters)));
     }
 }
