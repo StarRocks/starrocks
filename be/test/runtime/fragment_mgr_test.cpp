@@ -123,26 +123,4 @@ TEST_F(FragmentMgrTest, PrepareFailed) {
     ASSERT_FALSE(mgr.exec_plan_fragment(params).ok());
 }
 
-TEST_F(FragmentMgrTest, OfferPoolFailed) {
-    config::fragment_pool_thread_num_min = 1;
-    config::fragment_pool_thread_num_max = 1;
-    config::fragment_pool_queue_size = 0;
-    FragmentMgr mgr(ExecEnv::GetInstance());
-
-    TExecPlanFragmentParams params;
-    params.params.fragment_instance_id = TUniqueId();
-    params.params.fragment_instance_id.__set_hi(100);
-    params.params.fragment_instance_id.__set_lo(200);
-    ASSERT_TRUE(mgr.exec_plan_fragment(params).ok());
-
-    // the first plan open will cost 50ms, so the next 3 plans will be aborted.
-    for (int i = 1; i < 4; ++i) {
-        TExecPlanFragmentParams params;
-        params.params.fragment_instance_id = TUniqueId();
-        params.params.fragment_instance_id.__set_hi(100 + i);
-        params.params.fragment_instance_id.__set_lo(200);
-        ASSERT_FALSE(mgr.exec_plan_fragment(params).ok());
-    }
-}
-
 } // namespace starrocks
