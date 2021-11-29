@@ -566,10 +566,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     table: nation, rollup: nation\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
-                "     partitionsRatio=1/1, tabletsRatio=1/1\n" +
-                "     tabletList=10185\n" +
-                "     actualRows=0, avgRowSize=29.0\n" +
-                "     cardinality: 2"));
+                "     partitionsRatio=1/1, tabletsRatio=1/1\n"));
         // eval predicate cardinality in join node
         Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
                 "  |  cross join:\n" +
