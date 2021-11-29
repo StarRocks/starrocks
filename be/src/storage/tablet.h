@@ -185,8 +185,6 @@ public:
     bool can_do_compaction();
     const uint32_t calc_cumulative_compaction_score() const;
     const uint32_t calc_base_compaction_score() const;
-    static void compute_version_hash_from_rowsets(const std::vector<RowsetSharedPtr>& rowsets,
-                                                  VersionHash* version_hash);
 
     // operation for clone
     void calc_missed_versions(int64_t spec_version, vector<Version>* missed_versions);
@@ -256,7 +254,7 @@ private:
     Status _contains_version(const Version& version);
     Version _max_continuous_version_from_beginning_unlocked() const;
     RowsetSharedPtr _rowset_with_largest_size();
-    void _delete_inc_rowset_by_version(const Version& version, const VersionHash& version_hash);
+    void _delete_inc_rowset_by_version(const Version& version);
     /// Delete stale rowset by version. This method not only delete the version in expired rowset map,
     /// but also delete the version in rowset meta vector.
     void _delete_stale_rowset_by_version(const Version& version);
@@ -281,7 +279,6 @@ private:
     // should use with migration lock.
     std::atomic<bool> _is_migrating{false};
 
-    // TODO(lingbin): There is a _meta_lock TabletMeta too, there should be a comment to
     // explain how these two locks work together.
     mutable std::shared_mutex _meta_lock;
     // A new load job will produce a new rowset, which will be inserted into both _rs_version_map

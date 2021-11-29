@@ -139,7 +139,7 @@ public:
     // Note: EditVersion history count, not like talet.version_count()
     size_t version_history_count() const { return _edit_version_infos.size(); }
 
-    // get info's version, version_hash, version_count, row_count, data_size
+    // get info's version, version_count, row_count, data_size
     void get_tablet_info_extra(TTabletInfo* info);
 
     std::string debug_string() const;

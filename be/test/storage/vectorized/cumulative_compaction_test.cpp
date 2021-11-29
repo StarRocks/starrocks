@@ -33,7 +33,6 @@ public:
         rowset_writer_context->tablet_schema = _tablet_schema.get();
         rowset_writer_context->version.first = 0;
         rowset_writer_context->version.second = 0;
-        rowset_writer_context->version_hash = 110;
     }
 
     void create_tablet_schema(KeysType keys_type) {
