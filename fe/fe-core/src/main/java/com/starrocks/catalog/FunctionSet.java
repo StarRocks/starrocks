@@ -117,6 +117,7 @@ public class FunctionSet {
 
     private static final Map<Type, Type> MULTI_DISTINCT_SUM_RETURN_TYPE =
             ImmutableMap.<Type, Type>builder()
+                    .put(Type.BOOLEAN, Type.BIGINT)
                     .put(Type.TINYINT, Type.BIGINT)
                     .put(Type.SMALLINT, Type.BIGINT)
                     .put(Type.INT, Type.BIGINT)
@@ -388,7 +389,7 @@ public class FunctionSet {
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
-            } else if (t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint() || t.isDouble()) {
+            } else if (t.isBoolean() || t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint() || t.isDouble()) {
                 addBuiltin(AggregateFunction.createBuiltin("multi_distinct_count", Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
@@ -406,7 +407,7 @@ public class FunctionSet {
             }
 
             // sum in multi distinct
-            if (t.isTinyint() || t.isSmallint() || t.isInt() || t.isFloat()) {
+            if (t.isBoolean() || t.isTinyint() || t.isSmallint() || t.isInt() || t.isFloat()) {
                 addBuiltin(AggregateFunction.createBuiltin("multi_distinct_sum", Lists.newArrayList(t),
                         MULTI_DISTINCT_SUM_RETURN_TYPE.get(t),
                         Type.VARCHAR,
@@ -486,6 +487,8 @@ public class FunctionSet {
         // Sum
         String[] sumNames = {"sum", "sum_distinct"};
         for (String name : sumNames) {
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.BOOLEAN), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.TINYINT), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
