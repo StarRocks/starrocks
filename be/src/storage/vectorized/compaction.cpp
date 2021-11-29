@@ -109,10 +109,10 @@ Status Compaction::do_compaction_impl() {
 
     LOG(INFO) << "succeed to do " << compaction_name() << ". tablet=" << _tablet->full_name()
               << ", output_version=" << _output_version.first << "-" << _output_version.second
-              << ", input infos [segments=" << segments_num << ", rows:" << _input_row_num
-              << ", disk size:" << _input_rowsets_size << "]"
+              << ", input infos [segments=" << segments_num << ", rows=" << _input_row_num
+              << ", disk size=" << _input_rowsets_size << "]"
               << ", output infos [segments=" << _output_rowset->num_segments()
-              << ", rows:" << _output_rowset->num_rows() << ", disk size:" << _output_rowset->data_disk_size() << "]"
+              << ", rows=" << _output_rowset->num_rows() << ", disk size=" << _output_rowset->data_disk_size() << "]"
               << ". elapsed time=" << watch.get_elapse_second() << "s.";
 
     // warm-up this rowset
