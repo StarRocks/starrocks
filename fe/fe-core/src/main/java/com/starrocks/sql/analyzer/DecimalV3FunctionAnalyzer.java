@@ -17,7 +17,6 @@ import java.util.Set;
 public class DecimalV3FunctionAnalyzer {
     public static final Set<String> DECIMAL_UNARY_FUNCTION_SET =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add(FunctionSet.COUNT)
                     .add("abs").add("positive").add("negative").add("money_format").build();
 
     public static final Set<String> DECIMAL_IDENTICAL_TYPE_FUNCTION_SET =
@@ -32,6 +31,7 @@ public class DecimalV3FunctionAnalyzer {
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+                    .add(FunctionSet.COUNT)
                     .add("sum").add("sum_distinct").add("multi_distinct_sum").add("avg").add("variance")
                     .add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
                     .add("stddev").add("stddev_pop").add("stddev_samp").build();
