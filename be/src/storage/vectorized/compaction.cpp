@@ -181,18 +181,19 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     while (true) {
+        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        Status status;
+        while (!bg_worker_stopped) {
 #ifndef BE_TEST
-        Status st = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
-        if (!st.ok()) {
-            LOG(WARNING) << "fail to execute compaction: " << st.message() << std::endl;
-            return Status::MemoryLimitExceeded(st.message());
-        }
+            status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
+            if (!status.ok()) {
+                LOG(WARNING) << "fail to execute compaction: " << status.message() << std::endl;
+                return status;
+            }
 #endif
 
-        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-        while (!bg_worker_stopped) {
             chunk->reset();
-            Status status = reader.get_next(chunk.get());
+            status = reader.get_next(chunk.get());
             if (!status.ok()) {
                 if (status.is_end_of_file()) {
                     break;
