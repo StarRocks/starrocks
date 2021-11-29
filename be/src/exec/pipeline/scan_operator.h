@@ -34,7 +34,7 @@ public:
 
     bool has_output() const override;
 
-    bool pending_finish() override;
+    bool pending_finish() const override;
 
     bool is_finished() const override;
 

@@ -164,6 +164,7 @@ public:
                _state == DriverState::INTERNAL_ERROR;
     }
     bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
+    bool is_still_pending_finish() { return source_operator()->pending_finish() || sink_operator()->pending_finish(); }
     // return false if all the dependencies are ready, otherwise return true.
     bool dependencies_block() {
         if (_all_dependencies_ready) {
