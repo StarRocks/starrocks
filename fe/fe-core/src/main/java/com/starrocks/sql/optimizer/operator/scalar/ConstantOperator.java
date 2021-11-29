@@ -376,7 +376,11 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (desc.isDecimalV3()) {
             BigDecimal value = new BigDecimal(childString);
             try {
-                DecimalLiteral.checkLiteralOverflow(value, (ScalarType) desc);
+                ScalarType scalarType = (ScalarType) desc;
+                DecimalLiteral.checkLiteralOverflow(value, scalarType);
+                if (scalarType.getScalarScale() == 0 && scalarType.getScalarPrecision() == 0) {
+                    throw new SemanticException("Forbidden cast to decimal(precision=0, scale=0)");
+                }
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
