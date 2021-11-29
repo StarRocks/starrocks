@@ -128,7 +128,8 @@ public class FunctionAnalyzer {
         // SUM and AVG cannot be applied to non-numeric types
         if ((fnName.getFunction().equalsIgnoreCase("sum")
                 || fnName.getFunction().equalsIgnoreCase("avg"))
-                && ((!arg.getType().isNumericType() && !arg.getType().isNull() && !(arg instanceof NullLiteral)) ||
+                && ((!arg.getType().isNumericType() && !arg.getType().isBoolean() && !arg.getType().isNull() &&
+                !(arg instanceof NullLiteral)) ||
                 arg.getType().isOnlyMetricType())) {
             throw new SemanticException(
                     fnName.getFunction() + " requires a numeric parameter: " + functionCallExpr.toSql());
