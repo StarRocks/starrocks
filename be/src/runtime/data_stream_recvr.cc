@@ -350,6 +350,12 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         std::unique_lock<std::mutex> l(_lock);
         wait_timer.stop();
 
+        // _is_cancelled may be modified after checking _is_cancelled above,
+        // because lock is release temporarily when deserializing chunk.
+        if (_is_cancelled) {
+            return Status::OK();
+        }
+
         for (auto& pair : chunks) {
             _chunk_queue.emplace_back(std::move(pair));
         }
