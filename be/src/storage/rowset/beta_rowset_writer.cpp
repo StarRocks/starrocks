@@ -432,7 +432,7 @@ std::unique_ptr<SegmentWriter> BetaRowsetWriter::_create_segment_writer() {
     std::unique_ptr<SegmentWriter> segment_writer =
             std::make_unique<segment_v2::SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
     // TODO set write_mbytes_per_sec based on writer type (load/base compaction/cumulative compaction)
-    auto s = segment_writer->init(config::push_write_mbytes_per_sec);
+    auto s = segment_writer->init();
     if (!s.ok()) {
         LOG(WARNING) << "Fail to init segment writer, " << s.to_string();
         segment_writer.reset(nullptr);
