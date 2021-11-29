@@ -517,24 +517,21 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
 
 Status ColumnReader::_load_zone_map_index_once() {
     Status status = _zonemap_index_once.call([this] {
-        RETURN_IF_ERROR(_load_zone_map_index(!config::disable_storage_page_cache, _opts.kept_in_memory));
-        return Status::OK();
+        return _load_zone_map_index(!config::disable_storage_page_cache, _opts.kept_in_memory);
     });
     return status;
 }
 
 Status ColumnReader::_load_bitmap_index_once() {
     Status status = _bitmap_index_once.call([this] {
-        RETURN_IF_ERROR(_load_bitmap_index(!config::disable_storage_page_cache, _opts.kept_in_memory));
-        return Status::OK();
+        return _load_bitmap_index(!config::disable_storage_page_cache, _opts.kept_in_memory);
     });
     return status;
 }
 
 Status ColumnReader::_load_bloom_filter_index_once() {
     Status status = _bloomfilter_index_once.call([this] {
-        RETURN_IF_ERROR(_load_bloom_filter_index(!config::disable_storage_page_cache, _opts.kept_in_memory));
-        return Status::OK();
+        return _load_bloom_filter_index(!config::disable_storage_page_cache, _opts.kept_in_memory);
     });
     return status;
 }
@@ -543,9 +540,7 @@ Status ColumnReader::load_ordinal_index_once() {
     // Only load ordinal index.
     // Other indexes like zone map/bitmap/bloomfilter should be load when necessary
     Status status = _ordinal_index_once.call([this] {
-        bool use_page_cache = !config::disable_storage_page_cache;
-        RETURN_IF_ERROR(_load_ordinal_index(use_page_cache, _opts.kept_in_memory));
-        return Status::OK();
+        return _load_ordinal_index(!config::disable_storage_page_cache, _opts.kept_in_memory);
     });
     return status;
 }
