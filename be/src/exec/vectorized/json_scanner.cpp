@@ -436,12 +436,14 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs,
         return;
     }
 
-    std::vector<SlotDescriptor*> ordered_slot_descs(*slot_descs);
+    // Build slot_desc_dict.
+    std::unordered_map<std::string, SlotDescriptor*> slot_desc_dict;
+    for (const auto& desc : *slot_descs) {
+        slot_desc_dict.emplace(desc->col_name(), desc);
+    }
 
-    std::set<std::string> key_set;
-
-    // Index of sorted elements in the ordered_slot_descs.
-    size_t idx = 0;
+    std::vector<SlotDescriptor*> ordered_slot_descs;
+    ordered_slot_descs.reserve(slot_descs->size());
 
     std::ostringstream oss;
     simdjson::ondemand::raw_json_string json_str;
@@ -457,23 +459,21 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs,
         auto key = oss.str();
         oss.str("");
 
-        auto kitr = key_set.find(key);
-        if (kitr != key_set.end()) {
-            // Duplicated key in json.
-            continue;
-        }
-
-        key_set.insert(key);
-
         // Find the SlotDescriptor with the json document key.
-        auto itr = std::find_if(ordered_slot_descs.begin(), ordered_slot_descs.end(),
-                                [&key](const SlotDescriptor* desc) { return desc->col_name() == key; });
+        // Duplicated key in json would be skipped since the key has been erased before.
+        auto itr = slot_desc_dict.find(key);
 
         // Swap the SlotDescriptor to the expected index.
-        if (itr != ordered_slot_descs.end()) {
-            std::swap(ordered_slot_descs[idx], *itr);
-            idx++;
+        if (itr != slot_desc_dict.end()) {
+            ordered_slot_descs.push_back(itr->second);
+            // Erase the key from the dict.
+            slot_desc_dict.erase(itr);
         }
+    }
+
+    // Append left key(s) in the dict to the ordered_slot_descs;
+    for (const auto& kv : slot_desc_dict) {
+        ordered_slot_descs.push_back(kv.second);
     }
 
     std::swap(ordered_slot_descs, *slot_descs);
