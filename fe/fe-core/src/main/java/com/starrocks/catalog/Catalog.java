@@ -3915,9 +3915,13 @@ public class Catalog {
             // use table name as this single partition name
             long partitionId = partitionNameToId.get(tableName);
             DataProperty dataProperty = null;
+            boolean hasMedium = stmt.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             try {
                 dataProperty = PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(),
                         DataProperty.DEFAULT_DATA_PROPERTY);
+                if (hasMedium) {
+                    olapTable.setStorageMedium(dataProperty.getStorageMedium());
+                }
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -4028,9 +4032,13 @@ public class Catalog {
                     try {
                         // just for remove entries in stmt.getProperties(),
                         // and then check if there still has unknown properties
-                        PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(), DataProperty.DEFAULT_DATA_PROPERTY);
+                        boolean hasMedium = stmt.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                        DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(),
+                                DataProperty.DEFAULT_DATA_PROPERTY);
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
-
+                        if (hasMedium) {
+                            olapTable.setStorageMedium(dataProperty.getStorageMedium());
+                        }
                         if (properties != null && !properties.isEmpty()) {
                             // here, all properties should be checked
                             throw new DdlException("Unknown properties: " + properties);
@@ -4052,7 +4060,7 @@ public class Catalog {
                         olapTable.addPartition(partition);
                     }
                 } else {
-                    throw new DdlException("Unsupport partition method: " + partitionInfo.getType().name());
+                    throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
                 }
             }
 
@@ -4363,7 +4371,17 @@ public class Catalog {
             // storage type
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
-            sb.append("\n");
+
+
+            // storage media
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
+            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                sb.append("\n");
+            } else {
+                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                sb.append("\n");
+            }
 
             if (table.getType() == TableType.OLAP_EXTERNAL) {
                 ExternalOlapTable externalOlapTable = (ExternalOlapTable) table;

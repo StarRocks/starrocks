@@ -47,6 +47,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import org.apache.logging.log4j.LogManager;
@@ -185,6 +186,11 @@ public class DynamicPartitionScheduler extends MasterDaemon {
             } else {
                 partitionProperties
                         .put("replication_num", String.valueOf(dynamicPartitionProperty.getReplicationNum()));
+            }
+            Map<String, String> tableProperty = olapTable.getTableProperty().getProperties();
+            if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                partitionProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
             }
             String partitionName =
                     dynamicPartitionProperty.getPrefix() + DynamicPartitionUtil.getFormattedPartitionName(

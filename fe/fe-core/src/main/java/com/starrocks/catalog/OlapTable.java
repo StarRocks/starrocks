@@ -1462,6 +1462,14 @@ public class OlapTable extends Table {
         tableProperty.buildInMemory();
     }
 
+    public void setStorageMedium(TStorageMedium storageMedium) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium.name());
+    }
+
     public boolean hasDelete() {
         if (tableProperty == null) {
             return false;
