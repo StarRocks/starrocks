@@ -154,7 +154,6 @@ OLAPStatus BetaRowsetWriter::init() {
         _rowset_meta->set_load_id(_context.load_id);
     } else {
         _rowset_meta->set_version(_context.version);
-        _rowset_meta->set_version_hash(_context.version_hash);
     }
     _rowset_meta->set_tablet_uid(_context.tablet_uid);
     return OLAP_SUCCESS;

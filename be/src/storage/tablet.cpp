@@ -354,7 +354,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
     return Status::OK();
 }
 
-void Tablet::_delete_inc_rowset_by_version(const Version& version, const VersionHash& version_hash) {
+void Tablet::_delete_inc_rowset_by_version(const Version& version) {
     // delete incremental rowset from map
     _inc_rs_version_map.erase(version);
 
@@ -377,15 +377,15 @@ void Tablet::_delete_stale_rowset_by_version(const Version& version) {
 
 void Tablet::delete_expired_inc_rowsets() {
     int64_t now = UnixSeconds();
-    std::vector<std::pair<Version, VersionHash>> expired_versions;
+    std::vector<Version> expired_versions;
     std::unique_lock wrlock(_meta_lock);
     for (auto& rs_meta : _tablet_meta->all_inc_rs_metas()) {
         double diff = ::difftime(now, rs_meta->creation_time());
         if (diff >= config::inc_rowset_expired_sec) {
             Version version(rs_meta->version());
-            expired_versions.emplace_back(version, rs_meta->version_hash());
+            expired_versions.emplace_back(version);
             VLOG(3) << "find expire incremental rowset. tablet=" << full_name() << ", version=" << version
-                    << ", version_hash=" << rs_meta->version_hash() << ", exist_sec=" << diff;
+                    << ", exist_sec=" << diff;
         }
     }
 
@@ -393,9 +393,9 @@ void Tablet::delete_expired_inc_rowsets() {
         return;
     }
 
-    for (auto& pair : expired_versions) {
-        _delete_inc_rowset_by_version(pair.first, pair.second);
-        VLOG(3) << "delete expire incremental data. tablet=" << full_name() << ", version=" << pair.first;
+    for (auto& version : expired_versions) {
+        _delete_inc_rowset_by_version(version);
+        VLOG(3) << "delete expire incremental data. tablet=" << full_name() << ", version=" << version.first;
     }
 
     save_meta();
@@ -403,7 +403,6 @@ void Tablet::delete_expired_inc_rowsets() {
 
 void Tablet::delete_expired_stale_rowset() {
     int64_t now = UnixSeconds();
-    std::vector<std::pair<Version, VersionHash>> expired_versions;
     // Compute the end time to delete rowsets, when a expired rowset createtime less then this time, it will be deleted.
     double expired_stale_sweep_endtime = ::difftime(now, config::tablet_rowset_stale_sweep_time_sec);
 
@@ -690,16 +689,6 @@ const uint32_t Tablet::calc_base_compaction_score() const {
     return base_rowset_exist ? score : 0;
 }
 
-void Tablet::compute_version_hash_from_rowsets(const std::vector<RowsetSharedPtr>& rowsets, VersionHash* version_hash) {
-    DCHECK(version_hash != nullptr) << "invalid parameter, version_hash is nullptr";
-    int64_t v_hash = 0;
-    // version hash is useless since StarRocks version 0.11
-    // but for compatibility, we set version hash as the last rowset's version hash.
-    // this can also enable us to do the compaction for last one rowset.
-    v_hash = rowsets.back()->version_hash();
-    *version_hash = v_hash;
-}
-
 void Tablet::calc_missed_versions(int64_t spec_version, std::vector<Version>* missed_versions) {
     std::shared_lock rdlock(_meta_lock);
     if (_updates != nullptr) {
@@ -755,23 +744,22 @@ Version Tablet::_max_continuous_version_from_beginning_unlocked() const {
     if (_updates != nullptr) {
         return Version{0, _updates->max_version()};
     }
-    std::vector<std::pair<Version, VersionHash>> existing_versions;
+    std::vector<Version> existing_versions;
     for (auto& rs : _tablet_meta->all_rs_metas()) {
-        existing_versions.emplace_back(rs->version(), rs->version_hash());
+        existing_versions.emplace_back(rs->version());
     }
 
     // sort the existing versions in ascending order
-    std::sort(existing_versions.begin(), existing_versions.end(),
-              [](const std::pair<Version, VersionHash>& left, const std::pair<Version, VersionHash>& right) {
-                  // simple because 2 versions are certainly not overlapping
-                  return left.first.first < right.first.first;
-              });
+    std::sort(existing_versions.begin(), existing_versions.end(), [](const Version& left, const Version& right) {
+        // simple because 2 versions are certainly not overlapping
+        return left.first < right.first;
+    });
     Version max_continuous_version = {-1, 0};
     for (auto& existing_version : existing_versions) {
-        if (existing_version.first.first > max_continuous_version.second + 1) {
+        if (existing_version.second > max_continuous_version.second + 1) {
             break;
         }
-        max_continuous_version = existing_version.first;
+        max_continuous_version = existing_version;
     }
     return max_continuous_version;
 }
@@ -1113,7 +1101,6 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
             // and perform state modification operations.
         }
         tablet_info->__set_version(version.second);
-        tablet_info->__set_version_hash(0); // unused now
         tablet_info->__set_version_count(_tablet_meta->version_count());
         tablet_info->__set_row_count(_tablet_meta->num_rows());
         tablet_info->__set_data_size(_tablet_meta->tablet_footprint());
