@@ -708,7 +708,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         info.add(baseIndexName);
         info.add(rollupIndexName);
         info.add(rollupIndexId);
-        info.add(Integer.toString(rollupSchemaHash));
         info.add(watershedTxnId);
         info.add(jobState.name());
         info.add(errMsg);
