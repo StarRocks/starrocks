@@ -52,7 +52,7 @@ void PipelineDriverPoller::run_internal() {
         while (driver_it != local_blocked_drivers.end()) {
             auto* driver = *driver_it;
 
-            if (driver->pending_finish() && !driver->source_operator()->pending_finish()) {
+            if (driver->pending_finish() && !driver->is_still_pending_finish()) {
                 // driver->pending_finish() return true means that when a driver's sink operator is finished,
                 // but its source operator still has pending io task that executed in io threads and has
                 // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
@@ -73,7 +73,7 @@ void PipelineDriverPoller::run_internal() {
                 // If the fragment is expired when the source operator is already pending i/o task,
                 // The state of driver shouldn't be changed.
                 driver->finish_operators(driver->fragment_ctx()->runtime_state());
-                if (driver->source_operator()->pending_finish()) {
+                if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     ++driver_it;
                 } else {
@@ -85,7 +85,7 @@ void PipelineDriverPoller::run_internal() {
                 // If the fragment is cancelled when the source operator is already pending i/o task,
                 // The state of driver shouldn't be changed.
                 driver->finish_operators(driver->fragment_ctx()->runtime_state());
-                if (driver->source_operator()->pending_finish()) {
+                if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     ++driver_it;
                 } else {

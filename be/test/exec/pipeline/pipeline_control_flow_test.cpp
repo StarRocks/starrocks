@@ -69,7 +69,7 @@ std::atomic<size_t> lifecycle_error_num;
 class TestOperator : public Operator {
 public:
     TestOperator(int32_t id, const std::string& name, int32_t plan_node_id) : Operator(id, name, plan_node_id) {}
-    ~TestOperator() {
+    ~TestOperator() override {
         if (!_is_prepared) {
             ++lifecycle_error_num;
         }
@@ -133,7 +133,7 @@ public:
             _chunks.push_back(PipelineTestBase::_create_and_fill_chunk(chunk_size));
         }
     }
-    ~TestSourceOperator() {
+    ~TestSourceOperator() override {
         if (!_is_prepared) {
             ++lifecycle_error_num;
         }
@@ -184,7 +184,7 @@ public:
 
     bool has_output() const override { return _index < _chunks.size(); }
     bool is_finished() const override { return !has_output(); }
-    bool pending_finish() { return --_pending_finish_cnt >= 0; }
+    bool pending_finish() const override { return --_pending_finish_cnt >= 0; }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -193,7 +193,7 @@ private:
     CounterPtr _counter;
     std::vector<vectorized::ChunkPtr> _chunks;
     size_t _index = 0;
-    std::atomic<int32_t> _pending_finish_cnt;
+    mutable std::atomic<int32_t> _pending_finish_cnt;
 
     bool _is_prepared = false;
     bool _is_finishing = false;
