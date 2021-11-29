@@ -301,7 +301,7 @@ public class UtFrameUtils {
         if (!portDir.exists()){
             Preconditions.checkState(portDir.mkdirs());
         }
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 10; i++) {
             try (ServerSocket socket = new ServerSocket(0)) {
                 socket.setReuseAddress(true);
                 int port = socket.getLocalPort();
