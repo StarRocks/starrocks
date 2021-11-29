@@ -635,8 +635,8 @@ VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
     }
 }
 
-OLAPStatus VerticalBetaRowsetWriter::add_chunk_by_columns(const vectorized::Chunk& chunk,
-                                                          const std::vector<uint32_t>& column_indexes, bool is_key) {
+OLAPStatus VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
+                                                 const std::vector<uint32_t>& column_indexes, bool is_key) {
     auto segment_writer_add_chunk = [&](const vectorized::Chunk& chunk) -> OLAPStatus {
         auto s = _segment_writers[_current_writer_index]->append_chunk(chunk);
         if (!s.ok()) {

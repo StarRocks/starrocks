@@ -760,7 +760,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
-            ASSERT_EQ(OLAP_SUCCESS, rowset_writer->add_chunk_by_columns(*chunk, column_indexes, true));
+            ASSERT_EQ(OLAP_SUCCESS, rowset_writer->add_columns(*chunk, column_indexes, true));
         }
         ASSERT_EQ(OLAP_SUCCESS, rowset_writer->flush_columns());
     }
@@ -779,7 +779,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
                 }
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
-            ASSERT_EQ(OLAP_SUCCESS, rowset_writer->add_chunk_by_columns(*chunk, column_indexes, false));
+            ASSERT_EQ(OLAP_SUCCESS, rowset_writer->add_columns(*chunk, column_indexes, false));
         }
         ASSERT_EQ(OLAP_SUCCESS, rowset_writer->flush_columns());
     }

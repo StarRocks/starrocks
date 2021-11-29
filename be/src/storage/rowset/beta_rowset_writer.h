@@ -120,8 +120,8 @@ public:
     explicit VerticalBetaRowsetWriter(const RowsetWriterContext& context);
     ~VerticalBetaRowsetWriter() override;
 
-    OLAPStatus add_chunk_by_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                                    bool is_key) override;
+    OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                           bool is_key) override;
 
     OLAPStatus flush_columns() override;
     OLAPStatus final_flush() override;

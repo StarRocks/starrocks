@@ -69,8 +69,8 @@ class Column;
 //
 //      // 4. add chunk by columns
 //      for (column_group : column_groups) {
-//          writer->add_chunk_by_columns(chunk, column_group, is_key);
-//          writer->add_chunk_by_columns(chunk, column_group, is_key);
+//          writer->add_columns(chunk, column_group, is_key);
+//          writer->add_columns(chunk, column_group, is_key);
 //          ...
 //          writer->flush_columns();
 //      }
@@ -100,8 +100,8 @@ public:
 
     // Used for vertical compaction
     // |Chunk| contains partial columns data corresponding to |column_indexes|.
-    virtual OLAPStatus add_chunk_by_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                                            bool is_key) {
+    virtual OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                                   bool is_key) {
         return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
     }
 
