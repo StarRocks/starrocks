@@ -214,8 +214,6 @@ CONF_mInt32(exchg_node_buffer_size_bytes, "10485760");
 // CONF_Int32(insertion_threadhold, "16");
 // the block_size every block allocate for sorter
 CONF_Int32(sorter_block_size, "8388608");
-// push_write_mbytes_per_sec
-CONF_Int32(push_write_mbytes_per_sec, "10");
 
 CONF_mInt64(column_dictionary_key_ratio_threshold, "0");
 CONF_mInt64(column_dictionary_key_size_threshold, "0");
