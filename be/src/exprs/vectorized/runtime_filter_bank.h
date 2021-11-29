@@ -25,7 +25,7 @@ class MemTracker;
 class ExecEnv;
 class RuntimeProfile;
 namespace pipeline {
-class RuntimeBloomFilterEvalContext;
+struct RuntimeBloomFilterEvalContext;
 }
 namespace vectorized {
 class HashJoinNode;

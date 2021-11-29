@@ -200,7 +200,7 @@ private:
             _process_other_conjunct(&chunk);
         }
 
-        // TODO(satanson): _conjunct_ctxs should including local runtime in-filters.
+        // TODO(satanson): _conjunct_ctxs shouldn't include local runtime in-filters.
         if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
         }
@@ -236,8 +236,7 @@ private:
                 if (!to_build[i]) continue;
                 ColumnPtr column = _ht.get_key_columns()[i];
                 Expr* probe_expr = _probe_expr_ctxs[i]->root();
-                // create and fill runtime IN filter.
-                // create and fill runtime IN filter.
+                // create and fill runtime in filter.
                 VectorizedInConstPredicateBuilder builder(state, _pool, probe_expr);
                 builder.set_eq_null(_is_null_safes[i]);
                 builder.use_as_join_runtime_filter();

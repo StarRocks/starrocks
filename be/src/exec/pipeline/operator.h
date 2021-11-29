@@ -116,7 +116,6 @@ public:
     void eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk);
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(vectorized::Chunk* chunk);
-    void eval_runtime_bloom_filters(vectorized::ChunkPtr* chunk);
 
 protected:
     OperatorFactory* _factory;

@@ -113,7 +113,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     if (chunk.value() != nullptr) {
         chunk.value()->check_or_die();
     }
-    eval_runtime_bloom_filters(&chunk.value());
+    eval_runtime_bloom_filters(chunk.value().get());
     if (chunk.value() != nullptr) {
         chunk.value()->check_or_die();
     }

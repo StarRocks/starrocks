@@ -98,13 +98,6 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
     }
 }
 
-void Operator::eval_runtime_bloom_filters(vectorized::ChunkPtr* chunk) {
-    if (chunk == nullptr) {
-        return;
-    }
-    eval_runtime_bloom_filters(chunk->get());
-}
-
 OperatorFactory::OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id)
         : _id(id), _name(name), _plan_node_id(plan_node_id) {
     std::string upper_name(_name);

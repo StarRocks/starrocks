@@ -39,7 +39,7 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chu
     APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
-    eval_runtime_bloom_filters(&chunk);
+    eval_runtime_bloom_filters(chunk.get());
 
     // For having
     eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), chunk.get());

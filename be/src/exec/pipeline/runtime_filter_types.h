@@ -103,7 +103,7 @@ public:
         }
     }
 
-    std::vector<RuntimeFilterHolder*> gather_holders(std::set<TPlanNodeId> ids) {
+    std::vector<RuntimeFilterHolder*> gather_holders(const std::set<TPlanNodeId>& ids) {
         std::vector<RuntimeFilterHolder*> holders;
         holders.reserve(ids.size());
         for (auto id : ids) {
