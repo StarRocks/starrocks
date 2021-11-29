@@ -220,7 +220,7 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
-    // VLOG_ROW << "[Driver] finalize, driver=" << this;
+    VLOG_ROW << "[Driver] finalize, driver=" << this;
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
 
     _close_operators(runtime_state);
