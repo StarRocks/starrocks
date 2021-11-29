@@ -199,7 +199,7 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
                 if (status.is_end_of_file()) {
                     break;
                 } else {
-                    return Status::InternalError("reader get_next error:" + status.to_string());
+                    return Status::InternalError(fmt::format("reader get_next error:{}", status.to_string()));
                 }
             }
 
