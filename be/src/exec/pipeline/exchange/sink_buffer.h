@@ -96,7 +96,7 @@ public:
     }
 
     ~SinkBuffer() {
-        DCHECK(is_finished());
+        // DCHECK(is_finished());
 
         // Relase resources
         for (auto& [_, closure] : _closures) {

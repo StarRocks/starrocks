@@ -24,7 +24,13 @@ public:
 
     virtual Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
 
-    virtual void finish(RuntimeState* state) = 0;
+    virtual void finish(RuntimeState* state) {
+        if (decrement_sink_number() == 1) {
+            for (auto* source : _source->get_sources()) {
+                source->set_finishing(state);
+            }
+        }
+    }
 
     // All LocalExchangeSourceOperators have finished.
     virtual bool is_all_sources_finished() const {
@@ -94,14 +100,6 @@ public:
 
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
-    void finish(RuntimeState* state) override {
-        if (decrement_sink_number() == 1) {
-            for (auto* source : _source->get_sources()) {
-                source->set_finishing(state);
-            }
-        }
-    }
-
 private:
     // Used for local shuffle exchanger.
     // The sink_driver_sequence-th local sink operator exclusively uses the sink_driver_sequence-th partitioner.
@@ -117,14 +115,6 @@ public:
             : LocalExchanger(memory_manager, source) {}
 
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
-
-    void finish(RuntimeState* state) override {
-        if (decrement_sink_number() == 1) {
-            for (auto* source : _source->get_sources()) {
-                source->set_finishing(state);
-            }
-        }
-    }
 };
 
 // Exchange the local data for one local source operation
@@ -135,14 +125,6 @@ public:
             : LocalExchanger(memory_manager, source) {}
 
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
-
-    void finish(RuntimeState* state) override {
-        if (decrement_sink_number() == 1) {
-            for (auto* source : _source->get_sources()) {
-                source->set_finishing(state);
-            }
-        }
-    }
 
 private:
     std::atomic<size_t> _next_accept_source = 0;
