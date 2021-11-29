@@ -109,6 +109,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
     // all shadow indexes should have this prefix in name
     public static final String SHADOW_NAME_PRFIX = "__starrocks_shadow_";
+    public static final String SHADOW_NAME_PRFIX_V1 = "__doris_shadow_";
 
     public SchemaChangeHandler() {
         super("schema change");
