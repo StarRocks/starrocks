@@ -52,6 +52,8 @@ public:
     RowsetId rowset_id() override { return _context.rowset_id; }
 
 protected:
+    Status flush_src_rssids(uint32_t segment_id);
+
     RowsetWriterContext _context;
     std::shared_ptr<RowsetMeta> _rowset_meta;
     std::unique_ptr<TabletSchema> _rowset_schema;
@@ -107,7 +109,6 @@ private:
     OLAPStatus _add_row(const RowType& row);
 
     OLAPStatus _flush_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* segment_writer);
-    Status _flush_src_rssids();
 
     Status _final_merge();
 
@@ -122,6 +123,8 @@ public:
 
     OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
                            bool is_key) override;
+    OLAPStatus add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                                      const std::vector<uint32_t>& rssid) override;
 
     OLAPStatus flush_columns() override;
     OLAPStatus final_flush() override;

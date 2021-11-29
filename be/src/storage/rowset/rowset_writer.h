@@ -105,6 +105,11 @@ public:
         return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
     }
 
+    virtual OLAPStatus add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                                              const std::vector<uint32_t>& rssid) {
+        return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
+    }
+
     // This routine is free to modify the content of |chunk|.
     virtual OLAPStatus flush_chunk(const vectorized::Chunk& chunk) { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
 

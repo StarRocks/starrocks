@@ -139,6 +139,31 @@ RowsetSharedPtr BetaRowsetWriter::build() {
     return rowset;
 }
 
+Status BetaRowsetWriter::flush_src_rssids(uint32_t segment_id) {
+    auto path = BetaRowset::segment_srcrssid_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_id);
+    std::unique_ptr<fs::WritableBlock> wblock;
+    fs::CreateBlockOptions opts({path});
+    Status st = _context.block_mgr->create_block(opts, &wblock);
+    if (!st.ok()) {
+        return st;
+    }
+    st = wblock->append(Slice((const char*)(_src_rssids->data()), _src_rssids->size() * sizeof(uint32_t)));
+    if (!st.ok()) {
+        return Status::IOError("flush_src_rssids WritableBlock.append error");
+    }
+    st = wblock->finalize();
+    if (!st.ok()) {
+        return Status::IOError("flush_src_rssids WritableBlock.finalize error");
+    }
+    st = wblock->close();
+    if (!st.ok()) {
+        return Status::IOError("flush_src_rssids WritableBlock.close error");
+    }
+    _src_rssids->clear();
+    _src_rssids.reset();
+    return Status::OK();
+}
+
 HorizontalBetaRowsetWriter::HorizontalBetaRowsetWriter(const RowsetWriterContext& context)
         : BetaRowsetWriter(context), _segment_writer(nullptr) {}
 
@@ -312,6 +337,7 @@ OLAPStatus HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Ch
         return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
     }
     _num_rows_written += chunk.num_rows();
+    _total_row_size += chunk.bytes_usage();
     return OLAP_SUCCESS;
 }
 
@@ -567,9 +593,9 @@ OLAPStatus HorizontalBetaRowsetWriter::_flush_segment_writer(
         _total_index_size += index_size;
     }
     if (_src_rssids) {
-        Status st = _flush_src_rssids();
+        Status st = flush_src_rssids(_segment_writer->segment_id());
         if (!st.ok()) {
-            LOG(WARNING) << "_flush_src_rssids error: " << st.to_string();
+            LOG(WARNING) << "flush_src_rssids error: " << st.to_string();
             return OLAP_ERR_IO_ERROR;
         }
     }
@@ -589,31 +615,6 @@ OLAPStatus HorizontalBetaRowsetWriter::_flush_segment_writer(
 
     (*segment_writer).reset();
     return OLAP_SUCCESS;
-}
-
-Status HorizontalBetaRowsetWriter::_flush_src_rssids() {
-    auto path = BetaRowset::segment_srcrssid_file_path(_context.rowset_path_prefix, _context.rowset_id,
-                                                       _segment_writer->segment_id());
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions opts({path});
-    Status st = _context.block_mgr->create_block(opts, &wblock);
-    if (!st.ok()) {
-        return st;
-    }
-    st = wblock->append(Slice((const char*)(_src_rssids->data()), _src_rssids->size() * sizeof(uint32_t)));
-    if (!st.ok()) {
-        return Status::IOError("_flush_src_rssids WritableBlock.append error");
-    }
-    st = wblock->finalize();
-    if (!st.ok()) {
-        return Status::IOError("_flush_src_rssids WritableBlock.finalize error");
-    }
-    st = wblock->close();
-    if (!st.ok()) {
-        return Status::IOError("_flush_src_rssids WritableBlock.close error");
-    }
-    _src_rssids->clear();
-    return Status::OK();
 }
 
 VerticalBetaRowsetWriter::VerticalBetaRowsetWriter(const RowsetWriterContext& context) : BetaRowsetWriter(context) {}
@@ -727,6 +728,17 @@ OLAPStatus VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
     return OLAP_SUCCESS;
 }
 
+OLAPStatus VerticalBetaRowsetWriter::add_columns_with_rssid(const vectorized::Chunk& chunk,
+                                                            const std::vector<uint32_t>& column_indexes,
+                                                            const std::vector<uint32_t>& rssid) {
+    RETURN_NOT_OK(add_columns(chunk, column_indexes, true));
+    if (!_src_rssids) {
+        _src_rssids = std::make_unique<std::vector<uint32_t>>();
+    }
+    _src_rssids->insert(_src_rssids->end(), rssid.begin(), rssid.end());
+    return OLAP_SUCCESS;
+}
+
 OLAPStatus VerticalBetaRowsetWriter::flush_columns() {
     if (_segment_writers.empty()) {
         return OLAP_SUCCESS;
@@ -812,6 +824,13 @@ OLAPStatus VerticalBetaRowsetWriter::_flush_columns(std::unique_ptr<segment_v2::
     {
         std::lock_guard<std::mutex> l(_lock);
         _total_index_size += index_size;
+    }
+    if (_src_rssids) {
+        Status st = flush_src_rssids((*segment_writer)->segment_id());
+        if (!st.ok()) {
+            LOG(WARNING) << "flush_src_rssids error: " << st.to_string();
+            return OLAP_ERR_IO_ERROR;
+        }
     }
     return OLAP_SUCCESS;
 }
