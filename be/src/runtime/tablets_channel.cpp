@@ -79,16 +79,19 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
     ClosureGuard done_guard(done);
 
     if (UNLIKELY(!request->has_sender_id())) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs("no sender_id in PTabletWriterAddChunkRequest");
         return;
     }
     if (UNLIKELY(request->sender_id() < 0)) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs("negative sender_id in PTabletWriterAddChunkRequest");
         return;
     }
     if (UNLIKELY(request->sender_id() >= _senders.size())) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs(
                 fmt::format("invalid sender_id {} in PTabletWriterAddChunkRequest, limit={}", request->sender_id(),
@@ -96,6 +99,7 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
         return;
     }
     if (UNLIKELY(!request->has_packet_seq())) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs("no packet_seq in PTabletWriterAddChunkRequest");
         return;
@@ -105,17 +109,20 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
     std::lock_guard l(sender.lock);
 
     if (sender.next_seq < 0) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
         response->mutable_status()->add_error_msgs("Tablet channel has been cancelled");
         return;
     } else if (request->packet_seq() == sender.next_seq) {
         sender.next_seq++;
     } else if (request->packet_seq() < sender.next_seq) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         LOG(INFO) << "Ignore outdated request from " << cntl->remote_side() << ". seq=" << request->packet_seq()
                   << " expect=" << sender.next_seq << " load_id=" << _load_channel->load_id();
         response->mutable_status()->set_status_code(TStatusCode::OK);
         return;
     } else {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         LOG(WARNING) << "Out-of-order request from " << cntl->remote_side() << ". seq=" << request->packet_seq()
                      << " expect=" << sender.next_seq << " load_id=" << _load_channel->load_id();
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
@@ -125,13 +132,15 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 
     auto res = _create_write_context(request, response, done);
     if (!res.ok()) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         res.status().to_protobuf(response->mutable_status());
         return;
+    } else {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+        response->mutable_status()->set_status_code(TStatusCode::OK);
     }
-    response->mutable_status()->set_status_code(TStatusCode::OK);
 
     auto context = std::move(res).value();
-    auto count_down_latch = BThreadCountDownLatch(1);
     auto channel_size = _tablet_id_to_sorted_indexes.size();
     auto tablet_ids = request->tablet_ids().data();
     auto tablet_ids_size = request->tablet_ids_size();
@@ -142,6 +151,8 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 
     bool wait = _num_remaining_senders.load(std::memory_order_acquire) >= 3 || request->eos() ||
                 (_mem_tracker->consumption() > _mem_tracker->limit() * 8 / 10);
+
+    auto count_down_latch = BThreadCountDownLatch(1);
 
     if (wait) {
         context->set_count_down_latch(&count_down_latch);
@@ -205,8 +216,6 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
-    // The bthread may running on a different pthread worker now
-    tls_thread_status.set_mem_tracker(_mem_tracker);
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
@@ -404,20 +413,23 @@ StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_wr
 }
 
 void TabletsChannel::WriteCallback::run(const Status& st, const CommittedRowsetInfo* info) {
-    _context->update_status(st);
-    if (info != nullptr) {
-        PTabletInfo tablet_info;
-        tablet_info.set_tablet_id(info->tablet->tablet_id());
-        tablet_info.set_schema_hash(info->tablet->schema_hash());
-        const auto& rowset_global_dict_columns_valid_info = info->rowset_writer->global_dict_columns_valid_info();
-        for (const auto& item : rowset_global_dict_columns_valid_info) {
-            if (item.second) {
-                tablet_info.add_valid_dict_cache_columns(item.first);
-            } else {
-                tablet_info.add_invalid_dict_cache_columns(item.first);
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+        _context->update_status(st);
+        if (info != nullptr) {
+            PTabletInfo tablet_info;
+            tablet_info.set_tablet_id(info->tablet->tablet_id());
+            tablet_info.set_schema_hash(info->tablet->schema_hash());
+            const auto& rowset_global_dict_columns_valid_info = info->rowset_writer->global_dict_columns_valid_info();
+            for (const auto& item : rowset_global_dict_columns_valid_info) {
+                if (item.second) {
+                    tablet_info.add_valid_dict_cache_columns(item.first);
+                } else {
+                    tablet_info.add_invalid_dict_cache_columns(item.first);
+                }
             }
+            _context->add_committed_tablet_info(&tablet_info);
         }
-        _context->add_committed_tablet_info(&tablet_info);
     }
     delete this;
 }

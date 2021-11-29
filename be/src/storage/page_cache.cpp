@@ -62,10 +62,10 @@ bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
 void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory) {
 #ifndef BE_TEST
     int64_t mem_size = malloc_usable_size(data.data);
-    tls_thread_status.mem_release(mem_size);
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    tls_thread_status.mem_consume(mem_size);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    CurrentThread::mem_release(mem_size);
+    MemTracker* prev_tracker = CurrentThread::set_mem_tracker(_mem_tracker);
+    CurrentThread::mem_consume(mem_size);
+    DeferOp op([&] { CurrentThread::set_mem_tracker(prev_tracker); });
 #endif
 
     auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[](uint8_t*) value; };

@@ -61,6 +61,8 @@ Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable) {
         ss << "tablet_id = " << memtable->tablet_id() << " flush_status error ";
         return Status::InternalError(ss.str());
     }
+    // Does not count the size of MemtableFlushTask into our memory tracker
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable));
     return _flush_token->submit(std::move(task));
 }

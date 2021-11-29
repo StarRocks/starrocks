@@ -151,7 +151,7 @@ class CACHELINE_ALIGNED ColumnPool {
             _curr_free.bytes -= bytes;
             UPDATE_BVAR(g_column_pool_total_local_bytes, -bytes);
 
-            tls_thread_status.mem_consume(bytes);
+            CurrentThread::mem_consume(bytes);
             _pool->mem_tracker()->release(bytes);
 
             return obj;
@@ -169,7 +169,7 @@ class CACHELINE_ALIGNED ColumnPool {
                 _curr_free.ptrs[_curr_free.nfree++] = ptr;
                 _curr_free.bytes += bytes;
 
-                tls_thread_status.mem_release(bytes);
+                CurrentThread::mem_release(bytes);
                 _pool->mem_tracker()->consume(bytes);
 
                 UPDATE_BVAR(g_column_pool_total_local_bytes, bytes);
@@ -182,7 +182,7 @@ class CACHELINE_ALIGNED ColumnPool {
                 _curr_free.ptrs[0] = ptr;
                 _curr_free.bytes = bytes;
 
-                tls_thread_status.mem_release(bytes);
+                CurrentThread::mem_release(bytes);
                 _pool->mem_tracker()->consume(bytes);
 
                 UPDATE_BVAR(g_column_pool_total_local_bytes, bytes);
@@ -261,7 +261,7 @@ public:
         }
 
         _mem_tracker->release(freed_bytes);
-        tls_thread_status.mem_consume(freed_bytes);
+        CurrentThread::mem_consume(freed_bytes);
 
         UPDATE_BVAR(g_column_pool_total_central_bytes, -freed_bytes);
         return freed_bytes;

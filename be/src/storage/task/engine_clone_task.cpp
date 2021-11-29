@@ -67,8 +67,7 @@ EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone
 }
 
 OLAPStatus EngineCloneTask::execute() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     auto tablet_manager = StorageEngine::instance()->tablet_manager();
     // Prevent the snapshot directory from been removed by the path GC worker.

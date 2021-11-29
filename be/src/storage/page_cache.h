@@ -106,9 +106,8 @@ public:
     ~PageCacheHandle() {
         if (_handle != nullptr) {
 #ifndef BE_TEST
-            MemTracker* prev_tracker =
-                    tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->page_cache_mem_tracker());
-            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+            MemTracker* prev_tracker = CurrentThread::set_mem_tracker(ExecEnv::GetInstance()->page_cache_mem_tracker());
+            DeferOp op([&] { CurrentThread::set_mem_tracker(prev_tracker); });
 #endif
             _cache->release(_handle);
         }

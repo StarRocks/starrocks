@@ -12,13 +12,14 @@
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))
 
+
 /*
 //// void* ptr = new AAA();
 void* operator new(size_t size) {
     void* ptr = tc_new(size);
 
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    starrocks::CurrentThread::mem_consume(actual_size);
 
     return ptr;
 }
@@ -26,7 +27,7 @@ void* operator new(size_t size) {
 // (<=C++11) delete ptr
 void operator delete(void* p) noexcept {
     size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     tc_delete(p);
 }
@@ -36,7 +37,7 @@ void* operator new[](size_t size) {
     void* ptr = tc_newarray(size);
 
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    starrocks::CurrentThread::mem_consume(actual_size);
 
     return ptr;
 }
@@ -44,7 +45,7 @@ void* operator new[](size_t size) {
 // delete[] ptr;
 void operator delete[](void* p) noexcept {
     size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     tc_deletearray(p);
 }
@@ -54,7 +55,7 @@ void* operator new(size_t size, const std::nothrow_t& nt) noexcept {
     void* ptr = tc_new_nothrow(size, nt);
 
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    starrocks::CurrentThread::mem_consume(actual_size);
 
     return ptr;
 }
@@ -64,21 +65,21 @@ void* operator new[](size_t size, const std::nothrow_t& nt) noexcept {
     void* ptr = tc_newarray_nothrow(size, nt);
 
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    starrocks::CurrentThread::mem_consume(actual_size);
 
     return ptr;
 }
 
 void operator delete(void* p, const std::nothrow_t& nt) noexcept {
     size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     tc_delete(p);
 }
 
 void operator delete[](void* p, const std::nothrow_t& nt) noexcept {
     size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     tc_deletearray(p);
 }
@@ -86,14 +87,14 @@ void operator delete[](void* p, const std::nothrow_t& nt) noexcept {
 // (>C++11) delete ptr
 void operator delete(void* p, size_t size) noexcept {
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     tc_delete(p);
 }
 
 void operator delete[](void* p, size_t size) noexcept {
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     tc_deletearray(p);
 }
@@ -102,14 +103,14 @@ void* operator new(size_t size, std::align_val_t al) {
     void* ptr = tc_new_aligned(size, al);
 
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    starrocks::CurrentThread::mem_consume(actual_size);
 
     return ptr;
 }
 
 void operator delete(void* p, std::align_val_t al) noexcept {
     size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     return tc_delete_aligned(p, al);
 }
@@ -117,13 +118,13 @@ void* operator new[](size_t size, std::align_val_t al) {
     void* ptr = tc_newarray_aligned(size, al);
 
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    starrocks::CurrentThread::mem_consume(actual_size);
 
     return ptr;
 }
 void operator delete[](void* p, std::align_val_t al) noexcept {
     size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     return tc_deletearray_aligned(p, al);
 }
@@ -131,39 +132,39 @@ void* operator new(size_t size, std::align_val_t al, const std::nothrow_t& nt) n
     void* ptr = tc_new_aligned_nothrow(size, al, nt);
 
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    starrocks::CurrentThread::mem_consume(actual_size);
 
     return ptr;
 }
 void* operator new[](size_t size, std::align_val_t al, const std::nothrow_t& nt) noexcept {
     void* ptr = tc_newarray_aligned_nothrow(size, al, nt);
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    starrocks::CurrentThread::mem_consume(actual_size);
 
     return ptr;
 }
 void operator delete(void* p, std::align_val_t al, const std::nothrow_t& nt) noexcept {
     size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     return tc_delete_aligned_nothrow(p, al, nt);
 }
 void operator delete[](void* p, std::align_val_t al, const std::nothrow_t& nt) noexcept {
     size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     return tc_deletearray_aligned_nothrow(p, al, nt);
 }
 
 void operator delete(void* p, size_t size, std::align_val_t al) noexcept {
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     return tc_delete(p);
 }
 void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
     size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_release(actual_size);
+    starrocks::CurrentThread::mem_release(actual_size);
 
     return tc_deletearray(p);
 }
@@ -171,9 +172,33 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 
 #ifndef BE_TEST
 #define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
-#define MEMORY_CONSUME_PTR(ptr) starrocks::tls_thread_status.mem_consume(tc_malloc_size(ptr))
-#define MEMORY_RELEASE_PTR(ptr) starrocks::tls_thread_status.mem_release(tc_malloc_size(ptr))
-#define MEMORY_CONSUME_SIZE(size) starrocks::tls_thread_status.mem_consume(size)
+
+#define MEMORY_CONSUME_PTR(ptr)                                         \
+    do {                                                                \
+        if (MEM_TRACKER_ENABLED()) {                                    \
+            DISABLE_MEMTRACKER();                                       \
+            starrocks::CurrentThread::mem_consume(tc_malloc_size(ptr)); \
+            ENABLE_MEMTRACKER();                                        \
+        }                                                               \
+    } while (0)
+
+#define MEMORY_RELEASE_PTR(ptr)                                         \
+    do {                                                                \
+        if (MEM_TRACKER_ENABLED()) {                                    \
+            DISABLE_MEMTRACKER();                                       \
+            starrocks::CurrentThread::mem_release(tc_malloc_size(ptr)); \
+            ENABLE_MEMTRACKER();                                        \
+        }                                                               \
+    } while (0)
+
+#define MEMORY_CONSUME_SIZE(size)                        \
+    do {                                                 \
+        if (MEM_TRACKER_ENABLED()) {                     \
+            DISABLE_MEMTRACKER();                        \
+            starrocks::CurrentThread::mem_consume(size); \
+            ENABLE_MEMTRACKER();                         \
+        }                                                \
+    } while (0)
 #else
 #define TC_MALLOC_SIZE(ptr) 0
 #define MEMORY_CONSUME_PTR(ptr) (void)(ptr)
@@ -185,11 +210,7 @@ extern "C" {
 // malloc
 void* my_alloc(size_t size) __THROW {
     void* ptr = tc_malloc(size);
-    // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
-    // call the `my_alloc`, and result in a deadloop.
-#ifndef BE_TEST
-    MEMORY_CONSUME_SIZE(tc_nallocx(size, 0));
-#endif
+    MEMORY_CONSUME_PTR(ptr);
     return ptr;
 }
 

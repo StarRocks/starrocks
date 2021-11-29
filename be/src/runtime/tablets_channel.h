@@ -124,10 +124,9 @@ private:
                 return;
             }
             std::lock_guard l(_response_lock);
-            if (_response->status().status_code() != TStatusCode::OK) {
-                return;
+            if (_response->status().status_code() == TStatusCode::OK) {
+                status.to_protobuf(_response->mutable_status());
             }
-            status.to_protobuf(_response->mutable_status());
         }
 
         void add_committed_tablet_info(PTabletInfo* tablet_info) {
@@ -158,7 +157,6 @@ private:
 
     class WriteCallback : public AsyncDeltaWriterCallback {
     public:
-        // |latch| must outlive the WriteCallback
         explicit WriteCallback(WriteContext* context) : _context(context) { _context->AddRef(); }
 
         ~WriteCallback() override { _context->Release(); }

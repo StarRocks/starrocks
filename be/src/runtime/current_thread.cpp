@@ -4,9 +4,9 @@
 
 #include "storage/storage_engine.h"
 
-namespace starrocks {
+namespace starrocks::internal {
 
-CurrentThread::~CurrentThread() {
+ThreadLocalData::~ThreadLocalData() {
     StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
     if (UNLIKELY(storage_engine != nullptr && storage_engine->bg_worker_stopped())) {
         return;
@@ -14,4 +14,4 @@ CurrentThread::~CurrentThread() {
     commit();
 }
 
-} // namespace starrocks
+} // namespace starrocks::internal

@@ -373,8 +373,7 @@ void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState>* exec_state, co
     auto q_tracker = (*exec_state)->runtime_state()->query_mem_tracker_ptr();
     auto s_tracker = (*exec_state)->runtime_state()->instance_mem_tracker_ptr();
 
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(s_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(s_tracker.get());
 
     (*exec_state)->execute();
 

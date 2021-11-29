@@ -646,7 +646,7 @@ bool ChunkMerger::_pop_heap() {
 bool LinkedSchemaChange::process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
                                  TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
 #ifndef BE_TEST
-    Status st = tls_thread_status.mem_tracker()->check_mem_limit("LinkedSchemaChange");
+    Status st = CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange");
     if (!st.ok()) {
         LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
         return false;
@@ -679,7 +679,7 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
             return false;
         }
 #ifndef BE_TEST
-        Status st = tls_thread_status.mem_tracker()->check_mem_limit("DirectSchemaChange");
+        Status st = CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange");
         if (!st.ok()) {
             LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
             return false;
@@ -761,7 +761,7 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
     while (!bg_worker_stopped) {
 #ifndef BE_TEST
-        Status st = tls_thread_status.mem_tracker()->check_mem_limit("SortSchemaChange");
+        Status st = CurrentThread::mem_tracker()->check_mem_limit("SortSchemaChange");
         if (!st.ok()) {
             LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
             return false;

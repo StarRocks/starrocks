@@ -223,8 +223,8 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
         // and the execution thread will call run() to let brpc continue to send packets,
         // and there will be memory release
 #ifndef BE_TEST
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
-        DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+        MemTracker* prev_tracker = CurrentThread::set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
+        DeferOp op([&] { CurrentThread::set_mem_tracker(prev_tracker); });
 #endif
 
         closure->Run();
@@ -573,8 +573,7 @@ bool DataStreamRecvr::is_data_ready() {
 }
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_instance_mem_tracker.get());
 
     SCOPED_TIMER(_sender_total_timer);
     COUNTER_UPDATE(_request_received_counter, 1);

@@ -282,9 +282,9 @@ Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpSc
 }
 
 void EsHttpScanNode::_scanner_scan(std::unique_ptr<EsHttpScanner> scanner, std::promise<Status>& p_status) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    MemTracker* prev_tracker = CurrentThread::set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
     DeferOp op([&] {
-        tls_thread_status.set_mem_tracker(prev_tracker);
+        CurrentThread::set_mem_tracker(prev_tracker);
 
         // This scanner will finish
         _num_running_scanners--;
