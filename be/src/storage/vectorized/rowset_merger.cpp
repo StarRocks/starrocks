@@ -8,8 +8,12 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
+#include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/empty_iterator.h"
+#include "storage/vectorized/merge_iterator.h"
+#include "storage/vectorized/union_iterator.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
@@ -38,6 +42,7 @@ struct MergeEntry {
     std::unique_ptr<RowsetReleaseGuard> rowset_release_guard;
     // set |encode_schema| if require encode chunk pk columns
     const vectorized::Schema* encode_schema = nullptr;
+    uint16_t order;
 
     MergeEntry() = default;
     ~MergeEntry() { close(); }
@@ -154,7 +159,7 @@ public:
         return Status::OK();
     }
 
-    Status get_next(Chunk* chunk, vector<uint32_t>* rssids) {
+    Status get_next(Chunk* chunk, vector<uint32_t>* rssids, vector<RowSourceMask>* source_masks) {
         size_t nrow = 0;
         while (!_heap.empty() && nrow < _chunk_size) {
             MergeEntry<T>& top = *_heap.top();
@@ -165,6 +170,9 @@ public:
                 if (nrow == 0 && top.at_start()) {
                     chunk->swap_chunk(*top.chunk);
                     rssids->insert(rssids->end(), chunk->num_rows(), top.rowset_seg_id);
+                    if (source_masks) {
+                        source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{top.order, false});
+                    }
                     top.pk_cur = top.pk_last + 1;
                     return _fill_heap(&top);
                 } else {
@@ -173,6 +181,9 @@ public:
                     auto start_offset = top.offset(top.pk_cur);
                     chunk->append(*top.chunk, start_offset, nappend);
                     rssids->insert(rssids->end(), nappend, top.rowset_seg_id);
+                    if (source_masks) {
+                        source_masks->insert(source_masks->end(), nappend, RowSourceMask{top.order, false});
+                    }
                     top.pk_cur += nappend;
                     if (top.pk_cur > top.pk_last) {
                         //LOG(INFO) << "  append all " << nappend << "  get_next batch";
@@ -190,6 +201,9 @@ public:
                 nrow++;
                 top.pk_cur++;
                 rssids->push_back(top.rowset_seg_id);
+                if (source_masks) {
+                    source_masks->emplace_back(RowSourceMask{top.order, false});
+                }
                 if (top.pk_cur > top.pk_last) {
                     auto start_offset = top.offset(start);
                     auto end_offset = top.offset(top.pk_cur);
@@ -222,25 +236,65 @@ public:
 
     Status do_merge(Tablet& tablet, int64_t version, const Schema& schema, const vector<RowsetSharedPtr>& rowsets,
                     RowsetWriter* writer, const MergeConfig& cfg) override {
+        _chunk_size = cfg.chunk_size;
+
+        size_t total_input_size = 0;
+        size_t total_rows = 0;
+        size_t total_chunk = 0;
+        OlapReaderStatistics stats;
+        vector<vector<uint32_t>> column_groups;
         MonotonicStopWatch timer;
         timer.start();
-        _chunk_size = cfg.chunk_size;
-        OlapReaderStatistics stats;
+        if (cfg.algorithm == VERTICAL) {
+            int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+            Compaction::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(), max_columns_per_group,
+                                                 &column_groups);
+            RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,
+                                                 &total_input_size, &total_rows, &total_chunk, &stats));
+        } else {
+            RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, &total_input_size,
+                                                   &total_rows, &total_chunk, &stats));
+        }
+        timer.stop();
+
+        StarRocksMetrics::instance()->update_compaction_deltas_total.increment(rowsets.size());
+        StarRocksMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
+        StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);
+        StarRocksMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
+        LOG(INFO) << "compaction merge finished. tablet=" << tablet.tablet_id() << " #key=" << schema.num_key_fields()
+                  << " algorithm=" << compaction_algorithm_to_string(cfg.algorithm)
+                  << " column_group_size=" << column_groups.size() << " input("
+                  << "entry=" << _entries.size() << " rows=" << stats.raw_rows_read
+                  << " del=" << stats.rows_del_vec_filtered
+                  << " actual=" << stats.raw_rows_read - stats.rows_del_vec_filtered
+                  << " bytes=" << PrettyPrinter::print(total_input_size, TUnit::BYTES) << ") output(rows=" << total_rows
+                  << " chunk=" << total_chunk
+                  << " bytes=" << PrettyPrinter::print(writer->total_data_size(), TUnit::BYTES)
+                  << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
+        return Status::OK();
+    }
+
+private:
+    Status _do_merge_horizontally(Tablet& tablet, int64_t version, const Schema& schema,
+                                  const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg,
+                                  size_t* total_input_size, size_t* total_rows, size_t* total_chunk,
+                                  OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr) {
         std::unique_ptr<vectorized::Column> pk_column;
         if (schema.num_key_fields() > 1) {
             if (!PrimaryKeyEncoder::create_column(schema, &pk_column).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         }
-        size_t total_input_size = 0;
+
+        uint16_t order = 0;
         for (const auto& i : rowsets) {
-            total_input_size += i->data_disk_size();
+            *total_input_size += i->data_disk_size();
             _entries.emplace_back(new MergeEntry<T>());
             MergeEntry<T>& entry = *_entries.back();
             entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(i);
             auto rowset = i.get();
             auto beta_rowset = down_cast<BetaRowset*>(rowset);
-            auto res = beta_rowset->get_segment_iterators2(schema, tablet.data_dir()->get_meta(), version, &stats);
+            auto res = beta_rowset->get_segment_iterators2(schema, tablet.data_dir()->get_meta(), version, stats);
             if (!res.ok()) {
                 return res.status();
             }
@@ -252,6 +306,7 @@ public:
                 entry.chunk_pk_column = pk_column->clone_shared();
                 entry.chunk_pk_column->reserve(_chunk_size);
             }
+            entry.order = order++;
             auto st = entry.init();
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
@@ -266,63 +321,194 @@ public:
 
         auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
-        size_t total_rows = 0;
-        size_t total_chunk = 0;
+        vector<uint32_t> column_indexes;
+        std::unique_ptr<vector<RowSourceMask>> source_masks;
+        if (mask_buffer) {
+            source_masks = std::make_unique<vector<RowSourceMask>>();
+            column_indexes.reserve(schema.num_key_fields());
+            for (uint32_t i = 0; i < schema.num_key_fields(); ++i) {
+                column_indexes.emplace_back(i);
+            }
+        }
+
         auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
         vector<uint32_t> rssids;
         rssids.reserve(_chunk_size);
         while (true) {
             chunk->reset();
             rssids.clear();
-            Status status = get_next(chunk.get(), &rssids);
+            Status status = get_next(chunk.get(), &rssids, source_masks.get());
             if (!status.ok()) {
                 if (status.is_end_of_file()) {
                     break;
                 } else {
+                    LOG(WARNING) << "reader get next error. tablet=" << tablet.full_name()
+                                 << ", err=" << status.to_string();
                     return Status::InternalError("reader get_next error.");
                 }
             }
 
             ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet.tablet_schema(), chunk.get());
 
-            total_rows += chunk->num_rows();
-            total_chunk++;
-            OLAPStatus olap_status = writer->add_chunk_with_rssid(*chunk, rssids);
-            if (olap_status != OLAP_SUCCESS) {
-                LOG(WARNING) << "writer add_chunk error, err=" << olap_status;
-                return Status::InternalError("writer add_chunk error.");
+            *total_rows += chunk->num_rows();
+            (*total_chunk)++;
+
+            if (mask_buffer) {
+                OLAPStatus olap_status = writer->add_columns_with_rssid(*chunk, column_indexes, rssids);
+                if (olap_status != OLAP_SUCCESS) {
+                    LOG(WARNING) << "writer add_columns_with_rssid error, tablet=" << tablet.full_name()
+                                 << ", err=" << olap_status;
+                    return Status::InternalError("writer add_columns_with_rssid error.");
+                }
+
+                if (!source_masks->empty()) {
+                    RETURN_IF_ERROR(mask_buffer->write(*source_masks));
+                    source_masks->clear();
+                }
+            } else {
+                OLAPStatus olap_status = writer->add_chunk_with_rssid(*chunk, rssids);
+                if (olap_status != OLAP_SUCCESS) {
+                    LOG(WARNING) << "writer add_chunk_with_rssid error, tablet=" << tablet.full_name()
+                                 << ", err=" << olap_status;
+                    return Status::InternalError("writer add_chunk_with_rssid error.");
+                }
             }
         }
-        OLAPStatus olap_status = writer->flush();
-        if (olap_status != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " + tablet.full_name()
-                         << ", err=" << olap_status;
-            return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
+
+        if (mask_buffer) {
+            OLAPStatus olap_status = writer->flush_columns();
+            if (olap_status != OLAP_SUCCESS) {
+                LOG(WARNING) << "failed to flush columns when merging rowsets of tablet " << tablet.full_name()
+                             << ", err=" << olap_status;
+                return Status::InternalError("failed to flush columns when merging rowsets of tablet error.");
+            }
+
+            RETURN_IF_ERROR(mask_buffer->flush());
+        } else {
+            OLAPStatus olap_status = writer->flush();
+            if (olap_status != OLAP_SUCCESS) {
+                LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " << tablet.full_name()
+                             << ", err=" << olap_status;
+                return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
+            }
         }
-        timer.stop();
-        if (stats.raw_rows_read - stats.rows_del_vec_filtered != total_rows) {
+
+        if (stats->raw_rows_read - stats->rows_del_vec_filtered != *total_rows) {
             string msg = Substitute("update compaction rows read($0) != rows written($1)",
-                                    stats.raw_rows_read - stats.rows_del_vec_filtered, total_rows);
+                                    stats->raw_rows_read - stats->rows_del_vec_filtered, *total_rows);
             DCHECK(false) << msg;
             LOG(WARNING) << msg;
         }
-        StarRocksMetrics::instance()->update_compaction_deltas_total.increment(rowsets.size());
-        StarRocksMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
-        StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);
-        StarRocksMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
-        LOG(INFO) << "compaction merge finished. tablet:" << tablet.tablet_id() << " #key:" << schema.num_key_fields()
-                  << " input("
-                  << "entry=" << _entries.size() << " rows=" << stats.raw_rows_read
-                  << " del=" << stats.rows_del_vec_filtered
-                  << " actual=" << stats.raw_rows_read - stats.rows_del_vec_filtered
-                  << " bytes=" << PrettyPrinter::print(total_input_size, TUnit::BYTES) << ") output(rows=" << total_rows
-                  << " chunk=" << total_chunk
-                  << " bytes=" << PrettyPrinter::print(writer->total_data_size(), TUnit::BYTES)
-                  << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
+
         return Status::OK();
     }
 
-private:
+    Status _do_merge_vertically(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
+                                RowsetWriter* writer, const MergeConfig& cfg,
+                                const vector<vector<uint32_t>>& column_groups, size_t* total_input_size,
+                                size_t* total_rows, size_t* total_chunk, OlapReaderStatistics* stats) {
+        DCHECK_GT(column_groups.size(), 1);
+        // merge key columns
+        auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(tablet.tablet_id(), tablet.data_dir()->path());
+        {
+            Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0]);
+            RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
+                                                   total_rows, total_chunk, stats, mask_buffer.get()));
+        }
+
+        // merge non key columns
+        auto source_masks = std::make_unique<vector<RowSourceMask>>();
+        for (size_t i = 1; i < column_groups.size(); ++i) {
+            mask_buffer->flip();
+
+            _entries.clear();
+            _entries.reserve(rowsets.size());
+            vector<vectorized::ChunkIteratorPtr> iterators;
+            iterators.reserve(rowsets.size());
+            OlapReaderStatistics non_key_stats;
+            Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[i]);
+            for (const auto& rowset : rowsets) {
+                _entries.emplace_back(new MergeEntry<T>());
+                MergeEntry<T>& entry = *_entries.back();
+                entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
+                auto beta_rowset = down_cast<BetaRowset*>(rowset.get());
+                auto res = beta_rowset->get_segment_iterators2(schema, tablet.data_dir()->get_meta(), version,
+                                                               &non_key_stats);
+                if (!res.ok()) {
+                    return res.status();
+                }
+                vector<vectorized::ChunkIteratorPtr> segment_iters;
+                for (const auto& segment_iter : res.value()) {
+                    if (segment_iter) {
+                        segment_iters.emplace_back(std::move(segment_iter));
+                    }
+                }
+                if (segment_iters.empty()) {
+                    iterators.emplace_back(new_empty_iterator(schema, _chunk_size));
+                } else {
+                    iterators.emplace_back(new_union_iterator(std::move(segment_iters)));
+                }
+            }
+
+            CHECK_EQ(rowsets.size(), iterators.size());
+            std::shared_ptr<ChunkIterator> iter = new_mask_merge_iterator(iterators, mask_buffer.get());
+            iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+
+            auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
+            auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+
+            while (true) {
+                chunk->reset();
+                Status status = iter->get_next(chunk.get(), source_masks.get());
+                if (!status.ok()) {
+                    if (status.is_end_of_file()) {
+                        break;
+                    } else {
+                        LOG(WARNING) << "reader get next error. tablet=" << tablet.full_name()
+                                     << ", err=" << status.to_string();
+                        return Status::InternalError("reader get_next error.");
+                    }
+                }
+
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet.tablet_schema(), chunk.get());
+
+                OLAPStatus olap_status = writer->add_columns(*chunk, column_groups[i], false);
+                if (olap_status != OLAP_SUCCESS) {
+                    LOG(WARNING) << "writer add_columns error, tablet=" << tablet.full_name()
+                                 << ", err=" << olap_status;
+                    return Status::InternalError("writer add_columns error.");
+                }
+
+                if (!source_masks->empty()) {
+                    source_masks->clear();
+                }
+            }
+
+            OLAPStatus olap_status = writer->flush_columns();
+            if (olap_status != OLAP_SUCCESS) {
+                LOG(WARNING) << "failed to flush columns when merging rowsets of tablet " << tablet.full_name()
+                             << ", err=" << olap_status;
+                return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
+            }
+
+            if (non_key_stats.raw_rows_read - non_key_stats.rows_del_vec_filtered != *total_rows) {
+                string msg = Substitute("update compaction rows read($0) != rows written($1) when merging non keys",
+                                        non_key_stats.raw_rows_read - non_key_stats.rows_del_vec_filtered, *total_rows);
+                DCHECK(false) << msg;
+                LOG(WARNING) << msg;
+            }
+        }
+
+        OLAPStatus olap_status = writer->final_flush();
+        if (olap_status != OLAP_SUCCESS) {
+            LOG(WARNING) << "failed to final flush rowset when merging rowsets of tablet " << tablet.full_name()
+                         << ", err=" << olap_status;
+            return Status::InternalError("failed to final flush rowset when merging rowsets of tablet error.");
+        }
+
+        return Status::OK();
+    }
+
     size_t _chunk_size = 0;
     std::vector<std::unique_ptr<MergeEntry<T>>> _entries;
     using Heap = std::priority_queue<MergeEntry<T>*, std::vector<MergeEntry<T>*>, MergeEntryCmp<T>>;
