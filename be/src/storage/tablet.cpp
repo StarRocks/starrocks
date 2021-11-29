@@ -756,7 +756,7 @@ Version Tablet::_max_continuous_version_from_beginning_unlocked() const {
     });
     Version max_continuous_version = {-1, 0};
     for (auto& existing_version : existing_versions) {
-        if (existing_version.second > max_continuous_version.second + 1) {
+        if (existing_version.first > max_continuous_version.second + 1) {
             break;
         }
         max_continuous_version = existing_version;
