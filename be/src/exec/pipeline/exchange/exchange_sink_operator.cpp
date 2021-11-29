@@ -208,6 +208,8 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     return Status::OK();
 }
 
+// TODO(lzh): Remove fragment_ctx from parameters.
+//  Cancel flag should probably be owned by RuntimeState instead of FragmentContext.
 void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
     state->log_error(_close_internal(state, fragment_ctx).get_error_msg());
 }
