@@ -51,7 +51,6 @@ void PipelineDriverPoller::run_internal() {
         auto driver_it = local_blocked_drivers.begin();
         while (driver_it != local_blocked_drivers.end()) {
             auto* driver = *driver_it;
-            // VLOG_ROW << "[Driver] check block: " << driver->to_readable_string();
 
             if (driver->pending_finish() && !driver->is_still_pending_finish()) {
                 // driver->pending_finish() return true means that when a driver's sink operator is finished,
@@ -131,7 +130,6 @@ void PipelineDriverPoller::run_internal() {
 }
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
-    // VLOG_ROW << "[Driver] add_blocked_driver: " << driver->to_readable_string();
     std::unique_lock<std::mutex> lock(this->_mutex);
     driver->_pending_timer_sw->reset();
     if (driver->driver_state() == DriverState::PRECONDITION_BLOCK) {

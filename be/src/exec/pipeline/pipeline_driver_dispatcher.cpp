@@ -107,17 +107,12 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                // VLOG_ROW << strings::Substitute("[Driver] Push back again, source=$0, state=$1",
-                //                                driver->source_operator()->get_name(), ds_to_string(driver_state));
                 this->_driver_queue->put_back(driver);
                 break;
             }
             case FINISH:
             case CANCELED:
             case INTERNAL_ERROR: {
-                // VLOG_ROW << strings::Substitute("[Driver] Finished, source=$0, state=$1, status=$2",
-                //                                driver->source_operator()->get_name(), ds_to_string(driver_state),
-                //                                fragment_ctx->final_status().to_string());
                 finalize_driver(driver, runtime_state, driver_state);
                 break;
             }
@@ -125,8 +120,6 @@ void GlobalDriverDispatcher::run() {
             case OUTPUT_FULL:
             case PENDING_FINISH:
             case PRECONDITION_BLOCK: {
-                // VLOG_ROW << strings::Substitute("[Driver] Blocked, source=$0, state=$1",
-                //                                 driver->source_operator()->get_name(), ds_to_string(driver_state));
                 _blocked_driver_poller->add_blocked_driver(driver);
                 break;
             }
