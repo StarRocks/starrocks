@@ -355,8 +355,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                           child(1)->row_desc(), child(0)->row_desc(), _row_descriptor, child(1)->type(),
                           child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters);
 
-    auto hash_joiner_factory =
-            std::make_shared<starrocks::pipeline::HashJoinerFactory>(param, context->degree_of_parallelism());
+    auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param, num_partitions);
 
     // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,
     // Operators consuming the runtime filters will inspect this placeholder.
@@ -366,7 +365,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // PartialRuntimeFilterMerger
     auto&& partial_rf_merger = std::make_unique<pipeline::PartialRuntimeFilterMerger>(
-            pool, _runtime_join_filter_pushdown_limit, context->degree_of_parallelism());
+            pool, _runtime_join_filter_pushdown_limit, num_partitions);
     auto build_op = std::make_shared<pipeline::HashJoinBuildOperatorFactory>(
             context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger));
 

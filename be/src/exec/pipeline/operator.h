@@ -114,6 +114,7 @@ public:
 
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     void eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk);
+
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(vectorized::Chunk* chunk);
 
@@ -128,7 +129,7 @@ protected:
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
-    RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
+    vectorized::RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
     // Common metrics
     RuntimeProfile::Counter* _push_timer = nullptr;

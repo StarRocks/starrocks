@@ -5,6 +5,7 @@
 #include <mutex>
 
 #include "common/statusor.h"
+#include "exec/vectorized/hash_join_node.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
@@ -30,11 +31,10 @@ struct RuntimeBloomFilterBuildParam;
 using RuntimeBloomFilterBuildParams = std::list<RuntimeBloomFilterBuildParam>;
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
-    RuntimeBloomFilterBuildParam(bool eq_null, const ColumnPtr& column, size_t column_offset, size_t ht_row_count)
-            : eq_null(eq_null), column(column), column_offset(column_offset), ht_row_count(ht_row_count) {}
+    RuntimeBloomFilterBuildParam(bool eq_null, const ColumnPtr& column, size_t ht_row_count)
+            : eq_null(eq_null), column(column), ht_row_count(ht_row_count) {}
     bool eq_null;
     ColumnPtr column;
-    size_t column_offset;
     size_t ht_row_count;
 };
 
@@ -122,26 +122,6 @@ private:
     std::unordered_map<TPlanNodeId, RuntimeFilterHolderPtr> _holders;
 };
 
-// RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.
-// this function is non-reentrant, variables inside RuntimeFilterProbeCollector that hinder reentrancy is moved
-// into RuntimeBloomFilterEvalContext and make do_evaluate function can be called concurrently.
-struct RuntimeBloomFilterEvalContext {
-    void prepare(RuntimeProfile* runtime_profile) {
-        join_runtime_filter_timer = ADD_TIMER(runtime_profile, "JoinRuntimeFilterTime");
-        join_runtime_filter_input_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterInputRows", TUnit::UNIT);
-        join_runtime_filter_output_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
-        join_runtime_filter_eval_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
-    }
-
-    std::map<double, RuntimeBloomFilterProbeDescriptorPtr> selectivity;
-    size_t input_chunk_nums = 0;
-    int run_filter_nums = 0;
-    std::unordered_map<size_t, RuntimeBloomFilterRunningContext> running_contexts;
-    RuntimeProfile::Counter* join_runtime_filter_timer = nullptr;
-    RuntimeProfile::Counter* join_runtime_filter_input_counter = nullptr;
-    RuntimeProfile::Counter* join_runtime_filter_output_counter = nullptr;
-    RuntimeProfile::Counter* join_runtime_filter_eval_counter = nullptr;
-};
 // A ExecNode in non-pipeline engine can be decomposed into more than one OperatorFactories in pipeline engine.
 // Dispatcher framework do not care about that runtime filters take affects on which OperatorFactories, since
 // it depends on Operators' implementation. so each OperatorFactory from the same ExecNode shared a
@@ -313,8 +293,8 @@ public:
                     continue;
                 }
                 auto status = vectorized::RuntimeFilterHelper::fill_runtime_bloom_filter(
-                        param.column, desc->build_expr_type(), desc->runtime_filter(), param.column_offset,
-                        param.eq_null);
+                        param.column, desc->build_expr_type(), desc->runtime_filter(),
+                        vectorized::kHashJoinKeyColumnOffset, param.eq_null);
                 if (!status.ok()) {
                     desc->set_runtime_filter(nullptr);
                 }

@@ -88,7 +88,6 @@ struct HashJoinerParam {
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
 
-static constexpr size_t kHashJoinKeyColumnOffset = 1;
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
     explicit HashJoiner(const HashJoinerParam& param);
@@ -256,19 +255,18 @@ private:
             rf_desc->set_is_pipeline(true);
             // skip if it does not have consumer.
             if (!rf_desc->has_consumer()) {
-                _runtime_bloom_filter_build_params.emplace_back(false, nullptr, kHashJoinKeyColumnOffset, -1);
+                _runtime_bloom_filter_build_params.emplace_back(false, nullptr, -1);
                 continue;
             }
             if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) {
-                _runtime_bloom_filter_build_params.emplace_back(false, nullptr, kHashJoinKeyColumnOffset, -1);
+                _runtime_bloom_filter_build_params.emplace_back(false, nullptr, -1);
                 continue;
             }
 
             int expr_order = rf_desc->build_expr_order();
             ColumnPtr column = _ht.get_key_columns()[expr_order];
             bool eq_null = _is_null_safes[expr_order];
-            _runtime_bloom_filter_build_params.emplace_back(eq_null, column, kHashJoinKeyColumnOffset,
-                                                            _ht.get_row_count());
+            _runtime_bloom_filter_build_params.emplace_back(eq_null, column, _ht.get_row_count());
         }
         return Status::OK();
     }

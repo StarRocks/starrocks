@@ -24,9 +24,7 @@ class RowDescriptor;
 class MemTracker;
 class ExecEnv;
 class RuntimeProfile;
-namespace pipeline {
-struct RuntimeBloomFilterEvalContext;
-}
+
 namespace vectorized {
 class HashJoinNode;
 class RuntimeFilterProbeCollector;
@@ -120,6 +118,28 @@ private:
     int64_t _ready_timestamp = 0;
 };
 
+// RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.
+// this function is non-reentrant, variables inside RuntimeFilterProbeCollector that hinder reentrancy is moved
+// into RuntimeBloomFilterEvalContext and make do_evaluate function can be called concurrently.
+struct RuntimeBloomFilterEvalContext {
+    RuntimeBloomFilterEvalContext() = default;
+    void prepare(RuntimeProfile* runtime_profile) {
+        join_runtime_filter_timer = ADD_TIMER(runtime_profile, "JoinRuntimeFilterTime");
+        join_runtime_filter_input_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterInputRows", TUnit::UNIT);
+        join_runtime_filter_output_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
+        join_runtime_filter_eval_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
+    }
+
+    std::map<double, RuntimeFilterProbeDescriptor*> selectivity;
+    size_t input_chunk_nums = 0;
+    int run_filter_nums = 0;
+    JoinRuntimeFilter::RunningContext running_context;
+    RuntimeProfile::Counter* join_runtime_filter_timer = nullptr;
+    RuntimeProfile::Counter* join_runtime_filter_input_counter = nullptr;
+    RuntimeProfile::Counter* join_runtime_filter_output_counter = nullptr;
+    RuntimeProfile::Counter* join_runtime_filter_eval_counter = nullptr;
+};
+
 // The collection of `RuntimeFilterProbeDescriptor`
 class RuntimeFilterProbeCollector {
 public:
@@ -130,7 +150,7 @@ public:
     Status open(RuntimeState* state);
     void close(RuntimeState* state);
     void evaluate(vectorized::Chunk* chunk);
-    void evaluate(vectorized::Chunk* chunk, pipeline::RuntimeBloomFilterEvalContext& eval_context);
+    void evaluate(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
     // accept RuntimeFilterCollector from parent node
     // which means parent node to push down runtime filter.
@@ -146,21 +166,14 @@ public:
 
 private:
     void update_selectivity(vectorized::Chunk* chunk);
-    void update_selectivity(vectorized::Chunk* chunk, pipeline::RuntimeBloomFilterEvalContext& eval_context);
+    void update_selectivity(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     void do_evaluate(vectorized::Chunk* chunk);
-    void do_evaluate(vectorized::Chunk* chunk, pipeline::RuntimeBloomFilterEvalContext& eval_context);
+    void do_evaluate(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     // mapping from filter id to runtime filter descriptor.
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
-    std::map<double, RuntimeFilterProbeDescriptor*> _selectivity;
-    size_t _input_chunk_nums = 0;
-    int _run_filter_nums = 0;
     int _wait_timeout_ms = 0;
-
     RuntimeProfile* _runtime_profile = nullptr;
-    RuntimeProfile::Counter* _join_runtime_filter_timer = nullptr;
-    RuntimeProfile::Counter* _join_runtime_filter_input_counter = nullptr;
-    RuntimeProfile::Counter* _join_runtime_filter_output_counter = nullptr;
-    RuntimeProfile::Counter* _join_runtime_filter_eval_counter = nullptr;
+    RuntimeBloomFilterEvalContext _eval_context;
 };
 
 } // namespace vectorized

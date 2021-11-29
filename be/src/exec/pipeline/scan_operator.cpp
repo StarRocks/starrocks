@@ -48,6 +48,10 @@ bool ScanOperator::has_output() const {
         return false;
     }
 
+    if (!_chunk_source) {
+        return true;
+    }
+
     DCHECK(_chunk_source != nullptr);
 
     // Still have buffered chunks
@@ -83,6 +87,11 @@ void ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    if (!_chunk_source) {
+        _pickup_morsel(state);
+        return nullptr;
+    }
+
     DCHECK(_chunk_source != nullptr);
     if (!_chunk_source->has_output()) {
         if (_chunk_source->has_next_chunk()) {
@@ -140,10 +149,10 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
     } else {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
-        _chunk_source = std::make_shared<OlapChunkSource>(std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs,
-                                                          runtime_in_filters(), runtime_bloom_filters(),
-                                                          _runtime_profile.get(), _olap_scan_node.key_column_name,
-                                                          _olap_scan_node.is_preaggregation, &_unused_output_columns);
+        _chunk_source = std::make_shared<OlapChunkSource>(
+                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, runtime_in_filters(),
+                runtime_bloom_filters(), _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation,
+                &_unused_output_columns, _runtime_profile.get());
         _chunk_source->prepare(state);
         _trigger_next_scan(state);
     }
