@@ -4720,4 +4720,20 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
+
+    @Test
+    public void testConstantTimeTNull() throws Exception {
+        // check can get plan without exception
+        String sql = "select TIMEDIFF(\"1969-12-30 21:44:11\", NULL) from t0;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 1:Project\n" +
+                "  |  <slot 4> : NULL"));
+
+        sql = "select timediff(cast(cast(null as DATETIME) as DATETIME), " +
+                "cast(case when ((cast(null as DOUBLE) < cast(null as DOUBLE))) then cast(null as DATETIME) " +
+                "else cast(null as DATETIME) end as DATETIME)) as c18 from t0 as ref_0;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 1:Project\n" +
+                "  |  <slot 4> : NULL"));
+    }
 }

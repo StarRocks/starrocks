@@ -55,8 +55,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         1\n" +
-                "         2\n" +
-                "     use vectorized: true"));
+                "         2\n"));
     }
 
     @Test
