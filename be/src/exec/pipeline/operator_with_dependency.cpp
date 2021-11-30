@@ -6,8 +6,9 @@
 namespace starrocks {
 namespace pipeline {
 
-OperatorWithDependency::OperatorWithDependency(int32_t id, const std::string& name, int32_t plan_node_id)
-        : Operator(id, name, plan_node_id) {}
+OperatorWithDependency::OperatorWithDependency(OperatorFactory* factory, int32_t id, const std::string& name,
+                                               int32_t plan_node_id)
+        : Operator(factory, id, name, plan_node_id) {}
 
 OperatorWithDependencyFactory::OperatorWithDependencyFactory(int32_t id, const std::string& name, int32_t plan_node_id)
         : OperatorFactory(id, name, plan_node_id) {}

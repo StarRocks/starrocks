@@ -2649,17 +2649,17 @@ public class PlanFragmentTest extends PlanTestBase {
                 "with user_info as (select 2 as user_id, 'mike' as user_name), address as (select 1 as user_id, 'newzland' as address_name) \n" +
                         "select * from address a right join user_info b on b.user_id=a.user_id;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (COLOCATE)\n" +
+        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
-                "  |  colocate: true\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: expr = 3: expr"));
-        Assert.assertTrue(plan.contains("  |----1:UNION\n" +
-                "  |       constant exprs: \n" +
-                "  |           2 | 'mike'"));
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        Assert.assertTrue(plan.contains("2:UNION\n" +
                 "     constant exprs: \n" +
-                "         1 | 'newzland'\n"));
+                "         2 | 'mike'"));
+        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 'newzland'"));
     }
 
     @Test
@@ -2738,13 +2738,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 " union select join2.id from join1 RIGHT ANTI JOIN join2 on join1.id = join2.id " +
                 " and 1 > 2 WHERE (NOT (true)) group by join2.id ";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
-                "  |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
+        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
-                "  |  colocate: true\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 5: id = 2: id"));
-        Assert.assertTrue(plan.contains("  |----2:EMPTYSET\n"));
-        Assert.assertTrue(plan.contains("  7:EMPTYSET\n"));
+        Assert.assertTrue(plan.contains("  2:EMPTYSET\n"));
+        Assert.assertTrue(plan.contains("  8:EMPTYSET\n"));
     }
 
     @Test
@@ -4584,7 +4584,7 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testCountDistinctBoolTwoPhase() throws Exception{
+    public void testCountDistinctBoolTwoPhase() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct id_bool) from test_bool";
         String plan = getCostExplain(sql);
@@ -4605,5 +4605,21 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  <slot 7> : CAST(6: if AS DECIMAL32(2,2))\n"));
         Config.enable_decimal_v3 = false;
+    }
+
+    @Test
+    public void testConstantTimeTNull() throws Exception {
+        // check can get plan without exception
+        String sql = "select TIMEDIFF(\"1969-12-30 21:44:11\", NULL) from t0;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 1:Project\n" +
+                "  |  <slot 4> : NULL"));
+
+        sql = "select timediff(cast(cast(null as DATETIME) as DATETIME), " +
+                "cast(case when ((cast(null as DOUBLE) < cast(null as DOUBLE))) then cast(null as DATETIME) " +
+                "else cast(null as DATETIME) end as DATETIME)) as c18 from t0 as ref_0;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 1:Project\n" +
+                "  |  <slot 4> : NULL"));
     }
 }

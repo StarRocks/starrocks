@@ -57,6 +57,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "         2"));
 
         explainString = getInsertExecPlan("insert into t0(v1) select v5 from t1");
+        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: v5 | 4: expr | 5: expr\n" +
                 "  PARTITION: RANDOM\n" +
@@ -78,7 +79,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=17.0\n" +
+                "     avgRowSize=3.0\n" +
                 "     numNodes=0"));
     }
 
