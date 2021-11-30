@@ -102,7 +102,8 @@ Status JsonScanner::_construct_json_types() {
             continue;
         }
 
-        if (slot_desc->type().type == TYPE_ARRAY) {
+        switch (slot_desc->type().type) {
+        case TYPE_ARRAY: {
             TypeDescriptor json_type(TYPE_ARRAY);
             TypeDescriptor* child_type = &json_type;
 
@@ -117,9 +118,23 @@ Status JsonScanner::_construct_json_types() {
             child_type->children.emplace_back(varchar_type);
 
             _json_types[column_pos] = std::move(json_type);
-        } else {
+            break;
+        }
+
+        // Treat BIGINT(8B), INT(4B), SMALLINT(2B), TYNYINT(1B) as BIGINT(8B).
+        case TYPE_BIGINT:
+        case TYPE_INT:
+        case TYPE_SMALLINT:
+        case TYPE_TINYINT: {
+            _json_types[column_pos] = TypeDescriptor{TYPE_BIGINT};
+            break;
+        }
+
+        default: {
             auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             _json_types[column_pos] = std::move(varchar_type);
+            break;
+        }
         }
     }
     return Status::OK();
@@ -732,8 +747,7 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
                 break;
             }
 
-            auto f = fmt::format_int(i64);
-            column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
+            column->append_numbers(&i64, sizeof(i64));
             break;
         }
 
@@ -745,8 +759,7 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
                 break;
             }
 
-            auto f = fmt::format_int(u64);
-            column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
+            column->append_numbers(&u64, sizeof(u64));
             break;
         }
 

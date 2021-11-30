@@ -157,7 +157,12 @@ public:
 
     bool append_continuous_strings(const std::vector<Slice>& strs) override;
 
-    size_t append_numbers(const void* buff, size_t length) override { return -1; }
+    size_t append_numbers(const void* buff, size_t length) override {
+        _bytes.insert(_bytes.end(), static_cast<const char*>(buff), static_cast<const char*>(buff) + length);
+        _offsets.emplace_back(_bytes.size());
+        _slices_cache = false;
+        return 1;
+     }
 
     void append_value_multiple_times(const void* value, size_t count) override;
 
