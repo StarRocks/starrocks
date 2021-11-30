@@ -5,11 +5,11 @@
 #include <vector>
 
 #include "runtime/descriptors.h"
+#include "runtime/global_dicts.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_reader.h"
 #include "storage/rowset/segment_v2/segment.h"
 #include "storage/tablet.h"
-#include "runtime/global_dicts.h"
 
 namespace starrocks {
 
