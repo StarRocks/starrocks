@@ -214,7 +214,8 @@ select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a
 [result]
 INNER JOIN (join-predicate [1: v1 = cast(4: expr as bigint(20))] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
-    VALUES (1,2)
+    EXCHANGE BROADCAST
+        VALUES (1,2)
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:1: v1 | 2: v2 | 5: expr
@@ -222,33 +223,31 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-  4:EXCHANGE
-     use vectorized: true
+5:EXCHANGE
+use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 04
+EXCHANGE ID: 05
 UNPARTITIONED
 
-3:Project
+4:Project
 |  <slot 1> : 1: v1
 |  <slot 2> : 2: v2
 |  <slot 5> : 5: expr
 |  use vectorized: true
 |
-2:HASH JOIN
-|  join op: INNER JOIN (COLOCATE)
+3:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
-|  colocate: true
+|  colocate: false, reason:
 |  equal join conjunct: 1: v1 = CAST(4: expr AS BIGINT)
 |  use vectorized: true
 |
-|----1:UNION
-|       constant exprs:
-|           1 | 2
+|----2:EXCHANGE
 |       use vectorized: true
 |
 0:OlapScanNode
@@ -261,6 +260,19 @@ tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=2.0
 numNodes=0
+use vectorized: true
+
+PLAN FRAGMENT 2
+OUTPUT EXPRS:
+PARTITION: UNPARTITIONED
+
+STREAM DATA SINK
+EXCHANGE ID: 02
+UNPARTITIONED
+
+1:UNION
+constant exprs:
+1 | 2
 use vectorized: true
 [end]
 

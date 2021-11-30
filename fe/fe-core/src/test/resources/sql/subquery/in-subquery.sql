@@ -348,7 +348,8 @@ select * from t0 where v3 in (select * from (values(2),(3)) t);
 [result]
 LEFT SEMI JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    VALUES (2),(3)
+    EXCHANGE BROADCAST
+        VALUES (2),(3)
 [end]
 
 [sql]
@@ -356,7 +357,8 @@ select * from t0 where v3 not in (select * from (values(2),(3)) t);
 [result]
 NULL AWARE LEFT ANTI JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    VALUES (2),(3)
+    EXCHANGE BROADCAST
+        VALUES (2),(3)
 [end]
 
 [sql]
@@ -364,7 +366,8 @@ select * from t0 where v3 in (select 2);
 [result]
 LEFT SEMI JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    VALUES (2)
+    EXCHANGE BROADCAST
+        VALUES (2)
 [end]
 
 [sql]
@@ -372,5 +375,6 @@ select * from t0 where v3 not in (select 2);
 [result]
 NULL AWARE LEFT ANTI JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    VALUES (2)
+    EXCHANGE BROADCAST
+        VALUES (2)
 [end]
