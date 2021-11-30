@@ -269,6 +269,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TableFunctionNode::decom
     OpFactories operators = _children[0]->decompose_to_pipeline(context);
 
     operators.emplace_back(std::make_shared<TableFunctionOperatorFactory>(context->next_operator_id(), id(), _tnode));
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
 
     return operators;
 }

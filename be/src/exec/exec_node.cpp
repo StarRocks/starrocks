@@ -31,6 +31,8 @@
 #include "common/status.h"
 #include "exec/empty_set_node.h"
 #include "exec/exchange_node.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/select_node.h"
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 #include "exec/vectorized/aggregate/aggregate_streaming_node.h"
@@ -163,11 +165,20 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
     return Status::OK();
 }
 
+void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
+                                                const RcRfProbeCollectorPtr& rc_rf_probe_collector) {
+    op->init_runtime_filter(context->fragment_context()->runtime_filter_hub(), this->get_tuple_ids(),
+                            this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector);
+}
+
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     VLOG(2) << "ExecNode init:\n" << apache::thrift::ThriftDebugString(tnode);
     _runtime_state = state;
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs));
     RETURN_IF_ERROR(init_join_runtime_filters(tnode, state));
+    if (tnode.__isset.local_rf_waiting_set) {
+        _local_rf_waiting_set = tnode.local_rf_waiting_set;
+    }
     return Status::OK();
 }
 

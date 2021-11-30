@@ -4,7 +4,10 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "exec/pipeline/runtime_filter_types.h"
+#include "exprs/vectorized/runtime_filter_bank.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
 #include "util/runtime_profile.h"
 
@@ -13,16 +16,19 @@ class Expr;
 class ExprContext;
 class RuntimeProfile;
 class RuntimeState;
+using RuntimeFilterProbeCollector = starrocks::vectorized::RuntimeFilterProbeCollector;
 namespace pipeline {
 class Operator;
+class OperatorFactory;
 using OperatorPtr = std::shared_ptr<Operator>;
 using Operators = std::vector<OperatorPtr>;
+using LocalRFWaitingSet = std::set<TPlanNodeId>;
 
 class Operator {
     friend class PipelineDriver;
 
 public:
-    Operator(int32_t id, const std::string& name, int32_t plan_node_id);
+    Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -52,6 +58,9 @@ public:
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
     // This method will be exactly invoked once in the whole life cycle
     virtual void set_finished(RuntimeState* state) {}
+
+    // when local runtime filters are ready, the operator should bound its corresponding runtime in-filters.
+    virtual void set_precondition_ready(RuntimeState* state);
 
     // close is used to do the cleanup work
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
@@ -91,19 +100,36 @@ public:
 
     RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
-    std::string get_name() const {
-        std::stringstream ss;
-        ss << _name + "_" << this;
-        return ss.str();
+    virtual std::string get_name() const {
+        return strings::Substitute("$0_$1($2)", _name, this, is_finished() ? "X" : "O");
     }
 
+    const LocalRFWaitingSet& rf_waiting_set() const;
+
+    RuntimeFilterHub* runtime_filter_hub();
+
+    std::vector<ExprContext*>& runtime_in_filters();
+
+    RuntimeFilterProbeCollector* runtime_bloom_filters();
+
+    // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
+    void eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk);
+
+    // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
+    void eval_runtime_bloom_filters(vectorized::Chunk* chunk);
+
 protected:
+    OperatorFactory* _factory;
     int32_t _id = 0;
     std::string _name;
     // Which plan node this operator belongs to
     int32_t _plan_node_id = -1;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
     std::unique_ptr<MemTracker> _mem_tracker;
+    bool _conjuncts_and_in_filters_is_cached = false;
+    std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
+
+    vectorized::RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
     // Common metrics
     RuntimeProfile::Counter* _push_timer = nullptr;
@@ -113,26 +139,88 @@ protected:
     RuntimeProfile::Counter* _push_row_num_counter = nullptr;
     RuntimeProfile::Counter* _pull_chunk_num_counter = nullptr;
     RuntimeProfile::Counter* _pull_row_num_counter = nullptr;
+    RuntimeProfile::Counter* _runtime_in_filter_num_counter = nullptr;
+    RuntimeProfile::Counter* _runtime_bloom_filter_num_counter = nullptr;
+    RuntimeProfile::Counter* _conjuncts_timer = nullptr;
+    RuntimeProfile::Counter* _conjuncts_input_counter = nullptr;
+    RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
+    RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
 };
 
 class OperatorFactory {
 public:
-    OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id)
-            : _id(id), _name(name), _plan_node_id(plan_node_id) {}
+    OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id);
     virtual ~OperatorFactory() = default;
     // Create the operator for the specific sequence driver
     // For some operators, when share some status, need to know the degree_of_parallelism
     virtual OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) = 0;
     virtual bool is_source() const { return false; }
     int32_t plan_node_id() const { return _plan_node_id; }
-    virtual Status prepare(RuntimeState* state) { return Status::OK(); }
-    virtual void close(RuntimeState* state) {}
+    virtual Status prepare(RuntimeState* state);
+    virtual void close(RuntimeState* state);
     std::string get_name() const { return _name + "_" + std::to_string(_id); }
 
+    // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
+    // util the corresponding local rf generated.
+    const LocalRFWaitingSet& rf_waiting_set() const { return _rf_waiting_set; }
+
+    // invoked by ExecNode::init_runtime_filter_for_operator to initialize fields involving runtime filter
+    void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
+                             const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
+                             const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector) {
+        _runtime_filter_hub = runtime_filter_hub;
+        _tuple_ids = tuple_ids;
+        _rf_waiting_set = rf_waiting_set;
+        _row_desc = row_desc;
+        _runtime_filter_collector = runtime_filter_collector;
+    }
+    // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
+    // to bound its runtime in-filters.
+    void prepare_runtime_in_filters(RuntimeState* state) {
+        // TODO(satanson): at present, prepare_runtime_in_filters is called in the PipelineDriverPoller thread sequentially,
+        //  std::call_once's cost can be ignored, in the future, if mulitple PipelineDriverPollers are employed to dectect
+        //  and wake blocked driver, std::call_once is sound but may be blocked.
+        std::call_once(_prepare_runtime_in_filters_once, [this, state]() { this->_prepare_runtime_in_filters(state); });
+    }
+
+    RuntimeFilterHub* runtime_filter_hub() { return _runtime_filter_hub; }
+
+    std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
+    RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
+        if (_runtime_filter_collector) {
+            return _runtime_filter_collector->get_rf_probe_collector();
+        } else {
+            return nullptr;
+        }
+    }
+
 protected:
+    void _prepare_runtime_in_filters(RuntimeState* state) {
+        auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
+        for (auto& holder : holders) {
+            DCHECK(holder->is_ready());
+            auto* collector = holder->get_collector();
+            auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
+            for (auto* filter : in_filters) {
+                filter->prepare(state, _row_desc);
+                filter->open(state);
+                _runtime_in_filters.push_back(filter);
+            }
+        }
+    }
+
     int32_t _id = 0;
     std::string _name;
     int32_t _plan_node_id = -1;
+    std::shared_ptr<RuntimeProfile> _runtime_profile;
+    RuntimeFilterHub* _runtime_filter_hub;
+    std::vector<TupleId> _tuple_ids;
+    // a set of TPlanNodeIds of HashJoinNode who generates Local RF that take effects on this operator.
+    LocalRFWaitingSet _rf_waiting_set;
+    std::once_flag _prepare_runtime_in_filters_once;
+    RowDescriptor _row_desc;
+    std::vector<ExprContext*> _runtime_in_filters;
+    std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector;
 };
 
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;

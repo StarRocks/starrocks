@@ -72,6 +72,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     _query_ctx = QueryContextManager::instance()->get_or_register(query_id);
+    _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
@@ -80,6 +81,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     } else {
         _query_ctx->set_expire_seconds(300);
     }
+
     // initialize query's deadline
     _query_ctx->extend_lifetime();
 
@@ -94,10 +96,17 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
-
+    auto&& runtime_filter_port = std::make_unique<RuntimeFilterPort>(runtime_state);
+    _fragment_ctx->set_runtime_filter_port(std::move(runtime_filter_port));
     runtime_state->set_batch_size(config::vector_chunk_size);
     runtime_state->init_mem_trackers(query_id);
     runtime_state->set_be_number(backend_num);
+
+    // RuntimeFilterWorker::open_query is idempotent
+    if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
+        _query_ctx->set_is_runtime_filter_coordinator(true);
+        exec_env->runtime_filter_worker()->open_query(query_id, request.query_options, params.runtime_filter_params);
+    }
 
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();

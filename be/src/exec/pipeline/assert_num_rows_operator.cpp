@@ -57,9 +57,12 @@ bool AssertNumRowsOperator::is_finished() const {
 }
 
 Status AssertNumRowsOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
     return Status::OK();
 }
 
-void AssertNumRowsOperatorFactory::close(RuntimeState* state) {}
+void AssertNumRowsOperatorFactory::close(RuntimeState* state) {
+    OperatorFactory::close(state);
+}
 
 } // namespace starrocks::pipeline
