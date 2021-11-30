@@ -109,7 +109,11 @@ Status Compaction::do_compaction_impl() {
 
     LOG(INFO) << "succeed to do " << compaction_name() << ". tablet=" << _tablet->full_name()
               << ", output_version=" << _output_version.first << "-" << _output_version.second
-              << ", segments=" << segments_num << ". elapsed time=" << watch.get_elapse_second() << "s.";
+              << ", input infos [segments=" << segments_num << ", rows=" << _input_row_num
+              << ", disk size=" << _input_rowsets_size << "]"
+              << ", output infos [segments=" << _output_rowset->num_segments()
+              << ", rows=" << _output_rowset->num_rows() << ", disk size=" << _output_rowset->data_disk_size() << "]"
+              << ". elapsed time=" << watch.get_elapse_second() << "s.";
 
     // warm-up this rowset
     auto st = _output_rowset->load();
@@ -196,7 +200,7 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
                 if (status.is_end_of_file()) {
                     break;
                 } else {
-                    return Status::InternalError("reader get_next error.");
+                    return Status::InternalError(fmt::format("reader get_next error:{}", status.to_string()));
                 }
             }
 

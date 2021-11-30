@@ -1175,7 +1175,6 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     uint64_t index_size;
     ASSERT_OK(writer.finalize(&file_size, &index_size));
 
-
     auto segment = *segment_v2::Segment::open(_block_mgr, file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
