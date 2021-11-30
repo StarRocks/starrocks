@@ -7,8 +7,10 @@
 #include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/vectorized/hash_join_node.h"
 #include "exec/vectorized/join_hash_map.h"
+#include "exprs/vectorized/in_const_predicate.hpp"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -38,16 +40,57 @@ enum HashJoinPhase {
     POST_PROBE = 2,
     EOS = 4,
 };
+struct HashJoinerParam {
+    HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, TPlanNodeId node_id,
+                    TPlanNodeType::type node_type, int64_t limit, const std::vector<bool>& is_null_safes,
+                    const std::vector<ExprContext*>& build_expr_ctxs, const std::vector<ExprContext*>& probe_expr_ctxs,
+                    const std::vector<ExprContext*>& other_join_conjunct_ctxs,
+                    const std::vector<ExprContext*>& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
+                    const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor,
+                    TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
+                    bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters)
+            : _pool(pool),
+              _hash_join_node(hash_join_node),
+              _node_id(node_id),
+              _node_type(node_type),
+              _limit(limit),
+              _is_null_safes(is_null_safes),
+              _build_expr_ctxs(std::move(build_expr_ctxs)),
+              _probe_expr_ctxs(std::move(probe_expr_ctxs)),
+              _other_join_conjunct_ctxs(std::move(other_join_conjunct_ctxs)),
+              _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _build_row_descriptor(build_row_descriptor),
+              _probe_row_descriptor(probe_row_descriptor),
+              _row_descriptor(row_descriptor),
+              _build_node_type(build_node_type),
+              _probe_node_type(probe_node_type),
+              _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
+              _build_runtime_filters(build_runtime_filters) {}
+    HashJoinerParam(HashJoinerParam&&) = default;
+    HashJoinerParam(HashJoinerParam&) = default;
+    ~HashJoinerParam() = default;
+    ObjectPool* _pool;
+    const THashJoinNode& _hash_join_node;
+    TPlanNodeId _node_id;
+    TPlanNodeType::type _node_type;
+    int64_t _limit;
+    std::vector<bool> _is_null_safes;
+    std::vector<ExprContext*> _build_expr_ctxs;
+    std::vector<ExprContext*> _probe_expr_ctxs;
+    std::vector<ExprContext*> _other_join_conjunct_ctxs;
+    std::vector<ExprContext*> _conjunct_ctxs;
+    const RowDescriptor _build_row_descriptor;
+    const RowDescriptor _probe_row_descriptor;
+    const RowDescriptor _row_descriptor;
+    TPlanNodeType::type _build_node_type;
+    TPlanNodeType::type _probe_node_type;
+    bool _build_conjunct_ctxs_is_empty;
+    std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
+};
 
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
-    HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id, TPlanNodeType::type node_type, int64_t limit,
-               const std::vector<bool>& is_null_safes, const std::vector<ExprContext*>& build_expr_ctxs,
-               const std::vector<ExprContext*>& probe_expr_ctxs,
-               const std::vector<ExprContext*>& other_join_conjunct_ctxs,
-               const std::vector<ExprContext*>& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
-               const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor);
-
+    explicit HashJoiner(const HashJoinerParam& param);
     ~HashJoiner() = default;
     Status prepare(RuntimeState* state);
     Status close(RuntimeState* state) override;
@@ -69,6 +112,13 @@ public:
     // probe phase
     void push_chunk(RuntimeState* state, ChunkPtr&& chunk);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
+
+    std::list<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
+    std::list<RuntimeFilterBuildDescriptor*>& get_runtime_bloom_filters() { return _build_runtime_filters; }
+    std::list<pipeline::RuntimeBloomFilterBuildParam>& get_runtime_bloom_filter_build_params() {
+        return _runtime_bloom_filter_build_params;
+    }
+    size_t get_ht_row_count() { return _ht.get_row_count(); }
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -149,6 +199,7 @@ private:
             _process_other_conjunct(&chunk);
         }
 
+        // TODO(satanson): _conjunct_ctxs shouldn't include local runtime in-filters.
         if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
         }
@@ -157,12 +208,70 @@ private:
         // Post probe needn't process _other_join_conjunct_ctxs, because they
         // are `ON` predicates, which need to be processed only on probe phase.
         if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
+            // TODO(satanson): _conjunct_ctxs should including local runtime in-filters.
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
         }
     }
 
     static std::string _get_join_type_str(TJoinOp::type join_type);
 
+    Status _create_runtime_in_filters(RuntimeState* state) {
+        SCOPED_TIMER(_build_runtime_filter_timer);
+
+        if (_ht.get_row_count() > 1024) {
+            return Status::OK();
+        }
+
+        if (_ht.get_row_count() > 0) {
+            // there is a bug (DSDB-3860) in old planner if probe_expr is not slot-ref, and this fix is workaround.
+            size_t size = _build_expr_ctxs.size();
+            std::vector<bool> to_build(size, true);
+            for (int i = 0; i < size; i++) {
+                ExprContext* expr_ctx = _probe_expr_ctxs[i];
+                to_build[i] = (expr_ctx->root()->is_slotref());
+            }
+
+            for (size_t i = 0; i < size; i++) {
+                if (!to_build[i]) continue;
+                ColumnPtr column = _ht.get_key_columns()[i];
+                Expr* probe_expr = _probe_expr_ctxs[i]->root();
+                // create and fill runtime in filter.
+                VectorizedInConstPredicateBuilder builder(state, _pool, probe_expr);
+                builder.set_eq_null(_is_null_safes[i]);
+                builder.use_as_join_runtime_filter();
+                Status st = builder.create();
+                if (!st.ok()) continue;
+                builder.add_values(column, kHashJoinKeyColumnOffset);
+                _runtime_in_filters.push_back(builder.get_in_const_predicate());
+            }
+        }
+
+        COUNTER_UPDATE(_runtime_filter_num, static_cast<int64_t>(_runtime_in_filters.size()));
+        return Status::OK();
+    }
+
+    Status _create_runtime_bloom_filters(RuntimeState* state, int64_t limit) {
+        for (auto* rf_desc : _build_runtime_filters) {
+            rf_desc->set_is_pipeline(true);
+            // skip if it does not have consumer.
+            if (!rf_desc->has_consumer()) {
+                _runtime_bloom_filter_build_params.emplace_back(false, nullptr, -1);
+                continue;
+            }
+            if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) {
+                _runtime_bloom_filter_build_params.emplace_back(false, nullptr, -1);
+                continue;
+            }
+
+            int expr_order = rf_desc->build_expr_order();
+            ColumnPtr column = _ht.get_key_columns()[expr_order];
+            bool eq_null = _is_null_safes[expr_order];
+            _runtime_bloom_filter_build_params.emplace_back(eq_null, column, _ht.get_row_count());
+        }
+        return Status::OK();
+    }
+
+    ObjectPool* _pool;
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     const int64_t _limit; // -1: no limit
     int64_t _num_rows_returned;
@@ -184,9 +293,13 @@ private:
     const RowDescriptor& _build_row_descriptor;
     const RowDescriptor& _probe_row_descriptor;
     const RowDescriptor& _row_descriptor;
+    const TPlanNodeType::type _build_node_type;
+    const TPlanNodeType::type _probe_node_type;
+    const bool _build_conjunct_ctxs_is_empty;
 
     std::list<ExprContext*> _runtime_in_filters;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
+    std::list<pipeline::RuntimeBloomFilterBuildParam> _runtime_bloom_filter_build_params;
     bool _build_runtime_filters_from_planner;
 
     bool _is_push_down = false;
@@ -207,7 +320,7 @@ private:
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _build_ht_timer = nullptr;
     RuntimeProfile::Counter* _copy_right_table_chunk_timer = nullptr;
-    RuntimeProfile::Counter* _build_push_down_expr_timer = nullptr;
+    RuntimeProfile::Counter* _build_runtime_filter_timer = nullptr;
     RuntimeProfile::Counter* _merge_input_chunk_timer = nullptr;
     RuntimeProfile::Counter* _probe_timer = nullptr;
     RuntimeProfile::Counter* _search_ht_timer = nullptr;
@@ -217,7 +330,7 @@ private:
     RuntimeProfile::Counter* _build_rows_counter = nullptr;
     RuntimeProfile::Counter* _probe_rows_counter = nullptr;
     RuntimeProfile::Counter* _build_buckets_counter = nullptr;
-    RuntimeProfile::Counter* _push_down_expr_num = nullptr;
+    RuntimeProfile::Counter* _runtime_filter_num = nullptr;
     RuntimeProfile::Counter* _avg_input_probe_chunk_size = nullptr;
     RuntimeProfile::Counter* _avg_output_chunk_size = nullptr;
     RuntimeProfile::Counter* _build_conjunct_evaluate_timer = nullptr;

@@ -2,6 +2,7 @@
 
 #include "runtime/runtime_filter_worker.h"
 
+#include "exec/pipeline/query_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
@@ -73,6 +74,7 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
 
         // rf metadata
         PTransmitRuntimeFilterParams params;
+        params.set_is_pipeline(rf_desc->is_pipeline());
         params.set_filter_id(rf_desc->filter_id());
         params.set_is_partial(true);
         PUniqueId* query_id = params.mutable_query_id();
@@ -222,6 +224,10 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     // if well enough, then we send it out.
 
     PTransmitRuntimeFilterParams request;
+    // For pipeline engine
+    if (status->is_pipeline) {
+        request.set_is_pipeline(true);
+    }
     request.set_filter_id(filter_id);
     request.set_is_partial(false);
     PUniqueId* query_id = request.mutable_query_id();
@@ -404,6 +410,35 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
     ev.transmit_rf_request = params;
     _queue.put(std::move(ev));
 }
+// receive total runtime filter in pipeline engine.
+static inline Status receive_total_runtime_filter_pipeline(
+        PTransmitRuntimeFilterParams& params, const std::shared_ptr<vectorized::JoinRuntimeFilter>& shared_rf) {
+    auto& pb_query_id = params.query_id();
+    TUniqueId query_id;
+    query_id.hi = pb_query_id.hi();
+    query_id.lo = pb_query_id.lo();
+
+    auto query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
+    // QueryContext is already destructed or invalid, so do nothing.
+    if (!query_ctx || query_ctx->is_finished() || query_ctx->is_expired()) {
+        return Status::OK();
+    }
+    auto& probe_finst_ids = params.probe_finst_ids();
+    for (auto finst_id_it = probe_finst_ids.begin(); finst_id_it != probe_finst_ids.end(); finst_id_it++) {
+        auto& pb_finst_id = *finst_id_it;
+        TUniqueId finst_id;
+        finst_id.hi = pb_finst_id.hi();
+        finst_id.lo = pb_finst_id.lo();
+        auto fragment_ctx = query_ctx->fragment_mgr()->get(finst_id);
+        // FragmentContext is already destructed or invalid, so do nothing.
+        if (!fragment_ctx || fragment_ctx->is_canceled()) {
+            return Status::OK();
+        }
+        fragment_ctx->runtime_filter_port()->receive_shared_runtime_filter(params.filter_id(), shared_rf);
+    }
+    return Status::OK();
+}
+
 void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request,
                                                         RuntimeFilterRpcClosure* rpc_closure) {
     // deserialize once, and all fragment instance shared that runtime filter.
@@ -415,7 +450,12 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         return;
     }
     std::shared_ptr<vectorized::JoinRuntimeFilter> shared_rf(rf);
-    _exec_env->fragment_mgr()->receive_runtime_filter(request, shared_rf);
+    // for pipeline engine
+    if (request.has_is_pipeline() && request.is_pipeline()) {
+        receive_total_runtime_filter_pipeline(request, shared_rf);
+    } else {
+        _exec_env->fragment_mgr()->receive_runtime_filter(request, shared_rf);
+    }
 
     // not enough, have to forward this request to continue broadcast.
     // copy modifed fields out.

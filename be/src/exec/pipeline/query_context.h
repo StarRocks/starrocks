@@ -25,9 +25,10 @@ using std::chrono::duration_cast;
 class QueryContext {
 public:
     QueryContext();
+    ~QueryContext();
+    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() { return _query_id; }
-    RuntimeState* runtime_state() { return _runtime_state.get(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -56,9 +57,10 @@ public:
 
     void cancel(const Status& status);
 
+    void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
+
 private:
-    std::unique_ptr<RuntimeState> _runtime_state;
-    std::shared_ptr<RuntimeProfile> _runtime_profile;
+    ExecEnv* _exec_env = nullptr;
     TQueryOptions _query_options;
     TUniqueId _query_id;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
@@ -67,6 +69,7 @@ private:
     std::atomic<size_t> _num_active_fragments;
     int64_t _deadline;
     seconds _expire_seconds;
+    bool _is_runtime_filter_coordinator = false;
 };
 
 class QueryContextManager {

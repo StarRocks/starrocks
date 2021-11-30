@@ -19,9 +19,9 @@ class ChunksSorter;
 namespace pipeline {
 class AssertNumRowsOperator final : public Operator {
 public:
-    AssertNumRowsOperator(int32_t id, int32_t plan_node_id, const int64_t& desired_num_rows,
+    AssertNumRowsOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const int64_t& desired_num_rows,
                           const std::string& subquery_string, const TAssertion::type& assertion)
-            : Operator(id, "assert_num_rows_sink", plan_node_id),
+            : Operator(factory, id, "assert_num_rows_sink", plan_node_id),
               _desired_num_rows(desired_num_rows),
               _subquery_string(subquery_string),
               _assertion(std::move(assertion)),
@@ -66,7 +66,7 @@ public:
     ~AssertNumRowsOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AssertNumRowsOperator>(_id, _plan_node_id, _desired_num_rows, _subquery_string,
+        return std::make_shared<AssertNumRowsOperator>(this, _id, _plan_node_id, _desired_num_rows, _subquery_string,
                                                        _assertion);
     }
 

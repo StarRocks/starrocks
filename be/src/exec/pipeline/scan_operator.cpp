@@ -29,7 +29,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
         _unused_output_columns.emplace_back(col_name);
     }
 
-    _pickup_morsel(state);
     return Status::OK();
 }
 
@@ -47,6 +46,10 @@ Status ScanOperator::close(RuntimeState* state) {
 bool ScanOperator::has_output() const {
     if (_is_finished) {
         return false;
+    }
+
+    if (!_chunk_source) {
+        return true;
     }
 
     DCHECK(_chunk_source != nullptr);
@@ -84,6 +87,11 @@ void ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    if (!_chunk_source) {
+        _pickup_morsel(state);
+        return nullptr;
+    }
+
     DCHECK(_chunk_source != nullptr);
     if (!_chunk_source->has_output()) {
         if (_chunk_source->has_next_chunk()) {
@@ -101,6 +109,9 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         _chunk_source->has_next_chunk()) {
         _trigger_next_scan(state);
     }
+
+    eval_runtime_bloom_filters(chunk.value().get());
+
     return chunk;
 }
 
@@ -139,16 +150,17 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
         _chunk_source = std::make_shared<OlapChunkSource>(
-                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, _runtime_profile.get(), _runtime_filters,
-                _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation, &_unused_output_columns);
+                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, runtime_in_filters(),
+                runtime_bloom_filters(), _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation,
+                &_unused_output_columns, _runtime_profile.get());
         _chunk_source->prepare(state);
         _trigger_next_scan(state);
     }
 }
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
@@ -159,6 +171,7 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
 
 void ScanOperatorFactory::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

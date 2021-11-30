@@ -20,8 +20,7 @@ Status ExceptProbeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& 
 Status ExceptProbeSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RowDescriptor row_desc;
-    Expr::prepare(_dst_exprs, state, row_desc);
+    Expr::prepare(_dst_exprs, state, _row_desc);
     Expr::open(_dst_exprs, state);
 
     return Status::OK();

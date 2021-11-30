@@ -8,6 +8,7 @@
 #include "column/hash_set.h"
 #include "common/object_pool.h"
 #include "exprs/predicate.h"
+#include "gutil/strings/substitute.h"
 
 namespace starrocks {
 
@@ -77,6 +78,18 @@ public:
         _init_array_buffer();
         _is_prepare = true;
         return Status::OK();
+    }
+
+    Status merge(Predicate* predicate) {
+        if (auto* that = dynamic_cast<typeof(this)>(predicate)) {
+            const auto& hash_set = that->hash_set();
+            _hash_set.insert(hash_set.begin(), hash_set.end());
+            _null_in_set = _null_in_set || that->null_in_set();
+            return Status::OK();
+        } else {
+            return Status::NotSupported(strings::Substitute("$0 cannot be merged with VectorizedInConstPredicate",
+                                                            predicate->debug_string()));
+        }
     }
 
     Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) override {

@@ -72,20 +72,21 @@ bool SelectOperator::need_input() const {
 }
 
 Status SelectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
+    eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get());
     _curr_chunk = chunk;
     return Status::OK();
 }
 
 Status SelectOperatorFactory::prepare(RuntimeState* state) {
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }
 
 void SelectOperatorFactory::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

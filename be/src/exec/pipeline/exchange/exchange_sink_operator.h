@@ -30,9 +30,10 @@ namespace pipeline {
 class SinkBuffer;
 class ExchangeSinkOperator final : public Operator {
 public:
-    ExchangeSinkOperator(int32_t id, int32_t plan_node_id, const std::shared_ptr<SinkBuffer>& buffer,
-                         TPartitionType::type part_type, const std::vector<TPlanFragmentDestination>& destinations,
-                         int sender_id, PlanNodeId dest_node_id, const std::vector<ExprContext*>& partition_expr_ctxs,
+    ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                         const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
+                         const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
+                         PlanNodeId dest_node_id, const std::vector<ExprContext*>& partition_expr_ctxs,
                          FragmentContext* const fragment_ctx);
 
     ~ExchangeSinkOperator() override = default;

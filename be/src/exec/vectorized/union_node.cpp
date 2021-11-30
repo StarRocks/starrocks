@@ -305,7 +305,9 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
 pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     std::vector<pipeline::OpFactories> operators_list;
     operators_list.reserve(_children.size() + 1);
-
+    const auto num_operators_generated = _children.size() + !_const_expr_lists.empty();
+    auto&& rc_rf_probe_collector =
+            std::make_shared<RcRfProbeCollector>(num_operators_generated, std::move(this->runtime_filter_collector()));
     size_t i = 0;
     // UnionPassthroughOperator is used for the passthrough sub-node.
     for (; i < _first_materialized_child_idx; i++) {
@@ -327,6 +329,8 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         auto union_passthrough_op = std::make_shared<pipeline::UnionPassthroughOperatorFactory>(
                 context->next_operator_id(), id(), dst2src_slot_map, dst_slots, src_slots);
         operators_list[i].emplace_back(std::move(union_passthrough_op));
+        // Initialize OperatorFactory's fields involving runtime filters.
+        this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
     // ProjectOperatorFactory is used for the materialized sub-node.
@@ -350,6 +354,8 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
                 context->next_operator_id(), id(), std::move(dst_column_ids), std::move(_child_expr_lists[i]),
                 std::move(dst_column_is_nullables), std::vector<int32_t>(), std::vector<ExprContext*>());
         operators_list[i].emplace_back(std::move(project_op));
+        // Initialize OperatorFactory's fields involving runtime filters.
+        this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
     // UnionConstSourceOperatorFactory is used for the const sub exprs.
@@ -371,6 +377,8 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         union_const_source_op->set_degree_of_parallelism(parallelism);
 
         operators_list[i].emplace_back(std::move(union_const_source_op));
+        // Initialize OperatorFactory's fields involving runtime filters.
+        this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
     return context->gather_pipelines_to_one(operators_list);
