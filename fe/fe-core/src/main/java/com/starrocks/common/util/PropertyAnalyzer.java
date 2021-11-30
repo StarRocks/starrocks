@@ -294,8 +294,8 @@ public class PropertyAnalyzer {
         return schemaVersion;
     }
 
-    public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns)
-            throws AnalysisException {
+    public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
+            boolean isPrimaryKey) throws AnalysisException {
         Set<String> bfColumns = null;
         if (properties != null && properties.containsKey(PROPERTIES_BF_COLUMNS)) {
             bfColumns = Sets.newHashSet();
@@ -326,11 +326,11 @@ public class PropertyAnalyzer {
                             bfColumn, type));
                 }
 
-                // Only support create bloom filter on duplicate table or key columns of UNIQUE/AGGREGATE table.
-                if (!(column.isKey() || column.getAggregationType() == AggregateType.NONE)) {
-                    // Although the implementation supports bf for replace non-key column,
+                // Only support create bloom filter on DUPLICATE/PRIMARY table or key columns of UNIQUE/AGGREGATE table.
+                if (!(column.isKey() || isPrimaryKey || column.getAggregationType() == AggregateType.NONE)) {
+                    // Although the implementation supports bloom filter for replace non-key column,
                     // for simplicity and unity, we don't expose that to user.
-                    throw new AnalysisException("Bloom filter index only used in columns of DUP_KEYS table or "
+                    throw new AnalysisException("Bloom filter index only used in columns of DUP_KEYS/PRIMARY table or "
                             + "key columns of UNIQUE_KEYS/AGG_KEYS table. invalid column: " + bfColumn);
                 }
 
