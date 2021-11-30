@@ -303,14 +303,15 @@ private:
     // Events include 'new request' and 'channel ready'
     std::queue<TUniqueId, std::list<TUniqueId>> _events;
 
+    // _is_rpc_task_active and _is_finishing are used in _try_to_trigger_rpc_task, and _send_rpc.
+    // - Write them with lock, to protect critical region between _try_to_trigger_rpc_task, and _send_rpc.
+    // - Read them without lock, whose visibility is guaranteed by atomic.
+    std::atomic<bool> _is_rpc_task_active = false;
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still RPC task or in-flight RPC running.
     // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.
     std::atomic<bool> _is_finishing = false;
-    // _is_finishing and _is_rpc_task_active are used in _try_to_trigger_rpc_task, RPC task _process, and _send_rpc.
-    // - Write them with lock, to protect critical region between _try_to_trigger_rpc_task, _process, and _send_rpc.
-    // - Read them without lock, whose visibility is guaranteed by atomic.
-    std::atomic<bool> _is_rpc_task_active = false;
+
     int32_t _expected_eos = 0;
 
     std::atomic<int> _num_remaining_sinkers;
