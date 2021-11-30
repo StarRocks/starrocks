@@ -145,6 +145,9 @@ public:
 
     void decrease_running_sinkers() {
         if (--_num_remaining_sinkers == 0) {
+            // To protect critical region for trigger_rpc_task, rpc task, and send_rpc,
+            // we should use lock here, even if _is_finishing is atomic bool.
+            std::lock_guard<std::mutex> l(_mutex);
             _is_finishing = true;
         }
     }
@@ -299,8 +302,8 @@ private:
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still RPC task or in-flight RPC running.
     // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.
-    bool _is_finishing = false;
-    bool _is_rpc_task_active = false;
+    std::atomic<bool> _is_finishing = false;
+    std::atomic<bool> _is_rpc_task_active = false;
     int32_t _expected_eos = 0;
 
     std::atomic<int> _num_remaining_sinkers;
