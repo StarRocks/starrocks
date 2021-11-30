@@ -4053,6 +4053,47 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testReplicationJoinWithEmptyNode() throws Exception {
+        // check replicate join without exception
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+        FeConstants.runningUnitTest = true;
+        String sql = "with cross_join as (\n" +
+                "  select * from \n" +
+                "  (SELECT \n" +
+                "      t0.v1, \n" +
+                "      t0.v2, \n" +
+                "      t0.v3\n" +
+                "    FROM \n" +
+                "      t0 \n" +
+                "    WHERE \n" +
+                "      false)\n" +
+                "  subt0 LEFT SEMI \n" +
+                "  JOIN \n" +
+                "    (SELECT \n" +
+                "      t2.v7, \n" +
+                "      t2.v8, \n" +
+                "      t2.v9\n" +
+                "    FROM \n" +
+                "      t2 \n" +
+                "    WHERE \n" +
+                "      false)\n" +
+                "  subt2 ON subt0.v3 = subt2.v8, \n" +
+                "  t1 \n" +
+                ")\n" +
+                "SELECT \n" +
+                "  DISTINCT cross_join.v1 \n" +
+                "FROM \n" +
+                "  t0 LEFT JOIN\n" +
+                "  cross_join\n" +
+                "  ON cross_join.v4 = t0.v2;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("9:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (REPLICATED)"));
+        FeConstants.runningUnitTest = false;
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
     public void testOuterJoinBucketShuffle() throws Exception {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 RIGHT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
         String plan = getFragmentPlan(sql);
