@@ -295,17 +295,6 @@ public class InPredicate extends Predicate {
     }
 
     @Override
-    public boolean isVectorized() {
-        for (Expr child : children) {
-            if (!child.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    @Override
     public boolean isStrictPredicate() {
         return getChild(0).unwrapSlotRef() != null;
     }

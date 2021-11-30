@@ -334,7 +334,8 @@ select * from t0 where exists (select 9)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    VALUES (9)
+    EXCHANGE BROADCAST
+        VALUES (9)
 [end]
 
 [sql]
@@ -342,7 +343,8 @@ select * from t0 where exists (select 9,10)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    VALUES (9)
+    EXCHANGE BROADCAST
+        VALUES (9)
 [end]
 
 [sql]
@@ -362,15 +364,16 @@ select * from t0 where exists (select * from (values(2),(3)) t)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    VALUES (2),(3)
-[end]
+    EXCHANGE BROADCAST
+        VALUES (2),(3)
 
 [sql]
 select * from t0 where exists (select * from (values(1,2),(3,4)) t)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    VALUES (1),(3)
+    EXCHANGE BROADCAST
+        VALUES (1),(3)
 [end]
 
 [sql]

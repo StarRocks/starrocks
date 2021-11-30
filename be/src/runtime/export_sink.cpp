@@ -27,9 +27,8 @@
 #include "column/column.h"
 #include "env/env_broker.h"
 #include "exec/broker_writer.h"
+#include "exec/plain_text_builder.h"
 #include "exprs/expr.h"
-#include "formats/csv/converter.h"
-#include "formats/csv/output_stream_file.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/row_batch.h"
@@ -94,9 +93,9 @@ Status ExportSink::open(RuntimeState* state) {
 
 Status ExportSink::close(RuntimeState* state, Status exec_status) {
     Expr::close(_output_expr_ctxs, state);
-    if (_output_stream != nullptr) {
-        Status st = _output_stream->finalize();
-        _output_stream.reset();
+    if (_file_builder != nullptr) {
+        Status st = _file_builder->finish();
+        _file_builder.reset();
         return st;
     }
     return Status::OK();
@@ -124,17 +123,10 @@ Status ExportSink::open_file_writer(int timeout_ms) {
         return Status::NotSupported(strings::Substitute("Unsupported file type $0", file_type));
     }
 
-    using WriteBufferFile = vectorized::csv::OutputStreamFile;
-    _output_stream = std::make_unique<WriteBufferFile>(std::move(output_file), 1024 * 1024);
-    _converters.reserve(_output_expr_ctxs.size());
-    for (auto* ctx : _output_expr_ctxs) {
-        const auto& type = ctx->root()->type();
-        auto conv = vectorized::csv::get_converter(type, ctx->root()->is_nullable());
-        if (conv == nullptr) {
-            return Status::InternalError("No CSV converter for type " + type.debug_string());
-        }
-        _converters.emplace_back(std::move(conv));
-    }
+    _file_builder = std::make_unique<PlainTextBuilder>(
+            PlainTextBuilderOptions{.column_terminated_by = _t_export_sink.column_separator,
+                                    .line_terminated_by = _t_export_sink.row_delimiter},
+            std::move(output_file), _output_expr_ctxs);
 
     _state->add_export_output_file(file_path);
     return Status::OK();
@@ -154,37 +146,8 @@ Status ExportSink::gen_file_name(std::string* file_name) {
     return Status::OK();
 }
 
-Status ExportSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
-    const size_t num_rows = chunk->num_rows();
-    const size_t num_cols = chunk->num_columns();
-    if (num_cols != _converters.size()) {
-        auto err = strings::Substitute("Unmatched number of columns expected=$0 real=$1", _converters.size(), num_cols);
-        return Status::InternalError(err);
-    }
-    std::vector<const vectorized::Column*> columns_raw_ptr;
-    columns_raw_ptr.reserve(num_cols);
-    for (int i = 0; i < num_cols; i++) {
-        auto root = _output_expr_ctxs[i]->root();
-        if (!root->is_slotref()) {
-            return Status::InternalError("Not slot ref column");
-        }
-        auto column_ref = ((vectorized::ColumnRef*)root);
-        columns_raw_ptr.emplace_back(chunk->get_column_by_slot_id(column_ref->slot_id()).get());
-    }
-
-    const std::string& row_delimiter = _t_export_sink.row_delimiter;
-    const std::string& column_delimiter = _t_export_sink.column_separator;
-
-    vectorized::csv::Converter::Options opts;
-    auto* os = _output_stream.get();
-    for (size_t row = 0; row < num_rows; row++) {
-        for (size_t col = 0; col < num_cols; col++) {
-            auto col_ptr = columns_raw_ptr[col];
-            RETURN_IF_ERROR(_converters[col]->write_string(os, *col_ptr, row, opts));
-            RETURN_IF_ERROR(os->write((col == num_cols - 1) ? row_delimiter : column_delimiter));
-        }
-    }
-    return Status::OK();
+Status ExportSink::send_chunk(RuntimeState*, vectorized::Chunk* chunk) {
+    return _file_builder->add_chunk(chunk);
 }
 
 } // namespace starrocks

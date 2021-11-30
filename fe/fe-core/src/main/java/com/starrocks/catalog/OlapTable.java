@@ -615,7 +615,7 @@ public class OlapTable extends Table {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
         for (Column column : partitionColumns) {
-            partitionColumnNames.add(column.getName().toLowerCase());
+            partitionColumnNames.add(column.getName());
         }
         return partitionColumnNames;
     }
@@ -1460,6 +1460,17 @@ public class OlapTable extends Table {
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_INMEMORY, Boolean.valueOf(isInMemory).toString());
         tableProperty.buildInMemory();
+    }
+
+    public boolean hasDelete() {
+        if (tableProperty == null) {
+            return false;
+        }
+        return tableProperty.hasDelete();
+    }
+
+    public void setHasDelete() {
+        tableProperty.setHasDelete(true);
     }
 
     // return true if partition with given name already exist, both in partitions and temp partitions.

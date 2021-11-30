@@ -267,9 +267,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         newDictColumn = context.columnRefFactory.create(
                                 stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
                     }
-
-                    newOutputColumns.remove(stringColumn);
-                    newOutputColumns.add(newDictColumn);
+                    if (newOutputColumns.contains(stringColumn)) {
+                        newOutputColumns.remove(stringColumn);
+                        newOutputColumns.add(newDictColumn);
+                    }
 
                     Column oldColumn = scanOperator.getColRefToColumnMetaMap().get(stringColumn);
                     Column newColumn = new Column(oldColumn.getName(), ID_TYPE, oldColumn.isAllowNull());
@@ -659,7 +660,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             }
         }
         PhysicalDecodeOperator decodeOperator = new PhysicalDecodeOperator(ImmutableMap.copyOf(dictToStrings),
-                context.stringFunctions);
+                Maps.newHashMap(context.stringFunctions));
         OptExpression result = OptExpression.create(decodeOperator, childExpr);
         result.setStatistics(childExpr.get(0).getStatistics());
         result.setLogicalProperty(childExpr.get(0).getLogicalProperty());
@@ -681,7 +682,17 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (call.getUsedColumns().cardinality() > 1) {
                 return false;
             }
-            return call.getFunction().isCouldApplyDictOptimize();
+            if (!call.getFunction().isCouldApplyDictOptimize()) {
+                return false;
+            }
+            for (ScalarOperator child : call.getChildren()) {
+                if (child instanceof CallOperator) {
+                    if (!child.accept(this, null)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         @Override

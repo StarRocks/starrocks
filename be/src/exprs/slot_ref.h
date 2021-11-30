@@ -32,10 +32,6 @@ namespace starrocks {
 // to reference SlotRef::compute_fn() directly.
 // Splitting it up into separate .h files would require circular #includes.
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 class SlotRef final : public Expr {
 public:
     SlotRef(const TExprNode& node);
@@ -56,7 +52,6 @@ public:
     void* get_slot(TupleRow* row);
     Tuple* get_tuple(TupleRow* row);
     bool is_null_bit_set(TupleRow* row);
-    static bool vector_compute_fn(Expr* expr, VectorizedRowBatch* batch);
     static bool is_nullable(Expr* expr);
     std::string debug_string() const override;
     bool is_constant() const override { return false; }
@@ -66,20 +61,6 @@ public:
     SlotId slot_id() const { return _slot_id; }
     TupleId tuple_id() const { return _tuple_id; }
     inline NullIndicatorOffset null_indicator_offset() const { return _null_indicator_offset; }
-
-    starrocks_udf::BooleanVal get_boolean_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::TinyIntVal get_tiny_int_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::SmallIntVal get_small_int_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::IntVal get_int_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::BigIntVal get_big_int_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::LargeIntVal get_large_int_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::FloatVal get_float_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::DoubleVal get_double_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::StringVal get_string_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::DateTimeVal get_datetime_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::DecimalVal get_decimal_val(ExprContext* context, TupleRow*) override;
-    starrocks_udf::DecimalV2Val get_decimalv2_val(ExprContext* context, TupleRow*) override;
-    // virtual starrocks_udf::ArrayVal GetArrayVal(ExprContext* context, TupleRow*);
 
     // vector query engine
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
@@ -94,10 +75,6 @@ private:
     TupleId _tuple_id = 0; // used for desc this slot from
     bool _is_nullable = false;
 };
-
-inline bool SlotRef::vector_compute_fn(Expr* expr, VectorizedRowBatch* /* batch */) {
-    return true;
-}
 
 inline void* SlotRef::get_value(Expr* expr, TupleRow* row) {
     SlotRef* ref = (SlotRef*)expr;

@@ -54,8 +54,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.planner.AdapterNode.checkPlanIsVectorized;
-
 public class InsertPlanner {
     public ExecPlan plan(Relation relation, ConnectContext session) {
         InsertRelation insertRelation = (InsertRelation) relation;
@@ -83,6 +81,7 @@ public class InsertPlanner {
 
         //6. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
+
         Optimizer optimizer = new Optimizer();
         OptExpression optimizedPlan = optimizer.optimize(
                 session,
@@ -93,9 +92,17 @@ public class InsertPlanner {
 
         //7. Build fragment exec plan
         PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                insertRelation.getQueryRelation().getColumnOutputNames());
+
+        ExecPlan execPlan;
+        if (optimizedPlan.getOp().hasLimit()) {
+            execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    insertRelation.getQueryRelation().getColumnOutputNames());
+        } else {
+            execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
+                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    insertRelation.getQueryRelation().getColumnOutputNames());
+        }
 
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
@@ -114,8 +121,6 @@ public class InsertPlanner {
             }
         }
         olapTuple.computeMemLayout();
-
-        checkPlanIsVectorized(execPlan.getFragments());
 
         OlapTableSink dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
                 insertRelation.getTargetPartitionIds());

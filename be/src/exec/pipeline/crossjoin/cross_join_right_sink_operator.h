@@ -12,9 +12,10 @@ namespace starrocks::pipeline {
 
 class CrossJoinRightSinkOperator final : public Operator {
 public:
-    CrossJoinRightSinkOperator(int32_t id, int32_t plan_node_id, const int32_t driver_sequence,
+    CrossJoinRightSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                               const int32_t driver_sequence,
                                const std::shared_ptr<CrossJoinContext>& cross_join_context)
-            : Operator(id, "cross_join_right_sink", plan_node_id),
+            : Operator(factory, id, "cross_join_right_sink", plan_node_id),
               _driver_sequence(driver_sequence),
               _cross_join_context(cross_join_context) {
         _cross_join_context->ref();
@@ -60,7 +61,8 @@ public:
     ~CrossJoinRightSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<CrossJoinRightSinkOperator>(_id, _plan_node_id, driver_sequence, _cross_join_context);
+        return std::make_shared<CrossJoinRightSinkOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                            _cross_join_context);
     }
 
 private:

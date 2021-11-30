@@ -8,7 +8,6 @@
 #include "runtime/descriptors.h"
 
 namespace starrocks {
-class TextConverter;
 class TupleDescriptor;
 class RuntimeState;
 class Status;
@@ -16,7 +15,7 @@ class Status;
 
 namespace starrocks::vectorized {
 
-class SchemaScanNode : public ScanNode {
+class SchemaScanNode final : public ScanNode {
 public:
     SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~SchemaScanNode() override;
@@ -31,9 +30,6 @@ public:
 
     // Start Schema scan using _schema_scanner.
     Status open(RuntimeState* state) override;
-
-    // Fill the next row batch by calling next() on the _schema_scanner,
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
 
     // Fill the next chunk by calling next() on the _schema_scanner,
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;

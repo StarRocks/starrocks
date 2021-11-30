@@ -898,25 +898,6 @@ public class FunctionCallExpr extends Expr {
         return result;
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        if (fn instanceof AggregateFunction) {
-            return true;
-        }
-
-        if (fn != null) {
-            return fn.isVectorized();
-        }
-
-        return false;
-    }
-
     /**
      * Below function is added by new analyzer
      */

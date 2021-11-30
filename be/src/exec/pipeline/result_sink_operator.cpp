@@ -44,7 +44,12 @@ Status ResultSinkOperator::close(RuntimeState* state) {
             // Incrementing and reading _num_written_rows needn't memory barrier, because
             // the visibility of _num_written_rows is guaranteed by _num_result_sinkers.fetch_sub().
             _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
-            _sender->close(st);
+
+            Status final_status = _fragment_ctx->final_status();
+            if (!st.ok() && final_status.ok()) {
+                final_status = st;
+            }
+            _sender->close(final_status);
         }
 
         state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
@@ -92,12 +97,12 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
 }
 
 Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), 1024, &_sender));
 
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
 
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc));
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
     return Status::OK();
@@ -105,5 +110,6 @@ Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
 
 void ResultSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_output_expr_ctxs, state);
+    OperatorFactory::close(state);
 }
 } // namespace starrocks::pipeline

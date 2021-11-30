@@ -28,14 +28,12 @@ namespace starrocks {
 
 class TExprNode;
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 class Predicate : public Expr {
+public:
+    virtual Status merge(Predicate* predicate) { return Status::NotSupported("Not supported"); }
+
 protected:
     friend class Expr;
-
     Predicate(const TExprNode& node) : Expr(node) {}
 };
 

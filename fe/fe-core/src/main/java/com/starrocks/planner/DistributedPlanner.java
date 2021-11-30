@@ -444,7 +444,7 @@ public class DistributedPlanner {
         // Push down the predicates constructed by the right child when the
         // join op is inner join or left semi join
         if (ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
-                && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin())) {
+                && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin() || node.getJoinOp().isRightJoin())) {
             node.setIsPushDown(true);
         } else {
             node.setIsPushDown(false);

@@ -29,10 +29,6 @@
 
 namespace starrocks {
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 MysqlScanner::MysqlScanner(const MysqlScannerParam& param)
         : _my_param(param), _my_conn(nullptr), _my_result(nullptr), _is_open(false), _field_num(0) {}
 

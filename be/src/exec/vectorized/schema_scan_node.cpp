@@ -5,7 +5,6 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
-#include "exec/text_converter.hpp"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
@@ -152,19 +151,6 @@ Status SchemaScanNode::open(RuntimeState* state) {
     }
 
     return _schema_scanner->start(state);
-}
-
-Status SchemaScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    if (!_is_init) {
-        return Status::InternalError("used before initialized.");
-    }
-
-    if (nullptr == state || nullptr == row_batch || nullptr == eos) {
-        return Status::InternalError("input pointer is nullptr.");
-    }
-
-    *eos = true;
-    return Status::OK();
 }
 
 Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {

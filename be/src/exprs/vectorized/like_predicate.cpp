@@ -347,10 +347,15 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
     if (context->is_constant_column(1)) {
         auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
+        hs_scratch_t* scratch = nullptr;
+        if (hs_clone_scratch(state->scratch, &scratch) != HS_SUCCESS) {
+            CHECK(false) << "ERROR: Unable to clone scratch space.";
+        }
+
         for (int row = 0; row < value_viewer.size(); ++row) {
             bool v = false;
             auto status = hs_scan(
-                    state->database, value_viewer.value(row).data, value_viewer.value(row).size, 0, state->scratch,
+                    state->database, value_viewer.value(row).data, value_viewer.value(row).size, 0, scratch,
                     [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                        void* ctx) -> int {
                         *((bool*)ctx) = true;
@@ -360,6 +365,10 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
 
             DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED);
             result.append(v, value_viewer.is_null(row));
+        }
+
+        if (hs_free_scratch(scratch) != HS_SUCCESS) {
+            CHECK(false) << "ERROR: free scratch space failure";
         }
         return result.build(value_column->is_constant());
     }
@@ -405,10 +414,15 @@ ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const sta
     if (context->is_constant_column(1)) {
         auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
+        hs_scratch_t* scratch = nullptr;
+        if (hs_clone_scratch(state->scratch, &scratch) != HS_SUCCESS) {
+            CHECK(false) << "ERROR: Unable to clone scratch space.";
+        }
+
         for (int row = 0; row < value_viewer.size(); ++row) {
             bool v = false;
             auto status = hs_scan(
-                    state->database, value_viewer.value(row).data, value_viewer.value(row).size, 0, state->scratch,
+                    state->database, value_viewer.value(row).data, value_viewer.value(row).size, 0, scratch,
                     [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                        void* ctx) -> int {
                         *((bool*)ctx) = true;
@@ -418,6 +432,10 @@ ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const sta
 
             DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED);
             result.append(v, value_viewer.is_null(row));
+        }
+
+        if (hs_free_scratch(scratch) != HS_SUCCESS) {
+            CHECK(false) << "ERROR: free scratch space failure";
         }
         return result.build(value_column->is_constant());
     }

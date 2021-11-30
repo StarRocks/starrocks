@@ -8,8 +8,9 @@
 namespace starrocks::pipeline {
 class AnalyticSinkOperator : public Operator {
 public:
-    AnalyticSinkOperator(int32_t id, int32_t plan_node_id, const TPlanNode& tnode, AnalytorPtr analytor)
-            : Operator(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(std::move(analytor)) {
+    AnalyticSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TPlanNode& tnode,
+                         AnalytorPtr analytor)
+            : Operator(factory, id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(std::move(analytor)) {
         _analytor->ref();
     }
     ~AnalyticSinkOperator() = default;
@@ -49,7 +50,7 @@ public:
     ~AnalyticSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AnalyticSinkOperator>(_id, _plan_node_id, _tnode, _analytor);
+        return std::make_shared<AnalyticSinkOperator>(this, _id, _plan_node_id, _tnode, _analytor);
     }
 
 private:

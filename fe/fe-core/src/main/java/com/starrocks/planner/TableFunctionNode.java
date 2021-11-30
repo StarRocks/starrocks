@@ -3,7 +3,6 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -54,15 +53,6 @@ public class TableFunctionNode extends PlanNode {
         msg.table_function_node.setParam_columns(paramSlots);
         msg.table_function_node.setOuter_columns(outerSlots);
         msg.table_function_node.setFn_result_columns(fnResultSlots);
-    }
-
-    @Override
-    public boolean isVectorized() {
-        if (!getChild(0).isVectorized()) {
-            throw UnsupportedException.unsupportedException("Not support non-vectorized table function node.");
-        }
-
-        return true;
     }
 
     @Override

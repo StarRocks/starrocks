@@ -5,12 +5,86 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <utility>
+
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
+#include "common/object_pool.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "runtime/mem_pool.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks {
 namespace vectorized {
+
+template <PrimitiveType child_type>
+struct VectorizedCaseExprTestBuilder {
+    VectorizedCaseExprTestBuilder(bool has_else, bool has_case) {
+        _has_else = has_else;
+        _has_case = has_case;
+        _expr.reset(VectorizedCaseExprFactory::from_thrift(case_when_node()));
+    }
+
+    template <template <PrimitiveType Type> typename T, typename... Args>
+    VectorizedCaseExprTestBuilder& add_then(Args&&... args) {
+        _then_expr_sz++;
+        _expr->add_child(_obj_pool.add(new T<child_type>(mock_node(child_type), std::forward<Args>(args)...)));
+        return *this;
+    }
+
+    template <template <PrimitiveType Type> typename T, typename... Args>
+    VectorizedCaseExprTestBuilder& add_when(Args&&... args) {
+        _when_expr_sz++;
+        _expr->add_child(_obj_pool.add(new T<TYPE_BOOLEAN>(mock_node(TYPE_BOOLEAN), std::forward<Args>(args)...)));
+        return *this;
+    }
+
+    Expr* build() {
+        if (!_has_else) {
+            DCHECK_EQ(_when_expr_sz, _then_expr_sz);
+        } else {
+            DCHECK_EQ(_when_expr_sz + 1, _then_expr_sz);
+        }
+        return _expr.release();
+    }
+
+private:
+    TExprNode case_when_node() {
+        TExprNode expr_node;
+        expr_node.opcode = TExprOpcode::ADD;
+        expr_node.child_type = to_thrift(child_type);
+        expr_node.node_type = TExprNodeType::CASE_EXPR;
+        expr_node.num_children = 0;
+        expr_node.__isset.opcode = true;
+        expr_node.__isset.child_type = true;
+        expr_node.type = gen_type_desc(to_thrift(child_type));
+        return expr_node;
+    }
+
+    TExprNode mock_node(PrimitiveType type) {
+        TExprNode expr_node;
+        expr_node.opcode = TExprOpcode::ADD;
+        expr_node.child_type = to_thrift(type);
+        expr_node.node_type = TExprNodeType::FUNCTION_CALL;
+        expr_node.num_children = 0;
+        expr_node.__isset.opcode = true;
+        expr_node.__isset.child_type = true;
+        expr_node.type = gen_type_desc(to_thrift(type));
+        return expr_node;
+    }
+
+    bool _has_else;
+    bool _has_case;
+
+    int _when_expr_sz = 0;
+    int _then_expr_sz = 0;
+
+    std::unique_ptr<Expr> _expr;
+    ObjectPool _obj_pool;
+    MemPool _mem_pool;
+};
 
 class VectorizedCaseExprTest : public ::testing::Test {
 public:
@@ -263,6 +337,54 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseNullElse) {
             } else {
                 ASSERT_EQ(20, v->get_data()[j]);
             }
+        }
+    }
+}
+
+TEST_F(VectorizedCaseExprTest, WhenNoCaseIntNullElse) {
+    {
+        // No CASE No ELSE
+        VectorizedCaseExprTestBuilder<TYPE_INT> builder(false, false);
+        builder.add_when<MockVectorizedExpr>(10, uint8_t(true));
+        builder.add_then<MockVectorizedExpr>(10, 10);
+        std::unique_ptr<Expr> expr(builder.build());
+
+        Chunk chunk;
+        ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+        ASSERT_TRUE(ptr->is_numeric() && !ptr->is_nullable());
+    }
+    {
+        // No CASE Has ELSE
+        VectorizedCaseExprTestBuilder<TYPE_INT> builder(true, false);
+        builder.add_when<MockVectorizedExpr>(10, uint8_t(false));
+        builder.add_then<MockVectorizedExpr>(10, 10);
+        builder.add_then<MockNullVectorizedExpr>(10, 40);
+
+        std::unique_ptr<Expr> expr(builder.build());
+        Chunk chunk;
+        ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+
+        ColumnViewer<TYPE_INT> viewer(ptr);
+
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_TRUE(!viewer.is_null(j));
+            ASSERT_EQ(40, viewer.value(j));
+        }
+    }
+    {
+        // No CASE Has always NULL ELSE
+        VectorizedCaseExprTestBuilder<TYPE_INT> builder(true, false);
+        builder.add_when<MockVectorizedExpr>(10, uint8_t(false));
+        builder.add_then<MockVectorizedExpr>(10, 10);
+        builder.add_then<MockNullVectorizedExpr>(10, 0, true); // only_null
+
+        std::unique_ptr<Expr> expr(builder.build());
+        Chunk chunk;
+        ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+
+        ColumnViewer<TYPE_INT> viewer(ptr);
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_TRUE(viewer.is_null(j));
         }
     }
 }

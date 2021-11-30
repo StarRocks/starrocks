@@ -10,8 +10,8 @@
 namespace starrocks::pipeline {
 class AnalyticSourceOperator : public SourceOperator {
 public:
-    AnalyticSourceOperator(int32_t id, int32_t plan_node_id, AnalytorPtr analytor)
-            : SourceOperator(id, "analytic_source", plan_node_id), _analytor(std::move(analytor)) {
+    AnalyticSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, AnalytorPtr analytor)
+            : SourceOperator(factory, id, "analytic_source", plan_node_id), _analytor(std::move(analytor)) {
         _analytor->ref();
     }
     ~AnalyticSourceOperator() override = default;
@@ -39,7 +39,7 @@ public:
     ~AnalyticSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AnalyticSourceOperator>(_id, _plan_node_id, _analytor);
+        return std::make_shared<AnalyticSourceOperator>(this, _id, _plan_node_id, _analytor);
     }
 
 private:

@@ -166,6 +166,11 @@ public class DescribeStmt extends ShowStmt {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbTableName.getTbl());
             }
 
+            if (table.getType() == TableType.HIVE) {
+                // Reuse the logic of `desc <table_name>` because hive external table doesn't support view.
+                isAllTables = false;
+            }
+
             if (!isAllTables) {
                 // show base table schema only
                 String procString = "/dbs/" + db.getId() + "/" + table.getId() + "/" + TableProcDir.INDEX_SCHEMA

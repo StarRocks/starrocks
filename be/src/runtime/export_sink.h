@@ -41,6 +41,7 @@ class MemTracker;
 class FileWriter;
 class Status;
 class TupleRow;
+class FileBuilder;
 
 // This class is a sinker, which put export data to external storage by broker.
 class ExportSink : public DataSink {
@@ -62,8 +63,6 @@ public:
     RuntimeProfile* profile() override { return _profile; }
 
 private:
-    using ConverterPtr = std::unique_ptr<vectorized::csv::Converter>;
-
     Status open_file_writer(int timeout_ms);
     Status gen_file_name(std::string* file_name);
 
@@ -84,8 +83,7 @@ private:
     RuntimeProfile::Counter* _rows_written_counter;
     RuntimeProfile::Counter* _write_timer;
 
-    std::unique_ptr<vectorized::csv::OutputStreamFile> _output_stream;
-    std::vector<ConverterPtr> _converters;
+    std::unique_ptr<FileBuilder> _file_builder;
 };
 
 } // end namespace starrocks

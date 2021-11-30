@@ -29,9 +29,11 @@ public class RuntimeFilterDescription {
     private TUniqueId senderFragmentInstanceId;
     private int equalCount;
     private int crossExchangeNodeTimes;
+    private boolean equalForNull;
 
     private static final int ProbeMinSize = 100 * 1024;
     private static final float ProbeMinSelectivity = 0.5f;
+    public static final int BuildMaxSize = 64 * 1024 * 1024;
     private long buildCardinality;
 
     public RuntimeFilterDescription() {
@@ -45,6 +47,15 @@ public class RuntimeFilterDescription {
         equalCount = 0;
         crossExchangeNodeTimes = 0;
         buildCardinality = 0;
+        equalForNull = false;
+    }
+
+    public boolean getEqualForNull() {
+        return equalForNull;
+    }
+
+    public void setEqualForNull(boolean v) {
+        equalForNull = v;
     }
 
     public void setFilterId(int id) {

@@ -131,11 +131,6 @@ public class LikePredicate extends Predicate {
     }
 
     @Override
-    public boolean isVectorized() {
-        return fn.isVectorized();
-    }
-
-    @Override
     public boolean isStrictPredicate() {
         return getChild(0).unwrapSlotRef() != null;
     }

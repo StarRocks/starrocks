@@ -34,7 +34,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     cm.tuple_desc = tuple_desc;
     cm.obj_pool = &_obj_pool;
     cm.key_column_names = &_key_column_names;
-    cm.runtime_filters = &_runtime_filters;
+    cm.runtime_filters = &_runtime_bloom_filters;
     cm.runtime_state = state;
 
     const TQueryOptions& query_options = state->query_options();
@@ -67,7 +67,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _read_uncompressed_counter = ADD_COUNTER(_scan_profile, "UncompressedBytesRead", TUnit::BYTES);
 
     _raw_rows_counter = ADD_COUNTER(_scan_profile, "RawRowsRead", TUnit::UNIT);
-    _total_pages_num_counter = ADD_COUNTER(_scan_profile, "TotalPagesNum", TUnit::UNIT);
+    _read_pages_num_counter = ADD_COUNTER(_scan_profile, "ReadPagesNum", TUnit::UNIT);
     _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
     _pushdown_predicates_counter = ADD_COUNTER(_scan_profile, "PushdownPredicates", TUnit::UNIT);
 
@@ -91,6 +91,10 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _chunk_copy_timer = ADD_CHILD_TIMER(_scan_profile, "ChunkCopy", "SegmentRead");
     _decompress_timer = ADD_CHILD_TIMER(_scan_profile, "DecompressT", "SegmentRead");
     _index_load_timer = ADD_CHILD_TIMER(_scan_profile, "IndexLoad", "SegmentRead");
+    _rowsets_read_count = ADD_CHILD_COUNTER(_scan_profile, "RowsetsReadCount", TUnit::UNIT, "SegmentRead");
+    _segments_read_count = ADD_CHILD_COUNTER(_scan_profile, "SegmentsReadCount", TUnit::UNIT, "SegmentRead");
+    _total_columns_data_page_count =
+            ADD_CHILD_COUNTER(_scan_profile, "TotalColumnsDataPageCount", TUnit::UNIT, "SegmentRead");
 
     // IOTime
     _io_timer = ADD_TIMER(_scan_profile, "IOTime");
@@ -205,6 +209,9 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
             return Status::InternalError(ss.str());
         }
         scanner_columns.push_back(index);
+        if (!_unused_output_column_ids.count(index)) {
+            _query_slots.push_back(slot);
+        }
     }
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
@@ -212,6 +219,21 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     if (scanner_columns.empty()) {
         return Status::InternalError("failed to build storage scanner, no materialized slot!");
     }
+    return Status::OK();
+}
+
+Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
+    for (const auto& col_name : unused_output_columns) {
+        int32_t index = _tablet->field_index(col_name);
+        if (index < 0) {
+            std::stringstream ss;
+            ss << "invalid field name: " << col_name;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+        _unused_output_column_ids.insert(index);
+    }
+    _params.unused_output_column_ids = &_unused_output_column_ids;
     return Status::OK();
 }
 
@@ -223,6 +245,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
     RETURN_IF_ERROR(_init_global_dicts(&_params));
+    RETURN_IF_ERROR(_init_unused_output_columns(*_unused_output_columns));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
@@ -243,6 +266,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
+    RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
 
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
@@ -320,7 +344,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
             return status;
         }
 
-        for (auto slot : *_slots) {
+        for (auto slot : _query_slots) {
             size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
@@ -382,12 +406,16 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
     COUNTER_UPDATE(_index_load_timer, _reader->stats().index_load_ns);
 
-    COUNTER_UPDATE(_total_pages_num_counter, _reader->stats().total_pages_num);
+    COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
+    COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
+    COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
 

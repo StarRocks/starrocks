@@ -44,6 +44,7 @@
 #include "http/http_response.h"
 #include "http/utils.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
@@ -54,6 +55,7 @@
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
+#include "util/defer_op.h"
 #include "util/json_util.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
@@ -254,10 +256,12 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
             size_t max_body_bytes = config::streaming_load_max_batch_size_mb * 1024 * 1024;
-            if (ctx->body_bytes > max_body_bytes) {
+            auto ignore_json_size = boost::iequals(http_req->header(HTTP_IGNORE_JSON_SIZE), "true");
+            if (!ignore_json_size && ctx->body_bytes > max_body_bytes) {
                 std::stringstream ss;
                 ss << "The size of this batch exceed the max size [" << max_body_bytes << "]  of json type data "
-                   << " data [ " << ctx->body_bytes << " ]";
+                   << " data [ " << ctx->body_bytes
+                   << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
                 return Status::InternalError(ss.str());
             }
         }
@@ -289,13 +293,21 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
         return;
     }
 
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->mem_tracker);
+
     struct evhttp_request* ev_req = req->get_evhttp_request();
     auto evbuf = evhttp_request_get_input_buffer(ev_req);
 
     int64_t start_read_data_time = MonotonicNanos();
     while (evbuffer_get_length(evbuf) > 0) {
-        auto bb = ByteBuffer::allocate(4096);
-        auto remove_bytes = evbuffer_remove(evbuf, bb->ptr, bb->capacity);
+        ByteBufferPtr bb = ByteBuffer::allocate(4096);
+        int remove_bytes;
+        {
+            // The memory is applied for in http server thread,
+            // so the release of this memory must be recorded in ProcessMemTracker
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+            remove_bytes = evbuffer_remove(evbuf, bb->ptr, bb->capacity);
+        }
         bb->pos = remove_bytes;
         bb->flip();
         auto st = ctx->body_sink->append(bb);

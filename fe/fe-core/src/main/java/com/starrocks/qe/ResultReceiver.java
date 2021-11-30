@@ -90,16 +90,16 @@ public class ResultReceiver {
                         }
                     }
                 }
-                TStatusCode code = TStatusCode.findByValue(pResult.status.status_code);
+                TStatusCode code = TStatusCode.findByValue(pResult.status.statusCode);
                 if (code != TStatusCode.OK) {
                     status.setPstatus(pResult.status);
                     return null;
                 }
 
-                rowBatch.setQueryStatistics(pResult.query_statistics);
+                rowBatch.setQueryStatistics(pResult.queryStatistics);
 
-                if (packetIdx != pResult.packet_seq) {
-                    LOG.warn("receive packet failed, expect={}, receive={}", packetIdx, pResult.packet_seq);
+                if (packetIdx != pResult.packetSeq) {
+                    LOG.warn("receive packet failed, expect={}, receive={}", packetIdx, pResult.packetSeq);
                     status.setRpcStatus("receive error packet");
                     return null;
                 }

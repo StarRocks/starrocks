@@ -26,7 +26,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DropResourceStmt;
-import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -67,13 +66,8 @@ public class ResourceMgr implements Writable {
     }
 
     public void createResource(CreateResourceStmt stmt) throws DdlException {
-        if (stmt.getResourceType() != ResourceType.SPARK
-                && stmt.getResourceType() != ResourceType.HIVE) {
-            throw new DdlException("Only support Spark or Hive resource.");
-        }
-
-        String resourceName = stmt.getResourceName();
         Resource resource = Resource.fromStmt(stmt);
+        String resourceName = stmt.getResourceName();
         if (nameToResource.putIfAbsent(resourceName, resource) != null) {
             throw new DdlException("Resource(" + resourceName + ") already exist");
         }
@@ -150,9 +144,11 @@ public class ResourceMgr implements Writable {
 
             for (Map.Entry<String, Resource> entry : nameToResource.entrySet()) {
                 Resource resource = entry.getValue();
-                // check resource privs
-                if (!Catalog.getCurrentCatalog().getAuth().checkResourcePriv(ConnectContext.get(), resource.getName(),
-                        PrivPredicate.SHOW)) {
+                // Since `nameToResource.entrySet` may change after it is called, resource
+                // may be dropped during `show resources`.So that we should do a null pointer
+                // check here. If resource is not null then we should check resource privs.
+                if (resource == null || !Catalog.getCurrentCatalog().getAuth().checkResourcePriv(
+                        ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
                     continue;
                 }
                 resource.getProcNodeData(result);

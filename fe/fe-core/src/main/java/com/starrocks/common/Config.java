@@ -1290,5 +1290,19 @@ public class Config extends ConfigBase {
      */
     @ConfField()
     public static int broker_client_timeout_ms = 10000;
+
+    /**
+     * Unused config field, leave it here for backward compatibility
+     */
+    @Deprecated
+    @ConfField(mutable = true)
+    public static boolean vectorized_load_enable = true; 
+
+    /**
+     * Unused config field, leave it here for backward compatibility
+     */
+    @Deprecated
+    @ConfField(mutable = true)
+    public static boolean enable_vectorized_file_load = true;
 }
 

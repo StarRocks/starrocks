@@ -214,8 +214,6 @@ CONF_mInt32(exchg_node_buffer_size_bytes, "10485760");
 // CONF_Int32(insertion_threadhold, "16");
 // the block_size every block allocate for sorter
 CONF_Int32(sorter_block_size, "8388608");
-// push_write_mbytes_per_sec
-CONF_Int32(push_write_mbytes_per_sec, "10");
 
 CONF_mInt64(column_dictionary_key_ratio_threshold, "0");
 CONF_mInt64(column_dictionary_key_size_threshold, "0");
@@ -634,18 +632,24 @@ CONF_Int64(pipeline_yield_max_chunks_moved, "100");
 // yield PipelineDriver when maximum time in nano-seconds has spent
 // in current execution round.
 CONF_Int64(pipeline_yield_max_time_spent, "100000000");
-// the number of io threads pipeline engine.
-CONF_Int64(pipeline_io_thread_pool_thread_num, "3");
-// queue size of io thread pool for pipeline engine.
-CONF_Int64(pipeline_io_thread_pool_queue_size, "102400");
+// the number of scan threads pipeline engine.
+CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
+// queue size of scan thread pool for pipeline engine.
+CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
+// the number of exchange threads pipeline engine.
+CONF_Int64(pipeline_exchange_thread_pool_thread_num, "2");
+// queue size of exchange thread pool for pipeline engine.
+CONF_Int64(pipeline_exchange_thread_pool_queue_size, "102400");
 // the number of execution threads for pipeline engine.
-CONF_Int64(pipeline_exec_thread_pool_thread_num, "3");
+CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
-// schema change vectorized
-CONF_Bool(enable_schema_change_vectorized, "true");
+// max hdfs file handle
+CONF_mInt32(max_hdfs_file_handle, "1000");
+
+CONF_Int64(max_segment_file_size, "1073741824");
 
 } // namespace config
 

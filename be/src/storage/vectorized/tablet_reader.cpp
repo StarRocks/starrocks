@@ -51,6 +51,7 @@ void TabletReader::close() {
 Status TabletReader::prepare() {
     std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
+    _stats.rowsets_read_count += _rowsets.size();
     return st;
 }
 
@@ -99,8 +100,9 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     rs_opts.runtime_state = params.runtime_state;
     rs_opts.profile = params.profile;
     rs_opts.use_page_cache = params.use_page_cache;
-    rs_opts.tablet_schema = &(_tablet->tablet_schema());
+    rs_opts.tablet_schema = &_tablet->tablet_schema();
     rs_opts.global_dictmaps = params.global_dictmaps;
+    rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -234,6 +236,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
 
     if (_collect_iter != nullptr) {
         RETURN_IF_ERROR(_collect_iter->init_encoded_schema(*params.global_dictmaps));
+        RETURN_IF_ERROR(_collect_iter->init_output_schema(*params.unused_output_column_ids));
     }
 
     return Status::OK();
@@ -262,8 +265,8 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
                 LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
                 return Status::InternalError("invalid delete condition string");
             }
-            size_t idx = _tablet->tablet_schema().field_index(cond.column_name);
-            if (idx >= _tablet->num_key_columns() && _tablet->keys_type() != DUP_KEYS) {
+            if (_tablet->tablet_schema().field_index(cond.column_name) >= _tablet->num_key_columns() &&
+                _tablet->keys_type() != DUP_KEYS) {
                 LOG(WARNING) << "ignore delete condition of non-key column: " << pred_pb.sub_predicates(i);
                 continue;
             }

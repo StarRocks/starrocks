@@ -317,6 +317,8 @@ vectorized_functions = [
      'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
     [50242, 'date_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format',
      'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
+    # cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
+    [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
 
     [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
@@ -473,6 +475,7 @@ vectorized_functions = [
     [120130, "to_base64", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::to_base64"],
     [120140, "md5", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::md5"],
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum"],
+    [120160, "sha2", "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2", "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
 
       # geo function
     [120000, "ST_Point", "VARCHAR", ["DOUBLE", "DOUBLE"], "GeoFunctions::st_point"],

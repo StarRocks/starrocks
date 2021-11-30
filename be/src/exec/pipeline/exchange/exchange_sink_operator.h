@@ -10,6 +10,7 @@
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -29,9 +30,11 @@ namespace pipeline {
 class SinkBuffer;
 class ExchangeSinkOperator final : public Operator {
 public:
-    ExchangeSinkOperator(int32_t id, int32_t plan_node_id, const std::shared_ptr<SinkBuffer>& buffer,
-                         TPartitionType::type part_type, const std::vector<TPlanFragmentDestination>& destinations,
-                         int sender_id, PlanNodeId dest_node_id, const std::vector<ExprContext*>& partition_expr_ctxs);
+    ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                         const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
+                         const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
+                         PlanNodeId dest_node_id, const std::vector<ExprContext*>& partition_expr_ctxs,
+                         FragmentContext* const fragment_ctx);
 
     ~ExchangeSinkOperator() override = default;
 
@@ -45,7 +48,11 @@ public:
 
     bool is_finished() const override;
 
+    bool pending_finish() const override;
+
     void set_finishing(RuntimeState* state) override;
+
+    void set_finished(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -76,6 +83,12 @@ private:
     PlanNodeId _dest_node_id;
 
     std::vector<std::shared_ptr<Channel>> _channels;
+    // index list for channels
+    // We need a random order of sending channels to avoid rpc blocking at the same time.
+    // But we can't change the order in the vector<channel> directly,
+    // because the channel is selected based on the hash pattern,
+    // so we pick a random order for the index
+    std::vector<int> _channel_indices;
     // Index of current channel to send to if _part_type == RANDOM.
     int _curr_random_channel_idx = 0;
 
@@ -128,6 +141,8 @@ private:
     // channel 0's row first, then channel 1's row indexes, then put channel 2's row indexes in
     // the last.
     std::vector<uint32_t> _row_indexes;
+
+    FragmentContext* const _fragment_ctx;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
@@ -135,7 +150,8 @@ public:
     ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer,
                                 TPartitionType::type part_type,
                                 const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
-                                PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs);
+                                PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
+                                FragmentContext* const fragment_ctx);
 
     ~ExchangeSinkOperatorFactory() override = default;
 
@@ -160,6 +176,8 @@ private:
 
     // For shuffle exchange
     std::vector<ExprContext*> _partition_expr_ctxs; // compute per-row partition values
+
+    FragmentContext* const _fragment_ctx;
 };
 
 } // namespace pipeline

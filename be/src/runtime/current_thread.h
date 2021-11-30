@@ -5,10 +5,13 @@
 #include <string>
 
 #include "gen_cpp/Types_types.h"
+#include "gutil/macros.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "storage/storage_engine.h"
 #include "util/uid_util.h"
+
+#define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
+    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
 
 namespace starrocks {
 
@@ -17,13 +20,9 @@ class TUniqueId;
 class CurrentThread {
 public:
     CurrentThread() = default;
-    ~CurrentThread() { commit(); }
+    ~CurrentThread();
 
     void commit() {
-        StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
-        if (storage_engine != nullptr && storage_engine->bg_worker_stopped()) {
-            return;
-        }
         MemTracker* cur_tracker = mem_tracker();
         if (_cache_size != 0 && cur_tracker != nullptr) {
             cur_tracker->consume(_cache_size);
@@ -96,4 +95,22 @@ private:
 };
 
 inline thread_local CurrentThread tls_thread_status;
+
+class CurrentThreadMemTrackerSetter {
+public:
+    explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
+        _old_mem_tracker = tls_thread_status.set_mem_tracker(new_mem_tracker);
+    }
+
+    ~CurrentThreadMemTrackerSetter() { (void)tls_thread_status.set_mem_tracker(_old_mem_tracker); }
+
+    CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
+    void operator=(const CurrentThreadMemTrackerSetter&) = delete;
+    CurrentThreadMemTrackerSetter(CurrentThreadMemTrackerSetter&&) = delete;
+    void operator=(CurrentThreadMemTrackerSetter&&) = delete;
+
+private:
+    MemTracker* _old_mem_tracker;
+};
+
 } // namespace starrocks

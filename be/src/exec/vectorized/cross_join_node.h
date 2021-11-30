@@ -7,7 +7,7 @@
 
 namespace starrocks {
 namespace vectorized {
-class CrossJoinNode : public ExecNode {
+class CrossJoinNode final : public ExecNode {
 public:
     CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~CrossJoinNode() override = default;
@@ -15,7 +15,6 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
 
     Status get_next_internal(RuntimeState* state, ChunkPtr* chunk, bool* eos,
                              ScopedTimer<MonotonicStopWatch>& probe_timer);

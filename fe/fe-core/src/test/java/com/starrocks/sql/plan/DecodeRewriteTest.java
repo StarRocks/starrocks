@@ -8,7 +8,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class DecodeRewriteTest extends PlanTestBase{
+public class DecodeRewriteTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
@@ -53,7 +53,6 @@ public class DecodeRewriteTest extends PlanTestBase{
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
     }
-
 
     @Test
     public void testDecodeNodeRewrite() throws Exception {
@@ -110,8 +109,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         String sql = "select L_COMMENT from lineitem group by L_COMMENT";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:Decode\n" +
-                "  |  <dict id 18> : <string id 16>\n" +
-                "  |  use vectorized: true"));
+                "  |  <dict id 18> : <string id 16>\n"));
     }
 
     @Test
@@ -120,7 +118,6 @@ public class DecodeRewriteTest extends PlanTestBase{
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 4> : <string id 2>\n" +
-                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  <slot 4> : 4: dept_name"));
@@ -144,10 +141,12 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertTrue(plan.contains("count(10: S_ADDRESS)"));
 
         sql = "select count(distinct S_ADDRESS) from supplier";
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("count(10: S_ADDRESS)"));
         Assert.assertTrue(plan.contains("HASH_PARTITIONED: 10: S_ADDRESS"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
     @Test
@@ -284,7 +283,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(*), S_ADDRESS from supplier group by S_ADDRESS";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("node_type:DECODE_NODE, num_children:1, limit:-1, row_tuples:[3, 2]"));
+        Assert.assertTrue(plan.contains("node_type:DECODE_NODE, num_children:1, limit:-1, row_tuples:[3]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -306,8 +305,7 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <dict id 15> : <string id 9>\n" +
                 "  |  string functions:\n" +
                 "  |  <function id 14> : upper(13: S_ADDRESS)\n" +
-                "  |  <function id 15> : lower(14: upper)\n" +
-                "  |  use vectorized: true"));
+                "  |  <function id 15> : lower(14: upper)\n"));
 
         sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);
@@ -352,7 +350,6 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <dict id 7> : <string id 3>\n" +
                 "  |  <dict id 8> : <string id 6>"));
 
-
         sql = "SELECT * \n" +
                 "FROM   emp \n" +
                 "WHERE  EXISTS (SELECT dept.dept_id \n" +
@@ -375,7 +372,8 @@ public class DecodeRewriteTest extends PlanTestBase{
 
     @Test
     public void testJoinGlobalDict() throws Exception {
-        String sql = "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
+        String sql =
+                "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("enable_column_expr_predicate:false, dict_string_id_to_int_ids:{}"));
         Assert.assertTrue(plan.contains("P_MFGR IN ('MFGR#1', 'MFGR#2'), enable_column_expr_predicate:false, " +
@@ -410,6 +408,14 @@ public class DecodeRewriteTest extends PlanTestBase{
         String sql = "select max(S_NAME) as b from supplier group by S_ADDRESS order by b";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
+
+        sql = "select substr(S_ADDRESS, 0, 1) from supplier group by substr(S_ADDRESS, 0, 1) " +
+                "order by substr(S_ADDRESS, 0, 1)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 11> : <string id 9>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 11> : substr(10: S_ADDRESS, 0, 1)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -444,5 +450,14 @@ public class DecodeRewriteTest extends PlanTestBase{
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  6:Decode\n" +
                 "  |  <dict id 17> : <string id 3>"));
+    }
+
+    @Test
+    public void testDecodeWithCast() throws Exception {
+        String sql = "select reverse(conv(cast(S_ADDRESS as bigint), NULL, NULL)) from supplier";
+        String plan = getFragmentPlan(sql);
+        // Currently, we disable cast operator
+        Assert.assertFalse(plan.contains("Decode"));
+        Assert.assertTrue(plan.contains("reverse(conv(CAST(3: S_ADDRESS AS BIGINT), NULL, NULL))"));
     }
 }

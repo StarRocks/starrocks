@@ -331,6 +331,8 @@ struct TOlapScanNode {
   21: optional string sql_predicates
   22: optional bool enable_column_expr_predicate
   23: optional map<i32, i32> dict_string_id_to_int_ids
+  // which columns only be used to filter data in the stage of scan data
+  24: optional list<string> unused_output_column_name
 }
 struct TEqJoinCondition {
   // left-hand side of "<a> = <b>"
@@ -848,8 +850,10 @@ struct TPlanNode {
   // runtime filters be probed by this node.
   55: optional list<TRuntimeFilterDescription> probe_runtime_filters
   56: optional TDecodeNode decode_node
-  // a set of TPlanNodeIds of whom generate local runtime filters that take effects on this node 
+  // a set of TPlanNodeIds of whom generate local runtime filters that take effects on this node
   57: optional set<Types.TPlanNodeId> local_rf_waiting_set
+  // Columns that null values can be filtered out
+  58: optional list<Types.TSlotId> filter_null_value_columns;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

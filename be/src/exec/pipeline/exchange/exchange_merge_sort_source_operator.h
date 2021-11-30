@@ -13,10 +13,11 @@ class SortExecExprs;
 namespace pipeline {
 class ExchangeMergeSortSourceOperator : public SourceOperator {
 public:
-    ExchangeMergeSortSourceOperator(int32_t id, int32_t plan_node_id, int32_t num_sender, const RowDescriptor& row_desc,
-                                    SortExecExprs* sort_exec_exprs, const std::vector<bool>& is_asc_order,
-                                    const std::vector<bool>& nulls_first, int64_t offset, int64_t limit)
-            : SourceOperator(id, "exchange_merge_sort_source", plan_node_id),
+    ExchangeMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t num_sender,
+                                    const RowDescriptor& row_desc, SortExecExprs* sort_exec_exprs,
+                                    const std::vector<bool>& is_asc_order, const std::vector<bool>& nulls_first,
+                                    int64_t offset, int64_t limit)
+            : SourceOperator(factory, id, "exchange_merge_sort_source", plan_node_id),
               _num_sender(num_sender),
               _row_desc(row_desc),
               _sort_exec_exprs(sort_exec_exprs),
@@ -76,7 +77,7 @@ public:
     ~ExchangeMergeSortSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
-        return std::make_shared<ExchangeMergeSortSourceOperator>(_id, _plan_node_id, _num_sender, _row_desc,
+        return std::make_shared<ExchangeMergeSortSourceOperator>(this, _id, _plan_node_id, _num_sender, _row_desc,
                                                                  _sort_exec_exprs, _is_asc_order, _nulls_first, _offset,
                                                                  _limit);
     }

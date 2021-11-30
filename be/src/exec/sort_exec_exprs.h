@@ -34,10 +34,6 @@ namespace starrocks {
 // If _materialize_tuple is true, SortExecExprs also stores the slot expressions used to
 // materialize the sort tuples.
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 class SortExecExprs {
 public:
     ~SortExecExprs();

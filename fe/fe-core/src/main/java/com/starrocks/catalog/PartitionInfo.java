@@ -200,7 +200,6 @@ public class PartitionInfo implements Writable {
 
         for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
             buff.append(entry.getKey()).append("is HDD: ");
-            ;
             if (entry.getValue().equals(new DataProperty(TStorageMedium.HDD))) {
                 buff.append(true);
             } else {

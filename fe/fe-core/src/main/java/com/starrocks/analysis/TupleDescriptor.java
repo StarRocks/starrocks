@@ -176,10 +176,6 @@ public class TupleDescriptor {
         return (aliases_ != null) ? aliases_[0] : null;
     }
 
-    public TableName getAliasAsName() {
-        return (aliases_ != null) ? new TableName(null, aliases_[0]) : null;
-    }
-
     public TTupleDescriptor toThrift() {
         TTupleDescriptor ttupleDesc = new TTupleDescriptor(id.asInt(), byteSize, numNullBytes);
         ttupleDesc.setNumNullSlots(numNullableSlots);
@@ -299,11 +295,8 @@ public class TupleDescriptor {
                 Table table = parent.getTable();
                 Preconditions.checkState(table != null);
                 Long tableId = table.getId();
-                Set<String> columnNames = tableIdToColumnNames.get(tableId);
-                if (columnNames == null) {
-                    columnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-                    tableIdToColumnNames.put(tableId, columnNames);
-                }
+                Set<String> columnNames = tableIdToColumnNames
+                        .computeIfAbsent(tableId, k -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER));
                 columnNames.add(slotDescriptor.getColumn().getName());
             } else {
                 for (Expr expr : slotDescriptor.getSourceExprs()) {
@@ -326,8 +319,6 @@ public class TupleDescriptor {
     }
 
     public String debugString() {
-        // TODO(zc):
-        // String tblStr = (getTable() == null ? "null" : getTable().getFullName());
         String tblStr = (getTable() == null ? "null" : getTable().getName());
         List<String> slotStrings = Lists.newArrayList();
         for (SlotDescriptor slot : slots) {

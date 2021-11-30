@@ -34,10 +34,6 @@
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 namespace starrocks {
 
 ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -251,6 +247,10 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         exchange_merge_sort_source_operator->set_degree_of_parallelism(1);
         operators.emplace_back(std::move(exchange_merge_sort_source_operator));
     }
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     return operators;
 }
 

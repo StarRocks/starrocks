@@ -155,7 +155,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         if (limit != -1 && limit < statistics.getOutputRowCount()) {
-            statistics = new Statistics(limit, statistics.getColumnStatistics());
+            statistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
         }
 
         Projection projection = node.getProjection();
@@ -745,7 +745,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         estimateStatistics = estimateStatistics(notEqJoin, builder.build());
 
         if (limit != -1 && limit < estimateStatistics.getOutputRowCount()) {
-            estimateStatistics = new Statistics(limit, estimateStatistics.getColumnStatistics());
+            estimateStatistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
         }
 
         context.setStatistics(estimateStatistics);
@@ -895,7 +895,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeRepeatNode(ExpressionContext context, List<ColumnRefOperator> outputGrouping,
-                                   List<List<Long>> groupingIds, List<Set<ColumnRefOperator>> repeatColumnRef) {
+                                   List<List<Long>> groupingIds, List<List<ColumnRefOperator>> repeatColumnRef) {
         Preconditions.checkState(context.arity() == 1);
         Preconditions.checkState(outputGrouping.size() == groupingIds.size());
         Statistics.Builder builder = Statistics.builder();

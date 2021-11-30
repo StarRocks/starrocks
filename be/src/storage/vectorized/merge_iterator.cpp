@@ -114,6 +114,13 @@ public:
         }
         return Status::OK();
     }
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        for (int i = 0; i < _children.size(); ++i) {
+            RETURN_IF_ERROR(_children[i]->init_output_schema(unused_output_column_ids));
+        }
+        return Status::OK();
+    }
 
 protected:
     Status init();
@@ -131,7 +138,7 @@ inline Status MergeIterator::init() {
     DCHECK(_chunk_size > 0);
     DCHECK_EQ(_children.size(), _chunk_pool.size());
     for (size_t i = 0; i < _children.size(); i++) {
-        _chunk_pool[i] = ChunkHelper::new_chunk(_schema, _chunk_size);
+        _chunk_pool[i] = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
         RETURN_IF_ERROR(fill(i));
     }
     _inited = true;

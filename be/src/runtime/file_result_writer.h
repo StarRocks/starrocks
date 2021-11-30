@@ -21,18 +21,20 @@
 
 #pragma once
 
+#include "env/env.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
 
+class Env;
 class ExprContext;
-class FileWriter;
-class ParquetWriterWrapper;
+class FileBuilder;
 class RowBatch;
 class RuntimeProfile;
 class TupleRow;
+class WritableFile;
 
 struct ResultFileOptions {
     bool is_local_file;
@@ -76,12 +78,6 @@ public:
     Status close() override;
 
 private:
-    Status _write_csv_file(const RowBatch& batch);
-    Status _write_one_row_as_csv(TupleRow* row);
-
-    // if buffer exceed the limit, write the data buffered in _plain_text_outstream via file_writer
-    // if eos, write the data even if buffer is not full.
-    Status _flush_plain_text_outstream(bool eos);
     void _init_profile();
 
     Status _create_file_writer();
@@ -97,22 +93,10 @@ private:
     const ResultFileOptions* _file_opts;
     const std::vector<ExprContext*>& _output_expr_ctxs;
 
-    // If the result file format is plain text, like CSV, this _file_writer is owned by this FileResultWriter.
-    // If the result file format is Parquet, this _file_writer is owned by _parquet_writer.
-    FileWriter* _file_writer = nullptr;
-    // parquet file writer
-    ParquetWriterWrapper* _parquet_writer = nullptr;
-    // Used to buffer the export data of plain text
-    // TODO(cmy): I simply use a stringstrteam to buffer the data, to avoid calling
-    // file writer's write() for every single row.
-    // But this cannot solve the problem of a row of data that is too large.
-    // For exampel: bitmap_to_string() may return large volumn of data.
-    // And the speed is relative low, in my test, is about 6.5MB/s.
-    std::stringstream _plain_text_outstream;
-    static const size_t OUTSTREAM_BUFFER_SIZE_BYTES;
+    Env* _env;
+    std::unique_ptr<Env> _owned_env;
+    std::unique_ptr<FileBuilder> _file_builder;
 
-    // current written bytes, used for split data
-    int64_t _current_written_bytes = 0;
     // the suffix idx of export file name, start at 0
     int _file_idx = 0;
 

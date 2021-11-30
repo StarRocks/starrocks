@@ -58,7 +58,6 @@ Status Compaction::do_compaction_impl() {
     TRACE_COUNTER_INCREMENT("input_segments_num", segments_num);
 
     _output_version = Version(_input_rowsets.front()->start_version(), _input_rowsets.back()->end_version());
-    _tablet->compute_version_hash_from_rowsets(_input_rowsets, &_output_version_hash);
 
     LOG(INFO) << "start " << compaction_name() << ". tablet=" << _tablet->full_name()
               << ", output version is=" << _output_version.first << "-" << _output_version.second;
@@ -110,7 +109,11 @@ Status Compaction::do_compaction_impl() {
 
     LOG(INFO) << "succeed to do " << compaction_name() << ". tablet=" << _tablet->full_name()
               << ", output_version=" << _output_version.first << "-" << _output_version.second
-              << ", segments=" << segments_num << ". elapsed time=" << watch.get_elapse_second() << "s.";
+              << ", input infos [segments=" << segments_num << ", rows=" << _input_row_num
+              << ", disk size=" << _input_rowsets_size << "]"
+              << ", output infos [segments=" << _output_rowset->num_segments()
+              << ", rows=" << _output_rowset->num_rows() << ", disk size=" << _output_rowset->data_disk_size() << "]"
+              << ". elapsed time=" << watch.get_elapse_second() << "s.";
 
     // warm-up this rowset
     auto st = _output_rowset->load();
@@ -135,7 +138,6 @@ Status Compaction::construct_output_rowset_writer() {
     context.tablet_schema = &(_tablet->tablet_schema());
     context.rowset_state = VISIBLE;
     context.version = _output_version;
-    context.version_hash = _output_version_hash;
     context.segments_overlap = NONOVERLAPPING;
     Status st = RowsetFactory::create_rowset_writer(context, &_output_rs_writer);
     if (!st.ok()) {
@@ -181,23 +183,24 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     while (true) {
+        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        Status status;
+        while (!bg_worker_stopped) {
 #ifndef BE_TEST
-        Status st = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
-        if (!st.ok()) {
-            LOG(WARNING) << "fail to execute compaction: " << st.message() << std::endl;
-            return Status::MemoryLimitExceeded(st.message());
-        }
+            status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
+            if (!status.ok()) {
+                LOG(WARNING) << "fail to execute compaction: " << status.message() << std::endl;
+                return status;
+            }
 #endif
 
-        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-        while (!bg_worker_stopped) {
             chunk->reset();
-            Status status = reader.get_next(chunk.get());
+            status = reader.get_next(chunk.get());
             if (!status.ok()) {
                 if (status.is_end_of_file()) {
                     break;
                 } else {
-                    return Status::InternalError("reader get_next error.");
+                    return Status::InternalError(fmt::format("reader get_next error:{}", status.to_string()));
                 }
             }
 

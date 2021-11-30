@@ -79,7 +79,7 @@ public:
                           const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
     OLAPStatus publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                           const Version& version, VersionHash version_hash);
+                           const Version& version);
 
     // publish_txn for updatable tablet
     OLAPStatus publish_txn2(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
@@ -101,8 +101,7 @@ public:
 
     // remove a txn from txn manager & persist rowset meta
     OLAPStatus publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                           SchemaHash schema_hash, const TabletUid& tablet_uid, const Version& version,
-                           VersionHash version_hash);
+                           SchemaHash schema_hash, const TabletUid& tablet_uid, const Version& version);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
     OLAPStatus rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,

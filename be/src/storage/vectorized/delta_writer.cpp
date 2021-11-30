@@ -7,12 +7,10 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/schema.h"
-#include "storage/schema_change.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/memtable.h"
-#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
@@ -164,8 +162,7 @@ Status DeltaWriter::_init() {
 }
 
 Status DeltaWriter::write(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();
@@ -191,8 +188,7 @@ Status DeltaWriter::_flush_memtable_async() {
 }
 
 Status DeltaWriter::flush_memtable_async() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();
@@ -231,8 +227,7 @@ void DeltaWriter::_reset_mem_table() {
 }
 
 Status DeltaWriter::close() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();
@@ -252,8 +247,7 @@ Status DeltaWriter::close() {
 }
 
 Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();
@@ -296,14 +290,12 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     }
     _delta_written_success = true;
 
-    const FlushStatistic& stat = _flush_token->get_stats();
-    LOG(INFO) << "Closed delta writer. tablet_id=" << _tablet->tablet_id() << " stats=" << stat;
+    LOG(INFO) << "Closed delta writer. tablet_id=" << _tablet->tablet_id() << " stats=" << _flush_token->get_stats();
     return Status::OK();
 }
 
 Status DeltaWriter::cancel() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();

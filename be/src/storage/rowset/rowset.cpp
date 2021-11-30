@@ -36,8 +36,7 @@ Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSh
           _refs_by_reader(0) {}
 
 Status Rowset::load() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
 
     // if the state is ROWSET_UNLOADING it means close() is called
     // and the rowset is already loaded, and the resource is not closed yet.
@@ -60,9 +59,8 @@ Status Rowset::load() {
     return Status::OK();
 }
 
-void Rowset::make_visible(Version version, VersionHash version_hash) {
+void Rowset::make_visible(Version version) {
     _rowset_meta->set_version(version);
-    _rowset_meta->set_version_hash(version_hash);
     _rowset_meta->set_rowset_state(VISIBLE);
     // update create time to the visible time,
     // it's used to skip recently published version during compaction
@@ -72,14 +70,13 @@ void Rowset::make_visible(Version version, VersionHash version_hash) {
         _rowset_meta->mutable_delete_predicate()->set_version(version.first);
         return;
     }
-    make_visible_extra(version, version_hash);
+    make_visible_extra(version);
 }
 
 void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id) {
     _rowset_meta->set_rowset_seg_id(rowset_seg_id);
     Version v(version, version);
     _rowset_meta->set_version(v);
-    _rowset_meta->set_version_hash(0);
     _rowset_meta->set_rowset_state(VISIBLE);
     // update create time to the visible time,
     // it's used to skip recently published version during compaction
@@ -89,7 +86,7 @@ void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id) {
         _rowset_meta->mutable_delete_predicate()->set_version(version);
         return;
     }
-    make_visible_extra(v, 0);
+    make_visible_extra(v);
 }
 
 } // namespace starrocks

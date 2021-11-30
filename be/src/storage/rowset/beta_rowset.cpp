@@ -210,6 +210,11 @@ public:
         return _iter->init_encoded_schema(dict_maps);
     }
 
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        return _iter->init_output_schema(unused_output_column_ids);
+    }
+
 protected:
     Status do_get_next(vectorized::Chunk* chunk) override { return _iter->get_next(chunk); }
     Status do_get_next(vectorized::Chunk* chunk, vector<uint32_t>* rowid) override {
@@ -250,6 +255,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     seg_options.reader_type = options.reader_type;
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
+    seg_options.unused_output_column_ids = options.unused_output_column_ids;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }
@@ -275,6 +281,9 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
 
     std::vector<vectorized::ChunkIteratorPtr> tmp_seg_iters;
     tmp_seg_iters.reserve(num_segments());
+    if (options.stats) {
+        options.stats->segments_read_count += num_segments();
+    }
     for (auto& seg_ptr : segments()) {
         if (seg_ptr->num_rows() == 0) {
             continue;

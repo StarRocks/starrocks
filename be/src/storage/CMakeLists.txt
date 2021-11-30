@@ -52,7 +52,6 @@ add_library(Olap STATIC
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
-    push_handler.cpp
     reader.cpp
     rowset_update_state.cpp
     update_compaction_state.cpp
@@ -61,7 +60,6 @@ add_library(Olap STATIC
     row_cursor.cpp
     version_graph.cpp
     schema.cpp
-    schema_change.cpp
     storage_engine.cpp
     data_dir.cpp
     short_key_index.cpp
@@ -89,6 +87,7 @@ add_library(Olap STATIC
     rowset/segment_v2/column_reader.cpp
     rowset/segment_v2/column_writer.cpp
     rowset/segment_v2/default_value_column_iterator.cpp
+    rowset/segment_v2/dictcode_column_iterator.cpp
     rowset/segment_v2/encoding_info.cpp
     rowset/segment_v2/scalar_column_iterator.cpp
     rowset/segment_v2/index_page.cpp

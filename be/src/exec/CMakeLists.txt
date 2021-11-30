@@ -38,7 +38,6 @@ set(EXEC_FILES
     local_file_reader.cpp
     scan_node.cpp
     select_node.cpp
-    text_converter.cpp
     sort_exec_exprs.cpp
     olap_common.cpp
     tablet_info.cpp
@@ -51,8 +50,8 @@ set(EXEC_FILES
     local_file_writer.cpp
     broker_writer.cpp
     parquet_reader.cpp
-    parquet_writer.cpp
-    vectorized/adapter_node.cpp
+    parquet_builder.cpp
+    plain_text_builder.cpp
     vectorized/aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp
@@ -182,6 +181,11 @@ set(EXEC_FILES
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
 )
+
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
 
 set(EXEC_FILES
     ${EXEC_FILES}

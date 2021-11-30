@@ -37,6 +37,10 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         return Status::OK();
     }
 
+    if (*chunk != nullptr) {
+        (*chunk)->reset();
+    }
+
     // TODO: merge small chunks to large chunk for optimization
     while (!_child_eos) {
         ChunkPtr input_chunk;
@@ -157,7 +161,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     }
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
-                    if ((*chunk)->num_rows() > 0) {
+                    if (*chunk != nullptr && (*chunk)->num_rows() > 0) {
                         break;
                     } else {
                         continue;
@@ -236,14 +240,20 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     // shared by sink operator factory and source operator factory
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(context->next_operator_id(), id(),
                                                                                  aggregator_factory);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
     operators_with_sink.emplace_back(sink_operator);
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
     auto source_operator = std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(), id(),
                                                                                      aggregator_factory);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
