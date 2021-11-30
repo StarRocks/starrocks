@@ -4763,6 +4763,15 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testCastDecimalZero() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "select (CASE WHEN CAST(t0.v1 AS BOOLEAN ) THEN 0.00 END) BETWEEN (0.07) AND (0.04) from t0;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  <slot 7> : CAST(6: if AS DECIMAL32(2,2))\n"));
+        Config.enable_decimal_v3 = false;
+    }
+
+    @Test
     public void testCountDistinctMultiColumns2() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem";
