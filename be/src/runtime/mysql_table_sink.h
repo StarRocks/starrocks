@@ -22,6 +22,7 @@
 #ifndef STARROCKS_BE_RUNTIME_MYSQL_TABLE_SINK_H
 #define STARROCKS_BE_RUNTIME_MYSQL_TABLE_SINK_H
 
+#include <memory>
 #include <vector>
 
 #include "common/status.h"
@@ -50,6 +51,8 @@ public:
 
     Status open(RuntimeState* state) override;
 
+    Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
+
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
     Status close(RuntimeState* state, Status exec_status) override;
@@ -57,16 +60,17 @@ public:
     RuntimeProfile* profile() override { return _profile; }
 
 private:
-    // owned by RuntimeState
     ObjectPool* _pool;
     const RowDescriptor& _row_desc;
     const std::vector<TExpr>& _t_output_expr;
+    int _batch_size;
 
     std::vector<ExprContext*> _output_expr_ctxs;
+
     MysqlConnInfo _conn_info;
     std::string _mysql_tbl;
-    MysqlTableWriter* _writer = nullptr;
 
+    std::unique_ptr<MysqlTableWriter> _writer;
     RuntimeProfile* _profile = nullptr;
 };
 
