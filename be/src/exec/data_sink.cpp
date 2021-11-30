@@ -111,13 +111,15 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         RETURN_IF_ERROR(status);
         break;
     }
-    case TDataSinkType::MCAST_DATA_STREAM_SINK: {
-        DCHECK(thrift_sink.__isset.mcast_stream_sink || thrift_sink.mcast_stream_sink.sinks.size() == 0)
+    case TDataSinkType::MULTI_CAST_DATA_STREAM_SINK: {
+        DCHECK(thrift_sink.__isset.multi_cast_stream_sink || thrift_sink.multi_cast_stream_sink.sinks.size() == 0)
                 << "Missing mcast stream sink.";
         auto mcast_data_stream_sink = std::make_unique<MCastDataStreamSink>(pool);
-        for (size_t i = 0; i < thrift_sink.mcast_stream_sink.sinks.size(); i++) {
-            const auto& sink = thrift_sink.mcast_stream_sink.sinks[i];
-            const auto& destinations = thrift_sink.mcast_stream_sink.destinations[i];
+        const auto& thrift_mcast_stream_sink = thrift_sink.multi_cast_stream_sink;
+
+        for (size_t i = 0; i < thrift_mcast_stream_sink.sinks.size(); i++) {
+            const auto& sink = thrift_mcast_stream_sink.sinks[i];
+            const auto& destinations = thrift_mcast_stream_sink.destinations[i];
             auto ret = create_data_stream_sink(pool, sink, row_desc, params, destinations);
             mcast_data_stream_sink->add_data_stream_sink(std::move(ret));
         }
