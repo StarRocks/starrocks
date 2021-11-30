@@ -67,7 +67,7 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
 
         auto ret = std::move(
                 create_data_stream_sink(pool, thrift_sink.stream_sink, row_desc, params, params.destinations));
-        auto mcast_data_stream_sink = std::make_unique<MCastDataStreamSink>(pool);
+        auto mcast_data_stream_sink = std::make_unique<MultiCastDataStreamSink>(pool);
         mcast_data_stream_sink->add_data_stream_sink(std::move(ret));
         *sink = std::move(mcast_data_stream_sink);
 
@@ -114,7 +114,7 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
     case TDataSinkType::MULTI_CAST_DATA_STREAM_SINK: {
         DCHECK(thrift_sink.__isset.multi_cast_stream_sink || thrift_sink.multi_cast_stream_sink.sinks.size() == 0)
                 << "Missing mcast stream sink.";
-        auto mcast_data_stream_sink = std::make_unique<MCastDataStreamSink>(pool);
+        auto mcast_data_stream_sink = std::make_unique<MultiCastDataStreamSink>(pool);
         const auto& thrift_mcast_stream_sink = thrift_sink.multi_cast_stream_sink;
 
         for (size_t i = 0; i < thrift_mcast_stream_sink.sinks.size(); i++) {

@@ -5,38 +5,38 @@ namespace starrocks {
 
 static Status kOnlyPipelinedEngine = Status::NotSupported("Don't support non-pipelined query engine");
 
-MCastDataStreamSink::MCastDataStreamSink(ObjectPool* pool) : _pool(pool), _profile(nullptr), _sinks() {}
+MultiCastDataStreamSink::MultiCastDataStreamSink(ObjectPool* pool) : _pool(pool), _profile(nullptr), _sinks() {}
 
-void MCastDataStreamSink::add_data_stream_sink(std::unique_ptr<DataStreamSender> data_stream_sink) {
+void MultiCastDataStreamSink::add_data_stream_sink(std::unique_ptr<DataStreamSender> data_stream_sink) {
     _sinks.emplace_back(std::move(data_stream_sink));
 }
 
-Status MCastDataStreamSink::init(const TDataSink& thrift_sink) {
+Status MultiCastDataStreamSink::init(const TDataSink& thrift_sink) {
     for (auto& s : _sinks) {
         RETURN_IF_ERROR(s->init(thrift_sink));
     }
     return Status::OK();
 }
 
-Status MCastDataStreamSink::prepare(RuntimeState* state) {
+Status MultiCastDataStreamSink::prepare(RuntimeState* state) {
     return kOnlyPipelinedEngine;
 }
 
-void MCastDataStreamSink::_create_profile() {
+void MultiCastDataStreamSink::_create_profile() {
     // todo(yan):
-    std::string title("MCastDataStreamSink");
+    std::string title("MultiCastDataStreamSink");
     _profile = _pool->add(new RuntimeProfile(title));
 }
 
-Status MCastDataStreamSink::open(RuntimeState* state) {
+Status MultiCastDataStreamSink::open(RuntimeState* state) {
     return kOnlyPipelinedEngine;
 }
 
-Status MCastDataStreamSink::close(RuntimeState* state, Status exec_status) {
+Status MultiCastDataStreamSink::close(RuntimeState* state, Status exec_status) {
     return kOnlyPipelinedEngine;
 }
 
-Status MCastDataStreamSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status MultiCastDataStreamSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
     return kOnlyPipelinedEngine;
 }
 } // namespace starrocks

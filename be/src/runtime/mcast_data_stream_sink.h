@@ -4,11 +4,11 @@
 
 namespace starrocks {
 
-class MCastDataStreamSink : public DataSink {
+class MultiCastDataStreamSink : public DataSink {
 public:
-    MCastDataStreamSink(ObjectPool* pool);
+    MultiCastDataStreamSink(ObjectPool* pool);
     void add_data_stream_sink(std::unique_ptr<DataStreamSender> data_stream_sink);
-    ~MCastDataStreamSink() override = default;
+    ~MultiCastDataStreamSink() override = default;
 
     Status init(const TDataSink& thrift_sink) override;
     Status prepare(RuntimeState* state) override;

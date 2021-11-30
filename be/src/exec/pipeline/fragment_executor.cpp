@@ -264,13 +264,13 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
                 sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(), _fragment_ctx);
         _fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
 
-    } else if (typeid(*datasink) == typeid(starrocks::MCastDataStreamSink)) {
+    } else if (typeid(*datasink) == typeid(starrocks::MultiCastDataStreamSink)) {
         // note(yan): steps are:
         // 1. create exchange[EX]
         // 2. create sink[A] at the end of current pipeline
         // 3. create source[B]/sink[C] pipelines.
         // A -> EX -> B/C
-        starrocks::MCastDataStreamSink* mcast_sink = down_cast<starrocks::MCastDataStreamSink*>(datasink);
+        starrocks::MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink);
         const auto& sinks = mcast_sink->get_sinks();
 
         // === create exchange ===
