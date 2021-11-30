@@ -177,17 +177,13 @@ public class SplitAggregateRule extends TransformationRule {
                     newExpressions.addAll(implementOneDistinctWithGroupByAgg(
                             context.getColumnRefFactory(), input, operator,
                             singleDistinctFunctionPos));
-                    // Array type not support two stage distinct
-                    // Count Distinct with multi columns not support two stage aggregate
-                    if (distinctColumns.stream().anyMatch(column -> column.getType().isArrayType()) ||
-                            operator.getAggregations().values().stream().
-                                    anyMatch(callOperator -> callOperator.isDistinct() &&
-                                            callOperator.getChildren().size() > 1)) {
+                    if (!canGenerateTwoStageAggregate(operator, distinctColumns)) {
                         return newExpressions;
                     }
                     newExpressions.addAll(implementTwoStageAgg(input, operator));
                     return newExpressions;
-                } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2) {
+                } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
+                        canGenerateTwoStageAggregate(operator, distinctColumns)) {
                     return implementTwoStageAgg(input, operator);
                 } else {
                     return implementOneDistinctWithGroupByAgg(
@@ -198,17 +194,13 @@ public class SplitAggregateRule extends TransformationRule {
                 if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0) {
                     newExpressions.addAll(implementOneDistinctWithOutGroupByAgg(context.getColumnRefFactory(),
                             input, operator, distinctColumns, singleDistinctFunctionPos));
-                    // Array type not support two stage distinct
-                    // Count Distinct with multi columns not support two stage aggregate
-                    if (distinctColumns.stream().anyMatch(column -> column.getType().isArrayType()) ||
-                            operator.getAggregations().values().stream().
-                                    anyMatch(callOperator -> callOperator.isDistinct() &&
-                                            callOperator.getChildren().size() > 1)) {
+                    if (!canGenerateTwoStageAggregate(operator, distinctColumns)) {
                         return newExpressions;
                     }
                     newExpressions.addAll(implementTwoStageAgg(input, operator));
                     return newExpressions;
-                } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2) {
+                } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
+                        canGenerateTwoStageAggregate(operator, distinctColumns)) {
                     return implementTwoStageAgg(input, operator);
                 } else {
                     return implementOneDistinctWithOutGroupByAgg(context.getColumnRefFactory(),
@@ -218,6 +210,19 @@ public class SplitAggregateRule extends TransformationRule {
         }
 
         return implementTwoStageAgg(input, operator);
+    }
+
+    private boolean canGenerateTwoStageAggregate(LogicalAggregationOperator operator,
+                                                 List<ColumnRefOperator> distinctColumns) {
+        // Array type not support two stage distinct
+        // Count Distinct with multi columns not support two stage aggregate
+        if (distinctColumns.stream().anyMatch(column -> column.getType().isArrayType()) ||
+                operator.getAggregations().values().stream().
+                        anyMatch(callOperator -> callOperator.isDistinct() &&
+                                callOperator.getChildren().size() > 1)) {
+            return false;
+        }
+        return true;
     }
 
     private CallOperator rewriteDistinctAggFn(CallOperator fnCall) {
