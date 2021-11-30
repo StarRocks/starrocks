@@ -289,14 +289,12 @@ public:
             ss << "invalid size info. size of element:" << _size_of_element << ", SIZE_OF_TYPE:" << SIZE_OF_TYPE;
             return Status::InternalError(ss.str());
         }
-        if (_options.use_cache) {
-            if (_data.size != _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE) {
-                std::stringstream ss;
-                ss << "Size information unmatched, _data.size:" << _data.size << ", _num_elements:" << _num_elements
-                   << ", expected size is "
-                   << _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE;
-                return Status::InternalError(ss.str());
-            }
+        if (_options.use_cache &&
+            _data.size != _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE) {
+            std::stringstream ss;
+            ss << "Size information unmatched, _data.size:" << _data.size << ", _num_elements:" << _num_elements
+               << ", expected size is " << _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE;
+            return Status::InternalError(ss.str());
         }
 
         _parsed = true;
@@ -375,11 +373,8 @@ public:
 
 private:
     inline const void* get_data(size_t pos) {
-        if (_options.use_cache) {
-            return &_data[pos];
-        } else {
-            return &_decoded[pos];
-        }
+        return (_options.use_cache) ? static_cast<const void*>(&_data[pos + BITSHUFFLE_PAGE_HEADER_SIZE])
+                                    : static_cast<const void*>(&_decoded[pos]);
     }
 
     void _copy_next_values(size_t n, void* data) {
@@ -403,8 +398,8 @@ private:
     }
 
     Status _decode_to(uint8_t* to) {
-        char* in = const_cast<char*>(&_data[BITSHUFFLE_PAGE_HEADER_SIZE]);
         if (!_options.use_cache) {
+            char* in = const_cast<char*>(&_data[BITSHUFFLE_PAGE_HEADER_SIZE]);
             int64_t bytes = bitshuffle::decompress_lz4(in, to, _num_element_after_padding, _size_of_element, 0);
             if (PREDICT_FALSE(bytes < 0)) {
                 // Ideally, this should not happen.
@@ -441,7 +436,7 @@ inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized:
     }
 
     if (_options.enable_direct_copy && !_is_decoded && *count >= _num_elements && _cur_index <= 0 &&
-        dst->capacity() - dst->size() >= _num_element_after_padding) {
+        dst->capacity() - dst->size() >= _num_element_after_padding && !_options.use_cache) {
         // if the page is not decoded and to read the whole page data
         // decode the page directly to dst to save mem copy from _decoded to dst
         // Now this can be used to optimize compaction
