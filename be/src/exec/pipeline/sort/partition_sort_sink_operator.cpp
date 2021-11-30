@@ -51,6 +51,7 @@ void PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc));
     RETURN_IF_ERROR(_sort_exec_exprs.open(state));
     return Status::OK();
@@ -58,6 +59,7 @@ Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
 
 void PartitionSortSinkOperatorFactory::close(RuntimeState* state) {
     _sort_exec_exprs.close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

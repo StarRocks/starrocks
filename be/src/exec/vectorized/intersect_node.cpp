@@ -223,12 +223,19 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
     pipeline::IntersectPartitionContextFactoryPtr intersect_partition_ctx_factory =
             std::make_shared<pipeline::IntersectPartitionContextFactory>(_tuple_id, _children.size() - 1);
 
+    const auto num_operators_generated = _children.size() + 1;
+    auto&& rc_rf_probe_collector =
+            std::make_shared<RcRfProbeCollector>(num_operators_generated, std::move(this->runtime_filter_collector()));
+
     // Use the first child to build the hast table by IntersectBuildSinkOperator.
     pipeline::OpFactories operators_with_intersect_build_sink = child(0)->decompose_to_pipeline(context);
     operators_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(
             operators_with_intersect_build_sink, _child_expr_lists[0]);
     operators_with_intersect_build_sink.emplace_back(std::make_shared<pipeline::IntersectBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[0]));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operators_with_intersect_build_sink.back().get(), context,
+                                           rc_rf_probe_collector);
     context->add_pipeline(operators_with_intersect_build_sink);
 
     // Use the rest children to erase keys from the hast table by IntersectProbeSinkOperator.
@@ -238,6 +245,9 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
                 operators_with_intersect_probe_sink, _child_expr_lists[i]);
         operators_with_intersect_probe_sink.emplace_back(std::make_shared<pipeline::IntersectProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[i], i - 1));
+        // Initialize OperatorFactory's fields involving runtime filters.
+        this->init_runtime_filter_for_operator(operators_with_intersect_probe_sink.back().get(), context,
+                                               rc_rf_probe_collector);
         context->add_pipeline(operators_with_intersect_probe_sink);
     }
 
@@ -245,6 +255,8 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
     pipeline::OpFactories operators_with_intersect_output_source;
     auto intersect_output_source = std::make_shared<pipeline::IntersectOutputSourceOperatorFactory>(
             context->next_operator_id(), id(), intersect_partition_ctx_factory, _children.size() - 1);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(intersect_output_source.get(), context, rc_rf_probe_collector);
     intersect_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
     operators_with_intersect_output_source.emplace_back(std::move(intersect_output_source));
 

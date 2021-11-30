@@ -26,17 +26,20 @@ namespace pipeline {
 class OlapChunkSource final : public ChunkSource {
 public:
     OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, std::vector<ExprContext*> conjunct_ctxs,
-                    RuntimeProfile* runtime_profile, const vectorized::RuntimeFilterProbeCollector& runtime_filters,
+                    std::vector<ExprContext*>& runtime_in_filters,
+                    vectorized::RuntimeFilterProbeCollector* runtime_bloom_filters,
                     std::vector<std::string> key_column_names, bool skip_aggregation,
-                    std::vector<std::string>* unused_output_columns)
+                    std::vector<std::string>* unused_output_columns, RuntimeProfile* runtime_profile)
             : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
-              _runtime_filters(runtime_filters),
+              _runtime_in_filters(runtime_in_filters),
+              _runtime_bloom_filters(*runtime_bloom_filters),
               _key_column_names(std::move(key_column_names)),
               _skip_aggregation(skip_aggregation),
               _unused_output_columns(unused_output_columns),
               _runtime_profile(runtime_profile) {
+        _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
         OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
         _scan_range = olap_morsel->get_scan_range();
     }
@@ -74,8 +77,8 @@ private:
 
     int32_t _tuple_id;
     std::vector<ExprContext*> _conjunct_ctxs;
-
-    const vectorized::RuntimeFilterProbeCollector& _runtime_filters;
+    const std::vector<ExprContext*>& _runtime_in_filters;
+    const vectorized::RuntimeFilterProbeCollector& _runtime_bloom_filters;
     std::vector<std::string> _key_column_names;
     bool _skip_aggregation;
     TInternalScanRange* _scan_range;

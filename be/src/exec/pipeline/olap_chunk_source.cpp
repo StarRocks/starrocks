@@ -34,7 +34,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     cm.tuple_desc = tuple_desc;
     cm.obj_pool = &_obj_pool;
     cm.key_column_names = &_key_column_names;
-    cm.runtime_filters = &_runtime_filters;
+    cm.runtime_filters = &_runtime_bloom_filters;
     cm.runtime_state = state;
 
     const TQueryOptions& query_options = state->query_options();

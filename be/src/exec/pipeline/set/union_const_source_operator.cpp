@@ -44,9 +44,8 @@ StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::R
 Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RowDescriptor row_desc;
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(exprs, state, row_desc));
+        RETURN_IF_ERROR(Expr::prepare(exprs, state, _row_desc));
     }
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {

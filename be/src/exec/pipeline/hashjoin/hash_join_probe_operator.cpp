@@ -4,9 +4,9 @@
 
 namespace starrocks {
 namespace pipeline {
-HashJoinProbeOperator::HashJoinProbeOperator(int32_t id, const string& name, int32_t plan_node_id,
-                                             HashJoinerPtr hash_joiner)
-        : OperatorWithDependency(id, name, plan_node_id), _hash_joiner(hash_joiner) {
+HashJoinProbeOperator::HashJoinProbeOperator(OperatorFactory* factory, int32_t id, const string& name,
+                                             int32_t plan_node_id, HashJoinerPtr hash_joiner)
+        : OperatorWithDependency(factory, id, name, plan_node_id), _hash_joiner(hash_joiner) {
     _hash_joiner->ref();
 }
 
@@ -56,7 +56,7 @@ void HashJoinProbeOperatorFactory::close(RuntimeState* state) {
 }
 
 OperatorPtr HashJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<HashJoinProbeOperator>(_id, _name, _plan_node_id,
+    return std::make_shared<HashJoinProbeOperator>(this, _id, _name, _plan_node_id,
                                                    _hash_joiner_factory->create(driver_sequence));
 }
 

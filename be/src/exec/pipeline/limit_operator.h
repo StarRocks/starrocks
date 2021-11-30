@@ -8,8 +8,8 @@ namespace starrocks {
 namespace pipeline {
 class LimitOperator final : public Operator {
 public:
-    LimitOperator(int32_t id, int32_t plan_node_id, int64_t limit)
-            : Operator(id, "limit", plan_node_id), _limit(limit) {}
+    LimitOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int64_t limit)
+            : Operator(factory, id, "limit", plan_node_id), _limit(limit) {}
 
     ~LimitOperator() override = default;
 
@@ -38,7 +38,7 @@ public:
     ~LimitOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LimitOperator>(_id, _plan_node_id, _limit);
+        return std::make_shared<LimitOperator>(this, _id, _plan_node_id, _limit);
     }
 
 private:

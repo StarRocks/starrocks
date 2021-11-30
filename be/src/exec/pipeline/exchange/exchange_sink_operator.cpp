@@ -214,13 +214,13 @@ void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* 
     state->log_error(_close_internal(state, fragment_ctx).get_error_msg());
 }
 
-ExchangeSinkOperator::ExchangeSinkOperator(int32_t id, int32_t plan_node_id, const std::shared_ptr<SinkBuffer>& buffer,
-                                           TPartitionType::type part_type,
+ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                           const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
                                            const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
                                            PlanNodeId dest_node_id,
                                            const std::vector<ExprContext*>& partition_expr_ctxs,
                                            FragmentContext* const fragment_ctx)
-        : Operator(id, "exchange_sink", plan_node_id),
+        : Operator(factory, id, "exchange_sink", plan_node_id),
           _buffer(buffer),
           _part_type(part_type),
           _destinations(destinations),
@@ -536,8 +536,8 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
           _fragment_ctx(fragment_ctx) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations, _sender_id,
-                                                  _dest_node_id, _partition_expr_ctxs, _fragment_ctx);
+    return std::make_shared<ExchangeSinkOperator>(this, _id, _plan_node_id, _buffer, _part_type, _destinations,
+                                                  _sender_id, _dest_node_id, _partition_expr_ctxs, _fragment_ctx);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
@@ -545,8 +545,7 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
-        RowDescriptor row_desc;
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, row_desc));
+        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
         RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     }
     return Status::OK();
@@ -554,6 +553,7 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
 
 void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_partition_expr_ctxs, state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

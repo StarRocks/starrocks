@@ -220,6 +220,7 @@ public:
         _has_null |= rf->_has_null;
         _bf.merge(rf->_bf);
     }
+
     virtual void concat(JoinRuntimeFilter* rf) {
         _has_null |= rf->_has_null;
         _hash_partition_bf.emplace_back(std::move(rf->_bf));

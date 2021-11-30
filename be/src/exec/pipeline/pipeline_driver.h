@@ -13,9 +13,9 @@
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/source_operator.h"
 #include "util/phmap/phmap.h"
-
 namespace starrocks {
 namespace pipeline {
 
@@ -29,7 +29,7 @@ enum DriverState : uint32_t {
     RUNNING = 2,
     INPUT_EMPTY = 3,
     OUTPUT_FULL = 4,
-    DEPENDENCIES_BLOCK = 5,
+    PRECONDITION_BLOCK = 5,
     FINISH = 6,
     CANCELED = 7,
     INTERNAL_ERROR = 8,
@@ -51,8 +51,8 @@ static inline std::string ds_to_string(DriverState ds) {
         return "INPUT_EMPTY";
     case OUTPUT_FULL:
         return "OUTPUT_FULL";
-    case DEPENDENCIES_BLOCK:
-        return "DEPENDENCIES_BLOCK";
+    case PRECONDITION_BLOCK:
+        return "PRECONDITION_BLOCK";
     case FINISH:
         return "FINISH";
     case CANCELED:
@@ -104,11 +104,12 @@ private:
 // is called exactly one time during whole operator
 enum OperatorStage {
     INIT = 0,
-    PREPARED = 4,
-    PROCESSING = 8,
-    FINISHING = 12,
-    FINISHED = 16,
-    CLOSED = 20,
+    PREPARED = 1,
+    PRECONDITION_NOT_READY = 2,
+    PROCESSING = 3,
+    FINISHING = 4,
+    FINISHED = 5,
+    CLOSED = 6,
 };
 
 class PipelineDriver {
@@ -147,12 +148,18 @@ public:
     StatusOr<DriverState> process(RuntimeState* runtime_state);
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
-    DriverState driver_state() { return _state; }
+    DriverState driver_state() const { return _state; }
     void set_driver_state(DriverState state) { _state = state; }
     Operators& operators() { return _operators; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
 
+    // drivers that waits for runtime filters' readiness must be marked PRECONDITION_NOT_READY and put into
+    // PipelineDriverPoller.
+    void mark_precondition_not_ready();
+    // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
+    // are finished.
+    void mark_precondition_ready(RuntimeState* runtime_state);
     void dispatch_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
@@ -175,9 +182,22 @@ public:
         return !_all_dependencies_ready;
     }
 
+    // return false if all the local runtime filters are ready, otherwise return false.
+    bool local_rf_block() {
+        if (_all_local_rf_ready) {
+            return false;
+        }
+        _all_local_rf_ready = std::all_of(_local_rf_holders.begin(), _local_rf_holders.end(),
+                                          [](auto* holder) { return holder->is_ready(); });
+        return !_all_local_rf_ready;
+    }
+    // return true if either dependencies_block or local_rf_block return true, which means that the current driver
+    // should wait for both hash table and local runtime filters' readiness.
+    bool is_precondition_block() { return dependencies_block() || local_rf_block(); }
+
     bool is_not_blocked() {
-        if (UNLIKELY(_state == DriverState::DEPENDENCIES_BLOCK)) {
-            return !dependencies_block();
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            return !is_precondition_block();
         } else if (_state == DriverState::OUTPUT_FULL) {
             return sink_operator()->need_input() || sink_operator()->is_finished();
         } else if (_state == DriverState::INPUT_EMPTY) {
@@ -201,6 +221,8 @@ private:
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
+    mutable std::vector<RuntimeFilterHolder*> _local_rf_holders;
+    bool _all_local_rf_ready = false;
     size_t _first_unfinished;
     QueryContext* _query_ctx;
     FragmentContext* _fragment_ctx;
@@ -222,8 +244,11 @@ private:
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
     RuntimeProfile::Counter* _pending_timer = nullptr;
+    RuntimeProfile::Counter* _precondition_block_timer = nullptr;
+    RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
+    MonotonicStopWatch* _precondition_block_timer_sw = nullptr;
 };
 
 } // namespace pipeline
