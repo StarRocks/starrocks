@@ -143,6 +143,7 @@ Status IntersectNode::open(RuntimeState* state) {
     }
 
     _hash_set_iterator = _hash_set->begin();
+    _mem_tracker->set(_hash_set->mem_usage());
     return Status::OK();
 }
 
