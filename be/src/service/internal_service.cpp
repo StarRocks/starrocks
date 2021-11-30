@@ -21,6 +21,7 @@
 
 #include "service/internal_service.h"
 
+#include "common/closure_guard.h"
 #include "common/config.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
@@ -119,7 +120,7 @@ void PInternalServiceImpl<T>::transmit_runtime_filter(google::protobuf::RpcContr
     VLOG_FILE << "transmit runtime filter: fragment_instance_id=" << print_id(request->finst_id())
               << " query_id=" << request->query_id() << ", is_partital=" << request->is_partial()
               << ", filter_id=" << request->filter_id();
-    brpc::ClosureGuard closure_guard(done);
+    ClosureGuard closure_guard(done);
     _exec_env->runtime_filter_worker()->receive_runtime_filter(*request);
     Status st;
     st.to_protobuf(response->mutable_status());
@@ -131,7 +132,7 @@ void PInternalServiceImpl<T>::tablet_writer_open(google::protobuf::RpcController
                                                  PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     VLOG_RPC << "tablet writer open, id=" << request->id() << ", index_id=" << request->index_id()
              << ", txn_id=" << request->txn_id();
-    brpc::ClosureGuard closure_guard(done);
+    ClosureGuard closure_guard(done);
     auto st = _exec_env->load_channel_mgr()->open(*request);
     if (!st.ok()) {
         LOG(WARNING) << "load channel open failed, message=" << st.get_error_msg() << ", id=" << request->id()
@@ -144,7 +145,7 @@ template <typename T>
 void PInternalServiceImpl<T>::exec_plan_fragment(google::protobuf::RpcController* cntl_base,
                                                  const PExecPlanFragmentRequest* request,
                                                  PExecPlanFragmentResult* response, google::protobuf::Closure* done) {
-    brpc::ClosureGuard closure_guard(done);
+    ClosureGuard closure_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto st = _exec_plan_fragment(cntl);
     if (!st.ok()) {
@@ -158,7 +159,7 @@ void PInternalServiceImpl<T>::tablet_writer_add_batch(google::protobuf::RpcContr
                                                       const PTabletWriterAddBatchRequest* request,
                                                       PTabletWriterAddBatchResult* response,
                                                       google::protobuf::Closure* done) {
-    brpc::ClosureGuard closure_guard(done);
+    ClosureGuard closure_guard(done);
     response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
 }
 
@@ -173,7 +174,7 @@ void PInternalServiceImpl<T>::tablet_writer_add_chunk(google::protobuf::RpcContr
     // this will influence query execution, because the pthreads under bthread may be
     // exhausted, so we put this to a local thread pool to process
     _tablet_worker_pool.offer([request, response, done, this]() {
-        brpc::ClosureGuard closure_guard(done);
+        ClosureGuard closure_guard(done);
         int64_t execution_time_ns = 0;
         int64_t wait_lock_time_ns = 0;
         {
@@ -199,7 +200,7 @@ void PInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcControll
                                                    google::protobuf::Closure* done) {
     VLOG_RPC << "tablet writer cancel, id=" << request->id() << ", index_id=" << request->index_id()
              << ", sender_id=" << request->sender_id();
-    brpc::ClosureGuard closure_guard(done);
+    ClosureGuard closure_guard(done);
     auto st = _exec_env->load_channel_mgr()->cancel(*request);
     if (!st.ok()) {
         LOG(WARNING) << "tablet writer cancel failed, id=" << request->id() << ", index_id=" << request->index_id()
@@ -252,7 +253,7 @@ template <typename T>
 void PInternalServiceImpl<T>::cancel_plan_fragment(google::protobuf::RpcController* cntl_base,
                                                    const PCancelPlanFragmentRequest* request,
                                                    PCancelPlanFragmentResult* result, google::protobuf::Closure* done) {
-    brpc::ClosureGuard closure_guard(done);
+    ClosureGuard closure_guard(done);
     TUniqueId tid;
     tid.__set_hi(request->finst_id().hi());
     tid.__set_lo(request->finst_id().lo());
@@ -313,7 +314,7 @@ void PInternalServiceImpl<T>::trigger_profile_report(google::protobuf::RpcContro
                                                      const PTriggerProfileReportRequest* request,
                                                      PTriggerProfileReportResult* result,
                                                      google::protobuf::Closure* done) {
-    brpc::ClosureGuard closure_guard(done);
+    ClosureGuard closure_guard(done);
     auto st = _exec_env->fragment_mgr()->trigger_profile_report(request);
     st.to_protobuf(result->mutable_status());
 }
@@ -321,7 +322,7 @@ void PInternalServiceImpl<T>::trigger_profile_report(google::protobuf::RpcContro
 template <typename T>
 void PInternalServiceImpl<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
                                        PProxyResult* response, google::protobuf::Closure* done) {
-    brpc::ClosureGuard closure_guard(done);
+    ClosureGuard closure_guard(done);
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
         Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
