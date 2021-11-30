@@ -56,6 +56,9 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visitConstant(ConstantOperator operator, Void context) {
+            if (operator.isNull()) {
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
+            }
             OptionalDouble value = doubleValueFromConstant(operator);
             if (value.isPresent()) {
                 return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
