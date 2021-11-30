@@ -145,8 +145,8 @@ public:
 
     void decrease_running_sinkers() {
         if (--_num_remaining_sinkers == 0) {
-            // To protect critical region for trigger_rpc_task, rpc task, and send_rpc,
-            // we should use lock here, even if _is_finishing is atomic bool.
+            // _is_finishing is used to return early for _try_to_trigger_rpc_task, RPC task _process, and _send_rpc.
+            // To protect critical region between them, we should use lock here, even if _is_finishing is atomic bool.
             std::lock_guard<std::mutex> l(_mutex);
             _is_finishing = true;
         }
