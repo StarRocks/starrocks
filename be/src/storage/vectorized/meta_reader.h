@@ -9,6 +9,7 @@
 #include "storage/rowset/rowset_reader.h"
 #include "storage/rowset/segment_v2/segment.h"
 #include "storage/tablet.h"
+#include "runtime/global_dicts.h"
 
 namespace starrocks {
 
@@ -20,13 +21,12 @@ namespace starrocks::vectorized {
 
 class Tablet;
 class SegmentMetaCollecter;
-const size_t LOW_CARDINALITY_BASE_SIZE = 256;
 static std::vector<std::string> FAKE_DICT_WORDS;
 static std::vector<Slice> generate_fake_dict_words() {
     std::vector<Slice> result;
-    FAKE_DICT_WORDS.resize(LOW_CARDINALITY_BASE_SIZE + 1);
-    result.resize(LOW_CARDINALITY_BASE_SIZE + 1);
-    for (size_t i = 0; i < LOW_CARDINALITY_BASE_SIZE + 1; i++) {
+    FAKE_DICT_WORDS.resize(DICT_DECODE_MAX_SIZE + 1);
+    result.resize(DICT_DECODE_MAX_SIZE + 1);
+    for (size_t i = 0; i < DICT_DECODE_MAX_SIZE + 1; i++) {
         FAKE_DICT_WORDS[i] = std::to_string(i);
         result[i] = FAKE_DICT_WORDS[i];
     }
