@@ -113,8 +113,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_QUERY_EXPIRE_SECONDS = "pipeline_query_expire_seconds";
-
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
 
@@ -308,11 +306,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
-
-    // a query that can not make any progress for more than pipelineQueryExpireSeconds
-    // (300s in default) will be canceled.
-    @VariableMgr.VarAttr(name = PIPELINE_QUERY_EXPIRE_SECONDS)
-    private int pipelineQueryExpireSeconds = 300;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
@@ -796,7 +789,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setPipeline_dop(pipelineDop);
-        tResult.setPipeline_query_expire_seconds(pipelineQueryExpireSeconds);
         return tResult;
     }
 
