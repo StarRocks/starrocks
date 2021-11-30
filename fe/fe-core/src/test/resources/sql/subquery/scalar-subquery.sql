@@ -364,7 +364,8 @@ INNER JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predi
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
-            VALUES (6)
+            EXCHANGE GATHER
+                VALUES (6)
 [end]
 
 [sql]
@@ -374,7 +375,8 @@ INNER JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predi
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
-            VALUES (2)
+            EXCHANGE GATHER
+                VALUES (2)
 [end]
 
 [sql]
@@ -384,7 +386,8 @@ INNER JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predi
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
-            VALUES (2)
+            EXCHANGE GATHER
+                VALUES (2)
 [end]
 
 [sql]
@@ -394,7 +397,8 @@ CROSS JOIN (join-predicate [null] post-join-predicate [3: v3 > cast(4: expr as b
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
-            VALUES (2)
+            EXCHANGE GATHER
+                VALUES (2)
 [end]
 
 [sql]
@@ -402,7 +406,8 @@ select v3 from t0 group by v3 having sum(v2) > (select * from (values(2)) t);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [4: sum(2: v2) > cast(5: expr as bigint(20))])
     ASSERT LE 1
-        VALUES (2)
+        EXCHANGE GATHER
+            VALUES (2)
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{4: sum(2: v2)=sum(4: sum(2: v2))}] group by [[3: v3]] having [null]
             EXCHANGE SHUFFLE[3]
@@ -462,11 +467,12 @@ LEFT OUTER JOIN (join-predicate [3: v3 = 5: v5] post-join-predicate [CASE WHEN 7
 select case when (select max(v4) from t1) > 1 then 2 else 3 end
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    AGGREGATE ([GLOBAL] aggregate [{6: max(3: v4)=max(6: max(3: v4))}] group by [[]] having [null]
-        EXCHANGE GATHER
-            AGGREGATE ([LOCAL] aggregate [{6: max(3: v4)=max(3: v4)}] group by [[]] having [null]
-                SCAN (columns[3: v4] predicate[null])
     VALUES (1)
+    EXCHANGE BROADCAST
+        AGGREGATE ([GLOBAL] aggregate [{6: max(3: v4)=max(6: max(3: v4))}] group by [[]] having [null]
+            EXCHANGE GATHER
+                AGGREGATE ([LOCAL] aggregate [{6: max(3: v4)=max(3: v4)}] group by [[]] having [null]
+                    SCAN (columns[3: v4] predicate[null])
 [end]
 
 [sql]
