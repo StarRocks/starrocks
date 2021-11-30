@@ -304,8 +304,8 @@ private:
     std::queue<TUniqueId, std::list<TUniqueId>> _events;
 
     // _is_rpc_task_active and _is_finishing are used in _try_to_trigger_rpc_task, and _send_rpc.
-    // - Write them with lock, to protect critical region between _try_to_trigger_rpc_task, and _send_rpc.
-    // - Read them without lock, whose visibility is guaranteed by atomic.
+    // - Write and read them with lock, to protect critical region between _try_to_trigger_rpc_task, and _send_rpc.
+    // - Read them without lock in is_finished() and ~SinkBuffer(), whose visibility is guaranteed by atomic.
     std::atomic<bool> _is_rpc_task_active = false;
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still RPC task or in-flight RPC running.
