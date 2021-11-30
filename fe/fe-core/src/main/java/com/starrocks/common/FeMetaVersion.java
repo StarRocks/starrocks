@@ -70,7 +70,7 @@ public final class FeMetaVersion {
     public static final int VERSION_34 = 34;
 
     // update the BE in cluster, because of forgetting
-    // to remove backend in cluster when drop backend or 
+    // to remove backend in cluster when drop backend or
     // decommission in latest versions.
     public static final int VERSION_35 = 35;
 
@@ -199,6 +199,8 @@ public final class FeMetaVersion {
     public static final int VERSION_91 = 91;
     // for mysql external table support resource
     public static final int VERSION_92 = 92;
+    // for LoadJob's partial_update
+    public static final int VERSION_93 = 93;
     // note: when increment meta version, should assign the latest version to VERSION_CURRENT
-    public static final int VERSION_CURRENT = VERSION_92;
+    public static final int VERSION_CURRENT = VERSION_93;
 }

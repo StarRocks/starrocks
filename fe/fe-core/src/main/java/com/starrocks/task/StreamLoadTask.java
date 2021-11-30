@@ -59,7 +59,6 @@ public class StreamLoadTask {
     private boolean stripOuterArray;
     private String jsonPaths;
     private String jsonRoot;
-    private boolean partialUpdate;
 
     // optional
     private List<ImportColumnDesc> columnExprDescs = Lists.newArrayList();
@@ -73,6 +72,7 @@ public class StreamLoadTask {
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private int timeout = Config.stream_load_default_timeout_second;
     private long loadMemLimit = 0;
+    private boolean partialUpdate = false;
 
     public StreamLoadTask(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -82,7 +82,6 @@ public class StreamLoadTask {
         this.jsonPaths = "";
         this.jsonRoot = "";
         this.stripOuterArray = false;
-        this.partialUpdate = false;
     }
 
     public TUniqueId getId() {
@@ -270,6 +269,7 @@ public class StreamLoadTask {
             jsonRoot = routineLoadJob.getJsonRoot();
         }
         stripOuterArray = routineLoadJob.isStripOuterArray();
+        partialUpdate = routineLoadJob.isPartialUpdate();
     }
 
     // used for stream load

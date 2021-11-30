@@ -149,6 +149,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private long maxBatchRows = -1;
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
+    private boolean partialUpdate = false;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -227,6 +228,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public String getTimezone() {
         return timezone;
+    }
+
+    public boolean isPartialUpdate() {
+        return partialUpdate;
     }
 
     public String getFormat() {
@@ -362,6 +367,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         strictMode = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.STRICT_MODE),
                 RoutineLoadJob.DEFAULT_STRICT_MODE,
                 LoadStmt.STRICT_MODE + " should be a boolean");
+
+        partialUpdate = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.PARTIAL_UPDATE),
+                false,
+                LoadStmt.PARTIAL_UPDATE + " should be a boolean");
 
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();

@@ -108,6 +108,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected double maxFilterRatio = 0;
     protected boolean strictMode = false; // default is false
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
+    protected boolean partialUpdate = false;
     @Deprecated
     protected boolean deleteFlag = false;
 
@@ -382,6 +383,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             } else if (ConnectContext.get() != null) {
                 // get timezone for session variable
                 timezone = ConnectContext.get().getSessionVariable().getTimeZone();
+            }
+
+            if (properties.containsKey(LoadStmt.PARTIAL_UPDATE)) {
+                partialUpdate = Boolean.valueOf(properties.get(LoadStmt.PARTIAL_UPDATE));
             }
         }
     }
@@ -1017,6 +1022,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             authorizationInfo.write(out);
         }
         Text.writeString(out, timezone);
+        out.writeBoolean(partialUpdate);
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -1058,6 +1064,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_61) {
             timezone = Text.readString(in);
+        }
+        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_93) {
+            partialUpdate = in.readBoolean();
         }
     }
 
