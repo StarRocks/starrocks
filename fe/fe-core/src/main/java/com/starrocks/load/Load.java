@@ -99,8 +99,6 @@ public class Load {
             }
 
             String originCol = Column.removeNamePrefix(column.getName());
-            //String originCol = column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX);
-            //originCol = column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1);
             if (columnExprMap.containsKey(originCol)) {
                 Expr mappingExpr = columnExprMap.get(originCol);
                 if (mappingExpr != null) {
