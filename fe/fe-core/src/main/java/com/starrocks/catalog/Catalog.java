@@ -3931,7 +3931,7 @@ public class Catalog {
         // check colocation properties
         try {
             String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            if (!Strings.isNullOrEmpty(colocateGroup )) {
+            if (!Strings.isNullOrEmpty(colocateGroup)) {
                 String fullGroupName = db.getId() + "_" + colocateGroup;
                 ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
                 if (groupSchema != null) {
