@@ -4325,6 +4325,41 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testCountDistinctMultiColumns2() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem";
+        String plan = getFragmentPlan(sql);
+        // check use 4 stage agg plan
+        Assert.assertTrue(plan.contains("5:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(18: count)"));
+        Assert.assertTrue(plan.contains(" 3:AGGREGATE (update serialize)\n" +
+                "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  2:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE"));
+
+
+        sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
+        plan = getFragmentPlan(sql);
+        // check use 3 stage agg plan
+        Assert.assertTrue(plan.contains(" 4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
+                "  |  group by: 2: L_PARTKEY\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testConstantTimeTNull() throws Exception {
         // check can get plan without exception
         String sql = "select TIMEDIFF(\"1969-12-30 21:44:11\", NULL) from t0;";
