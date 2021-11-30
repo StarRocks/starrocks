@@ -173,11 +173,10 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second.contains(" |  \n" +
-                "  |----30:EXCHANGE\n" +
+        Assert.assertTrue(replayPair.second.contains("|----18:EXCHANGE\n" +
                 "  |       cardinality: 6326\n" +
                 "  |    \n" +
-                "  14:OlapScanNode\n" +
+                "  2:OlapScanNode\n" +
                 "     table: customer, rollup: customer"));
     }
 
@@ -234,10 +233,8 @@ public class ReplayFromDumpTest {
                 "  |  - filter_id = 0, build_expr = (5: d_date_sk), remote = false\n" +
                 "  |  cardinality: 399330000\n" +
                 "  |  column statistics: \n" +
-                "  |  * inv_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
                 "  |  * inv_item_sk-->[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE\n" +
                 "  |  * inv_quantity_on_hand-->[0.0, 1000.0, 0.05000724964315228, 4.0, 1006.0] ESTIMATE\n" +
-                "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 334.80791666666664] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |       cardinality: 335"));

@@ -216,9 +216,9 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testExpression5() throws Exception {
         String sql = "select v1+20, case v2 when v3 then 1 else 0 end from t0 where v1 is null";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  1:Project\n"
-                + "  |  <slot 4> : 1: v1 + 20\n"
-                + "  |  <slot 5> : CASE2: v2 WHEN 3: v3 THEN 1 ELSE 0 END"));
+        Assert.assertTrue(planFragment.contains("1:Project\n" +
+                "  |  <slot 4> : 1: v1 + 20\n" +
+                "  |  <slot 5> : CASE 2: v2 WHEN 3: v3 THEN 1 ELSE 0 END"));
     }
 
     @Test
@@ -3861,11 +3861,13 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select MAX(x1) from (select v2 as x1 from t0 union select v3 from t0) as q";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+        Assert.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
                 "  |  output: max(8: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  6:EXCHANGE\n" +
+                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 1\n" +
                 " OUTPUT EXPRS:\n" +
@@ -3878,26 +3880,28 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  5:AGGREGATE (update serialize)\n" +
                 "  |  output: max(4: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:UNION"));
 
         sql = "select MIN(x1) from (select distinct v2 as x1 from t0) as q";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update finalize)\n" +
                 "  |  output: min(2: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
 
         sql = "select MIN(x1) from (select v2 as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update finalize)\n" +
                 "  |  output: min(2: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: t0"));
+                "  0:OlapScanNode"));
     }
 
     @Test
@@ -3944,10 +3948,12 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select SUM(x1) from (select v2 as x1 from t0 union select v3 from t0) as q";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+        Assert.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
                 "  |  group by: 4: v2\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  6:EXCHANGE\n" +
+                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
@@ -3959,16 +3965,18 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  5:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 4: v2\n"));
+                "  |  group by: 4: v2"));
 
         sql = "select SUM(x1) from (select v2 as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
     }
@@ -4035,47 +4043,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("INNER JOIN (BROADCAST)"));
         FeConstants.runningUnitTest = oldValue;
-        connectContext.getSessionVariable().setEnableReplicationJoin(false);
-    }
-
-    @Test
-    public void testReplicationJoinWithEmptyNode() throws Exception {
-        // check replicate join without exception
-        connectContext.getSessionVariable().setEnableReplicationJoin(true);
-        FeConstants.runningUnitTest = true;
-        String sql = "with cross_join as (\n" +
-                "  select * from \n" +
-                "  (SELECT \n" +
-                "      t0.v1, \n" +
-                "      t0.v2, \n" +
-                "      t0.v3\n" +
-                "    FROM \n" +
-                "      t0 \n" +
-                "    WHERE \n" +
-                "      false)\n" +
-                "  subt0 LEFT SEMI \n" +
-                "  JOIN \n" +
-                "    (SELECT \n" +
-                "      t2.v7, \n" +
-                "      t2.v8, \n" +
-                "      t2.v9\n" +
-                "    FROM \n" +
-                "      t2 \n" +
-                "    WHERE \n" +
-                "      false)\n" +
-                "  subt2 ON subt0.v3 = subt2.v8, \n" +
-                "  t1 \n" +
-                ")\n" +
-                "SELECT \n" +
-                "  DISTINCT cross_join.v1 \n" +
-                "FROM \n" +
-                "  t0 LEFT JOIN\n" +
-                "  cross_join\n" +
-                "  ON cross_join.v4 = t0.v2;";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("9:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (REPLICATED)"));
-        FeConstants.runningUnitTest = false;
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
@@ -4338,13 +4305,15 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         // check use 4 stage agg plan
         Assert.assertTrue(plan.contains("5:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(18: count)"));
+                "  |  output: count(18: count(distinct 15: L_SHIPMODE, 1: L_ORDERKEY))"));
         Assert.assertTrue(plan.contains("3:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (merge serialize)\n" +
                 "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
@@ -4353,9 +4322,10 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
         plan = getFragmentPlan(sql);
         // check use 3 stage agg plan
-        Assert.assertTrue(plan.contains(" 4:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan.contains("4:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
                 "  |  group by: 2: L_PARTKEY\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  3:AGGREGATE (merge serialize)\n" +
                 "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));
@@ -4372,13 +4342,15 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         // check use 4 stage agg plan
         Assert.assertTrue(plan.contains("5:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(18: count)"));
-        Assert.assertTrue(plan.contains(" 3:AGGREGATE (update serialize)\n" +
+                "  |  output: count(18: count(distinct 15: L_SHIPMODE, 1: L_ORDERKEY))"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
                 "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (merge serialize)\n" +
                 "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
@@ -4391,6 +4363,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(" 4:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
                 "  |  group by: 2: L_PARTKEY\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  3:AGGREGATE (merge serialize)\n" +
                 "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));

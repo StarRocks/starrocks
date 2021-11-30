@@ -178,6 +178,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "\n" +
                 "  1:EXCHANGE\n" +
                 "     limit: 5\n" +
+                "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 1\n" +
                 " OUTPUT EXPRS:\n" +
@@ -197,7 +198,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     cardinality=5\n" +
                 "     avgRowSize=10.0\n" +
                 "     numNodes=0\n" +
-                "     limit: 5"));
+                "     limit: 5\n" +
+                "     use vectorized: true"));
 
 
         sql = "insert into test_all_type select * from test_all_type";
@@ -551,9 +553,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("11:Project\n" +
                 "  |  output columns:\n" +
-                "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
                 "  |  25 <-> [25: L_EXTENDEDPRICE, DOUBLE, false]\n" +
                 "  |  26 <-> [26: L_DISCOUNT, DOUBLE, false]\n" +
+                "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
                 "  |  cardinality: 7650728\n" +
                 "  |  column statistics: \n" +
                 "  |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
@@ -567,9 +569,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  - filter_id = 1, build_expr = (10: O_ORDERKEY), remote = false\n" +
                 "  |  cardinality: 7650728\n" +
                 "  |  column statistics: \n" +
-                "  |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
                 "  |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
-                "  |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE\n" +
                 "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
                 "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE"));
     }
