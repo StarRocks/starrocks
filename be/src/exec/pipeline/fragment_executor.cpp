@@ -274,12 +274,12 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
         const auto& sinks = mcast_sink->get_sinks();
 
         // === create exchange ===
-        auto mcast_local_exchanger = std::make_shared<MCastLocalExchanger>(sinks.size());
+        auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(sinks.size());
 
         // === create sink op ====
         {
-            OpFactoryPtr sink_op = std::make_shared<MCastLocalExchangeSinkOperatorFactory>(context->next_operator_id(),
-                                                                                           mcast_local_exchanger);
+            OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
+                    context->next_operator_id(), mcast_local_exchanger);
             _fragment_ctx->pipelines().back()->add_op_factory(sink_op);
         }
 
@@ -290,8 +290,8 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
             // it's okary to set arbitrary dop.
             const size_t dop = 1;
             // source op
-            auto source_op = std::make_shared<MCastLocalExchangeSourceOperatorFactory>(context->next_operator_id(), i,
-                                                                                       mcast_local_exchanger);
+            auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(context->next_operator_id(),
+                                                                                           i, mcast_local_exchanger);
             source_op->set_degree_of_parallelism(dop);
 
             // sink op

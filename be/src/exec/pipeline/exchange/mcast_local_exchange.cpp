@@ -7,7 +7,7 @@
 namespace starrocks {
 namespace pipeline {
 
-MCastLocalExchanger::MCastLocalExchanger(size_t consumer_number)
+MultiCastLocalExchanger::MultiCastLocalExchanger(size_t consumer_number)
         : _mutex(),
           _consumer_number(consumer_number),
           _current_acc_chunk_size(0),
@@ -22,7 +22,7 @@ MCastLocalExchanger::MCastLocalExchanger(size_t consumer_number)
     }
 }
 
-MCastLocalExchanger::~MCastLocalExchanger() {
+MultiCastLocalExchanger::~MultiCastLocalExchanger() {
     while (_head != nullptr) {
         auto* t = _head->next;
         delete _head;
@@ -30,7 +30,7 @@ MCastLocalExchanger::~MCastLocalExchanger() {
     }
 }
 
-bool MCastLocalExchanger::can_push_chunk() const {
+bool MultiCastLocalExchanger::can_push_chunk() const {
     std::unique_lock l(_mutex);
     if ((_current_acc_chunk_size - _fast_acc_chunk_size) > config::vector_chunk_size) {
         return false;
@@ -38,7 +38,7 @@ bool MCastLocalExchanger::can_push_chunk() const {
     return true;
 }
 
-Status MCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) {
+Status MultiCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) {
     if (chunk->num_rows() == 0) return Status::OK();
 
     std::unique_lock l(_mutex);
@@ -58,7 +58,7 @@ Status MCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, int32_
     return Status::OK();
 }
 
-bool MCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const {
+bool MultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const {
     DCHECK(mcast_consumer_index < _consumer_number);
 
     std::unique_lock l(_mutex);
@@ -71,7 +71,7 @@ bool MCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const {
     return false;
 }
 
-StatusOr<vectorized::ChunkPtr> MCastLocalExchanger::pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) {
+StatusOr<vectorized::ChunkPtr> MultiCastLocalExchanger::pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) {
     DCHECK(mcast_consumer_index < _consumer_number);
 
     std::unique_lock l(_mutex);
@@ -89,14 +89,14 @@ StatusOr<vectorized::ChunkPtr> MCastLocalExchanger::pull_chunk(RuntimeState* sta
     return cell->chunk;
 }
 
-void MCastLocalExchanger::open_source_operator(int32_t mcast_consumer_index) {
+void MultiCastLocalExchanger::open_source_operator(int32_t mcast_consumer_index) {
     std::unique_lock l(_mutex);
     if (_opened_source_opcount[mcast_consumer_index] == 0) {
         _opened_source_number += 1;
     }
     _opened_source_opcount[mcast_consumer_index] += 1;
 }
-void MCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index) {
+void MultiCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index) {
     std::unique_lock l(_mutex);
     _opened_source_opcount[mcast_consumer_index] -= 1;
     if (_opened_source_opcount[mcast_consumer_index] == 0) {
@@ -105,16 +105,16 @@ void MCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index) {
     }
 }
 
-void MCastLocalExchanger::open_sink_operator() {
+void MultiCastLocalExchanger::open_sink_operator() {
     std::unique_lock l(_mutex);
     _opened_sink_number++;
 }
-void MCastLocalExchanger::close_sink_operator() {
+void MultiCastLocalExchanger::close_sink_operator() {
     std::unique_lock l(_mutex);
     _opened_sink_number--;
 }
 
-void MCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
+void MultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
     Cell* now = _progress[mcast_consumer_index];
     now = now->next;
     while (now) {
@@ -125,7 +125,7 @@ void MCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
     _update_progress();
 }
 
-void MCastLocalExchanger::_update_progress(Cell* fast) {
+void MultiCastLocalExchanger::_update_progress(Cell* fast) {
     if (fast != nullptr) {
         _fast_acc_chunk_size = std::max(_fast_acc_chunk_size, fast->acc_chunk_size);
     } else {
@@ -147,20 +147,20 @@ void MCastLocalExchanger::_update_progress(Cell* fast) {
 }
 
 // ===== source op =====
-Status MCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
+Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _exchanger->open_source_operator(_mcast_consumer_index);
     return Status::OK();
 }
 
-void MCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) {
+void MultiCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) {
     if (!_is_finished) {
         _is_finished = true;
         _exchanger->close_source_operator(_mcast_consumer_index);
     }
 }
 
-StatusOr<vectorized::ChunkPtr> MCastLocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<vectorized::ChunkPtr> MultiCastLocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     auto ret = _exchanger->pull_chunk(state, _mcast_consumer_index);
     if (ret.status().is_end_of_file()) {
         set_finishing(state);
@@ -168,34 +168,34 @@ StatusOr<vectorized::ChunkPtr> MCastLocalExchangeSourceOperator::pull_chunk(Runt
     return ret;
 }
 
-bool MCastLocalExchangeSourceOperator::has_output() const {
+bool MultiCastLocalExchangeSourceOperator::has_output() const {
     return _exchanger->can_pull_chunk(_mcast_consumer_index);
 }
 
 // ===== sink op =====
 
-Status MCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
+Status MultiCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _exchanger->open_sink_operator();
     return Status::OK();
 }
 
-bool MCastLocalExchangeSinkOperator::need_input() const {
+bool MultiCastLocalExchangeSinkOperator::need_input() const {
     return _exchanger->can_push_chunk();
 }
 
-void MCastLocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
+void MultiCastLocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
     if (!_is_finished) {
         _is_finished = true;
         _exchanger->close_sink_operator();
     }
 }
 
-StatusOr<vectorized::ChunkPtr> MCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<vectorized::ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Should not pull_chunk in mcast_local_exchange_sink");
 }
 
-Status MCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     return _exchanger->push_chunk(chunk, _driver_sequence);
 }
 

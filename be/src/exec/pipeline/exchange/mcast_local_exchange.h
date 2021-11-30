@@ -7,10 +7,10 @@ namespace starrocks {
 namespace pipeline {
 
 // ===== exchanger =====
-class MCastLocalExchanger {
+class MultiCastLocalExchanger {
 public:
-    MCastLocalExchanger(size_t consumer_number);
-    ~MCastLocalExchanger();
+    MultiCastLocalExchanger(size_t consumer_number);
+    ~MultiCastLocalExchanger();
     bool can_pull_chunk(int32_t mcast_consumer_index) const;
     bool can_push_chunk() const;
     Status push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence);
@@ -42,11 +42,11 @@ private:
 };
 
 // ===== source op =====
-class MCastLocalExchangeSourceOperator final : public SourceOperator {
+class MultiCastLocalExchangeSourceOperator final : public SourceOperator {
 public:
-    MCastLocalExchangeSourceOperator(int32_t id, int32_t mcast_consumer_index,
-                                     std::shared_ptr<MCastLocalExchanger> exchanger)
-            : SourceOperator(id, "mcast_local_exchange_source", -1),
+    MultiCastLocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t mcast_consumer_index,
+                                         std::shared_ptr<MultiCastLocalExchanger> exchanger)
+            : SourceOperator(factory, id, "mcast_local_exchange_source", -1),
               _mcast_consumer_index(mcast_consumer_index),
               _exchanger(exchanger) {}
 
@@ -63,35 +63,37 @@ public:
 private:
     bool _is_finished = false;
     int32_t _mcast_consumer_index;
-    std::shared_ptr<MCastLocalExchanger> _exchanger;
+    std::shared_ptr<MultiCastLocalExchanger> _exchanger;
 };
 
-class MCastLocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
+class MultiCastLocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    MCastLocalExchangeSourceOperatorFactory(int32_t id, int32_t mcast_consumer_index,
-                                            std::shared_ptr<MCastLocalExchanger> exchanger)
+    MultiCastLocalExchangeSourceOperatorFactory(int32_t id, int32_t mcast_consumer_index,
+                                                std::shared_ptr<MultiCastLocalExchanger> exchanger)
             : SourceOperatorFactory(id, "mcast_local_exchange_source", -1),
               _mcast_consumer_index(mcast_consumer_index),
               _exchanger(exchanger) {}
-    ~MCastLocalExchangeSourceOperatorFactory() override = default;
+    ~MultiCastLocalExchangeSourceOperatorFactory() override = default;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<MCastLocalExchangeSourceOperator>(_id, _mcast_consumer_index, _exchanger);
+        return std::make_shared<MultiCastLocalExchangeSourceOperator>(this, _id, _mcast_consumer_index, _exchanger);
     }
 
 private:
     int32_t _mcast_consumer_index;
-    std::shared_ptr<MCastLocalExchanger> _exchanger;
+    std::shared_ptr<MultiCastLocalExchanger> _exchanger;
 };
 
 // ===== sink op =====
 
-class MCastLocalExchangeSinkOperator final : public Operator {
+class MultiCastLocalExchangeSinkOperator final : public Operator {
 public:
-    MCastLocalExchangeSinkOperator(int32_t id, const int32_t driver_sequence,
-                                   std::shared_ptr<MCastLocalExchanger> exchanger)
-            : Operator(id, "mcast_local_exchange_sink", -1), _driver_sequence(driver_sequence), _exchanger(exchanger) {}
+    MultiCastLocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, const int32_t driver_sequence,
+                                       std::shared_ptr<MultiCastLocalExchanger> exchanger)
+            : Operator(factory, id, "mcast_local_exchange_sink", -1),
+              _driver_sequence(driver_sequence),
+              _exchanger(exchanger) {}
 
-    ~MCastLocalExchangeSinkOperator() override = default;
+    ~MultiCastLocalExchangeSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
 
@@ -110,22 +112,22 @@ public:
 private:
     bool _is_finished = false;
     const int32_t _driver_sequence;
-    const std::shared_ptr<MCastLocalExchanger> _exchanger;
+    const std::shared_ptr<MultiCastLocalExchanger> _exchanger;
 };
 
-class MCastLocalExchangeSinkOperatorFactory final : public OperatorFactory {
+class MultiCastLocalExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
-    MCastLocalExchangeSinkOperatorFactory(int32_t id, std::shared_ptr<MCastLocalExchanger> exchanger)
+    MultiCastLocalExchangeSinkOperatorFactory(int32_t id, std::shared_ptr<MultiCastLocalExchanger> exchanger)
             : OperatorFactory(id, "mcast_local_exchange_sink", -1), _exchanger(exchanger) {}
 
-    ~MCastLocalExchangeSinkOperatorFactory() override = default;
+    ~MultiCastLocalExchangeSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<MCastLocalExchangeSinkOperator>(_id, driver_sequence, _exchanger);
+        return std::make_shared<MultiCastLocalExchangeSinkOperator>(this, _id, driver_sequence, _exchanger);
     }
 
 private:
-    std::shared_ptr<MCastLocalExchanger> _exchanger;
+    std::shared_ptr<MultiCastLocalExchanger> _exchanger;
 };
 
 } // namespace pipeline
