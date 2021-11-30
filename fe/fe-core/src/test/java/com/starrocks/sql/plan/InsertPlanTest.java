@@ -59,6 +59,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     use vectorized: true"));
 
         explainString = getInsertExecPlan("insert into t0(v1) select v5 from t1");
+        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: v5 | 4: expr | 5: expr\n" +
                 "  PARTITION: RANDOM\n" +
@@ -82,8 +83,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=1.0\n" +
-                "     numNodes=0\n" +
-                "     use vectorized: true\n"));
+                "     numNodes=0"));
     }
 
     @Test
