@@ -33,6 +33,9 @@ namespace starrocks {
 static const uint32_t OLAP_MAX_COLUMN_SEGMENT_FILE_SIZE = 268435456;
 static const double OLAP_COLUMN_FILE_SEGMENT_SIZE_SCALE = 0.9;
 
+// data and index page size, default is 64k
+static const size_t OLAP_PAGE_SIZE = 65536;
+
 static const uint64_t OLAP_FIX_HEADER_MAGIC_NUMBER = 0;
 
 // the max length supported for varchar type

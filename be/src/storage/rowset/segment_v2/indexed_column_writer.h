@@ -51,7 +51,7 @@ class IndexPageBuilder;
 class PageBuilder;
 
 struct IndexedColumnWriterOptions {
-    size_t index_page_size = 64 * 1024;
+    size_t index_page_size = OLAP_PAGE_SIZE;
     bool write_ordinal_index = false;
     bool write_value_index = false;
     EncodingTypePB encoding = DEFAULT_ENCODING;
