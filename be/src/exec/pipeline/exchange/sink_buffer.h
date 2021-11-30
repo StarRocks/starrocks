@@ -138,16 +138,19 @@ public:
     bool is_finishing() const { return _is_finishing; }
 
     bool is_finished() const {
-        return _is_finishing                                               // SinkBuffer needn't input request anymore,
-               && !_is_rpc_task_active                                     // and there isn't running rpc task,
-               && _in_flight_rpc_num.load(std::memory_order_acquire) == 0; // and there isn't in-flight RPC.
+        if (!_is_finishing) {
+            return false;
+        }
+
+        // Here is the guarantee that
+        // 1. No new rpc task will be created after finishing stage
+        // 2. No new brpc process will be triggered after finishing stage
+        // Therefore, we just wait for existed rpc task and bprc process to be finished
+        return !_is_rpc_task_active && _in_flight_rpc_num.load(std::memory_order_acquire) == 0;
     }
 
     void decrease_running_sinkers() {
         if (--_num_remaining_sinkers == 0) {
-            // _is_finishing is used in _try_to_trigger_rpc_task, RPC task _process, and _send_rpc.
-            // To protect critical region between them, we should use lock here,
-            // even if _is_finishing is atomic bool.
             std::lock_guard<std::mutex> l(_mutex);
             _is_finishing = true;
         }
@@ -304,6 +307,9 @@ private:
     // but there may be still RPC task or in-flight RPC running.
     // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.
     std::atomic<bool> _is_finishing = false;
+    // _is_finishing and _is_rpc_task_active are used in _try_to_trigger_rpc_task, RPC task _process, and _send_rpc.
+    // - Write them with lock, to protect critical region between _try_to_trigger_rpc_task, _process, and _send_rpc.
+    // - Read them without lock, whose visibility is guaranteed by atomic.
     std::atomic<bool> _is_rpc_task_active = false;
     int32_t _expected_eos = 0;
 
