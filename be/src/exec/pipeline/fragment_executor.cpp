@@ -76,8 +76,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
-    if (query_options.__isset.pipeline_query_expire_seconds) {
-        _query_ctx->set_expire_seconds(std::max<int>(query_options.pipeline_query_expire_seconds, 1));
+    if (query_options.__isset.query_timeout) {
+        _query_ctx->set_expire_seconds(std::max<int>(query_options.query_timeout, 1));
     } else {
         _query_ctx->set_expire_seconds(300);
     }
