@@ -756,7 +756,19 @@ public class QueryAnalyzer {
         if (tableRef.getName() != null && Strings.isNullOrEmpty(tableName.getDb())) {
             Optional<CTERelation> withQuery = scope.getCteQueries(tableRef.getName().getTbl());
             if (withQuery.isPresent()) {
-                return withQuery.get();
+                CTERelation cteRelation = withQuery.get();
+                RelationFields withRelationFields = withQuery.get().getCteQuery().getOutputScope().getRelationFields();
+                ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+
+                for (int fieldIdx = 0; fieldIdx < withRelationFields.getAllFields().size(); ++fieldIdx) {
+                    Field originField = withRelationFields.getAllFields().get(fieldIdx);
+                    outputFields.add(new Field(
+                            originField.getName(), originField.getType(), tableName,
+                            originField.getOriginExpression()));
+                }
+
+                return new CTERelation(cteRelation.getCteId(), cteRelation.getName(), cteRelation.getCteQuery(),
+                        outputFields.build());
             }
         }
 

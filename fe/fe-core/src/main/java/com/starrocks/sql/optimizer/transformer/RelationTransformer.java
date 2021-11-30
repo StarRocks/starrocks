@@ -139,9 +139,18 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
     @Override
     public OptExprBuilder visitCTE(CTERelation node, ExpressionMapping context) {
         if (session.getSessionVariable().isCboCteReuse()) {
-            LogicalCTEConsumeOperator cteConsumer =
-                    new LogicalCTEConsumeOperator(String.valueOf(RelationId.of(node).hashCode()));
-            return new OptExprBuilder(cteConsumer, Collections.emptyList(), cteContext.get(node.getCteId()));
+            ExpressionMapping expressionMapping = cteContext.get(node.getCteId());
+            List<ColumnRefOperator> cteOutputs = new ArrayList<>();
+            Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
+            for (ColumnRefOperator columnRefOperator : expressionMapping.getFieldMappings()) {
+                ColumnRefOperator c = columnRefFactory.create(columnRefOperator, columnRefOperator.getType(),
+                        columnRefOperator.isNullable());
+                cteOutputs.add(c);
+                cteOutputColumnRefMap.put(c, columnRefOperator);
+            }
+
+            return new OptExprBuilder(new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap),
+                    Collections.emptyList(), new ExpressionMapping(expressionMapping.getScope(), cteOutputs));
         } else {
             OptExprBuilder builder = visit(node.getCteQuery());
             return new OptExprBuilder(builder.getRoot().getOp(), builder.getInputs(),

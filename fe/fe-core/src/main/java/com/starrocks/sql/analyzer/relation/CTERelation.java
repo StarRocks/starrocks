@@ -27,6 +27,10 @@ public class CTERelation extends Relation {
         return cteId;
     }
 
+    public String getName() {
+        return name;
+    }
+
     @Override
     public String toString() {
         return name == null ? cteId : name;
