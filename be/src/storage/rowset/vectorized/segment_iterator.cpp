@@ -349,6 +349,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             iter_opts.use_page_cache = _opts.use_page_cache;
             iter_opts.rblock = _rblock.get();
             iter_opts.check_dict_encoding = check_dict_enc;
+            iter_opts.reader_type = _opts.reader_type;
             RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
 
             // we have a global dict map but column was not encode by dict
