@@ -8,7 +8,7 @@
 |---|---|---|
 |log_roll_size_mb|1024|日志拆分的大小，每1G拆分一个日志|
 |sys_log_dir|StarRocksFe.STARROCKS_HOME_DIR/log|日志保留的目录|
-|sys_log_level|INFO|日志级别，INFO < WARNING < ERROR < FATAL|sys_log_roll_num|10|日志保留的数目|
+|sys_log_level|INFO|日志级别，INFO < WARN < ERROR < FATAL|sys_log_roll_num|10|日志保留的数目|
 |sys_log_verbose_modules|空字符串|日志打印的模块，写org.apache.starrocks.catalog就只打印catalog模块下的日志|
 |sys_log_roll_interval|DAY|日志拆分的时间间隔|
 |sys_log_delete_age|7d|日志删除的间隔|
