@@ -835,12 +835,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public boolean canDoReplicatedJoin() {
-        if (children.size() == 1) {
-            return getChild(0).canDoReplicatedJoin();
-        } else if (children.size() == 2){
-            return getChild(1).canDoReplicatedJoin();
-        } else {
-            return false;
+        boolean canDoReplicatedJoin = false;
+        for (PlanNode childNode : children) {
+            canDoReplicatedJoin |= childNode.canDoReplicatedJoin();
         }
+        return canDoReplicatedJoin;
     }
 }
