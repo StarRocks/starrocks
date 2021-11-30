@@ -33,8 +33,8 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
 public class CacheDictManager implements IDictManager {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
-    private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newHashSet();
-    private static final Set<Long> forbiddenDictTableIds = Sets.newHashSet();
+    private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newConcurrentHashSet();
+    private static final Set<Long> forbiddenDictTableIds = Sets.newConcurrentHashSet();
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
