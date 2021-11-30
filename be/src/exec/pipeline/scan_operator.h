@@ -19,10 +19,11 @@ namespace pipeline {
 class ScanOperator final : public SourceOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
-                 const std::vector<ExprContext*>& conjunct_ctxs)
+                 const std::vector<ExprContext*>& conjunct_ctxs, int64_t limit)
             : SourceOperator(factory, id, "olap_scan", plan_node_id),
               _olap_scan_node(olap_scan_node),
-              _conjunct_ctxs(conjunct_ctxs) {}
+              _conjunct_ctxs(conjunct_ctxs),
+              _limit(limit) {}
 
     ~ScanOperator() override = default;
 
@@ -58,20 +59,24 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     PriorityThreadPool* _io_threads = nullptr;
     std::vector<std::string> _unused_output_columns;
+    // Pass limit info to scan operator in order to improve sql:
+    // select * from table limit x;
+    int64_t _limit; // -1: no limit
 };
 
 class ScanOperatorFactory final : public SourceOperatorFactory {
 public:
     ScanOperatorFactory(int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
-                        std::vector<ExprContext*>&& conjunct_ctxs)
+                        std::vector<ExprContext*>&& conjunct_ctxs, int64_t limit)
             : SourceOperatorFactory(id, "olap_scan", plan_node_id),
               _olap_scan_node(olap_scan_node),
-              _conjunct_ctxs(std::move(conjunct_ctxs)) {}
+              _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _limit(limit) {}
 
     ~ScanOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ScanOperator>(this, _id, _plan_node_id, _olap_scan_node, _conjunct_ctxs);
+        return std::make_shared<ScanOperator>(this, _id, _plan_node_id, _olap_scan_node, _conjunct_ctxs, _limit);
     }
 
     // ScanOperator needs to attach MorselQueue.
@@ -83,6 +88,9 @@ public:
 private:
     const TOlapScanNode& _olap_scan_node;
     std::vector<ExprContext*> _conjunct_ctxs;
+    // Pass limit info to scan operator in order to improve sql:
+    // select * from table limit x;
+    int64_t _limit; // -1: no limit
 };
 
 } // namespace pipeline
