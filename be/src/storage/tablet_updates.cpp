@@ -1818,7 +1818,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
             << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
-    LOG(INFO) << "start convert_from. "
+    LOG(INFO) << "start convert_from."
               << " new tablet_id:" << _tablet.tablet_id() << " request_version:" << request_version
               << " #pending:" << _pending_commits.size();
     int64_t max_version = base_tablet->updates()->max_version();
