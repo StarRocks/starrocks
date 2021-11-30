@@ -36,7 +36,7 @@ enum TDataSinkType {
     EXPORT_SINK,
     OLAP_TABLE_SINK,
     MEMORY_SCRATCH_SINK,
-    MCAST_DATA_STREAM_SINK,
+    MULTI_CAST_DATA_STREAM_SINK,
 }
 
 enum TResultSinkType {
@@ -84,7 +84,7 @@ struct TDataStreamSink {
   3: optional bool ignore_not_found
 }
 
-struct TMCastDataStreamSink {
+struct TMultiCastDataStreamSink {
     1: required list<TDataStreamSink> sinks;
     2: required list< list<TPlanFragmentDestination> > destinations;
 }
@@ -141,5 +141,5 @@ struct TDataSink {
   6: optional TExportSink export_sink
   7: optional TOlapTableSink olap_table_sink
   8: optional TMemoryScratchSink memory_scratch_sink
-  9: optional TMCastDataStreamSink mcast_stream_sink
+  9: optional TMultiCastDataStreamSink multi_cast_stream_sink
 }
