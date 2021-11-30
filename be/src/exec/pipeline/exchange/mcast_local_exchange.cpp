@@ -82,6 +82,9 @@ StatusOr<vectorized::ChunkPtr> MultiCastLocalExchanger::pull_chunk(RuntimeState*
         return Status::OK();
     }
     cell = cell->next;
+    VLOG_FILE << "return chunk to " << mcast_consumer_index << ", row = " << cell->chunk->debug_row(0)
+              << ", size = " << cell->chunk->size();
+
     _progress[mcast_consumer_index] = cell;
     cell->used_count += 1;
 
