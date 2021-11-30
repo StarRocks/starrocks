@@ -950,7 +950,16 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalValues(PhysicalValuesOperator node, ExpressionContext context) {
-        outputInputProps.add(OutputInputProperty.of(distributeRequirements()));
+        // Pass through the requirements to the child
+        if (getRequiredLocalDesc().isPresent()) {
+            return visitOperator(node, context);
+        }
+        // Can not support required property directly, this will generate plan fragment like:
+        //            join(colocate)
+        //            /            \
+        //         Es/Hive     Union/Empty
+        // This PlanFragment would use ColocatedBackendSelector which is not been allowed.
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 

@@ -2723,18 +2723,17 @@ public class PlanFragmentTest extends PlanTestBase {
                 "with user_info as (select 2 as user_id, 'mike' as user_name), address as (select 1 as user_id, 'newzland' as address_name) \n" +
                         "select * from address a right join user_info b on b.user_id=a.user_id;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (COLOCATE)\n" +
+        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
-                "  |  colocate: true\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: expr = 3: expr"));
-        Assert.assertTrue(plan.contains("  |----1:UNION\n" +
-                "  |       constant exprs: \n" +
-                "  |           2 | 'mike'"));
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        Assert.assertTrue(plan.contains("2:UNION\n" +
                 "     constant exprs: \n" +
-                "         1 | 'newzland'\n" +
-                "     use vectorized: true"));
+                "         2 | 'mike'"));
+        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 'newzland'"));
     }
 
     @Test
@@ -2813,15 +2812,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 " union select join2.id from join1 RIGHT ANTI JOIN join2 on join1.id = join2.id " +
                 " and 1 > 2 WHERE (NOT (true)) group by join2.id ";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
-                "  |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
+        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
-                "  |  colocate: true\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 5: id = 2: id"));
-        Assert.assertTrue(plan.contains("  |----2:EMPTYSET\n" +
-                "  |       use vectorized: true"));
-        Assert.assertTrue(plan.contains("  7:EMPTYSET\n" +
-                "     use vectorized: true"));
+        Assert.assertTrue(plan.contains("  2:EMPTYSET\n"));
+        Assert.assertTrue(plan.contains("  8:EMPTYSET\n"));
     }
 
     @Test
