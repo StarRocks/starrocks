@@ -126,10 +126,11 @@ Status JsonScanner::_construct_json_types() {
         case TYPE_INT:
         case TYPE_SMALLINT:
         case TYPE_TINYINT: {
-            _json_types[column_pos] = TypeDescriptor{TYPE_BIGINT};
+            _json_types[column_pos] = TypeDescriptor{slot_desc->type().type};
             break;
         }
 
+        // Treat DOUBLE, FLOAT as VARCHAR.
         default: {
             auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             _json_types[column_pos] = std::move(varchar_type);
@@ -326,6 +327,8 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 
     std::vector<SlotDescriptor*> ordered_slot_descs(slot_descs);
     bool ordered = false;
+
+    chunk->reserve(rows_to_read);
 
     for (; _doc_stream_itr != _doc_stream.end() && rows_to_read > 0; ++_doc_stream_itr, --rows_to_read) {
         simdjson::ondemand::document_reference doc;
@@ -730,56 +733,7 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
     }
 
     case simdjson::ondemand::json_type::number: {
-        simdjson::ondemand::number_type tp;
-
-        auto err = value.get_number_type().get(tp);
-        if (UNLIKELY(err)) {
-            column->append_nulls(1);
-            break;
-        }
-
-        switch (tp) {
-        case simdjson::ondemand::number_type::signed_integer: {
-            int64_t i64;
-            err = value.get_int64().get(i64);
-            if (UNLIKELY(err)) {
-                column->append_nulls(1);
-                break;
-            }
-
-            column->append_numbers(&i64, sizeof(i64));
-            break;
-        }
-
-        case simdjson::ondemand::number_type::unsigned_integer: {
-            uint64_t u64;
-            err = value.get_uint64().get(u64);
-            if (UNLIKELY(err)) {
-                column->append_nulls(1);
-                break;
-            }
-
-            column->append_numbers(&u64, sizeof(u64));
-            break;
-        }
-
-        case simdjson::ondemand::number_type::floating_point_number: {
-            std::string_view sv;
-            err = simdjson::to_json_string(value).get(sv);
-            if (UNLIKELY(err)) {
-                column->append_nulls(1);
-                break;
-            }
-
-            column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
-            break;
-        }
-
-        default: {
-            column->append_nulls(1);
-            break;
-        }
-        }
+        _construct_numeric_column(value, column, type_desc);
         break;
     }
 
@@ -809,6 +763,80 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
         column->append_nulls(1);
         break;
     }
+    }
+}
+
+void JsonReader::_construct_numeric_column(simdjson::ondemand::value& value, Column* column,
+                                           const TypeDescriptor& type_desc) {
+    simdjson::ondemand::number_type tp;
+
+    auto err = value.get_number_type().get(tp);
+    if (UNLIKELY(err)) {
+        column->append_nulls(1);
+        return;
+    }
+
+    if (tp == simdjson::ondemand::number_type::signed_integer) {
+        int64_t i64 = 0;
+        err = value.get_int64().get(i64);
+        if (UNLIKELY(err)) {
+            column->append_nulls(1);
+            return;
+        }
+
+        switch (type_desc.type) {
+        case TYPE_BIGINT: {
+            column->append_numbers(&i64, sizeof(i64));
+            break;
+        }
+
+        case TYPE_INT: {
+            auto i32 = static_cast<int32_t>(i64 & 0xffffffff);
+            column->append_numbers(&i32, sizeof(i32));
+            break;
+        }
+
+        case TYPE_SMALLINT: {
+            auto i16 = static_cast<int16_t>(i64 & 0xffff);
+            column->append_numbers(&i16, sizeof(i16));
+            break;
+        }
+
+        case TYPE_TINYINT: {
+            auto i8 = static_cast<int8_t>(i64 & 0xff);
+            column->append_numbers(&i8, sizeof(i8));
+            break;
+        }
+
+        case TYPE_FLOAT:
+        case TYPE_DOUBLE: {
+            // Integer value, float/double column.
+            std::string_view sv;
+            err = simdjson::to_json_string(value).get(sv);
+            if (UNLIKELY(err)) {
+                column->append_nulls(1);
+                break;
+            }
+
+            column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
+            break;
+        }
+
+        default: {
+            column->append_nulls(1);
+            return;
+        }
+        }
+    } else {
+        // Float, double, integer out of range [9223372036854775808,18446744073709551616).
+        std::string_view sv;
+        err = simdjson::to_json_string(value).get(sv);
+        if (UNLIKELY(err)) {
+            column->append_nulls(1);
+            return;
+        }
+
+        column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
     }
 }
 
