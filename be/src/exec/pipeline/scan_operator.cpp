@@ -88,16 +88,16 @@ void ScanOperator::set_finishing(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     if (!_chunk_source) {
-        _pickup_morsel(state);
+        RETURN_IF_ERROR(_pickup_morsel(state));
         return nullptr;
     }
 
     DCHECK(_chunk_source != nullptr);
     if (!_chunk_source->has_output()) {
         if (_chunk_source->has_next_chunk()) {
-            _trigger_next_scan(state);
+            RETURN_IF_ERROR(_trigger_next_scan(state));
         } else {
-            _pickup_morsel(state);
+            RETURN_IF_ERROR(_pickup_morsel(state));
         }
         return nullptr;
     }
@@ -107,7 +107,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     // we can start the next scan task ahead of time to obtain better continuity
     if (_chunk_source->get_buffer_size() < (_batch_size >> 1) && !_is_io_task_active.load(std::memory_order_acquire) &&
         _chunk_source->has_next_chunk()) {
-        _trigger_next_scan(state);
+        RETURN_IF_ERROR(_trigger_next_scan(state));
     }
 
     eval_runtime_bloom_filters(chunk.value().get());
@@ -115,7 +115,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     return chunk;
 }
 
-void ScanOperator::_trigger_next_scan(RuntimeState* state) {
+Status ScanOperator::_trigger_next_scan(RuntimeState* state) {
     DCHECK(!_is_io_task_active.load(std::memory_order_acquire));
 
     PriorityThreadPool::Task task;
@@ -129,12 +129,14 @@ void ScanOperator::_trigger_next_scan(RuntimeState* state) {
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
-    if (!_io_threads->offer(task)) {
-        LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool shutdown";
+    if (!_io_threads->try_offer(task)) {
+        LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool overload";
+        return Status::RuntimeError("ScanOperator failed to offer io task due to thread pool overload");
     }
+    return Status::OK();
 }
 
-void ScanOperator::_pickup_morsel(RuntimeState* state) {
+Status ScanOperator::_pickup_morsel(RuntimeState* state) {
     DCHECK(_morsel_queue != nullptr);
     DCHECK(!_is_io_task_active.load(std::memory_order_acquire));
     if (_chunk_source) {
@@ -154,8 +156,9 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
                 runtime_bloom_filters(), _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation,
                 &_unused_output_columns, _runtime_profile.get());
         _chunk_source->prepare(state);
-        _trigger_next_scan(state);
+        RETURN_IF_ERROR(_trigger_next_scan(state));
     }
+    return Status::OK();
 }
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
