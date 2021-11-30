@@ -1,9 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.analysis;
 
+import com.amazonaws.thirdparty.joda.time.DateTime;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.FeConstants;
-import org.joda.time.DateTime;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.List;
 
@@ -11,6 +12,10 @@ import java.util.List;
 public class DefaultValueResolver {
 
     private final String INIT_TIME = DateTime.now().toString();
+
+    public static DefaultValueResolver build() {
+        return new DefaultValueResolver();
+    }
 
     // if the column have a default value or default expr can be calculated like now(). return true
     // else for a batch of every row different like uuid(). return false
@@ -25,17 +30,6 @@ public class DefaultValueResolver {
         return false;
     }
 
-    // only for check use, no guarantee of consistency
-    public static String getCalculatedDefaultValueForCheck(Column column) {
-        if (column.getDefaultValue() != null) {
-            return column.getDefaultValue();
-        }
-        if("now()".equalsIgnoreCase(column.getDefaultExpr().getExpr())) {
-            return DateTime.now().toString();
-        }
-        return null;
-    }
-
     // if the column have a default value or default expr can be calculated like now(). return calculated value
     // else for a batch of every row different like uuid(). return null
     // consistency requires upper-level assurance
@@ -44,7 +38,14 @@ public class DefaultValueResolver {
             return column.getDefaultValue();
         }
         if("now()".equalsIgnoreCase(column.getDefaultExpr().getExpr())) {
-            return INIT_TIME;
+            // current transaction time
+            if (ConnectContext.get() != null) {
+                return ConnectContext.get().getTransactionStartTime().toString();
+            } else {
+                // not available for asynchronous calls for example:
+                // alter table xx add column t0 datetime not null default CURRENT_TIMESTAMP;
+                return INIT_TIME;
+            }
         }
         return null;
     }
