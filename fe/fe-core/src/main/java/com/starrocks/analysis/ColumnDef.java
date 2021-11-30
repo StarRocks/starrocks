@@ -174,7 +174,8 @@ public class ColumnDef {
                         String.format("Cannot specify aggregate function '%s' for key column '%s'", aggregateType,
                                 name));
             }
-            if (!aggregateType.checkCompatibility(type.getPrimitiveType())) {
+            
+            if (!(aggregateType.checkCompatibility(type.getPrimitiveType()) || type.isArrayType())) {
                 throw new AnalysisException(
                         String.format("Invalid aggregate function '%s' for '%s'", aggregateType, name));
             }
