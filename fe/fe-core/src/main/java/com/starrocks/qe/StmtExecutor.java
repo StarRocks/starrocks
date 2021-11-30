@@ -348,6 +348,7 @@ public class StmtExecutor {
                     SqlBlackList.verifying(originSql);
                 }
 
+
                 int retryTime = Config.max_query_retry_time;
                 for (int i = 0; i < retryTime; i++) {
                     try {
