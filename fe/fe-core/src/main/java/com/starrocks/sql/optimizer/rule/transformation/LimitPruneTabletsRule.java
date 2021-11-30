@@ -30,6 +30,7 @@ public class LimitPruneTabletsRule extends TransformationRule {
         return instance;
     }
 
+    @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
