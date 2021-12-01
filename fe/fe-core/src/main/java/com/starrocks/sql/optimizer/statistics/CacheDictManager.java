@@ -33,8 +33,8 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
 public class CacheDictManager implements IDictManager {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
-    private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newHashSet();
-    private static final Set<Long> forbiddenDictTableIds = Sets.newHashSet();
+    private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newConcurrentHashSet();
+    private static final Set<Long> forbiddenDictTableIds = Sets.newConcurrentHashSet();
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
@@ -129,6 +129,10 @@ public class CacheDictManager implements IDictManager {
         ImmutableMap.Builder<String, Integer> dicts = ImmutableMap.builder();
         if (tGlobalDict.isSetIds()) {
             int dictSize = tGlobalDict.getIdsSize();
+            ColumnIdentifier columnIdentifier = new ColumnIdentifier(statisticData.tableId, statisticData.columnName);
+            if (dictSize > 256) {
+                noDictStringColumns.add(columnIdentifier);
+            }
             for (int i = 0; i < dictSize; ++i) {
                 dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
             }
@@ -189,6 +193,16 @@ public class CacheDictManager implements IDictManager {
     @Override
     public boolean hasGlobalDict(long tableId, String columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        if (noDictStringColumns.contains(columnIdentifier)) {
+            LOG.debug("{} isn't low cardinality string column", columnName);
+            return false;
+        }
+
+        if (forbiddenDictTableIds.contains(tableId)) {
+            LOG.debug("table {} forbit low cardinality global dict", tableId);
+            return false;
+        }
+
         return dictStatistics.asMap().containsKey(columnIdentifier);
     }
 
