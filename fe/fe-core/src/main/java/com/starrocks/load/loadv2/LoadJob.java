@@ -109,8 +109,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected boolean strictMode = false; // default is false
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     protected boolean partialUpdate = false;
-    @Deprecated
-    protected boolean deleteFlag = false;
+    // reuse deleteFlag as partialUpdate
+    // @Deprecated
+    // protected boolean deleteFlag = false;
 
     protected long createTimestamp = System.currentTimeMillis();
     protected long loadStartTimestamp = -1;
@@ -358,12 +359,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             }
 
             if (properties.containsKey(LoadStmt.LOAD_DELETE_FLAG_PROPERTY)) {
-                String flag = properties.get(LoadStmt.LOAD_DELETE_FLAG_PROPERTY);
-                if (flag.equalsIgnoreCase("true") || flag.equalsIgnoreCase("false")) {
-                    deleteFlag = Boolean.parseBoolean(flag);
-                } else {
-                    throw new DdlException("Value of delete flag is invalid");
-                }
+                throw new DdlException("delete flag is not supported");
+            }
+            if (properties.containsKey(LoadStmt.PARTIAL_UPDATE)) {
+                partialUpdate = Boolean.valueOf(properties.get(LoadStmt.PARTIAL_UPDATE));
             }
 
             if (properties.containsKey(LoadStmt.LOAD_MEM_LIMIT)) {
@@ -383,10 +382,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             } else if (ConnectContext.get() != null) {
                 // get timezone for session variable
                 timezone = ConnectContext.get().getSessionVariable().getTimeZone();
-            }
-
-            if (properties.containsKey(LoadStmt.PARTIAL_UPDATE)) {
-                partialUpdate = Boolean.valueOf(properties.get(LoadStmt.PARTIAL_UPDATE));
             }
         }
     }
@@ -1001,7 +996,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         out.writeLong(timeoutSecond);
         out.writeLong(loadMemLimit);
         out.writeDouble(maxFilterRatio);
-        out.writeBoolean(deleteFlag);
+        // reuse deleteFlag as partialUpdate
+        // out.writeBoolean(deleteFlag);
+        out.writeBoolean(partialUpdate);
         out.writeLong(createTimestamp);
         out.writeLong(loadStartTimestamp);
         out.writeLong(finishTimestamp);
@@ -1042,7 +1039,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         loadMemLimit = in.readLong();
         maxFilterRatio = in.readDouble();
-        deleteFlag = in.readBoolean();
+        // reuse deleteFlag as partialUpdate
+        // deleteFlag = in.readBoolean();
+        partialUpdate = in.readBoolean();
         createTimestamp = in.readLong();
         loadStartTimestamp = in.readLong();
         finishTimestamp = in.readLong();
@@ -1064,9 +1063,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_61) {
             timezone = Text.readString(in);
-        }
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_93) {
-            partialUpdate = in.readBoolean();
         }
     }
 
