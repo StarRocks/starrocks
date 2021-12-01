@@ -13,6 +13,15 @@
 #define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
 
+#define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_WITHOUT_STATUS(mem_tracker, st) \
+    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetterWithStatus(mem_tracker, &st)
+
+#define SCOPED_THREAD_LOCAL_MEM_TRACKER_OF_FUNC(mem_tracker, func, st)          \
+    do {                                                                        \
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_WITHOUT_STATUS(mem_tracker, st); \
+        st = func;                                                              \
+    } while (false)
+
 namespace starrocks {
 
 class TUniqueId;
@@ -111,6 +120,34 @@ public:
 
 private:
     MemTracker* _old_mem_tracker;
+};
+
+class CurrentThreadMemTrackerSetterWithStatus {
+public:
+    explicit CurrentThreadMemTrackerSetterWithStatus(MemTracker* new_mem_tracker, Status* status) {
+        _old_mem_tracker = tls_thread_status.set_mem_tracker(new_mem_tracker);
+        _status = status;
+    }
+
+    ~CurrentThreadMemTrackerSetterWithStatus() {
+        if (!_status->ok()) {
+            int64_t size = _status->err_msg_mem_size();
+            tls_thread_status.mem_release(size);
+            (void)tls_thread_status.set_mem_tracker(_old_mem_tracker);
+            tls_thread_status.mem_consume(size);
+        } else {
+            tls_thread_status.set_mem_tracker(_old_mem_tracker);
+        }
+    }
+
+    CurrentThreadMemTrackerSetterWithStatus(const CurrentThreadMemTrackerSetterWithStatus&) = delete;
+    void operator=(const CurrentThreadMemTrackerSetterWithStatus&) = delete;
+    CurrentThreadMemTrackerSetterWithStatus(CurrentThreadMemTrackerSetterWithStatus&&) = delete;
+    void operator=(CurrentThreadMemTrackerSetterWithStatus&&) = delete;
+
+private:
+    MemTracker* _old_mem_tracker = nullptr;
+    Status* _status = nullptr;
 };
 
 } // namespace starrocks

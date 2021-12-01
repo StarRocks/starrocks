@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <malloc.h>
+
 #include <string>
 #include <vector>
 
@@ -21,6 +23,14 @@ public:
     ~Status() noexcept {
         if (!is_moved_from(_state)) {
             delete[] _state;
+        }
+    }
+
+    int64_t err_msg_mem_size() const {
+        if (!is_moved_from(_state)) {
+            return malloc_usable_size((void*)_state);
+        } else {
+            return 0;
         }
     }
 
@@ -268,7 +278,7 @@ inline std::ostream& operator<<(std::ostream& os, const Status& st) {
     do {                                     \
         status = (stmt);                     \
         if (UNLIKELY(!status.ok())) {        \
-            return;                          \
+            return status;                   \
         }                                    \
     } while (false)
 

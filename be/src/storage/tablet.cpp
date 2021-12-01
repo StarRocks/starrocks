@@ -117,6 +117,14 @@ void Tablet::save_meta() {
 
 Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                                   const std::vector<Version>& versions_to_delete) {
+    Status st = Status::OK();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_OF_FUNC(ExecEnv::GetInstance()->tablet_meta_mem_tracker(),
+                                            _revise_tablet_meta(rowsets_to_clone, versions_to_delete), st);
+    return st;
+}
+
+Status Tablet::_revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+                                   const std::vector<Version>& versions_to_delete) {
     LOG(INFO) << "begin to clone data to tablet. tablet=" << full_name()
               << ", rowsets_to_clone=" << rowsets_to_clone.size()
               << ", versions_to_delete_size=" << versions_to_delete.size();
@@ -194,9 +202,13 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
 }
 
 Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    Status st = Status::OK();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_OF_FUNC(ExecEnv::GetInstance()->tablet_meta_mem_tracker(),
+                                            _add_rowset(rowset, need_persist), st);
+    return st;
+}
 
+Status Tablet::_add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     CHECK(!_updates) << "updatable tablet should not call add_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
@@ -235,8 +247,7 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
 }
 
 void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
 
     CHECK(!_updates) << "updatable tablet should not call modify_rowsets";
     // the compaction process allow to compact the single version, eg: version[4-4].
@@ -327,9 +338,13 @@ RowsetSharedPtr Tablet::_rowset_with_largest_size() {
 
 // add inc rowset should not persist tablet meta, because it will be persisted when publish txn.
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    Status st = Status::OK();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_OF_FUNC(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _add_inc_rowset(rowset),
+                                            st);
+    return st;
+}
 
+Status Tablet::_add_inc_rowset(const RowsetSharedPtr& rowset) {
     CHECK(!_updates) << "updatable tablet should not call add_inc_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);

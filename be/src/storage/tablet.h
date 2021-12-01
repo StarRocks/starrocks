@@ -248,6 +248,8 @@ protected:
     void on_shutdown() override;
 
 private:
+    Status _add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
+    Status _add_inc_rowset(const RowsetSharedPtr& rowset);
     Status _init_once_action();
     void _print_missed_versions(const std::vector<Version>& missed_versions) const;
     bool _contains_rowset(const RowsetId rowset_id);
@@ -260,6 +262,8 @@ private:
     void _delete_stale_rowset_by_version(const Version& version);
     Status _capture_consistent_rowsets_unlocked(const vector<Version>& version_path,
                                                 vector<RowsetSharedPtr>* rowsets) const;
+    Status _revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+                               const std::vector<Version>& versions_to_delete);
 
 private:
     friend class TabletUpdates;

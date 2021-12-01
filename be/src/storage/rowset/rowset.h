@@ -257,6 +257,8 @@ protected:
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
     Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
 
+    Status _load();
+
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
     virtual OLAPStatus init() = 0;
 

@@ -62,11 +62,11 @@ public:
     // TODO(lingbin): Other schema-change type do not need to be on the same disk. Because
     // there may be insufficient space on the current disk, which will lead the schema-change
     // task to be fail, even if there is enough space on other disks
-    Status create_tablet(const TCreateTabletReq& request, std::vector<DataDir*> stores);
+    Status create_tablet(const TCreateTabletReq& request, const std::vector<DataDir*>& stores);
 
     Status drop_tablet(TTabletId tablet_id, bool keep_state = false);
 
-    Status drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec);
+    void drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec);
 
     TabletSharedPtr find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir);
 
@@ -164,6 +164,19 @@ private:
 
     TabletManager(const TabletManager&) = delete;
     const TabletManager& operator=(const TabletManager&) = delete;
+
+    Status _create_tablet(const TCreateTabletReq& request, const std::vector<DataDir*>& stores);
+    Status _drop_tablet(TTabletId tablet_id, bool keep_state = false);
+
+    Status _start_trash_sweep();
+    Status _create_tablet_from_meta_snapshot(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
+                                             const std::string& schema_hash_path, bool restore = false);
+
+    Status _load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,
+                                  const std::string& header, bool update_meta, bool force = false, bool restore = false,
+                                  bool check_path = true);
+    Status _load_tablet_from_dir(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
+                                 const std::string& schema_hash_path, bool force = false, bool restore = false);
 
     // Add a tablet pointer to StorageEngine
     // If force, drop the existing tablet add this new one

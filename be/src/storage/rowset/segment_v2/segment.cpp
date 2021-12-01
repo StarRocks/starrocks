@@ -253,31 +253,35 @@ Status Segment::_parse_footer(size_t* footer_length_hint, SegmentFooterPB* foote
 }
 
 Status Segment::_load_index() {
-    return _load_index_once.call([this] {
-        // read and parse short key index page
-        std::unique_ptr<fs::ReadableBlock> rblock;
-        RETURN_IF_ERROR(_block_mgr->open_block(_fname, &rblock));
+    Status st = Status::OK();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_OF_FUNC(
+            ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _load_index_once.call([this] {
+                // read and parse short key index page
+                std::unique_ptr<fs::ReadableBlock> rblock;
+                RETURN_IF_ERROR(_block_mgr->open_block(_fname, &rblock));
 
-        PageReadOptions opts;
-        opts.use_page_cache = !config::disable_storage_page_cache;
-        opts.rblock = rblock.get();
-        opts.page_pointer = _short_key_index_page;
-        opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
-        OlapReaderStatistics tmp_stats;
-        opts.stats = &tmp_stats;
+                PageReadOptions opts;
+                opts.use_page_cache = !config::disable_storage_page_cache;
+                opts.rblock = rblock.get();
+                opts.page_pointer = _short_key_index_page;
+                opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
+                OlapReaderStatistics tmp_stats;
+                opts.stats = &tmp_stats;
 
-        Slice body;
-        PageFooterPB footer;
-        RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
+                Slice body;
+                PageFooterPB footer;
+                RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
 
-        DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
-        DCHECK(footer.has_short_key_page_footer());
+                DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
+                DCHECK(footer.has_short_key_page_footer());
 
-        _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
-        RETURN_IF_ERROR(_sk_index_decoder->parse(body, footer.short_key_page_footer()));
+                _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
+                RETURN_IF_ERROR(_sk_index_decoder->parse(body, footer.short_key_page_footer()));
 
-        return Status::OK();
-    });
+                return Status::OK();
+            }),
+            st);
+    return st;
 }
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {
