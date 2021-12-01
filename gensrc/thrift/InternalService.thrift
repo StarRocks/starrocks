@@ -80,6 +80,11 @@ struct TLoadErrorHubInfo {
     3: optional TBrokerErrorHubInfo broker_info;
 }
 
+enum TPipelineProfileMode {
+  BRIEF,
+  DETAIL
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   1: optional bool abort_on_error = 0
@@ -150,6 +155,8 @@ struct TQueryOptions {
   53: optional i32 runtime_filter_send_timeout_ms = 400;
   // For pipeline query engine
   54: optional i32 pipeline_dop;
+  // For pipeline query engine
+  55: optional TPipelineProfileMode pipeline_profile_mode;
 }
 
 

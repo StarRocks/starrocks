@@ -142,6 +142,9 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
 }
 
 void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
+    if (done) {
+        update_profile_by_mode(fragment_ctx, done);
+    }
     auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
@@ -158,5 +161,44 @@ void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, co
     };
 
     this->_exec_state_reporter->submit(std::move(report_task));
+}
+
+void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ctx, bool done) {
+    if (!done) {
+        return;
+    }
+
+    if (fragment_ctx->profile_mode() != TPipelineProfileMode::type::BRIEF) {
+        return;
+    }
+
+    auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+
+    std::vector<RuntimeProfile*> pipeline_profiles;
+    profile->get_children(&pipeline_profiles);
+    for (auto* pipeline_profile : pipeline_profiles) {
+        std::vector<RuntimeProfile*> pipeline_driver_profiles;
+        pipeline_profile->get_children(&pipeline_driver_profiles);
+
+        // Find the most time-consuming profile in all driver profiles
+        int64_t max_active_time = 0;
+        RuntimeProfile* pipeline_driver_profile_with_max_active_time = nullptr;
+        for (auto* pipeline_driver_profile : pipeline_driver_profiles) {
+            auto* active_timer = pipeline_driver_profile->get_counter("DriverActiveTime");
+            if (active_timer == nullptr) {
+                continue;
+            }
+            if (active_timer->value() > max_active_time) {
+                max_active_time = active_timer->value();
+                pipeline_driver_profile_with_max_active_time = pipeline_driver_profile;
+            }
+        }
+        if (pipeline_driver_profile_with_max_active_time == nullptr) {
+            continue;
+        }
+        pipeline_profile->remove_childs();
+        pipeline_profile->add_child(pipeline_driver_profile_with_max_active_time, true, nullptr);
+        pipeline_profile->add_info_string("ContainsAllPipelineDrivers", "false");
+    }
 }
 } // namespace starrocks::pipeline
