@@ -24,6 +24,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
+#include "util/string_parser.hpp"
 
 namespace starrocks::vectorized {
 
@@ -733,19 +734,12 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
     }
 
     case simdjson::ondemand::json_type::number: {
-        _construct_numeric_column(value, column, type_desc);
+        _construct_number_column(value, column, type_desc);
         break;
     }
 
     case simdjson::ondemand::json_type::string: {
-        std::string_view sv;
-        auto err = value.get_string().get(sv);
-        if (UNLIKELY(err)) {
-            column->append_nulls(1);
-            break;
-        }
-
-        column->append_strings(std::vector<Slice>{Slice(sv.data(), sv.length())});
+        _construct_string_column(value, column, type_desc);
         break;
     }
 
@@ -766,7 +760,7 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
     }
 }
 
-void JsonReader::_construct_numeric_column(simdjson::ondemand::value& value, Column* column,
+void JsonReader::_construct_number_column(simdjson::ondemand::value& value, Column* column,
                                            const TypeDescriptor& type_desc) {
     simdjson::ondemand::number_type tp;
 
@@ -837,6 +831,91 @@ void JsonReader::_construct_numeric_column(simdjson::ondemand::value& value, Col
         }
 
         column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
+    }
+}
+
+void JsonReader::_construct_string_column(simdjson::ondemand::value& value, Column* column,
+                                          const TypeDescriptor& type_desc) {
+    std::string_view sv;
+    auto err = value.get_string().get(sv);
+    if (UNLIKELY(err)) {
+        column->append_nulls(1);
+        return;
+    }
+
+    switch (type_desc.type) {
+    case TYPE_VARCHAR: {
+        column->append_strings(std::vector<Slice>{Slice(sv.data(), sv.length())});
+        break;
+    }
+
+    case TYPE_LARGEINT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto i128 = StringParser::string_to_int<__int128>(sv.data(), sv.length(), &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS) {
+            column->append_numbers(&i128, sizeof(i128));
+        } else {
+            column->append_nulls(1);
+        }
+        break;
+    }
+
+    case TYPE_BIGINT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto i64 = StringParser::string_to_int<int64_t>(sv.data(), sv.length(), &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS) {
+            column->append_numbers(&i64, sizeof(i64));
+        } else {
+            column->append_nulls(1);
+        }
+        break;
+    }
+
+    case TYPE_INT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto i32 = StringParser::string_to_int<int32_t>(sv.data(), sv.length(), &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS) {
+            column->append_numbers(&i32, sizeof(i32));
+        } else {
+            column->append_nulls(1);
+        }
+        break;
+    }
+
+    case TYPE_SMALLINT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto i16 = StringParser::string_to_int<int16_t>(sv.data(), sv.length(), &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS) {
+            column->append_numbers(&i16, sizeof(i16));
+        } else {
+            column->append_nulls(1);
+        }
+        break;
+    }
+
+    case TYPE_TINYINT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto i8 = StringParser::string_to_int<int16_t>(sv.data(), sv.length(), &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS) {
+            column->append_numbers(&i8, sizeof(i8));
+        } else {
+            column->append_nulls(1);
+        }
+        break;
+    }
+
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE: {
+        // Treat FLOAT/DOUBLE as VARCAHR. Casting would be done in _cast_chunk().
+        column->append_strings(std::vector<Slice>{Slice(sv.data(), sv.length())});
+        break;
+    }
+
+    default: {
+        column->append_nulls(1);
+        break;
+    }
+
     }
 }
 
