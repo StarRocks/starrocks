@@ -54,6 +54,7 @@ private:
     const size_t _batch_size = config::pipeline_io_buffer_size;
     mutable bool _is_finished = false;
     std::atomic_bool _is_io_task_active = false;
+    int32_t _io_task_retry_cnt = 0;
     const TOlapScanNode& _olap_scan_node;
     const std::vector<ExprContext*>& _conjunct_ctxs;
     PriorityThreadPool* _io_threads = nullptr;

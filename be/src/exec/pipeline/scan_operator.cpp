@@ -129,9 +129,16 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state) {
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
-    if (!_io_threads->try_offer(task)) {
-        LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool overload";
-        return Status::RuntimeError("ScanOperator failed to offer io task due to thread pool overload");
+    if (_io_threads->try_offer(task)) {
+        _io_task_retry_cnt = 0;
+    } else {
+        _is_io_task_active.store(false, std::memory_order_release);
+        // TODO(hcf) set a proper retry times
+        LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool overload, retryCnt="
+                     << _io_task_retry_cnt;
+        if (++_io_task_retry_cnt > 100) {
+            return Status::RuntimeError("ScanOperator failed to offer io task due to thread pool overload");
+        }
     }
     return Status::OK();
 }
