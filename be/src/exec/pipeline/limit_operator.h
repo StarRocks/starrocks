@@ -15,17 +15,18 @@ public:
 
     bool has_output() const override { return _cur_chunk != nullptr; }
 
-    bool need_input() const override { return _limit != 0 && _cur_chunk == nullptr; }
+    bool need_input() const override { return !_is_finished && _limit != 0 && _cur_chunk == nullptr; }
 
-    bool is_finished() const override { return _limit == 0 && _cur_chunk == nullptr; }
+    bool is_finished() const override { return (_is_finished || _limit == 0) && _cur_chunk == nullptr; }
 
-    void set_finishing(RuntimeState* state) override { _limit = 0; }
+    void set_finishing(RuntimeState* state) override { _is_finished = true; }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
+    bool _is_finished = false;
     std::atomic<int64_t>& _limit;
     vectorized::ChunkPtr _cur_chunk = nullptr;
 };
