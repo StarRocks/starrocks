@@ -45,6 +45,7 @@ static const std::string HTTP_JSONPATHS = "jsonpaths";
 static const std::string HTTP_JSONROOT = "json_root";
 static const std::string HTTP_IGNORE_JSON_SIZE = "ignore_json_size";
 static const std::string HTTP_STRIP_OUTER_ARRAY = "strip_outer_array";
+static const std::string HTTP_PARTIAL_UPDATE = "partial_update";
 
 static const std::string HTTP_100_CONTINUE = "100-continue";
 

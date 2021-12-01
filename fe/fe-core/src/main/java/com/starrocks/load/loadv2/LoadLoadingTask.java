@@ -61,6 +61,7 @@ public class LoadLoadingTask extends LoadTask {
     private final boolean strictMode;
     private final long txnId;
     private final String timezone;
+    private final boolean partialUpdate;
     // timeout of load job, in seconds
     private final long timeoutS;
 
@@ -70,7 +71,7 @@ public class LoadLoadingTask extends LoadTask {
                            BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
                            long jobDeadlineMs, long execMemLimit, boolean strictMode,
                            long txnId, LoadTaskCallback callback, String timezone,
-                           long timeoutS) {
+                           long timeoutS, boolean partialUpdate) {
         super(callback, TaskType.LOADING);
         this.db = db;
         this.table = table;
@@ -84,12 +85,13 @@ public class LoadLoadingTask extends LoadTask {
         this.retryTime = 2; // 2 times is enough
         this.timezone = timezone;
         this.timeoutS = timeoutS;
+        this.partialUpdate = partialUpdate;
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
         this.loadId = loadId;
         planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
-                strictMode, timezone, this.timeoutS);
+                strictMode, timezone, timeoutS, partialUpdate);
         planner.plan(loadId, fileStatusList, fileNum);
     }
 
