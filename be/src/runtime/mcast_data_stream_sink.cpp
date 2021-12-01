@@ -15,6 +15,7 @@ Status MultiCastDataStreamSink::init(const TDataSink& thrift_sink) {
     for (auto& s : _sinks) {
         RETURN_IF_ERROR(s->init(thrift_sink));
     }
+    _create_profile();
     return Status::OK();
 }
 
@@ -23,9 +24,11 @@ Status MultiCastDataStreamSink::prepare(RuntimeState* state) {
 }
 
 void MultiCastDataStreamSink::_create_profile() {
-    // todo(yan):
     std::string title("MultiCastDataStreamSink");
     _profile = _pool->add(new RuntimeProfile(title));
+    for (auto& s : _sinks) {
+        _profile->add_child(s->profile(), true, nullptr);
+    }
 }
 
 Status MultiCastDataStreamSink::open(RuntimeState* state) {
