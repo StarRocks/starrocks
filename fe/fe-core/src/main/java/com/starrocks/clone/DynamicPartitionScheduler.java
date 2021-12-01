@@ -187,11 +187,6 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                 partitionProperties
                         .put("replication_num", String.valueOf(dynamicPartitionProperty.getReplicationNum()));
             }
-            Map<String, String> tableProperty = olapTable.getTableProperty().getProperties();
-            if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                partitionProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
-            }
             String partitionName =
                     dynamicPartitionProperty.getPrefix() + DynamicPartitionUtil.getFormattedPartitionName(
                             dynamicPartitionProperty.getTimeZone(), prevBorder, dynamicPartitionProperty.getTimeUnit());

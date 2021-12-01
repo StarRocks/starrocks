@@ -3399,6 +3399,11 @@ public class Catalog {
         if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
             sourceProperties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, olapTable.isInMemory().toString());
         }
+        Map<String, String> tableProperty = olapTable.getTableProperty().getProperties();
+        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            sourceProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
         return sourceProperties;
     }
 
@@ -3915,10 +3920,12 @@ public class Catalog {
             // use table name as this single partition name
             long partitionId = partitionNameToId.get(tableName);
             DataProperty dataProperty = null;
-            boolean hasMedium = stmt.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             try {
-                dataProperty = PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(),
-                        DataProperty.DEFAULT_DATA_PROPERTY);
+                boolean hasMedium = false;
+                if (properties != null) {
+                    hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                }
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
                 if (hasMedium) {
                     olapTable.setStorageMedium(dataProperty.getStorageMedium());
                 }
@@ -4032,8 +4039,11 @@ public class Catalog {
                     try {
                         // just for remove entries in stmt.getProperties(),
                         // and then check if there still has unknown properties
-                        boolean hasMedium = stmt.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
-                        DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(),
+                        boolean hasMedium = false;
+                        if (properties != null) {
+                            hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                        }
+                        DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                                 DataProperty.DEFAULT_DATA_PROPERTY);
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
                         if (hasMedium) {
