@@ -146,7 +146,12 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
     _params.profile = _scan_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
-    _params.chunk_size = config::vector_chunk_size;
+    // Improve for select * from table limit x, x is small
+    if (_limit != -1 && _limit < config::vector_chunk_size) {
+        _params.chunk_size = _limit;
+    } else {
+        _params.chunk_size = config::vector_chunk_size;
+    }
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<vectorized::ColumnPredicate*> preds;
@@ -304,6 +309,10 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
                 ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
         if (!_status.ok()) {
+            // end of file is normal case, need process chunk
+            if (_status.is_end_of_file()) {
+                _chunk_buffer.put(std::move(chunk));
+            }
             break;
         }
         _chunk_buffer.put(std::move(chunk));
@@ -363,6 +372,11 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
             DCHECK_CHUNK(chunk);
         }
     } while (chunk->num_rows() == 0);
+    _update_realtime_counter(chunk);
+    // Improve for select * from table limit x, x is small
+    if (_limit != -1 && _num_rows_read >= _limit) {
+        return Status::EndOfFile("limit reach");
+    }
     return Status::OK();
 }
 
@@ -373,6 +387,17 @@ Status OlapChunkSource::close(RuntimeState* state) {
     _predicate_free_pool.clear();
     _dict_optimize_parser.close(state);
     return Status::OK();
+}
+
+void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
+    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
+    _compressed_bytes_read += _reader->stats().compressed_bytes_read;
+    _reader->mutable_stats()->compressed_bytes_read = 0;
+
+    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
+    _raw_rows_read += _reader->stats().raw_rows_read;
+    _reader->mutable_stats()->raw_rows_read = 0;
+    _num_rows_read += chunk->num_rows();
 }
 
 void OlapChunkSource::_update_counter() {

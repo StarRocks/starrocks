@@ -552,7 +552,7 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     auto scan_operator = std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
-                                                               std::move(_conjunct_ctxs));
+                                                               std::move(_conjunct_ctxs), limit());
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
     auto& morsel_queues = context->fragment_context()->morsel_queues();
