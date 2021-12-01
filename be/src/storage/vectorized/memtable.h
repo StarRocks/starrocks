@@ -49,7 +49,7 @@ private:
 
     void _aggregate(bool is_final);
 
-    void _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);
+    Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);
 
     friend class SortHelper;
 
