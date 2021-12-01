@@ -8,7 +8,7 @@ namespace starrocks {
 namespace pipeline {
 class LimitOperator final : public Operator {
 public:
-    LimitOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int64_t limit)
+    LimitOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, std::atomic<int64_t>& limit)
             : Operator(factory, id, "limit", plan_node_id), _limit(limit) {}
 
     ~LimitOperator() override = default;
@@ -26,7 +26,7 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    int64_t _limit = 0;
+    std::atomic<int64_t>& _limit;
     vectorized::ChunkPtr _cur_chunk = nullptr;
 };
 
@@ -42,7 +42,7 @@ public:
     }
 
 private:
-    int64_t _limit = 0;
+    std::atomic<int64_t> _limit;
 };
 
 } // namespace pipeline
