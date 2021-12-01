@@ -2,16 +2,15 @@
 
 #include "exec/vectorized/file_scan_node.h"
 
+#include <bvar/bvar.h>
+
 #include <chrono>
 #include <sstream>
 
 #include "column/chunk.h"
 #include "common/object_pool.h"
-#include "env/compressed_file.h"
 #include "env/env.h"
 #include "env/env_broker.h"
-#include "env/env_stream_pipe.h"
-#include "env/env_util.h"
 #include "exec/vectorized/csv_scanner.h"
 #include "exec/vectorized/json_scanner.h"
 #include "exec/vectorized/orc_scanner.h"
@@ -25,6 +24,8 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
+
+bvar::Adder<int> file_scan_node_pending_chunks("starrocks", "file_scan_node_pending_chunks");
 
 FileScanNode::FileScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
@@ -130,6 +131,7 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         if (!_chunk_queue.empty()) {
             temp_chunk = _chunk_queue.front();
             _chunk_queue.pop_front();
+            file_scan_node_pending_chunks << -1;
         }
     }
 
@@ -179,6 +181,7 @@ Status FileScanNode::close(RuntimeState* state) {
 
     while (!_chunk_queue.empty()) {
         _chunk_queue.pop_front();
+        file_scan_node_pending_chunks << -1;
     }
 
     return ExecNode::close(state);
@@ -260,6 +263,7 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
                 return Status::Cancelled("Cancelled FileScanNode::scanner_scan");
             }
             // Queue size Must be smaller than _max_queue_size
+            file_scan_node_pending_chunks << 1;
             _chunk_queue.push_back(std::move(temp_chunk));
 
             // Notify reader to

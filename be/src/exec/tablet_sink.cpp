@@ -21,6 +21,8 @@
 
 #include "exec/tablet_sink.h"
 
+#include <bvar/bvar.h>
+
 #include <memory>
 #include <sstream>
 
@@ -43,6 +45,8 @@
 #include "util/defer_op.h"
 #include "util/monotime.h"
 #include "util/uid_util.h"
+
+static bvar::Adder<int> g_tablet_sink_pending_chunk("starrocks", "tablet_sink_pending_chunks");
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
 static const uint8_t VALID_SEL_OK = 0x1;
@@ -248,6 +252,7 @@ Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_id
             _mem_tracker->consume(_cur_chunk->memory_usage());
             _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
             _pending_batches_num++;
+            g_tablet_sink_pending_chunk << 1;
         }
         _cur_chunk = chunk->clone_empty_with_slot();
         _cur_add_chunk_request.clear_tablet_ids();
@@ -273,6 +278,7 @@ Status NodeChannel::mark_close() {
         _mem_tracker->consume(_cur_chunk->memory_usage());
         _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
         _pending_batches_num++;
+        g_tablet_sink_pending_chunk << 1;
     }
 
     _eos_is_produced = true;
@@ -342,6 +348,7 @@ int NodeChannel::try_send_chunk_and_fetch_status() {
             _pending_chunks.pop();
             _mem_tracker->release(send_chunk.first->memory_usage());
             _pending_batches_num--;
+            g_tablet_sink_pending_chunk << -1;
         }
 
         auto chunk = std::move(send_chunk.first);
@@ -397,6 +404,7 @@ void NodeChannel::clear_all_batches() {
     std::lock_guard<std::mutex> lg(_pending_batches_lock);
     while (!_pending_chunks.empty()) {
         _pending_chunks.pop();
+        g_tablet_sink_pending_chunk << -1;
     }
     if (_cur_chunk != nullptr) {
         _cur_chunk.reset();
