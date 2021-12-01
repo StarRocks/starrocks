@@ -197,7 +197,8 @@ public class InsertPlanner {
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
 
-            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
+            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) || 
+                    targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 String originName = Column.removeNamePrefix(targetColumn.getName());
                 Column originColumn = fullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst().get();

@@ -344,6 +344,9 @@ public class Column implements Writable {
         if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
             return colName.substring(SchemaChangeHandler.SHADOW_NAME_PRFIX.length());
         }
+        if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+            return colName.substring(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1.length());
+        }
         return colName;
     }
 
