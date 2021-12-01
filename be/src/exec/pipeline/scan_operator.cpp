@@ -152,7 +152,7 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
         _chunk_source = std::make_shared<OlapChunkSource>(
                 std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, runtime_in_filters(),
                 runtime_bloom_filters(), _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation,
-                &_unused_output_columns, _runtime_profile.get());
+                &_unused_output_columns, _runtime_profile.get(), _limit);
         _chunk_source->prepare(state);
         _trigger_next_scan(state);
     }
