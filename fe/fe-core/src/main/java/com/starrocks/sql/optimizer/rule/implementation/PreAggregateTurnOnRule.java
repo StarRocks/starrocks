@@ -58,11 +58,11 @@ public class PreAggregateTurnOnRule {
 
         @Override
         public Void visit(OptExpression opt, PreAggregationContext context) {
-            opt.getInputs().forEach(o -> rewriteOp(o, context.clone()));
+            opt.getInputs().forEach(o -> process(o, context.clone()));
             return null;
         }
 
-        public Void rewriteOp(OptExpression opt, PreAggregationContext context) {
+        public Void process(OptExpression opt, PreAggregationContext context) {
             if (opt.getOp().getProjection() != null) {
                 rewriteProject(opt, context);
             }
@@ -100,7 +100,7 @@ public class PreAggregateTurnOnRule {
                     aggregate.getGroupBys().stream().map(ScalarOperator::clone).collect(Collectors.toList());
             context.notPreAggregationJoin = false;
 
-            return rewriteOp(optExpression.inputAt(0), context);
+            return process(optExpression.inputAt(0), context);
         }
 
         @Override
@@ -308,9 +308,9 @@ public class PreAggregateTurnOnRule {
                 context.notPreAggregationJoin = true;
                 context.groupings.clear();
                 context.aggregations.clear();
-                rewriteOp(optExpression.inputAt(0), context);
+                process(optExpression.inputAt(0), context);
                 // Avoid left child modify context will effect right child
-                rewriteOp(optExpression.inputAt(1), context.clone());
+                process(optExpression.inputAt(1), context.clone());
                 return null;
             }
 
@@ -348,15 +348,15 @@ public class PreAggregateTurnOnRule {
 
             if (checkLeft) {
                 context.groupings = leftGroupOperator;
-                rewriteOp(leftChild, context);
-                rewriteOp(rightChild, disableContext);
+                process(leftChild, context);
+                process(rightChild, disableContext);
             } else if (checkRight) {
                 context.groupings = rightGroupOperator;
-                rewriteOp(rightChild, context);
-                rewriteOp(leftChild, disableContext);
+                process(rightChild, context);
+                process(leftChild, disableContext);
             } else {
-                rewriteOp(leftChild, disableContext);
-                rewriteOp(rightChild, disableContext);
+                process(leftChild, disableContext);
+                process(rightChild, disableContext);
             }
             return null;
         }
