@@ -50,3 +50,21 @@ docker pull starrocks/dev-env:{version}
 
 - llvm
 - clang
+
+## Required
+
+Memroy: 8GB+
+
+## FAQ
+
+1. Fail to compile StarRocks BE.
+
+```
+g++: fatal error: Killed signal terminated program cc1plus
+compilation terminated.
+```
+
+When you met above error message, it may be caused by lacking of memory.
+You should give more memory to the container.
+8GB is enough.
+
