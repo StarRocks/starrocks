@@ -363,9 +363,10 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-    // PartialRuntimeFilterMerger
+    // In default query engine, we only build one hash table for join right child.
+    // But for pipeline query engine, we will build `num_partitions` hash tables, so we need to enlarge the limit
     auto&& partial_rf_merger = std::make_unique<pipeline::PartialRuntimeFilterMerger>(
-            pool, _runtime_join_filter_pushdown_limit, num_partitions);
+            pool, _runtime_join_filter_pushdown_limit * num_partitions, num_partitions);
     auto build_op = std::make_shared<pipeline::HashJoinBuildOperatorFactory>(
             context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger));
 
