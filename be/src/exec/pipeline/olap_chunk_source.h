@@ -29,7 +29,7 @@ public:
                     std::vector<ExprContext*>& runtime_in_filters,
                     vectorized::RuntimeFilterProbeCollector* runtime_bloom_filters,
                     std::vector<std::string> key_column_names, bool skip_aggregation,
-                    std::vector<std::string>* unused_output_columns, RuntimeProfile* runtime_profile)
+                    std::vector<std::string>* unused_output_columns, RuntimeProfile* runtime_profile, int64_t limit)
             : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
@@ -38,7 +38,8 @@ public:
               _key_column_names(std::move(key_column_names)),
               _skip_aggregation(skip_aggregation),
               _unused_output_columns(unused_output_columns),
-              _runtime_profile(runtime_profile) {
+              _runtime_profile(runtime_profile),
+              _limit(limit) {
         _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
         OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
         _scan_range = olap_morsel->get_scan_range();
@@ -72,10 +73,12 @@ private:
     Status _build_scan_range(RuntimeState* state);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::Chunk* chunk);
     void _update_counter();
+    void _update_realtime_counter(vectorized::Chunk* chunk);
 
     vectorized::TabletReaderParams _params = {};
 
     int32_t _tuple_id;
+    int64_t _limit; // -1: no limit
     std::vector<ExprContext*> _conjunct_ctxs;
     const std::vector<ExprContext*>& _runtime_in_filters;
     const vectorized::RuntimeFilterProbeCollector& _runtime_bloom_filters;
