@@ -172,8 +172,6 @@ public class StreamLoadPlanner {
 
         fragment.finalize(null, false);
 
-        LOG.warn(analyzer.getDescTbl().getExplainString());
-
         TExecPlanFragmentParams params = new TExecPlanFragmentParams();
         params.setProtocol_version(InternalServiceVersion.V1);
         params.setFragment(fragment.toThrift());
