@@ -45,7 +45,7 @@ private:
     struct Cell {
         vectorized::ChunkPtr chunk = nullptr;
         Cell* next = nullptr;
-        size_t acc_chunk_size = 0;
+        size_t accumulated_row_size = 0;
         // how many consumers have used this chunk
         int32_t used_count = 0;
     };
@@ -53,11 +53,11 @@ private:
     void _closer_consumer(int32_t mcast_consumer_index);
     mutable std::mutex _mutex;
     size_t _consumer_number;
-    size_t _current_acc_chunk_size = 0;
+    size_t _current_accumulated_row_size = 0;
     std::vector<Cell*> _progress;
     std::vector<int32_t> _opened_source_opcount;
     // the fast consumer has consumed how many chunks.
-    size_t _fast_acc_chunk_size = 0;
+    size_t _fast_accumulated_row_size = 0;
     int32_t _opened_source_number = 0;
     int32_t _opened_sink_number = 0;
     Cell* _head = nullptr;

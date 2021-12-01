@@ -7,10 +7,12 @@
 namespace starrocks {
 namespace pipeline {
 
+static const size_t kBufferedRowSizeScaleFactor = 16;
+
 MultiCastLocalExchanger::MultiCastLocalExchanger(size_t consumer_number)
         : _mutex(),
           _consumer_number(consumer_number),
-          _current_acc_chunk_size(0),
+          _current_accumulated_row_size(0),
           _progress(consumer_number),
           _opened_source_opcount(consumer_number) {
     Cell* dummy = new Cell();
@@ -32,7 +34,10 @@ MultiCastLocalExchanger::~MultiCastLocalExchanger() {
 
 bool MultiCastLocalExchanger::can_push_chunk() const {
     std::unique_lock l(_mutex);
-    if ((_current_acc_chunk_size - _fast_acc_chunk_size) > config::vector_chunk_size) {
+    // if for the fastest consumer, the exchanger still has enough chunk to be consumed.
+    // the exchanger does not need any input.
+    if ((_current_accumulated_row_size - _fast_accumulated_row_size) >
+        config::vector_chunk_size * kBufferedRowSizeScaleFactor) {
         return false;
     }
     return true;
@@ -43,17 +48,17 @@ Status MultiCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, in
 
     std::unique_lock l(_mutex);
 
-    int32_t used_count = (_consumer_number - _opened_source_number);
+    int32_t closed_source_number = (_consumer_number - _opened_source_number);
 
     auto* cell = new Cell();
     cell->chunk = chunk;
-    cell->used_count = used_count;
-    cell->acc_chunk_size = _current_acc_chunk_size;
+    cell->used_count = closed_source_number;
+    cell->accumulated_row_size = _current_accumulated_row_size;
     cell->next = nullptr;
 
     _tail->next = cell;
     _tail = cell;
-    _current_acc_chunk_size += chunk->num_rows();
+    _current_accumulated_row_size += chunk->num_rows();
 
     return Status::OK();
 }
@@ -130,14 +135,14 @@ void MultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
 
 void MultiCastLocalExchanger::_update_progress(Cell* fast) {
     if (fast != nullptr) {
-        _fast_acc_chunk_size = std::max(_fast_acc_chunk_size, fast->acc_chunk_size);
+        _fast_accumulated_row_size = std::max(_fast_accumulated_row_size, fast->accumulated_row_size);
     } else {
         // update the fastest consumer.
-        _fast_acc_chunk_size = 0;
+        _fast_accumulated_row_size = 0;
         for (size_t i = 0; i < _consumer_number; i++) {
             Cell* c = _progress[i];
             if (c == nullptr) continue;
-            _fast_acc_chunk_size = std::max(_fast_acc_chunk_size, c->acc_chunk_size);
+            _fast_accumulated_row_size = std::max(_fast_accumulated_row_size, c->accumulated_row_size);
         }
     }
     // release chunk if no one needs it.

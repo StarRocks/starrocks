@@ -64,13 +64,6 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         }
         *sink = std::move(
                 create_data_stream_sink(pool, thrift_sink.stream_sink, row_desc, params, params.destinations));
-
-        // auto ret = std::move(
-        //         create_data_stream_sink(pool, thrift_sink.stream_sink, row_desc, params, params.destinations));
-        // auto mcast_data_stream_sink = std::make_unique<MultiCastDataStreamSink>(pool);
-        // mcast_data_stream_sink->add_data_stream_sink(std::move(ret));
-        // *sink = std::move(mcast_data_stream_sink);
-
         break;
     }
     case TDataSinkType::RESULT_SINK:
