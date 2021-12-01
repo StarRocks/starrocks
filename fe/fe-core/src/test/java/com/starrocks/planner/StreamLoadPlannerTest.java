@@ -30,6 +30,7 @@ import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
@@ -40,6 +41,7 @@ import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
+
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -99,6 +101,49 @@ public class StreamLoadPlannerTest {
         request.setLoadId(new TUniqueId(2, 3));
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadTask);
+        planner.plan(streamLoadTask.getId());
+    }
+
+    @Test
+    public void testPartialUpdatePlan() throws UserException {
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", Type.BIGINT, false);
+        columns.add(c1);
+        Column c2 = new Column("c2", Type.BIGINT, true);
+        columns.add(c2);
+        new Expectations() {
+            {
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+                destTable.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                scanNode.init((Analyzer) any);
+                minTimes = 0;
+                scanNode.getChildren();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                scanNode.getId();
+                minTimes = 0;
+                result = new PlanNodeId(5);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(1);
+        request.setLoadId(new TUniqueId(2, 3));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setPartial_update(true);
+        request.setColumns("c1");
         StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadTask);
         planner.plan(streamLoadTask.getId());

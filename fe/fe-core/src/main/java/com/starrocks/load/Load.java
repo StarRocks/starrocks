@@ -66,10 +66,12 @@ import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
@@ -485,6 +487,17 @@ public class Load {
         // 3. reanalyze all exprs using new type in vectorized load or using varchar in old load
         analyzeMappingExprs(tbl, analyzer, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
         LOG.debug("after init column, exprMap: {}", exprsByName);
+    }
+
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs) {
+        Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
+        List<Column> ret = new ArrayList<>();
+        for (Column col : tbl.getBaseSchema()) {
+            if (specified.contains(col.getName())) {
+                ret.add(col);
+            }
+        }
+        return ret;
     }
 
     /**

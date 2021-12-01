@@ -102,13 +102,28 @@ public class StreamLoadPlanner {
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
     public TExecPlanFragmentParams plan(TUniqueId loadId) throws UserException {
+        boolean isPrimaryKey = destTable.getKeysType() == KeysType.PRIMARY_KEYS;
         resetAnalyzer();
         // construct tuple descriptor, used for scanNode and dataSink
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DstTableTuple");
         boolean negative = streamLoadTask.getNegative();
+        if (isPrimaryKey) {
+            if (negative) {
+                throw new DdlException("Primary key table does not support negative load");
+            }
+        } else {
+            if (streamLoadTask.isPartialUpdate()) {
+                throw new DdlException("Only primary key table support partial update");
+            }
+        }
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        // here we should be full schema to fill the descriptor table
-        for (Column col : destTable.getFullSchema()) {
+        List<Column> destColumns;
+        if (streamLoadTask.isPartialUpdate()) {
+            destColumns = Load.getPartialUpateColumns(destTable, streamLoadTask.getColumnExprDescs());
+        } else {
+            destColumns = destTable.getFullSchema();
+        }
+        for (Column col : destColumns) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(col);
@@ -123,7 +138,7 @@ public class StreamLoadPlanner {
                 globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
             }
         }
-        if (destTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+        if (isPrimaryKey) {
             // add op type column
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
@@ -156,6 +171,8 @@ public class StreamLoadPlanner {
         fragment.setLoadGlobalDicts(globalDicts);
 
         fragment.finalize(null, false);
+
+        LOG.warn(analyzer.getDescTbl().getExplainString());
 
         TExecPlanFragmentParams params = new TExecPlanFragmentParams();
         params.setProtocol_version(InternalServiceVersion.V1);
