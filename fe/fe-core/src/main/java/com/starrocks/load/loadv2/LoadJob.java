@@ -1019,7 +1019,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             authorizationInfo.write(out);
         }
         Text.writeString(out, timezone);
-        out.writeBoolean(partialUpdate);
     }
 
     public void readFields(DataInput in) throws IOException {
