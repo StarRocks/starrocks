@@ -80,7 +80,7 @@ bool MemTable::is_full() const {
     return write_buffer_size() >= config::write_buffer_size;
 }
 
-bool MemTable::insert(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
+bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (_chunk == nullptr) {
         _chunk = ChunkHelper::new_chunk(_vectorized_schema, 0);
     }
@@ -90,14 +90,14 @@ bool MemTable::insert(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint
     // So the chunk can only be accessed by the subscript
     // instead of the column name.
     for (int i = 0; i < _slot_descs->size(); ++i) {
-        ColumnPtr& src = chunk->get_column_by_slot_id((*_slot_descs)[i]->id());
+        const ColumnPtr& src = chunk.get_column_by_slot_id((*_slot_descs)[i]->id());
         ColumnPtr& dest = _chunk->get_column_by_index(i);
         dest->append_selective(*src, indexes, from, size);
     }
 
-    if (chunk->has_rows()) {
-        _chunk_memory_usage += chunk->memory_usage() * size / chunk->num_rows();
-        _chunk_bytes_usage += chunk->bytes_usage() * size / chunk->num_rows();
+    if (chunk.has_rows()) {
+        _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
+        _chunk_bytes_usage += chunk.bytes_usage() * size / chunk.num_rows();
     }
 
     // if memtable is full, push it to the flush executor,
