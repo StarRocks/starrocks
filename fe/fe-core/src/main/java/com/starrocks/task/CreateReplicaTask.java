@@ -181,6 +181,9 @@ public class CreateReplicaTask extends AgentTask {
             if (column.getName().startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
                 tColumn.setColumn_name(column.getName().substring(SchemaChangeHandler.SHADOW_NAME_PRFIX.length()));
             }
+            if (column.getName().startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+                tColumn.setColumn_name(column.getName().substring(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1.length()));
+            }
             tColumns.add(tColumn);
         }
         tSchema.setColumns(tColumns);
