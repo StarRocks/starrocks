@@ -45,8 +45,8 @@ public:
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
-    void _pickup_morsel(RuntimeState* state);
-    void _trigger_next_scan(RuntimeState* state);
+    Status _pickup_morsel(RuntimeState* state);
+    Status _trigger_next_scan(RuntimeState* state);
 
 private:
     // TODO(hcf) ugly, remove this later
@@ -55,6 +55,7 @@ private:
     const size_t _batch_size = config::pipeline_io_buffer_size;
     mutable bool _is_finished = false;
     std::atomic_bool _is_io_task_active = false;
+    int32_t _io_task_retry_cnt = 0;
     const TOlapScanNode& _olap_scan_node;
     const std::vector<ExprContext*>& _conjunct_ctxs;
     PriorityThreadPool* _io_threads = nullptr;
