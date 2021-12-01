@@ -149,7 +149,7 @@ public:
 
     virtual RowsetId rowset_id() = 0;
 
-    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() {
+    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
         return _global_dict_columns_valid_info;
     }
 
