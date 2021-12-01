@@ -169,7 +169,7 @@ public class StreamLoadTask {
     }
 
     public void setPartialUpdate(boolean partialUpdate) {
-        this.setPartialUpdate(partialUpdate);
+        this.partialUpdate = partialUpdate;
     }
 
     public static StreamLoadTask fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
