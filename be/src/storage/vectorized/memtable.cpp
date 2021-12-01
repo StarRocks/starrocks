@@ -165,7 +165,7 @@ Status MemTable::finalize() {
             if (_has_op_slot) {
                 // TODO(cbl): mem_tracker
                 ChunkPtr upserts;
-                _split_upserts_deletes(_result_chunk, &upserts, &_deletes);
+                RETURN_IF_ERROR(_split_upserts_deletes(_result_chunk, &upserts, &_deletes));
                 if (_result_chunk != upserts) {
                     _result_chunk = upserts;
                 }
@@ -273,7 +273,7 @@ void MemTable::_append_to_sorted_chunk(Chunk* src, Chunk* dest) {
     dest->append_selective(*src, _selective_values.data(), 0, src->num_rows());
 }
 
-void MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes) {
+Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes) {
     size_t op_column_id = src->num_columns() - 1;
     auto op_column = src->get_column_by_index(op_column_id);
     src->remove_column_by_index(op_column_id);
@@ -287,7 +287,7 @@ void MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::uni
     if (ndel == 0) {
         // no deletes, short path
         *upserts = src;
-        return;
+        return Status::OK();
     }
     vector<uint32_t> indexes[2];
     indexes[TOpType::UPSERT].reserve(nupsert);
@@ -299,13 +299,17 @@ void MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::uni
     *upserts = src->clone_empty_with_schema(nupsert);
     (*upserts)->append_selective(*src, indexes[TOpType::UPSERT].data(), 0, nupsert);
     if (!*deletes) {
-        if (!PrimaryKeyEncoder::create_column(_vectorized_schema, deletes).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
+        auto st = PrimaryKeyEncoder::create_column(_vectorized_schema, deletes);
+        if (!st.ok()) {
+            LOG(ERROR) << "create column for primary key encoder failed, schema:" << _vectorized_schema
+                       << ", status:" << st.to_string();
+            return st;
         }
     }
     (*deletes)->reset_column();
     auto& delidx = indexes[TOpType::DELETE];
     PrimaryKeyEncoder::encode_selective(_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get());
+    return Status::OK();
 }
 
 // SortHelper functions only work for full sort.
