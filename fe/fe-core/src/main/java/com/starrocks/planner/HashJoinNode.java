@@ -402,9 +402,7 @@ public class HashJoinNode extends PlanNode {
         }
         msg.hash_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
-        if (ConnectContext.get().getSessionVariable().getEnableFilterNullValues()) {
-            msg.setFilter_null_value_columns(filter_null_value_columns);
-        }
+        msg.setFilter_null_value_columns(filter_null_value_columns);
     }
 
     @Override
