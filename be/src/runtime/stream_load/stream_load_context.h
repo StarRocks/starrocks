@@ -113,7 +113,9 @@ public:
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
 public:
-    MemTracker* mem_tracker = nullptr;
+    std::shared_ptr<RuntimeProfile> runtime_profile;
+    std::shared_ptr<MemTracker> query_mem_tracker;
+    std::shared_ptr<MemTracker> instance_mem_tracker;
     // load type, eg: ROUTINE LOAD/MANUAL LOAD
     TLoadType::type load_type;
     // load data source: eg: KAFKA/RAW
