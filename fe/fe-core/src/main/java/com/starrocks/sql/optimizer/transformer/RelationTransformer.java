@@ -18,6 +18,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.common.Pair;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -128,7 +129,11 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
         OptExprBuilder optExprBuilder;
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()
                 && session.getSessionVariable().isCboCteReuse()) {
-            optExprBuilder = this.visitQuery((QueryRelation) relation, null);
+            Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor =
+                    buildCTEAnchorAndProducer((QueryRelation) relation);
+            optExprBuilder = cteRootAndMostDeepAnchor.first;
+            OptExprBuilder builder = visit(relation);
+            cteRootAndMostDeepAnchor.second.addChild(builder);
         } else {
             optExprBuilder = visit(relation);
         }
@@ -158,8 +163,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
         }
     }
 
-    @Override
-    public OptExprBuilder visitQuery(QueryRelation node, ExpressionMapping context) {
+    Pair<OptExprBuilder, OptExprBuilder> buildCTEAnchorAndProducer(QueryRelation node) {
         OptExprBuilder root = null;
         OptExprBuilder anchorOptBuilder = null;
         for (CTERelation cteRelation : node.getCteRelations()) {
@@ -182,15 +186,17 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             }
             anchorOptBuilder = newAnchorOptBuilder;
 
-            cteContext.put(cteRelation.getCteId(),
-                    new ExpressionMapping(
-                            new Scope(RelationId.of(cteRelation.getCteQuery()), cteRelation.getRelationFields()),
-                            producerPlan.getOutputColumn()));
+            cteContext.put(cteRelation.getCteId(), new ExpressionMapping(
+                    new Scope(RelationId.of(cteRelation.getCteQuery()), cteRelation.getRelationFields()),
+                    producerPlan.getOutputColumn()));
         }
 
-        OptExprBuilder builder = visit(node);
-        anchorOptBuilder.addChild(builder);
-        return root;
+        return new Pair<>(root, anchorOptBuilder);
+    }
+
+    @Override
+    public OptExprBuilder visitQuery(QueryRelation node, ExpressionMapping context) {
+        throw new StarRocksPlannerException("query block not materialized", ErrorType.INTERNAL_ERROR);
     }
 
     @Override
