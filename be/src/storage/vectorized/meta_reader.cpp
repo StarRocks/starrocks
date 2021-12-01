@@ -279,12 +279,14 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
         return Status::InvalidArgument("Invalid Collet Params.");
     }
 
-    if (!_column_iterators[cid]->all_page_dict_encoded()) {
-        return Status::NotSupported("No all page dict encoded.");
-    }
-
     std::vector<Slice> words;
-    RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
+    if (!_column_iterators[cid]->all_page_dict_encoded()) {
+        // if all_page_dict_encoded if false, return fake dict word which cardinality exceed low cardinality base size
+        // so FE will not collect again and mark this column not a low cardinality
+        words = FAKE_DICT_SLICE_WORDS;
+    } else {
+        RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
+    }
 
     vectorized::ArrayColumn* array_column = nullptr;
     array_column = down_cast<vectorized::ArrayColumn*>(column);
