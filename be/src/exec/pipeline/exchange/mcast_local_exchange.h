@@ -6,6 +6,27 @@
 namespace starrocks {
 namespace pipeline {
 
+// For uni cast stream sink, we just add a exchange sink operator
+// at the end of the pipeline. It works like
+// [source pipeline]  -> exchange_sink_operator
+
+// But fr multi cast stream sink, extra pipelines are added with exchanger
+// It works like
+// [source pipeline] -> mcast_local_sink   -> mcast_local_exchanger  -> [new pipeline1]
+//                                                     |             -> [new pipeline2]
+//                                                     |             -> [new pipeline3]
+// and for each new pipeline, the internal structure is
+// [new pileine]: mcast_local_source -> exchange_sink_operator
+
+// The dataflow works like:
+// 1. mcast_local_sink push chunks to exchanger
+// 2. mcast_local_source pull chunks from exchanger
+
+// The exchanger should take care of several things:
+// 1. can accept chunk or not. we don't want to block any consumer. we can accept chunk only when a any consumer needs chunk.
+// 2. can throw chunk or not. we can only throw any chunk when all consumers have consumed that chunk.
+// 3. can pull chiunk. we maintain the progress of consumers.
+
 // ===== exchanger =====
 class MultiCastLocalExchanger {
 public:
@@ -25,6 +46,7 @@ private:
         vectorized::ChunkPtr chunk = nullptr;
         Cell* next = nullptr;
         size_t acc_chunk_size = 0;
+        // how many consumers have used this chunk
         int32_t used_count = 0;
     };
     void _update_progress(Cell* fast = nullptr);
@@ -34,6 +56,7 @@ private:
     size_t _current_acc_chunk_size = 0;
     std::vector<Cell*> _progress;
     std::vector<int32_t> _opened_source_opcount;
+    // the fast consumer has consumed how many chunks.
     size_t _fast_acc_chunk_size = 0;
     int32_t _opened_source_number = 0;
     int32_t _opened_sink_number = 0;

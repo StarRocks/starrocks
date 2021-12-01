@@ -269,7 +269,13 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
         // 1. create exchange[EX]
         // 2. create sink[A] at the end of current pipeline
         // 3. create source[B]/sink[C] pipelines.
-        // A -> EX -> B/C
+        // A -> EX -> B0/C0
+        //       | -> B1/C1
+        //       | -> B2/C2
+        // sink[A] will push chunk to exchanger
+        // and source[B] will pull chunk from exchanger
+        // so basically you can think exchanger is a chunk repository.
+        // Further workflow explanation is in mcast_local_exchange.h file.
         starrocks::MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink);
         const auto& sinks = mcast_sink->get_sinks();
 
