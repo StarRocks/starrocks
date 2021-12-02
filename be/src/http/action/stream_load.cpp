@@ -291,7 +291,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
         return;
     }
 
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->instance_mem_tracker.get());
 
     struct evhttp_request* ev_req = req->get_evhttp_request();
     auto evbuf = evhttp_request_get_input_buffer(ev_req);
