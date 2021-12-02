@@ -173,7 +173,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         projection.getCommonSubOperatorMap(), true);
                 mapOperator = mapOperator.accept(rewriter, null);
                 pruneBuilder.addColumnStatistic(columnRefOperator,
-                        ExpressionStatisticCalculator.calculate(mapOperator, statistics));
+                        ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
             }
 
             context.setStatistics(pruneBuilder.build());
