@@ -37,6 +37,13 @@ THRIFT_CPP_ARGS = -I ${CURDIR} -I ${BUILD_DIR}/thrift/ --allow-64bit-consts --ge
 
 ${BUILD_DIR}/gen_cpp:
 	mkdir -p $@
+
 # handwrite thrift
 ${BUILD_DIR}/gen_cpp/%_types.cpp: ${CURDIR}/%.thrift | ${BUILD_DIR}/gen_cpp
 	${THRIFT} ${THRIFT_CPP_ARGS} $<
+
+# The default generated header file contains too many unnecessary includes, this will leads a
+# slow compilation speed. We patch a diff to remove these includes.
+${BUILD_DIR}/gen_cpp/StatusCode_types.cpp: ${CURDIR}/StatusCode.thrift | ${BUILD_DIR}/gen_cpp
+	${THRIFT} ${THRIFT_CPP_ARGS} $<
+	patch -p0 -d ${BUILD_DIR}/gen_cpp < StatusCode_types.diff 2>&1 1>/dev/null
