@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -26,6 +27,13 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/*
+ *        Join          Join
+ *       /    \        /    \
+ *    Join     C  =>  A     Join
+ *   /    \                /    \
+ *  A     B               B      C
+ * */
 public class JoinAssociativityRule extends TransformationRule {
     private JoinAssociativityRule() {
         super(RuleType.TF_JOIN_ASSOCIATIVITY, Pattern.create(OperatorType.LOGICAL_JOIN)
@@ -57,6 +65,8 @@ public class JoinAssociativityRule extends TransformationRule {
         LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
         if (leftChildJoin.getProjection() != null) {
             Projection projection = leftChildJoin.getProjection();
+            // 1. Forbidden expression column on join-reorder
+            // 2. Forbidden on-predicate use columns from two children at same time
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
                 if (!entry.getValue().isColumnRef() &&
                         entry.getValue().getUsedColumns().isIntersect(input.inputAt(0).inputAt(0).getOutputColumns()) &&
@@ -169,7 +179,7 @@ public class JoinAssociativityRule extends TransformationRule {
                         .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id))
                         .collect(Collectors.toMap(Function.identity(), Function.identity()));
             } else {
-                expressionProject = leftChild1.getOp().getProjection().getColumnRefMap();
+                expressionProject = Maps.newHashMap(leftChild1.getOp().getProjection().getColumnRefMap());
             }
             expressionProject.putAll(leftExpression);
             Operator.Builder builder = OperatorBuilderFactory.build(leftChild1.getOp());

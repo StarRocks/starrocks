@@ -170,7 +170,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         projection.getCommonSubOperatorMap(), true);
                 mapOperator = mapOperator.accept(rewriter, null);
                 pruneBuilder.addColumnStatistic(columnRefOperator,
-                        ExpressionStatisticCalculator.calculate(mapOperator, statistics));
+                        ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
             }
 
             context.setStatistics(pruneBuilder.build());
@@ -546,6 +546,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics inputStatistics = context.getChildStatistics(0);
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
 
+        Statistics.Builder allBuilder = Statistics.builder();
+        allBuilder.addColumnStatistics(inputStatistics.getColumnStatistics());
+
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
             // derive stats from child
             // use clone here because it will be rewrite later
@@ -553,8 +556,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(commonSubOperatorMap, true);
             mapOperator = mapOperator.accept(rewriter, null);
-            builder.addColumnStatistic(requiredColumnRefOperator,
-                    ExpressionStatisticCalculator.calculate(mapOperator, inputStatistics));
+            ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
+            builder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
+            allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
         }
 
         context.setStatistics(builder.build());
