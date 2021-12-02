@@ -17,10 +17,14 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -108,7 +112,6 @@ public class CostModel {
             return CostEstimate.of(inputStatistics.getComputeSize(), statistics.getComputeSize(),
                     inputStatistics.getComputeSize());
         }
-
 
         boolean canGenerateOneStageAggNode(ExpressionContext context) {
             // 1. Must do two stage aggregate if child operator is LogicalRepeatOperator
@@ -324,6 +327,31 @@ public class CostModel {
             Preconditions.checkNotNull(statistics);
 
             return CostEstimate.ofCpu(statistics.getComputeSize());
+        }
+
+        @Override
+        public CostEstimate visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
+            Statistics statistics = context.getStatistics();
+            Preconditions.checkNotNull(statistics);
+
+            // @TODO:
+            //  there only compute CTEConsume output columns, but we need compute CTEProduce output columns in fact
+            return CostEstimate.of(statistics.getComputeSize(), 0, statistics.getComputeSize());
+        }
+
+        @Override
+        public CostEstimate visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
         }
     }
 }

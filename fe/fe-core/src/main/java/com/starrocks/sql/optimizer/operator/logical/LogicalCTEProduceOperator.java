@@ -9,6 +9,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
+import java.util.Objects;
+
 /*
  * This operator is initially set as the root of a separate logical tree which corresponds to
  * the CTE definition. There is one such tree – and one such CTEProducer operator – for every
@@ -41,5 +43,25 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalCTEProduce(optExpression, context);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        LogicalCTEProduceOperator that = (LogicalCTEProduceOperator) o;
+        return Objects.equals(cteId, that.cteId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), cteId);
     }
 }
