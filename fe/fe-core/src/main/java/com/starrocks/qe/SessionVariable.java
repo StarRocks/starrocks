@@ -29,6 +29,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPipelineProfileMode;
 import com.starrocks.thrift.TQueryOptions;
 import org.json.JSONObject;
 
@@ -112,6 +113,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
     public static final String PIPELINE_DOP = "pipeline_dop";
+
+    public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
@@ -305,6 +308,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
+
+    @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
+    private String pipelineProfileMode = "brief";
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
@@ -781,6 +787,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setPipeline_dop(pipelineDop);
+        if ("brief".equalsIgnoreCase(pipelineProfileMode)) {
+            tResult.setPipeline_profile_mode(TPipelineProfileMode.BRIEF);
+        } else {
+            tResult.setPipeline_profile_mode(TPipelineProfileMode.DETAIL);
+        }
         return tResult;
     }
 

@@ -123,12 +123,6 @@ private:
 // into RuntimeBloomFilterEvalContext and make do_evaluate function can be called concurrently.
 struct RuntimeBloomFilterEvalContext {
     RuntimeBloomFilterEvalContext() = default;
-    void prepare(RuntimeProfile* runtime_profile) {
-        join_runtime_filter_timer = ADD_TIMER(runtime_profile, "JoinRuntimeFilterTime");
-        join_runtime_filter_input_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterInputRows", TUnit::UNIT);
-        join_runtime_filter_output_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
-        join_runtime_filter_eval_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
-    }
 
     std::map<double, RuntimeFilterProbeDescriptor*> selectivity;
     size_t input_chunk_nums = 0;

@@ -274,6 +274,12 @@ public:
     // [thread-safe]
     RuntimeProfile* create_child(const std::string& name, bool indent = true, bool prepend = false);
 
+    // Remove childs
+    void remove_childs();
+
+    // Reverse childs
+    void reverse_childs();
+
     // Sorts all children according to a custom comparator. Does not
     // invalidate pointers to profiles.
     template <class Compare>
