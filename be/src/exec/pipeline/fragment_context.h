@@ -36,6 +36,20 @@ public:
         if (_plan != nullptr) {
             _plan->close(_runtime_state.get());
         }
+
+        std::stringstream os;
+        for (int i = 0; i < _thread_shedule_time.size(); ++i) {
+            auto milliseconds = ((double)_thread_shedule_time[i]) / 10000000;
+            if (milliseconds > 1) {
+                os << i;
+                os << ": " << _thread_shedule_frequency[i] << "-" << (milliseconds * 10) << "ms("
+                   << (milliseconds / 100) << "s) " << ((milliseconds * 10000) / _thread_shedule_frequency[i])
+                   << "us/frequency"
+                   << "\n";
+            }
+        }
+
+        LOG(INFO) << "fragment context:\n" << print_id(fragment_instance_id()) << "\n" << os.str();
     }
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
@@ -111,6 +125,13 @@ public:
 
     RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
 
+    void initial_thread_shedule_time(int32_t max_thread_id) {
+        _thread_shedule_time.clear();
+        _thread_shedule_time.resize(max_thread_id);
+        _thread_shedule_frequency.clear();
+        _thread_shedule_frequency.resize(max_thread_id);
+    }
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -147,6 +168,10 @@ private:
     std::atomic<Status*> _final_status;
     std::atomic<bool> _cancel_flag;
     Status _s_status;
+
+public:
+    std::vector<int64_t> _thread_shedule_time;
+    std::vector<int64_t> _thread_shedule_frequency;
 };
 
 class FragmentContextManager {

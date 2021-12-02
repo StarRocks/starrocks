@@ -16,6 +16,11 @@ public:
         _value.compare_exchange_strong(old_value, new_value);
     }
 
+    int32_t get_actual_num() {
+        int64_t value = _value.load(std::memory_order_relaxed);
+        return LIMIT_SETTER_ACTUAL_NUM(value);
+    }
+
     bool adjust_expect_num(int32_t expect_num, int32_t* old_expect_num) {
         int64_t old_value = _value.load(std::memory_order_relaxed);
         *old_expect_num = LIMIT_SETTER_EXPECT_NUM(old_value);

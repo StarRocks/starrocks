@@ -12,6 +12,8 @@ void QuerySharedDriverQueue::close() {
 
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level();
+
+    clock_gettime(CLOCK_MONOTONIC, &driver->_time_into_priority_queue);
     {
         std::unique_lock<std::mutex> lock(_global_mutex);
         _queues[level % QUEUE_SIZE].queue.emplace(driver);

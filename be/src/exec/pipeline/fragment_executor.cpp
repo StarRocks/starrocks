@@ -98,6 +98,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
+    _fragment_ctx->initial_thread_shedule_time(exec_env->driver_dispatcher()->get_actual_threads());
 
     if (query_options.__isset.pipeline_profile_mode) {
         _fragment_ctx->set_profile_mode(query_options.pipeline_profile_mode);

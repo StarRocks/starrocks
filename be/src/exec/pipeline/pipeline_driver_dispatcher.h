@@ -3,7 +3,9 @@
 #pragma once
 
 #include <memory>
+#include <stack>
 #include <unordered_map>
+#include <vector>
 
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -27,6 +29,7 @@ public:
     virtual ~DriverDispatcher() = default;
     virtual void initialize(int32_t num_threads) {}
     virtual void change_num_threads(int32_t num_threads) {}
+    virtual int32_t get_actual_threads() { return 0; }
     virtual void dispatch(DriverRawPtr driver){};
 
     // When all the root drivers (the drivers have no successors in the same fragment) have finished,
@@ -43,11 +46,12 @@ public:
     ~GlobalDriverDispatcher() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
+    int32_t get_actual_threads() override;
     void dispatch(DriverRawPtr driver) override;
     void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
 
 private:
-    void run();
+    void run(size_t thread_id);
     void finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     void update_profile_by_mode(FragmentContext* fragment_ctx, bool done);
 
@@ -57,6 +61,34 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
+
+    class ThreadIdAllocator {
+    public:
+        ThreadIdAllocator() : upper_bound(0), freed(), lock() {}
+        size_t allocate() {
+            std::lock_guard<std::mutex> guard(lock);
+            if (freed.empty()) {
+                return upper_bound++;
+            } else {
+                size_t id = freed.top();
+                freed.pop();
+                return id;
+            }
+        }
+
+        void deallocate(size_t id) {
+            std::lock_guard<std::mutex> guard(lock);
+            freed.push(id);
+        }
+
+    private:
+        size_t upper_bound;
+        std::stack<size_t, std::vector<size_t>> freed;
+
+        // TODO: use concurrent_stack or concurrent_queue
+        std::mutex lock;
+    };
+    static inline ThreadIdAllocator thread_id_allocator;
 };
 
 } // namespace pipeline

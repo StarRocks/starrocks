@@ -21,7 +21,11 @@ void GlobalDriverDispatcher::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->run(); });
+        _thread_pool->submit_func([this]() {
+            size_t thread_id = thread_id_allocator.allocate();
+            this->run(thread_id);
+            thread_id_allocator.deallocate(thread_id);
+        });
     }
 }
 
@@ -31,8 +35,16 @@ void GlobalDriverDispatcher::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->run(); });
+        _thread_pool->submit_func([this]() {
+            size_t thread_id = thread_id_allocator.allocate();
+            this->run(thread_id);
+            thread_id_allocator.deallocate(thread_id);
+        });
     }
+}
+
+int32_t GlobalDriverDispatcher::get_actual_threads() {
+    return _num_threads_setter.get_actual_num();
 }
 
 void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
@@ -45,19 +57,32 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
     }
 }
 
-void GlobalDriverDispatcher::run() {
+void GlobalDriverDispatcher::run(size_t thread_id) {
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
 
         size_t queue_index;
+
+        timespec start;
+        clock_gettime(CLOCK_MONOTONIC, &start);
         auto maybe_driver = this->_driver_queue->take(&queue_index);
+        timespec end;
+        clock_gettime(CLOCK_MONOTONIC, &end);
+
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
         auto driver = maybe_driver.value();
         DCHECK(driver != nullptr);
+
+        int64_t elapsed0 = (end.tv_sec - start.tv_sec) * 1000L * 1000L * 1000L + (end.tv_nsec - start.tv_nsec);
+        int64_t elapsed1 = (end.tv_sec - driver->_time_into_priority_queue.tv_sec) * 1000L * 1000L * 1000L +
+                           (end.tv_nsec - driver->_time_into_priority_queue.tv_nsec);
+
+        driver->fragment_ctx()->_thread_shedule_time[thread_id] += (elapsed0 < elapsed1 ? elapsed0 : elapsed1);
+        driver->fragment_ctx()->_thread_shedule_frequency[thread_id] += 1;
 
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();

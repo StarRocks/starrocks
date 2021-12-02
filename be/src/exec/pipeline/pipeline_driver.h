@@ -224,6 +224,8 @@ public:
 
     std::string to_readable_string() const;
 
+    timespec _time_into_priority_queue;
+
 private:
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
