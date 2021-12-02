@@ -74,7 +74,7 @@ public class StatementPlanner {
 
         //1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(query);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
         //2. Optimize logical plan and build physical plan
         Optimizer optimizer = new Optimizer();
