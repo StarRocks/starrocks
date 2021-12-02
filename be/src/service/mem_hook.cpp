@@ -189,7 +189,7 @@ void* my_alloc(size_t size) __THROW {
     // call the `my_alloc`, and result in a deadloop.
 #ifndef BE_TEST
     if (LIKELY(ptr != nullptr)) {
-        MEMORY_CONSUME_PTR(tc_nallocx(size, 0));
+        MEMORY_CONSUME_SIZE(tc_nallocx(size, 0));
     }
 #endif
     return ptr;
