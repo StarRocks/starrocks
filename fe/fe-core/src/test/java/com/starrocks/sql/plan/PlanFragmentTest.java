@@ -2177,7 +2177,11 @@ public class PlanFragmentTest extends PlanTestBase {
         starRocksAssert.query(castSql).explainContains("8: k11 < '2020-03-26 00:00:00'");
 
         String castSql2 = "select str_to_date('11/09/2011', '%m/%d/%Y');";
-        starRocksAssert.query(castSql2).explainContains("constant exprs:", "'2011-11-09 00:00:00'");
+        starRocksAssert.query(castSql2).explainContains("constant exprs:", "'2011-11-09'");
+
+        String castSql3 = "select str_to_date('11/09/2011', k6) from test.baseall";
+        starRocksAssert.query(castSql3).explainContains("  1:Project\n" +
+                "  |  <slot 12> : str_to_date('11/09/2011', 6: k6)");
     }
 
     @Test
@@ -2645,17 +2649,17 @@ public class PlanFragmentTest extends PlanTestBase {
                 "with user_info as (select 2 as user_id, 'mike' as user_name), address as (select 1 as user_id, 'newzland' as address_name) \n" +
                         "select * from address a right join user_info b on b.user_id=a.user_id;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (COLOCATE)\n" +
+        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
-                "  |  colocate: true\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: expr = 3: expr"));
-        Assert.assertTrue(plan.contains("  |----1:UNION\n" +
-                "  |       constant exprs: \n" +
-                "  |           2 | 'mike'"));
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        Assert.assertTrue(plan.contains("2:UNION\n" +
                 "     constant exprs: \n" +
-                "         1 | 'newzland'\n"));
+                "         2 | 'mike'"));
+        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 'newzland'"));
     }
 
     @Test
@@ -2734,13 +2738,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 " union select join2.id from join1 RIGHT ANTI JOIN join2 on join1.id = join2.id " +
                 " and 1 > 2 WHERE (NOT (true)) group by join2.id ";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
-                "  |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
+        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
-                "  |  colocate: true\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 5: id = 2: id"));
-        Assert.assertTrue(plan.contains("  |----2:EMPTYSET\n"));
-        Assert.assertTrue(plan.contains("  7:EMPTYSET\n"));
+        Assert.assertTrue(plan.contains("  2:EMPTYSET\n"));
+        Assert.assertTrue(plan.contains("  8:EMPTYSET\n"));
     }
 
     @Test
@@ -3692,65 +3696,6 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testAddProjectForJoinPrune() throws Exception {
-        String sql = "select\n" +
-                "    c_custkey,\n" +
-                "    c_name,\n" +
-                "    sum(l_extendedprice * (1 - l_discount)) as revenue,\n" +
-                "    c_acctbal,\n" +
-                "    n_name,\n" +
-                "    c_address,\n" +
-                "    c_phone,\n" +
-                "    c_comment\n" +
-                "from\n" +
-                "    customer,\n" +
-                "    orders,\n" +
-                "    lineitem,\n" +
-                "    nation\n" +
-                "where\n" +
-                "        c_custkey = o_custkey\n" +
-                "  and l_orderkey = o_orderkey\n" +
-                "  and o_orderdate >= date '1994-05-01'\n" +
-                "  and o_orderdate < date '1994-08-01'\n" +
-                "  and l_returnflag = 'R'\n" +
-                "  and c_nationkey = n_nationkey\n" +
-                "group by\n" +
-                "    c_custkey,\n" +
-                "    c_name,\n" +
-                "    c_acctbal,\n" +
-                "    c_phone,\n" +
-                "    n_name,\n" +
-                "    c_address,\n" +
-                "    c_comment\n" +
-                "order by\n" +
-                "    revenue desc limit 20;";
-        String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("8:Project\n" +
-                "  |  output columns:\n" +
-                "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
-                "  |  25 <-> [25: L_EXTENDEDPRICE, DOUBLE, false]\n" +
-                "  |  26 <-> [26: L_DISCOUNT, DOUBLE, false]\n" +
-                "  |  cardinality: 0\n" +
-                "  |  column statistics: \n" +
-                "  |  * O_CUSTKEY-->[1.0, 149999.0, 0.0, 8.0, 99996.0] ESTIMATE\n" +
-                "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
-                "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE\n" +
-                "  |  \n" +
-                "  7:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  equal join conjunct: [20: L_ORDERKEY, INT, false] = [10: O_ORDERKEY, INT, false]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (10: O_ORDERKEY), remote = false\n" +
-                "  |  cardinality: 0\n" +
-                "  |  column statistics: \n" +
-                "  |  * O_ORDERKEY-->[1.0, 6000000.0, 0.0, 8.0, 1500000.0] ESTIMATE\n" +
-                "  |  * O_CUSTKEY-->[1.0, 149999.0, 0.0, 8.0, 99996.0] ESTIMATE\n" +
-                "  |  * L_ORDERKEY-->[1.0, 6000000.0, 0.0, 8.0, 1500000.0] ESTIMATE\n" +
-                "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
-                "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE"));
-    }
-
-    @Test
     public void testUnionAll() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select * from t1 union all select * from t2;";
@@ -4009,6 +3954,47 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testReplicationJoinWithEmptyNode() throws Exception {
+        // check replicate join without exception
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+        FeConstants.runningUnitTest = true;
+        String sql = "with cross_join as (\n" +
+                "  select * from \n" +
+                "  (SELECT \n" +
+                "      t0.v1, \n" +
+                "      t0.v2, \n" +
+                "      t0.v3\n" +
+                "    FROM \n" +
+                "      t0 \n" +
+                "    WHERE \n" +
+                "      false)\n" +
+                "  subt0 LEFT SEMI \n" +
+                "  JOIN \n" +
+                "    (SELECT \n" +
+                "      t2.v7, \n" +
+                "      t2.v8, \n" +
+                "      t2.v9\n" +
+                "    FROM \n" +
+                "      t2 \n" +
+                "    WHERE \n" +
+                "      false)\n" +
+                "  subt2 ON subt0.v3 = subt2.v8, \n" +
+                "  t1 \n" +
+                ")\n" +
+                "SELECT \n" +
+                "  DISTINCT cross_join.v1 \n" +
+                "FROM \n" +
+                "  t0 LEFT JOIN\n" +
+                "  cross_join\n" +
+                "  ON cross_join.v4 = t0.v2;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("9:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (REPLICATED)"));
+        FeConstants.runningUnitTest = false;
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
     public void testOuterJoinBucketShuffle() throws Exception {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 RIGHT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
         String plan = getFragmentPlan(sql);
@@ -4137,8 +4123,16 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testArithmeticCommutative() throws Exception {
-        String sql = "select v1 from t0 where v1 + 2 > 3";
+        String sql = "select v1 from t0 where 2 / v1  > 3";
         String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 2.0 / CAST(1: v1 AS DOUBLE) > 3.0"));
+
+        sql = "select v1 from t0 where 2 * v1  > 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 2 * 1: v1 > 3"));
+
+        sql = "select v1 from t0 where v1 + 2 > 3";
+        planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 > 1"));
 
         sql = "select v1 from t0 where  v1 / 2 <=> 3";
@@ -4594,5 +4588,114 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  column statistics: \n" +
                 "  |  * t1a-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                 "  |  * t1b-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
+    }
+
+    @Test
+    public void testCountDistinctMultiColumns() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem";
+        String plan = getFragmentPlan(sql);
+        // check use 4 stage agg plan
+        Assert.assertTrue(plan.contains("5:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(18: count)"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (update serialize)\n" +
+                "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  2:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE"));
+
+        sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
+        plan = getFragmentPlan(sql);
+        // check use 3 stage agg plan
+        Assert.assertTrue(plan.contains(" 4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
+                "  |  group by: 2: L_PARTKEY\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testCountDistinctBoolTwoPhase() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct id_bool) from test_bool";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("aggregate: multi_distinct_count[([11: id_bool, BOOLEAN, true]); " +
+                "args: BOOLEAN; result: VARCHAR;"));
+
+        sql = "select sum(distinct id_bool) from test_bool";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("aggregate: multi_distinct_sum[([11: id_bool, BOOLEAN, true]); " +
+                "args: BOOLEAN; result: VARCHAR;"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testCastDecimalZero() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "select (CASE WHEN CAST(t0.v1 AS BOOLEAN ) THEN 0.00 END) BETWEEN (0.07) AND (0.04) from t0;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  <slot 7> : CAST(6: if AS DECIMAL32(2,2))\n"));
+        Config.enable_decimal_v3 = false;
+    }
+
+    @Test
+    public void testCountDistinctMultiColumns2() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem";
+        String plan = getFragmentPlan(sql);
+        // check use 4 stage agg plan
+        Assert.assertTrue(plan.contains("5:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(18: count)"));
+        Assert.assertTrue(plan.contains(" 3:AGGREGATE (update serialize)\n" +
+                "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  2:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE"));
+
+
+        sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
+        plan = getFragmentPlan(sql);
+        // check use 3 stage agg plan
+        Assert.assertTrue(plan.contains(" 4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
+                "  |  group by: 2: L_PARTKEY\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY, 15: L_SHIPMODE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testConstantTimeTNull() throws Exception {
+        // check can get plan without exception
+        String sql = "select TIMEDIFF(\"1969-12-30 21:44:11\", NULL) from t0;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 1:Project\n" +
+                "  |  <slot 4> : NULL"));
+
+        sql = "select timediff(cast(cast(null as DATETIME) as DATETIME), " +
+                "cast(case when ((cast(null as DOUBLE) < cast(null as DOUBLE))) then cast(null as DATETIME) " +
+                "else cast(null as DATETIME) end as DATETIME)) as c18 from t0 as ref_0;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 1:Project\n" +
+                "  |  <slot 4> : NULL"));
     }
 }

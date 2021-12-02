@@ -33,12 +33,8 @@
 namespace starrocks {
 
 EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash,
-                                       TVersion version, TVersionHash version_hash, uint32_t* checksum)
-        : _tablet_id(tablet_id),
-          _schema_hash(schema_hash),
-          _version(version),
-          _version_hash(version_hash),
-          _checksum(checksum) {
+                                       TVersion version, uint32_t* checksum)
+        : _tablet_id(tablet_id), _schema_hash(schema_hash), _version(version), _checksum(checksum) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "checksum instance", mem_tracker);
 }
 
@@ -118,7 +114,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     while (st.ok() && !bg_worker_stopped) {
 #ifndef BE_TEST
-        Status st = _mem_tracker->check_mem_limit("ConsistencyCheck");
+        st = _mem_tracker->check_mem_limit("ConsistencyCheck");
         if (!st.ok()) {
             LOG(WARNING) << "failed to finish compute checksum. " << st.message() << std::endl;
             return OLAP_ERR_OTHER_ERROR;

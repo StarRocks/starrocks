@@ -67,7 +67,7 @@ public class InsertPlanner {
         //2. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory).transform(insertRelation.getQueryRelation());
+                new RelationTransformer(columnRefFactory, session).transform(insertRelation.getQueryRelation());
 
         //3. Fill in the default value and NULL
         OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertRelation, outputColumns);
@@ -202,7 +202,8 @@ public class InsertPlanner {
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
 
-            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
+            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) || 
+                    targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 String originName = Column.removeNamePrefix(targetColumn.getName());
                 Column originColumn = fullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst().get();

@@ -73,7 +73,7 @@ public:
      * Output the result data in a streaming manner,
      * And dynamically adjust the heap.
      */
-    ChunkPtr pull_chunk(std::function<uint32_t(DataSegment* min_heap_entry)> func) {
+    ChunkPtr pull_chunk(const std::function<uint32_t(DataSegment* min_heap_entry)>& get_and_update_min_entry_func) {
         // Get appropriate size
         uint32_t needed_rows = std::min((uint64_t)config::vector_chunk_size, _require_rows - _next_output_row);
 
@@ -91,7 +91,7 @@ public:
         // Optimization for single thread.
         if (_data_segment_heaps.size() == 1) {
             for (; rows_number < needed_rows; ++rows_number) {
-                selective_values.push_back(func(min_heap_entry));
+                selective_values.push_back(get_and_update_min_entry_func(min_heap_entry));
             }
 
             result_chunk->append_selective(*min_heap_entry->chunk, selective_values.data(), 0, selective_values.size());
@@ -100,25 +100,14 @@ public:
         }
 
         // get the first data
-        selective_values.push_back(func(min_heap_entry));
-
-        // Swaps the value in the position first and the value in the position last-1
-        // and makes the subrange [first, last-1) into a heap.
-        std::pop_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+        selective_values.push_back(get_and_update_min_entry_func(min_heap_entry));
+        _adjust_heap();
         ++rows_number;
 
         while (rows_number < needed_rows) {
-            if (min_heap_entry->has_next()) {
-                // Inserts the element at the position last-1 into the max heap defined by the range [first, last-1).
-                std::push_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
-            } else {
-                // Remove the empty data segment.
-                _data_segment_heaps.pop_back();
-            }
-
             if (min_heap_entry == _data_segment_heaps[0]) {
                 // data from the same data segment, just add selective value.
-                selective_values.push_back(func(min_heap_entry));
+                selective_values.push_back(get_and_update_min_entry_func(min_heap_entry));
             } else {
                 // data from different data segment, just copy datas to reuslt chunk.
                 result_chunk->append_selective(*min_heap_entry->chunk, selective_values.data(), 0,
@@ -126,11 +115,10 @@ public:
                 // re-select min-heap entry.
                 min_heap_entry = _data_segment_heaps[0];
                 selective_values.clear();
-                selective_values.push_back(func(min_heap_entry));
+                selective_values.push_back(get_and_update_min_entry_func(min_heap_entry));
             }
 
-            // Swaps the value in the position first and the value in the position last-1.
-            std::pop_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+            _adjust_heap();
             ++rows_number;
         }
 
@@ -222,6 +210,24 @@ private:
 
         // _data_segment_heaps[0] is the toppest entry.
         std::make_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+    }
+
+    // Minimum entry of heap is updated by get_and_update_min_entry_func and may be not the minimum entry anymore,
+    // so pop it from the heap and push it to heap again, to make sure _data_segment_heaps as a complete heap.
+    void _adjust_heap() {
+        auto* old_min_heap_entry = _data_segment_heaps[0];
+
+        // Swaps the value in the position first and the value in the position last-1
+        // and makes the subrange [first, last-1) into a heap.
+        std::pop_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+
+        if (old_min_heap_entry->has_next()) {
+            // Inserts the element at the position last-1 into the max heap defined by the range [first, last-1).
+            std::push_heap(_data_segment_heaps.begin(), _data_segment_heaps.end(), _comparer);
+        } else {
+            // Remove the empty data segment.
+            _data_segment_heaps.pop_back();
+        }
     }
 
     size_t _next_output_row = 0;

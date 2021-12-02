@@ -172,6 +172,12 @@ SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 IN (1, 2) AND 2: v2 = 3: v3])
 [end]
 
 [sql]
+select v1 from t0 where v1 = 1 and v2 = 2 or v1 =3;
+[result]
+SCAN (columns[1: v1, 2: v2] predicate[1: v1 = 1 AND 2: v2 = 2 OR 1: v1 = 3 AND 1: v1 IN (1, 3)])
+[end]
+
+[sql]
 select v1 from t0 where (v1 = 1 or v1 = 2) and v2 = v1
 [result]
 SCAN (columns[1: v1, 2: v2] predicate[1: v1 IN (1, 2) AND 2: v2 = 1: v1])
@@ -187,4 +193,16 @@ SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 IN (1, 2) AND 2: v2 IN (3, 4)
 select * from test.t0 where (v1 = 1 and v2 = 2) or (v1 = 3 and v2 = 4);
 [result]
 SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 1: v1 = 3 AND 2: v2 = 4 AND 1: v1 IN (1, 3) AND 2: v2 IN (2, 4)])
+[end]
+
+[sql]
+select * from t0 where (v1 = 1 or v1 = 2 ) and v1 in (1,2)
+[result]
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 IN (1, 2)])
+[end]
+
+[sql]
+select * from t0 where v1 > 10 or v1 = 1 or v1 = 2
+[result]
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 > 10 OR 1: v1 = 1 OR 1: v1 = 2 AND 1: v1 >= 1])
 [end]

@@ -44,7 +44,7 @@ public class ScalarRangePredicateExtractor {
         return rewrite(predicate, false);
     }
 
-    public static ScalarOperator rewrite(ScalarOperator predicate, boolean onlyExtractColumnRef) {
+    public ScalarOperator rewrite(ScalarOperator predicate, boolean onlyExtractColumnRef) {
         if (predicate.getOpType() != OperatorType.COMPOUND) {
             return predicate;
         }
@@ -59,7 +59,6 @@ public class ScalarRangePredicateExtractor {
                 .map(hashMap::get)
                 .filter(d -> d.sourceCount > 1)
                 .map(ValueDescriptor::toScalarOperator).forEach(result::addAll);
-        //result.removeIf(conjuncts::contains);
         result.forEach(f -> f.setFromPredicateRangeDerive(true));
         result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
                 .forEach(f -> f.setNotEvalEstimate(true));
@@ -67,19 +66,20 @@ public class ScalarRangePredicateExtractor {
         ScalarOperator extractExpr = Utils.compoundAnd(Lists.newArrayList(result));
         predicate = Utils.compoundAnd(Lists.newArrayList(conjuncts));
 
-        if (isOr(predicate)) {
+        if (isOnlyOrCompound(predicate)) {
             Set<ColumnRefOperator> c = new HashSet<>(Utils.extractColumnRef(predicate));
-            if (c.size() == hashMap.size()) {
+            if (c.size() == hashMap.size() &&
+                    hashMap.values().stream().allMatch(v -> v instanceof MultiValuesDescriptor)) {
                 return extractExpr;
             }
         }
 
-        if (isAnd(predicate)) {
-            List<ScalarOperator> comp = Utils.extractConjuncts(predicate);
-            Set<ColumnRefOperator> colref = new HashSet<>(Utils.extractColumnRef(predicate));
+        if (isOnlyAndCompound(predicate)) {
+            List<ScalarOperator> cs = Utils.extractConjuncts(predicate);
+            Set<ColumnRefOperator> cf = new HashSet<>(Utils.extractColumnRef(predicate));
 
-            if (hashMap.values().stream().allMatch(valueDescriptor -> valueDescriptor.sourceCount == comp.size())
-                    && hashMap.size() == colref.size()) {
+            if (hashMap.values().stream().allMatch(valueDescriptor -> valueDescriptor.sourceCount == cs.size())
+                    && hashMap.size() == cf.size()) {
                 return extractExpr;
             }
         }
@@ -97,7 +97,7 @@ public class ScalarRangePredicateExtractor {
         return predicate;
     }
 
-    private static boolean checkStatisticsEstimateValid(ScalarOperator predicate) {
+    private boolean checkStatisticsEstimateValid(ScalarOperator predicate) {
         for (ScalarOperator child : predicate.getChildren()) {
             if (!checkStatisticsEstimateValid(child)) {
                 return false;
@@ -110,12 +110,12 @@ public class ScalarRangePredicateExtractor {
         return true;
     }
 
-    private static Map<ScalarOperator, ValueDescriptor> extractImpl(ScalarOperator scalarOperator) {
+    private Map<ScalarOperator, ValueDescriptor> extractImpl(ScalarOperator scalarOperator) {
         RangeExtractor re = new RangeExtractor();
         return re.apply(scalarOperator, null);
     }
 
-    private static class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
+    private class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
         private final Map<ScalarOperator, ValueDescriptor> descMap = Maps.newHashMap();
 
         public Map<ScalarOperator, ValueDescriptor> apply(ScalarOperator scalarOperator, Void context) {
@@ -408,27 +408,28 @@ public class ScalarRangePredicateExtractor {
         }
     }
 
-    private static boolean isAnd(ScalarOperator predicate) {
+    private static boolean isOnlyAndCompound(ScalarOperator predicate) {
         if (predicate instanceof CompoundPredicateOperator) {
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
             if (compoundPredicateOperator.isOr() || compoundPredicateOperator.isNot()) {
                 return false;
             }
 
-            return isAnd(compoundPredicateOperator.getChild(0)) && isAnd(compoundPredicateOperator.getChild(1));
+            return isOnlyAndCompound(compoundPredicateOperator.getChild(0)) &&
+                    isOnlyAndCompound(compoundPredicateOperator.getChild(1));
         } else {
             return true;
         }
     }
 
-    private static boolean isOr(ScalarOperator predicate) {
+    private static boolean isOnlyOrCompound(ScalarOperator predicate) {
         if (predicate instanceof CompoundPredicateOperator) {
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
             if (compoundPredicateOperator.isAnd() || compoundPredicateOperator.isNot()) {
                 return false;
             }
 
-            return isOr(predicate.getChild(0)) && isOr(predicate.getChild(1));
+            return isOnlyOrCompound(predicate.getChild(0)) && isOnlyOrCompound(predicate.getChild(1));
         } else {
             return true;
         }

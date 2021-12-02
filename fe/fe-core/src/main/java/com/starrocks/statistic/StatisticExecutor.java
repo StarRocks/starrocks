@@ -316,7 +316,7 @@ public class StatisticExecutor {
             QueryRelation query = (QueryRelation) analyzer.analyze(parsedStmt);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(query);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, context).transform(query);
 
             Optimizer optimizer = new Optimizer();
             OptExpression optimizedPlan = optimizer.optimize(

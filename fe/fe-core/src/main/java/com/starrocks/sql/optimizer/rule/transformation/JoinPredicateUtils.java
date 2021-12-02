@@ -227,12 +227,10 @@ public class JoinPredicateUtils {
     public static ScalarOperator rangePredicateDerive(ScalarOperator predicate) {
         ScalarRangePredicateExtractor scalarRangePredicateExtractor = new ScalarRangePredicateExtractor();
 
-        List<ScalarOperator> a = Utils.extractConjuncts(predicate);
-        ScalarOperator p =
+        return scalarRangePredicateExtractor.rewriteAll(
                 Utils.compoundAnd(
-                        a.stream().map(scalarRangePredicateExtractor::rewriteAll).collect(Collectors.toList()));
-
-        return scalarRangePredicateExtractor.rewriteAll(p);
+                        Utils.extractConjuncts(predicate).stream().map(scalarRangePredicateExtractor::rewriteAll)
+                                .collect(Collectors.toList())));
     }
 
     public static void getJoinOnPredicatesColumns(List<BinaryPredicateOperator> equalOnPredicates,

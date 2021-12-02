@@ -32,6 +32,8 @@ namespace starrocks {
 
 class TabletSchema;
 
+enum RowsetWriterType { HORIZONTAL = 0, VERTICAL = 1 };
+
 class RowsetWriterContext {
 public:
     RowsetWriterContext(DataFormatVersion mem_format_version, DataFormatVersion store_format_version)
@@ -55,7 +57,6 @@ public:
     int64_t partition_id = 0;
     int64_t txn_id = 0;
     Version version{};
-    VersionHash version_hash = 0;
     TabletUid tablet_uid = {0, 0};
     PUniqueId load_id{};
     // temporary segment files create or not, set false as default
@@ -77,6 +78,8 @@ public:
     DataFormatVersion storage_format_version;
 
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
+
+    RowsetWriterType writer_type = HORIZONTAL;
 };
 
 } // namespace starrocks

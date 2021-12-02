@@ -3866,7 +3866,8 @@ public class Catalog {
         Set<String> bfColumns = null;
         double bfFpp = 0;
         try {
-            bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema);
+            bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
+                olapTable.getKeysType() == KeysType.PRIMARY_KEYS);
             if (bfColumns != null && bfColumns.isEmpty()) {
                 bfColumns = null;
             }
@@ -3931,7 +3932,7 @@ public class Catalog {
         // check colocation properties
         try {
             String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            if (colocateGroup != null) {
+            if (!Strings.isNullOrEmpty(colocateGroup)) {
                 String fullGroupName = db.getId() + "_" + colocateGroup;
                 ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
                 if (groupSchema != null) {

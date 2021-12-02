@@ -82,7 +82,6 @@ protected:
     CompactionState _state;
 
     Version _output_version;
-    VersionHash _output_version_hash;
 
     RuntimeProfile _runtime_profile;
 };

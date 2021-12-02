@@ -267,7 +267,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         newDictColumn = context.columnRefFactory.create(
                                 stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
                     }
-
                     if (newOutputColumns.contains(stringColumn)) {
                         newOutputColumns.remove(stringColumn);
                         newOutputColumns.add(newDictColumn);

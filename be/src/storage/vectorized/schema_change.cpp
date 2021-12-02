@@ -867,8 +867,7 @@ bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr
 Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& request) {
     LOG(INFO) << "begin to do request alter tablet: base_tablet_id=" << request.base_tablet_id
               << ", base_schema_hash=" << request.base_schema_hash << ", new_tablet_id=" << request.new_tablet_id
-              << ", new_schema_hash=" << request.new_schema_hash << ", alter_version=" << request.alter_version
-              << ", alter_version_hash=" << request.alter_version_hash;
+              << ", new_schema_hash=" << request.new_schema_hash << ", alter_version=" << request.alter_version;
 
     MonotonicStopWatch timer;
     timer.start();
@@ -1171,7 +1170,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         writer_context.tablet_schema = &new_tablet->tablet_schema();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = sc_params.rowsets_to_change[i]->version();
-        writer_context.version_hash = sc_params.rowsets_to_change[i]->version_hash();
         writer_context.segments_overlap = sc_params.rowsets_to_change[i]->rowset_meta()->segments_overlap();
 
         if (sc_params.sc_sorting) {

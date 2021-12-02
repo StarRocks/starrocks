@@ -12,6 +12,8 @@ import org.apache.commons.lang.StringUtils;
 
 import java.util.Map;
 
+import static com.starrocks.common.util.Util.validateMetastoreUris;
+
 /**
  * Hive resource for external hive table
  * <p>
@@ -47,6 +49,7 @@ public class HiveResource extends Resource {
         if (StringUtils.isBlank(metastoreURIs)) {
             throw new DdlException(HIVE_METASTORE_URIS + " must be set in properties");
         }
+        validateMetastoreUris(metastoreURIs);
     }
 
     @Override

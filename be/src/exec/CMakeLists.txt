@@ -19,7 +19,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -52,7 +52,6 @@ set(EXEC_FILES
     parquet_reader.cpp
     parquet_builder.cpp
     plain_text_builder.cpp
-    vectorized/adapter_node.cpp
     vectorized/aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp

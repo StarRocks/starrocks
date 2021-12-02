@@ -7,7 +7,6 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/schema.h"
-#include "storage/schema_change.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
@@ -172,7 +171,7 @@ Status DeltaWriter::write(Chunk* chunk, const uint32_t* indexes, uint32_t from, 
         RETURN_IF_ERROR(_init());
     }
 
-    bool flush = _mem_table->insert(chunk, indexes, from, size);
+    bool flush = _mem_table->insert(*chunk, indexes, from, size);
 
     if (flush || _mem_table->is_full()) {
         RETURN_IF_ERROR(_flush_memtable_async());

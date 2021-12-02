@@ -40,6 +40,7 @@ import java.util.Map;
 public class HiveTableTest {
     private String hiveDb;
     private String hiveTable;
+    String resourceName;
     private List<Column> columns;
     private Map<String, String> properties;
 
@@ -47,6 +48,7 @@ public class HiveTableTest {
     public void setUp() {
         hiveDb = "db0";
         hiveTable = "table0";
+        resourceName = "hive0";
 
         columns = Lists.newArrayList();
         Column column = new Column("col1", Type.BIGINT, true);
@@ -55,22 +57,13 @@ public class HiveTableTest {
         properties = Maps.newHashMap();
         properties.put("database", hiveDb);
         properties.put("table", hiveTable);
-        properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
-    }
-
-    @Test
-    public void testNormal() throws DdlException {
-        HiveTable table = new HiveTable(1000, "hive_table", columns, properties);
-        Assert.assertEquals(String.format("%s.%s", hiveDb, hiveTable), table.getHiveDbTable());
-        Assert.assertEquals(1, table.getHiveProperties().size());
+        properties.put("resource", resourceName);
     }
 
     @Test
     public void testWithResourceName(@Mocked Catalog catalog,
                                      @Mocked ResourceMgr resourceMgr,
                                      @Mocked HiveRepository hiveRepository) throws DdlException {
-        String resourceName = "hive0";
-
         Resource hiveResource = new HiveResource(resourceName);
         Map<String, String> resourceProperties = Maps.newHashMap();
         resourceProperties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");

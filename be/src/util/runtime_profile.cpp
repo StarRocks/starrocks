@@ -297,6 +297,17 @@ RuntimeProfile* RuntimeProfile::create_child(const std::string& name, bool inden
     return child;
 }
 
+void RuntimeProfile::remove_childs() {
+    std::lock_guard<std::mutex> l(_children_lock);
+    _child_map.clear();
+    _children.clear();
+}
+
+void RuntimeProfile::reverse_childs() {
+    std::lock_guard<std::mutex> l(_children_lock);
+    std::reverse(_children.begin(), _children.end());
+}
+
 void RuntimeProfile::add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos) {
     DCHECK(child != nullptr);
     DCHECK(child->_parent == nullptr);

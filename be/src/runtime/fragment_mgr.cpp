@@ -431,7 +431,6 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
         // register exec_state before starting exec thread
         auto exec_state_iter = _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
         exec_state_ptr = &exec_state_iter.first->second;
-        exec_state.reset();
     }
 
     auto st = _thread_pool->submit_func([this, exec_state_ptr, cb] { exec_actual(exec_state_ptr, cb); });
@@ -447,7 +446,9 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
         }
         return Status::InternalError(error_msg);
     } else {
-        start_cb((*exec_state_ptr)->executor());
+        // It is necessary to ensure that ExecState is not destructed,
+        // so do not reset ExecState before calling start_cb, otherwise "heap use after free" may appear
+        start_cb(exec_state->executor());
     }
 
     return Status::OK();
@@ -653,7 +654,6 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             TTabletVersionInfo info = iter->second;
             scan_range.tablet_id = tablet_id;
             scan_range.version = std::to_string(info.version);
-            scan_range.version_hash = std::to_string(info.version_hash);
             scan_range.schema_hash = std::to_string(info.schema_hash);
             scan_range.hosts.push_back(address);
         } else {

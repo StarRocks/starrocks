@@ -57,6 +57,7 @@ public:
     bool use_page_cache = false;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+    const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 };
 
 } // namespace starrocks::vectorized

@@ -9,22 +9,28 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
 namespace starrocks {
 namespace pipeline {
+
+using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 class FragmentContext {
     friend FragmentContextManager;
 
 public:
     FragmentContext() : _cancel_flag(false) {}
     ~FragmentContext() {
+        auto runtime_state_ptr = _runtime_state;
+        _runtime_filter_hub.close_all_in_filters(runtime_state_ptr.get());
         _drivers.clear();
         close_all_pipelines();
         if (_plan != nullptr) {
@@ -39,6 +45,8 @@ public:
     }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
+    void set_profile_mode(const TPipelineProfileMode::type& profile_mode) { _profile_mode = profile_mode; }
+    const TPipelineProfileMode::type& profile_mode() { return _profile_mode; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
@@ -99,12 +107,23 @@ public:
         }
     }
 
+    RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
+
+    void set_runtime_filter_port(std::unique_ptr<RuntimeFilterPort>&& runtime_filter_port) {
+        _runtime_filter_port = std::move(runtime_filter_port);
+    }
+
+    RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port.get(); }
+
 private:
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance
     TUniqueId _fragment_instance_id;
     TNetworkAddress _fe_addr;
+
+    // Mode of profile
+    TPipelineProfileMode::type _profile_mode;
 
     // promise used to determine whether fragment finished its execution
     FragmentPromise _finish_promise;
@@ -115,6 +134,8 @@ private:
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     Pipelines _pipelines;
     Drivers _drivers;
+    std::unique_ptr<RuntimeFilterPort> _runtime_filter_port;
+    RuntimeFilterHub _runtime_filter_hub;
     // _morsel_queues is mapping from an source_id to its corresponding
     // MorselQueue that is shared among drivers created from the same pipeline,
     // drivers contend for Morsels from MorselQueue.

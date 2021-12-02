@@ -18,8 +18,8 @@ class SortContext;
  */
 class LocalMergeSortSourceOperator final : public SourceOperator {
 public:
-    LocalMergeSortSourceOperator(int32_t id, int32_t plan_node_id, SortContext* sort_context)
-            : SourceOperator(id, "local_merge_sort_source", plan_node_id), _sort_context(sort_context) {
+    LocalMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, SortContext* sort_context)
+            : SourceOperator(factory, id, "local_merge_sort_source", plan_node_id), _sort_context(sort_context) {
         _sort_context->ref();
     }
 
@@ -52,7 +52,7 @@ public:
     ~LocalMergeSortSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LocalMergeSortSourceOperator>(_id, _plan_node_id, _sort_context.get());
+        return std::make_shared<LocalMergeSortSourceOperator>(this, _id, _plan_node_id, _sort_context.get());
     }
 
 private:

@@ -584,7 +584,6 @@ public class Explain {
             stringBuilder.append("END");
             return stringBuilder.toString();
         }
-
     }
 
     static void buildCostEstimate(StringBuilder sb, OptExpression optExpression, int step) {

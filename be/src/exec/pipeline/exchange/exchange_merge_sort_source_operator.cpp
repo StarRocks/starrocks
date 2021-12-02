@@ -43,8 +43,8 @@ void ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> ExchangeMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_shared<vectorized::Chunk>();
-    // TODO(yan): run `eval_join_runtime_filters`
     get_next_merging(state, &chunk);
+    eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
 }
 
@@ -125,6 +125,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
 }
 
 Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(_sort_exec_exprs->prepare(state, _row_desc, _row_desc));
     RETURN_IF_ERROR(_sort_exec_exprs->open(state));
     return Status::OK();
@@ -132,6 +133,7 @@ Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state) {
 
 void ExchangeMergeSortSourceOperatorFactory::close(RuntimeState* state) {
     _sort_exec_exprs->close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

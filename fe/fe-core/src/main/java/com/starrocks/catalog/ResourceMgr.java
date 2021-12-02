@@ -22,7 +22,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DropResourceStmt;
@@ -42,6 +41,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 
@@ -59,7 +59,7 @@ public class ResourceMgr implements Writable {
 
     // { resourceName -> Resource}
     @SerializedName(value = "nameToResource")
-    private final Map<String, Resource> nameToResource = Maps.newConcurrentMap();
+    private final Hashtable<String, Resource> nameToResource = new Hashtable<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
 
     public ResourceMgr() {
@@ -144,9 +144,11 @@ public class ResourceMgr implements Writable {
 
             for (Map.Entry<String, Resource> entry : nameToResource.entrySet()) {
                 Resource resource = entry.getValue();
-                // check resource privs
-                if (!Catalog.getCurrentCatalog().getAuth().checkResourcePriv(ConnectContext.get(), resource.getName(),
-                        PrivPredicate.SHOW)) {
+                // Since `nameToResource.entrySet` may change after it is called, resource
+                // may be dropped during `show resources`.So that we should do a null pointer
+                // check here. If resource is not null then we should check resource privs.
+                if (resource == null || !Catalog.getCurrentCatalog().getAuth().checkResourcePriv(
+                        ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
                     continue;
                 }
                 resource.getProcNodeData(result);

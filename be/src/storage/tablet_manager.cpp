@@ -40,7 +40,8 @@ DIAGNOSTIC_POP
 #include "storage/olap_common.h"
 #include "storage/reader.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/schema_change.h"
+#include "storage/rowset/rowset_writer.h"
+#include "storage/rowset/rowset_writer_context.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -1108,7 +1109,6 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.tablet_schema = &tablet->tablet_schema();
             context.rowset_state = VISIBLE;
             context.version = version;
-            context.version_hash = request.version_hash;
             // there is no data in init rowset, so overlapping info is unknown.
             context.segments_overlap = OVERLAP_UNKNOWN;
 

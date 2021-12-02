@@ -43,7 +43,6 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* statue) override;
 
@@ -134,6 +133,8 @@ private:
     std::atomic<int32_t> _running_threads{0};
     std::atomic<int32_t> _closed_scanners{0};
 
+    std::vector<std::string> _unused_output_columns;
+
     // profile
     RuntimeProfile* _scan_profile = nullptr;
 
@@ -160,11 +161,14 @@ private:
     RuntimeProfile::Counter* _block_load_counter = nullptr;
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _index_load_timer = nullptr;
-    RuntimeProfile::Counter* _total_pages_num_counter = nullptr;
+    RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+    RuntimeProfile::Counter* _rowsets_read_count = nullptr;
+    RuntimeProfile::Counter* _segments_read_count = nullptr;
+    RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
 };
 
 } // namespace starrocks::vectorized

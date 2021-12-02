@@ -109,6 +109,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -507,6 +508,46 @@ public class PlanFragmentBuilder {
 
             tupleDescriptor.computeMemLayout();
 
+            // set unused output columns
+            if (ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
+                List<ColumnRefOperator> outputColumns = node.getOutputColumns();
+                Set<Integer> outputColumnIds = new HashSet<Integer>();
+                for (ColumnRefOperator colref : outputColumns) {
+                    outputColumnIds.add(colref.getId());
+                }
+
+                // we only support single pred like: a = xx, single pre can push down to scan node
+                // complex pred like: a + b = xx, can push down to scan node yet
+                // so the columns in complex pred, it useful for the stage after scan
+                Set<Integer> singlePredColumnIds = new HashSet<Integer>();
+                Set<Integer> complexPredColumnIds = new HashSet<Integer>();
+                for (ScalarOperator predicate : predicates) {
+                    ColumnRefSet usedColumns = predicate.getUsedColumns();
+                    if (usedColumns.cardinality() > 1) {
+                        for (int cid : usedColumns.getColumnIds()) {
+                            complexPredColumnIds.add(cid);
+                        }
+                    } else if (usedColumns.cardinality() == 1) {
+                        for (int cid : usedColumns.getColumnIds()) {
+                            singlePredColumnIds.add(cid);
+                        }
+                    }
+                }
+
+                Set<Integer> unUsedOutputColumnIds = new HashSet<Integer>();
+                Map<Integer, Integer> dictStringIdToIntIds = node.getDictStringIdToIntIds();
+                for (Integer cid : singlePredColumnIds) {
+                    Integer newCid = cid;
+                    if (dictStringIdToIntIds.containsKey(cid)) {
+                        newCid = dictStringIdToIntIds.get(cid);
+                    }
+                    if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
+                        unUsedOutputColumnIds.add(newCid);
+                    }
+                }
+                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
+            } 
+            
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
             scanNode.setDictStringIdToIntIds(node.getDictStringIdToIntIds());

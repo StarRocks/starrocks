@@ -1525,7 +1525,6 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
                                  << " rowset=" << err_rowsets;
     }
     info->__set_version(version);
-    info->__set_version_hash(0);
     info->__set_version_count(rowsets.size());
     info->__set_row_count(total_row);
     info->__set_data_size(total_size);
@@ -1819,7 +1818,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
             << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
-    LOG(INFO) << "start convert_from. "
+    LOG(INFO) << "start convert_from."
               << " new tablet_id:" << _tablet.tablet_id() << " request_version:" << request_version
               << " #pending:" << _pending_commits.size();
     int64_t max_version = base_tablet->updates()->max_version();
@@ -1874,7 +1873,6 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.tablet_schema = &_tablet.tablet_schema();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = src_rowset->version();
-        writer_context.version_hash = src_rowset->version_hash();
         writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
 
         std::unique_ptr<RowsetWriter> rowset_writer;
