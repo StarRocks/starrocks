@@ -14,14 +14,12 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status close(RuntimeState* state, Status exec_status) override;
-    RuntimeProfile* profile() override { return _profile; }
+    RuntimeProfile* profile() override { return nullptr; }
     std::vector<std::unique_ptr<DataStreamSender> >& get_sinks() { return _sinks; }
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
 private:
-    void _create_profile();
     ObjectPool* _pool;
-    RuntimeProfile* _profile;
     std::vector<std::unique_ptr<DataStreamSender> > _sinks;
 };
 

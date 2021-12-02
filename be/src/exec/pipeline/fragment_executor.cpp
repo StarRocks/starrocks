@@ -187,13 +187,17 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
     size_t driver_id = 0;
+    size_t num_root_drivers = 0;
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
         LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
                   << " fragment_instance_id=" << print_id(params.fragment_instance_id);
-        const bool is_root = (n == num_pipelines - 1);
+        // This happens when we create new pipelines at the end of original pipeline
+        // Theoretically we should set original pipeline non-root.
+        // But here for simplicity we just ignore that.
+        const bool is_root = (n == num_pipelines - 1) || (pipeline->is_root());
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only ScanOperator need a MorselQueue attached.
         setup_profile_hierarchy(runtime_state, pipeline);
@@ -205,7 +209,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 DCHECK(degree_of_parallelism <= morsel_queue->num_morsels());
             }
             if (is_root) {
-                _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
+                num_root_drivers += degree_of_parallelism;
             }
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
@@ -219,8 +223,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             }
         } else {
             if (is_root) {
-                _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
+                num_root_drivers += degree_of_parallelism;
             }
+
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
@@ -232,6 +237,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         // The pipeline created later should be placed in the front
         runtime_state->runtime_profile()->reverse_childs();
     }
+    _fragment_ctx->set_num_root_drivers(num_root_drivers);
     _fragment_ctx->set_drivers(std::move(drivers));
     return Status::OK();
 }
@@ -313,6 +319,7 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);
             auto pp = std::make_shared<Pipeline>(context->next_pipe_id(), ops);
+            pp->set_root();
             _fragment_ctx->pipelines().emplace_back(pp);
         }
     }

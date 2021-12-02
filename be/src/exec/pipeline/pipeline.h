@@ -70,10 +70,14 @@ public:
         return ss.str();
     }
 
+    bool is_root() const { return _is_root; }
+    void set_root() { _is_root = true; }
+
 private:
     uint32_t _id = 0;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     OpFactories _op_factories;
+    bool _is_root = false;
 };
 
 } // namespace pipeline

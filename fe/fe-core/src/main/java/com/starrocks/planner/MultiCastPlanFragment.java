@@ -30,6 +30,7 @@ public class MultiCastPlanFragment extends PlanFragment {
 
     public MultiCastPlanFragment(PlanFragment planFragment) {
         super(planFragment.fragmentId, planFragment.planRoot, DataPartition.RANDOM);
+        this.children.addAll(planFragment.getChildren());
     }
 
     public List<PlanFragment> getDestFragmentList() {
