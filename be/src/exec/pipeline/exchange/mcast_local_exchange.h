@@ -10,7 +10,7 @@ namespace pipeline {
 // at the end of the pipeline. It works like
 // [source pipeline]  -> exchange_sink_operator
 
-// But fr multi cast stream sink, extra pipelines are added with exchanger
+// But for multi cast stream sink, extra pipelines are added with exchanger
 // It works like
 // [source pipeline] -> mcast_local_sink   -> mcast_local_exchanger  -> [new pipeline1]
 //                                                     |             -> [new pipeline2]
