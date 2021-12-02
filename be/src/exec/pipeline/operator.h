@@ -145,6 +145,10 @@ protected:
     RuntimeProfile::Counter* _conjuncts_input_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
+
+private:
+    void _init_rf_counters(bool init_bloom);
+    void _init_conjuct_counters();
 };
 
 class OperatorFactory {

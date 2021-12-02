@@ -177,9 +177,7 @@ public:
 
     uint32_t version() const { return _opts.storage_format_version; }
 
-    // Read and load necessary column indexes into memory if it hasn't been loaded.
-    // May be called multiple times, subsequent calls will no op.
-    Status ensure_index_loaded(ReaderType reader_type);
+    Status load_ordinal_index_once();
 
 private:
     struct private_type {
@@ -212,6 +210,10 @@ private:
     void operator=(ColumnReader&&) = delete;
 
     Status _init(ColumnMetaPB* meta);
+
+    Status _load_zone_map_index_once();
+    Status _load_bitmap_index_once();
+    Status _load_bloom_filter_index_once();
 
     Status _load_zone_map_index(bool use_page_cache, bool kept_in_memory);
     Status _load_ordinal_index(bool use_page_cache, bool kept_in_memory);
@@ -266,8 +268,10 @@ private:
     // The ordinal index must be loaded before read operation.
     // zonemap, bitmap, bloomfilter is only necessary for query.
     // the other operations can not load these indices.
-    StarRocksCallOnce<Status> _load_ordinal_index_once;
-    StarRocksCallOnce<Status> _load_indices_once;
+    StarRocksCallOnce<Status> _ordinal_index_once;
+    StarRocksCallOnce<Status> _zonemap_index_once;
+    StarRocksCallOnce<Status> _bitmap_index_once;
+    StarRocksCallOnce<Status> _bloomfilter_index_once;
 
     std::bitset<16> _flags;
 };

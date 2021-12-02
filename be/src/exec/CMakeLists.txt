@@ -19,7 +19,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -132,6 +132,7 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange.cpp
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
+    pipeline/exchange/mcast_local_exchange.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
     pipeline/operator_with_dependency.cpp

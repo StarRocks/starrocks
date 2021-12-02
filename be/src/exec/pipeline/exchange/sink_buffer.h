@@ -138,13 +138,20 @@ public:
     bool is_finishing() const { return _is_finishing; }
 
     bool is_finished() const {
-        return _is_finishing                                               // SinkBuffer needn't input request anymore,
-               && !_is_rpc_task_active                                     // and there isn't running rpc task,
-               && _in_flight_rpc_num.load(std::memory_order_acquire) == 0; // and there isn't in-flight RPC.
+        if (!_is_finishing) {
+            return false;
+        }
+
+        // Here is the guarantee that
+        // 1. No new rpc task will be created after finishing stage
+        // 2. No new brpc process will be triggered after finishing stage
+        // Therefore, we just wait for existed rpc task and bprc process to be finished
+        return !_is_rpc_task_active && _in_flight_rpc_num.load(std::memory_order_acquire) == 0;
     }
 
     void decrease_running_sinkers() {
         if (--_num_remaining_sinkers == 0) {
+            std::lock_guard<std::mutex> l(_mutex);
             _is_finishing = true;
         }
     }
@@ -296,11 +303,15 @@ private:
     // Events include 'new request' and 'channel ready'
     std::queue<TUniqueId, std::list<TUniqueId>> _events;
 
+    // _is_rpc_task_active and _is_finishing are used in _try_to_trigger_rpc_task and _send_rpc.
+    // - Write and read them with lock, to protect critical region between _try_to_trigger_rpc_task and _send_rpc.
+    // - Read them without lock in is_finished() and ~SinkBuffer(), whose visibility is guaranteed by atomic.
+    std::atomic<bool> _is_rpc_task_active = false;
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still RPC task or in-flight RPC running.
     // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.
-    bool _is_finishing = false;
-    bool _is_rpc_task_active = false;
+    std::atomic<bool> _is_finishing = false;
+
     int32_t _expected_eos = 0;
 
     std::atomic<int> _num_remaining_sinkers;

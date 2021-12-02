@@ -57,6 +57,7 @@ import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -125,6 +126,7 @@ public class UtFrameUtils {
         ctx.setQualifiedUser(Auth.ROOT_USER);
         ctx.setCatalog(Catalog.getCurrentCatalog());
         ctx.setThreadLocalInfo();
+        ctx.setDumpInfo(new MockDumpInfo());
         return ctx;
     }
 
@@ -367,7 +369,7 @@ public class UtFrameUtils {
             Relation relation = analyzer.analyze(statementBase);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(relation);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext).transform(relation);
 
             Optimizer optimizer = new Optimizer();
             OptExpression optimizedPlan = optimizer.optimize(
@@ -467,7 +469,7 @@ public class UtFrameUtils {
         Relation relation = analyzer.analyze(statementBase);
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(relation);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext).transform(relation);
 
         Optimizer optimizer = new Optimizer();
         OptExpression optimizedPlan = optimizer.optimize(

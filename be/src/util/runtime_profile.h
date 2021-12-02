@@ -258,6 +258,8 @@ public:
 
     RuntimeProfile* parent() const { return _parent; }
 
+    void reset_parent() { _parent = nullptr; }
+
     // Adds a child profile.  This is thread safe.
     // 'indent' indicates whether the child will be printed w/ extra indentation
     // relative to the parent.
@@ -273,6 +275,12 @@ public:
     //
     // [thread-safe]
     RuntimeProfile* create_child(const std::string& name, bool indent = true, bool prepend = false);
+
+    // Remove childs
+    void remove_childs();
+
+    // Reverse childs
+    void reverse_childs();
 
     // Sorts all children according to a custom comparator. Does not
     // invalidate pointers to profiles.

@@ -21,7 +21,9 @@ public class CTEConsumerImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalCTEConsumeOperator logical = (LogicalCTEConsumeOperator) input.getOp();
-        PhysicalCTEConsumeOperator consume = new PhysicalCTEConsumeOperator(logical.getCteId());
+        PhysicalCTEConsumeOperator consume =
+                new PhysicalCTEConsumeOperator(logical.getCteId(), logical.getCteOutputColumnRefMap(),
+                        logical.getLimit(), logical.getPredicate(), logical.getProjection());
         return Lists.newArrayList(OptExpression.create(consume));
     }
 }

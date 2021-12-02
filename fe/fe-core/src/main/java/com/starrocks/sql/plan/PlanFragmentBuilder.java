@@ -46,6 +46,7 @@ import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.MetaScanNode;
+import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -76,6 +77,8 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
@@ -383,15 +386,17 @@ public class PlanFragmentBuilder {
                 ArrayList<SlotDescriptor> slots = childTuple.getSlots();
                 for (SlotDescriptor slot : slots) {
                     int slotId = slot.getId().asInt();
+                    boolean isNullable = slot.getIsNullable();
                     if (node.getDictToStrings().containsKey(slotId)) {
                         Integer stringSlotId = node.getDictToStrings().get(slotId);
                         SlotDescriptor slotDescriptor =
                                 context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(stringSlotId));
-                        slotDescriptor.setIsNullable(true);
+                        slotDescriptor.setIsNullable(isNullable);
                         slotDescriptor.setIsMaterialized(true);
                         slotDescriptor.setType(Type.VARCHAR);
 
-                        context.getColRefToExpr().put(new ColumnRefOperator(stringSlotId, Type.VARCHAR, "xxx", true),
+                        context.getColRefToExpr().put(new ColumnRefOperator(stringSlotId, Type.VARCHAR,
+                                        "<dict-code>", slotDescriptor.getIsNullable()),
                                 new SlotRef(stringSlotId.toString(), slotDescriptor));
                     } else {
                         // Note: must change the parent tuple id
@@ -546,8 +551,8 @@ public class PlanFragmentBuilder {
                     }
                 }
                 scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
-            } 
-            
+            }
+
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
             scanNode.setDictStringIdToIntIds(node.getDictStringIdToIntIds());
@@ -1490,10 +1495,10 @@ public class PlanFragmentBuilder {
                     // distributionMode is SHUFFLE_HASH_BUCKET
                     if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
                             !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                        return computeRunTimeBucketShufflePlanFragment(context, rightFragment,
+                        return computeShuffleHashBucketPlanFragment(context, rightFragment,
                                 leftFragment, hashJoinNode);
                     } else {
-                        return computeRunTimeBucketShufflePlanFragment(context, leftFragment,
+                        return computeShuffleHashBucketPlanFragment(context, leftFragment,
                                 rightFragment, hashJoinNode);
                     }
                 } else {
@@ -1610,10 +1615,10 @@ public class PlanFragmentBuilder {
             return stayFragment;
         }
 
-        public PlanFragment computeRunTimeBucketShufflePlanFragment(ExecPlan context,
-                                                                    PlanFragment stayFragment,
-                                                                    PlanFragment removeFragment,
-                                                                    HashJoinNode hashJoinNode) {
+        public PlanFragment computeShuffleHashBucketPlanFragment(ExecPlan context,
+                                                                 PlanFragment stayFragment,
+                                                                 PlanFragment removeFragment,
+                                                                 HashJoinNode hashJoinNode) {
             hashJoinNode.setShuffleHashBucket(true);
             removeFragment.getChild(0)
                     .setOutputPartition(new DataPartition(TPartitionType.HASH_PARTITIONED,
@@ -1912,6 +1917,58 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalLimit(OptExpression optExpression, ExecPlan context) {
             // PhysicalLimit use for enforce gather property, Enforcer will produce more PhysicalDistribution, there
             // don't need do anything.
+            return visit(optExpression.inputAt(0), context);
+        }
+
+        @Override
+        public PlanFragment visitPhysicalCTEConsume(OptExpression optExpression, ExecPlan context) {
+            PhysicalCTEConsumeOperator consume = (PhysicalCTEConsumeOperator) optExpression.getOp();
+            String cteId = consume.getCteId();
+
+            MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
+
+            ExchangeNode exchangeNode = new ExchangeNode(context.getPlanCtx().getNextNodeId(),
+                    cteFragment.getPlanRoot(), false, DistributionSpec.DistributionType.SHUFFLE);
+            exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
+
+            PlanFragment consumeFragment = new PlanFragment(context.getPlanCtx().getNextFragmentId(), exchangeNode,
+                    DataPartition.hashPartitioned(cteFragment.getOutputExprs()));
+
+            Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+            consume.getCteOutputColumnRefMap().forEach(projectMap::put);
+            buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
+
+            cteFragment.getDestNodeList().add(exchangeNode);
+            consumeFragment.addChild(cteFragment);
+            context.getFragments().add(consumeFragment);
+            return consumeFragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalCTEProduce(OptExpression optExpression, ExecPlan context) {
+            PlanFragment child = visit(optExpression.inputAt(0), context);
+            String cteId = ((PhysicalCTEProduceOperator) optExpression.getOp()).getCteId();
+            context.getFragments().remove(child);
+            MultiCastPlanFragment cteProduce = new MultiCastPlanFragment(child);
+
+            List<Expr> outputs = Lists.newArrayList();
+            optExpression.getOutputColumns().getStream()
+                    .forEach(i -> outputs.add(context.getColRefToExpr().get(columnRefFactory.getColumnRef(i))));
+
+            cteProduce.setOutputExprs(outputs);
+            context.getCteProduceFragments().put(cteId, cteProduce);
+            context.getFragments().add(cteProduce);
+            return child;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalCTEAnchor(OptExpression optExpression, ExecPlan context) {
+            visit(optExpression.inputAt(0), context);
+            return visit(optExpression.inputAt(1), context);
+        }
+
+        @Override
+        public PlanFragment visitPhysicalNoCTE(OptExpression optExpression, ExecPlan context) {
             return visit(optExpression.inputAt(0), context);
         }
     }

@@ -314,6 +314,12 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
         // how to process literal
         auto literal = _pool->add(new VExtLiteral(expr->type().type, _context->evaluate(expr, nullptr)));
         std::string col = slot_desc->col_name();
+
+        // ES does not support non-bool literal pushdown for bool type
+        if (column_ref->type().type == TYPE_BOOLEAN && expr->type().type != TYPE_BOOLEAN) {
+            return Status::InternalError("ES does not support non-bool literal pushdown");
+        }
+
         if (_field_context.find(col) != _field_context.end()) {
             col = _field_context[col];
         }

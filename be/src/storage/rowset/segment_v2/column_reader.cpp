@@ -174,6 +174,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
 }
 
 Status ColumnReader::new_bitmap_index_iterator(BitmapIndexIterator** iterator) {
+    RETURN_IF_ERROR(_load_bitmap_index_once());
     RETURN_IF_ERROR(_bitmap_index.reader->new_iterator(iterator));
     return Status::OK();
 }
@@ -196,6 +197,7 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
 Status ColumnReader::get_row_ranges_by_zone_map(CondColumn* cond_column, CondColumn* delete_condition,
                                                 std::unordered_set<uint32_t>* delete_partial_filtered_pages,
                                                 RowRanges* row_ranges) {
+    RETURN_IF_ERROR(_load_zone_map_index_once());
     std::vector<uint32_t> page_indexes;
     RETURN_IF_ERROR(_get_filtered_pages(cond_column, delete_condition, delete_partial_filtered_pages, &page_indexes));
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
@@ -308,6 +310,7 @@ Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_ind
 }
 
 Status ColumnReader::get_row_ranges_by_bloom_filter(CondColumn* cond_column, RowRanges* row_ranges) {
+    RETURN_IF_ERROR(_load_bloom_filter_index_once());
     RowRanges bf_row_ranges;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
     RETURN_IF_ERROR(_bloom_filter_index.reader->new_iterator(&bf_iter));
@@ -340,6 +343,7 @@ Status ColumnReader::get_row_ranges_by_bloom_filter(CondColumn* cond_column, Row
 // prerequisite: at least one predicate in |predicates| support bloom filter.
 Status ColumnReader::bloom_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
                                   vectorized::SparseRange* row_ranges) {
+    RETURN_IF_ERROR(_load_bloom_filter_index_once());
     vectorized::SparseRange bf_row_ranges;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
     RETURN_IF_ERROR(_bloom_filter_index.reader->new_iterator(&bf_iter));
@@ -441,6 +445,7 @@ Status ColumnReader::zone_map_filter(const std::vector<const vectorized::ColumnP
                                      const vectorized::ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
                                      vectorized::SparseRange* row_ranges) {
+    RETURN_IF_ERROR(_load_zone_map_index_once());
     std::vector<uint32_t> page_indexes;
     RETURN_IF_ERROR(_zone_map_filter(predicates, del_predicate, del_partial_filtered_pages, &page_indexes));
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
@@ -510,24 +515,29 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
     }
 }
 
-Status ColumnReader::ensure_index_loaded(ReaderType reader_type) {
-    Status status = _load_ordinal_index_once.call([this] {
-        bool use_page_cache = !config::disable_storage_page_cache;
-        RETURN_IF_ERROR(_load_ordinal_index(use_page_cache, _opts.kept_in_memory));
-        return Status::OK();
-    });
-    RETURN_IF_ERROR(status);
+Status ColumnReader::_load_zone_map_index_once() {
+    Status status = _zonemap_index_once.call(
+            [this] { return _load_zone_map_index(!config::disable_storage_page_cache, _opts.kept_in_memory); });
+    return status;
+}
 
-    if (is_query(reader_type)) {
-        status = _load_indices_once.call([this] {
-            // ZoneMap, Bitmap, BloomFilter is only necessary for query.
-            bool use_page_cache = !config::disable_storage_page_cache;
-            RETURN_IF_ERROR(_load_zone_map_index(use_page_cache, _opts.kept_in_memory));
-            RETURN_IF_ERROR(_load_bitmap_index(use_page_cache, _opts.kept_in_memory));
-            RETURN_IF_ERROR(_load_bloom_filter_index(use_page_cache, _opts.kept_in_memory));
-            return Status::OK();
-        });
-    }
+Status ColumnReader::_load_bitmap_index_once() {
+    Status status = _bitmap_index_once.call(
+            [this] { return _load_bitmap_index(!config::disable_storage_page_cache, _opts.kept_in_memory); });
+    return status;
+}
+
+Status ColumnReader::_load_bloom_filter_index_once() {
+    Status status = _bloomfilter_index_once.call(
+            [this] { return _load_bloom_filter_index(!config::disable_storage_page_cache, _opts.kept_in_memory); });
+    return status;
+}
+
+Status ColumnReader::load_ordinal_index_once() {
+    // Only load ordinal index.
+    // Other indexes like zone map/bitmap/bloomfilter should be load when necessary
+    Status status = _ordinal_index_once.call(
+            [this] { return _load_ordinal_index(!config::disable_storage_page_cache, _opts.kept_in_memory); });
     return status;
 }
 
