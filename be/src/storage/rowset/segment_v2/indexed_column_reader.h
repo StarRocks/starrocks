@@ -137,7 +137,7 @@ private:
 
     // read a page specified by `pp' from `file' into `handle'
     Status read_page(fs::ReadableBlock* rblock, const PagePointer& pp, PageHandle* handle, Slice* body,
-                     PageFooterPB* footer, bool save_in_cache = false) const;
+                     PageFooterPB* footer, bool save_in_page_cache = false) const;
 
     fs::BlockManager* _block_mgr;
     std::string _file_name;
