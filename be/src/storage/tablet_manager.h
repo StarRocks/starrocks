@@ -52,7 +52,7 @@ class DataDir;
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
+    TabletManager(int32_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -200,8 +200,6 @@ private:
     TabletMap& _get_tablet_map(TTabletId tablet_id);
 
     TabletsShard& _get_tablets_shard(TTabletId tabletId);
-
-    MemTracker* _mem_tracker = nullptr;
 
     std::vector<TabletsShard> _tablets_shards;
     const int32_t _tablets_shards_mask;

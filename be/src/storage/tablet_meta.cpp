@@ -26,6 +26,7 @@
 #include <sstream>
 
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 #include "storage/olap_common.h"
 #include "storage/protobuf_file.h"
 #include "storage/tablet_meta_manager.h"
@@ -235,7 +236,13 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
     return Status::OK();
 }
 
-TabletMeta::TabletMeta() : _tablet_uid(0, 0) {}
+TabletMeta::TabletMeta() : _tablet_uid(0, 0) {
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(sizeof(TabletMeta));
+}
+
+TabletMeta::~TabletMeta() {
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->release(sizeof(TabletMeta));
+}
 
 TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
                        uint64_t shard_id, const TTabletSchema& tablet_schema, uint32_t next_unique_id,
@@ -322,6 +329,8 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     // }
 
     init_from_pb(&tablet_meta_pb);
+
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(sizeof(TabletMeta));
 }
 
 Status TabletMeta::create_from_file(const string& file_path) {

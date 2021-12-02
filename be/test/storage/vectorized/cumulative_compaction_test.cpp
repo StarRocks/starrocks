@@ -125,7 +125,6 @@ public:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.tablet_meta_mem_tracker = _tablet_meta_mem_tracker.get();
         options.compaction_mem_tracker = _compaction_mem_tracker.get();
         if (k_engine == nullptr) {
             Status s = starrocks::StorageEngine::open(options, &k_engine);
@@ -144,7 +143,6 @@ public:
         _schema_hash_path = tablet_path + "/1111";
         ASSERT_TRUE(FileUtils::create_dir(_schema_hash_path).ok());
 
-        _tablet_meta_mem_tracker.reset(new MemTracker(-1));
         _mem_pool.reset(new MemPool());
 
         _compaction_mem_tracker.reset(new MemTracker(-1));
@@ -160,7 +158,6 @@ protected:
     std::unique_ptr<TabletSchema> _tablet_schema;
     RowsetTypePB _rowset_type = BETA_ROWSET;
     std::string _schema_hash_path;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
 };

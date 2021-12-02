@@ -71,9 +71,14 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(fs::BlockManager* blk_mgr, cons
 
 Segment::Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
                  const TabletSchema* tablet_schema)
-        : _block_mgr(blk_mgr), _fname(std::move(fname)), _tablet_schema(tablet_schema), _segment_id(segment_id) {}
+        : _block_mgr(blk_mgr), _fname(std::move(fname)), _tablet_schema(tablet_schema), _segment_id(segment_id) {
+    _mem_usage = sizeof(Segment) + _fname.size();
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(_mem_usage);
+}
 
-Segment::~Segment() = default;
+Segment::~Segment() {
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->release(_mem_usage);
+}
 
 Status Segment::_open(size_t* footer_length_hint) {
     SegmentFooterPB footer;
@@ -222,11 +227,19 @@ Status Segment::_load_index() {
         PageFooterPB footer;
         RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
 
+        int32_t mem_usage = _sk_index_handle.mem_usage();
+        _mem_usage += mem_usage;
+        ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage);
+
         DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
         DCHECK(footer.has_short_key_page_footer());
 
         _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
         RETURN_IF_ERROR(_sk_index_decoder->parse(body, footer.short_key_page_footer()));
+
+        mem_usage = _sk_index_decoder->mem_usage();
+        _mem_usage += mem_usage;
+        ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage);
 
         return Status::OK();
     });

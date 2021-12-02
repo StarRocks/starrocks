@@ -57,7 +57,6 @@ protected:
     OlapReaderStatistics _stats;
 
     void SetUp() override {
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
         _schema_change_mem_tracker = std::make_unique<MemTracker>();
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         config::tablet_map_shard_size = 1;
@@ -75,7 +74,6 @@ protected:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.tablet_meta_mem_tracker = _tablet_meta_mem_tracker.get();
         options.schema_change_mem_tracker = _schema_change_mem_tracker.get();
         Status s = starrocks::StorageEngine::open(options, &k_engine);
         ASSERT_TRUE(s.ok()) << s.to_string();
@@ -200,7 +198,6 @@ protected:
     }
 
 private:
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _schema_change_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };

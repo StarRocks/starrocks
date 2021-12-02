@@ -215,7 +215,8 @@ Status ExecEnv::init_mem_tracker() {
 
     int64_t load_mem_limit = calc_process_max_load_memory(_mem_tracker->limit());
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", _mem_tracker);
-    _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", _mem_tracker);
+    // Metadata statistics memory statistics do not use new mem statistics framework with hook
+    _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", nullptr);
 
     int64_t compaction_mem_limit = calc_compaction_max_load_memory(_mem_tracker->limit());
     _compaction_mem_tracker = new MemTracker(compaction_mem_limit, "compaction", _mem_tracker);

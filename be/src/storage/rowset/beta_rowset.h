@@ -43,7 +43,7 @@ class KVStore;
 class BetaRowset : public Rowset {
 public:
     BetaRowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
-    ~BetaRowset() override {}
+    ~BetaRowset() override;
 
     StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                         const vectorized::RowsetReadOptions& options) override;

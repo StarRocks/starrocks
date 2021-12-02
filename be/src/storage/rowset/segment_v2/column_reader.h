@@ -274,6 +274,7 @@ private:
     StarRocksCallOnce<Status> _bloomfilter_index_once;
 
     std::bitset<16> _flags;
+    uint32_t _mem_usage = 0;
 };
 
 } // namespace segment_v2

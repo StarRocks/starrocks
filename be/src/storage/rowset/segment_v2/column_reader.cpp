@@ -61,7 +61,10 @@ ColumnReader::ColumnReader(const private_type&, const ColumnReaderOptions& opts,
           _zone_map_index(),
           _ordinal_index(),
           _bitmap_index(),
-          _bloom_filter_index() {}
+          _bloom_filter_index() {
+    _mem_usage += sizeof(ColumnReader);
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(sizeof(ColumnReader));
+}
 
 ColumnReader::~ColumnReader() {
     delete (_flags[kHasOrdinalIndexMetaPos] ? _ordinal_index.meta : nullptr);
@@ -75,6 +78,8 @@ ColumnReader::~ColumnReader() {
 
     delete (_flags[kHasBloomFilterIndexMetaPos] ? _bloom_filter_index.meta : nullptr);
     delete (_flags[kHasBloomFilterIndexReaderPos] ? _bloom_filter_index.reader : nullptr);
+
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->release(_mem_usage);
 }
 
 Status ColumnReader::_init(ColumnMetaPB* meta) {
@@ -383,6 +388,11 @@ Status ColumnReader::_load_ordinal_index(bool use_page_cache, bool kept_in_memor
         _flags.set(kHasOrdinalIndexReaderPos, true);
         st = _ordinal_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), _num_rows, use_page_cache,
                                          kept_in_memory);
+        if (st.ok()) {
+            int32_t mem_usage = _ordinal_index.reader->mem_usage();
+            _mem_usage += mem_usage;
+            ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage);
+        }
     }
     return st;
 }
@@ -396,6 +406,11 @@ Status ColumnReader::_load_zone_map_index(bool use_page_cache, bool kept_in_memo
         _flags.set(kHasZoneMapIndexReaderPos, true);
         st = _zone_map_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache,
                                           kept_in_memory);
+        if (st.ok()) {
+            int32_t mem_usage = _zone_map_index.reader->mem_usage();
+            _mem_usage += mem_usage;
+            ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage);
+        }
     }
     return st;
 }
@@ -408,6 +423,11 @@ Status ColumnReader::_load_bitmap_index(bool use_page_cache, bool kept_in_memory
         _bitmap_index.reader = new BitmapIndexReader();
         _flags.set(kHasBitmapIndexReaderPos, true);
         st = _bitmap_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache, kept_in_memory);
+        if (st.ok()) {
+            int32_t mem_usage = _bitmap_index.reader->mem_usage();
+            _mem_usage += mem_usage;
+            ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage);
+        }
     }
     return st;
 }
@@ -421,6 +441,11 @@ Status ColumnReader::_load_bloom_filter_index(bool use_page_cache, bool kept_in_
         _flags.set(kHasBloomFilterIndexReaderPos, true);
         st = _bloom_filter_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache,
                                               kept_in_memory);
+        if (st.ok()) {
+            int32_t mem_usage = _bloom_filter_index.reader->mem_usage();
+            _mem_usage += mem_usage;
+            ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage);
+        }
     }
     return st;
 }

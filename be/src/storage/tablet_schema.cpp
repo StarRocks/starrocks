@@ -25,6 +25,7 @@
 #include <cctype>
 #include <vector>
 
+#include "runtime/exec_env.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/vectorized/type_utils.h"
 
@@ -393,7 +394,18 @@ bool TabletColumn::is_format_v2_column() const {
  * TabletSchema
  ******************************************************************/
 
+TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb) {
+    init_from_pb(schema_pb);
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage());
+}
+
+TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
+    init_from_pb(schema_pb);
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage());
+}
+
 TabletSchema::~TabletSchema() {
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->release(mem_usage());
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
     }

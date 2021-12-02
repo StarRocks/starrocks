@@ -49,7 +49,6 @@ struct EngineOptions {
     std::vector<StorePath> store_paths;
     // BE's UUID. It will be reset every time BE restarts.
     UniqueId backend_uid{0, 0};
-    MemTracker* tablet_meta_mem_tracker = nullptr;
     MemTracker* compaction_mem_tracker = nullptr;
     MemTracker* schema_change_mem_tracker = nullptr;
     MemTracker* update_mem_tracker = nullptr;

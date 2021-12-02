@@ -180,6 +180,7 @@ private:
     bool _needs_chunk_adapter = false;
     // When the storage types is different with TabletSchema
     bool _needs_block_adapter = false;
+    uint32_t _mem_usage = 0;
 };
 
 } // namespace segment_v2

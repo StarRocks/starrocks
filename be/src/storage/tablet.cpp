@@ -60,9 +60,12 @@ Tablet::Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(sizeof(Tablet));
 }
 
-Tablet::~Tablet() {}
+Tablet::~Tablet() {
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->release(sizeof(Tablet));
+}
 
 Status Tablet::_init_once_action() {
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
@@ -192,9 +195,6 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
 }
 
 Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     CHECK(!_updates) << "updatable tablet should not call add_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
@@ -233,9 +233,6 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
 }
 
 void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     CHECK(!_updates) << "updatable tablet should not call modify_rowsets";
     // the compaction process allow to compact the single version, eg: version[4-4].
     // this kind of "single version compaction" has same "input version" and "output version".
@@ -325,9 +322,6 @@ RowsetSharedPtr Tablet::_rowset_with_largest_size() {
 
 // add inc rowset should not persist tablet meta, because it will be persisted when publish txn.
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     CHECK(!_updates) << "updatable tablet should not call add_inc_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);

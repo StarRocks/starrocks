@@ -120,7 +120,7 @@ public:
                const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
                TTabletType::type tabletType, RowsetTypePB roset_type);
-    virtual ~TabletMeta() {}
+    virtual ~TabletMeta();
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.

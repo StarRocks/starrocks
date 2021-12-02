@@ -61,7 +61,13 @@ std::string BetaRowset::segment_srcrssid_file_path(const std::string& dir, const
 }
 
 BetaRowset::BetaRowset(const TabletSchema* schema, string rowset_path, RowsetMetaSharedPtr rowset_meta)
-        : Rowset(schema, std::move(rowset_path), std::move(rowset_meta)) {}
+        : Rowset(schema, std::move(rowset_path), std::move(rowset_meta)) {
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(sizeof(BetaRowset) + _rowset_meta->mem_usage());
+}
+
+BetaRowset::~BetaRowset() {
+    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->release(sizeof(BetaRowset) + rowset_meta()->mem_usage());
+}
 
 OLAPStatus BetaRowset::init() {
     return OLAP_SUCCESS; // no op
