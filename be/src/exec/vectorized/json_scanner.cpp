@@ -122,7 +122,7 @@ Status JsonScanner::_construct_json_types() {
             break;
         }
 
-        // Treat BIGINT(8B), INT(4B), SMALLINT(2B), TYNYINT(1B) as BIGINT(8B).
+        // Treat BIGINT(8B), INT(4B), SMALLINT(2B), TINYINT(1B) as BIGINT(8B).
         case TYPE_BIGINT:
         case TYPE_INT:
         case TYPE_SMALLINT:
@@ -761,7 +761,7 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
 }
 
 void JsonReader::_construct_number_column(simdjson::ondemand::value& value, Column* column,
-                                           const TypeDescriptor& type_desc) {
+                                          const TypeDescriptor& type_desc) {
     simdjson::ondemand::number_type tp;
 
     auto err = value.get_number_type().get(tp);
@@ -915,7 +915,6 @@ void JsonReader::_construct_string_column(simdjson::ondemand::value& value, Colu
         column->append_nulls(1);
         break;
     }
-
     }
 }
 

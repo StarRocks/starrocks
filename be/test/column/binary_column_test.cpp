@@ -112,8 +112,17 @@ PARALLEL_TEST(BinaryColumnTest, test_append_numbers) {
     void* buff = values.data();
     size_t length = values.size() * sizeof(values[0]);
 
-    auto c4 = BinaryColumn::create();
-    ASSERT_EQ(-1, c4->append_numbers(buff, length));
+    auto c = BinaryColumn::create();
+
+    for(const auto &value: values) {
+        ASSERT_EQ(1, c->append_numbers(&value, sizeof(value)));
+    }
+
+    ASSERT_EQ(values.size(), c->size());
+
+    for (size_t i = 0; i < values.size(); i++) {
+        std::memcmp(&values[i], c->get_data()[i].get_data(), sizeof(values[i]));
+    }
 }
 
 // NOLINTNEXTLINE

@@ -157,6 +157,9 @@ public:
 
     bool append_continuous_strings(const std::vector<Slice>& strs) override;
 
+    // BinaryColumn::append_numbers allows 1 number to be appended every time.
+    // The type of the column value is Slice, whose size is not fixed.
+    // Hence, we cannot determine the number of numbers appended.
     size_t append_numbers(const void* buff, size_t length) override {
         _bytes.insert(_bytes.end(), static_cast<const char*>(buff), static_cast<const char*>(buff) + length);
         _offsets.emplace_back(_bytes.size());
