@@ -52,6 +52,8 @@ import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.MultiCastDataSink;
+import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -351,16 +353,6 @@ public class Coordinator {
     private void prepare() {
         for (PlanFragment fragment : fragments) {
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
-        }
-
-        // set inputFragments
-        for (PlanFragment fragment : fragments) {
-            if (!(fragment.getSink() instanceof DataStreamSink)) {
-                continue;
-            }
-            FragmentExecParams params = fragmentExecParamsMap.get(fragment.getDestFragment().getFragmentId());
-            params.inputFragments.add(fragment.getFragmentId());
-
         }
 
         coordAddress = new TNetworkAddress(localIP, Config.rpc_port);
@@ -859,8 +851,17 @@ public class Coordinator {
 
         // compute destinations and # senders per exchange node
         // (the root fragment doesn't have a destination)
+
+        // MultiCastFragment params
+        handleMultiCastFragmentParams();
+
         for (FragmentExecParams params : fragmentExecParamsMap.values()) {
+            if (params.fragment instanceof MultiCastPlanFragment) {
+                continue;
+            }
+            
             PlanFragment destFragment = params.fragment.getDestFragment();
+
             if (destFragment == null) {
                 // root plan fragment
                 continue;
@@ -916,6 +917,76 @@ public class Coordinator {
                     dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
                     dest.setBrpc_server(toBrpcHost(destParams.instanceExecParams.get(j).host));
                     params.destinations.add(dest);
+                }
+            }
+        }
+
+    }
+
+    private void handleMultiCastFragmentParams() throws Exception {
+        for (FragmentExecParams params : fragmentExecParamsMap.values()) {
+            if (!(params.fragment instanceof MultiCastPlanFragment)) {
+                continue;
+            }
+
+            MultiCastPlanFragment multi = (MultiCastPlanFragment) params.fragment;
+            Preconditions.checkState(multi.getSink() instanceof MultiCastDataSink);
+            // set # of senders
+            MultiCastDataSink multiSink = (MultiCastDataSink) multi.getSink();
+
+            for (int i = 0; i < multi.getDestFragmentList().size(); i++) {
+                PlanFragment destFragment = multi.getDestFragmentList().get(i);
+                DataSink sink = multiSink.getDataStreamSinks().get(i);
+
+                if (destFragment == null) {
+                    continue;
+                }
+                FragmentExecParams destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
+
+                PlanNodeId exchId = sink.getExchNodeId();
+                // we might have multiple fragments sending to this exchange node
+                // (distributed MERGE), which is why we need to add up the #senders
+                if (destParams.perExchNumSenders.get(exchId.asInt()) == null) {
+                    destParams.perExchNumSenders.put(exchId.asInt(), params.instanceExecParams.size());
+                } else {
+                    destParams.perExchNumSenders.put(exchId.asInt(),
+                            params.instanceExecParams.size() + destParams.perExchNumSenders.get(exchId.asInt()));
+                }
+
+                if (needScheduleByShuffleJoin(destFragment.getFragmentId().asInt(), sink)) {
+                    int bucketSeq = 0;
+                    int bucketNum = getFragmentBucketNum(destFragment.getFragmentId());
+                    TNetworkAddress dummyServer = new TNetworkAddress("0.0.0.0", 0);
+
+                    while (bucketSeq < bucketNum) {
+                        TPlanFragmentDestination dest = new TPlanFragmentDestination();
+                        // dest bucket may be pruned, these bucket dest should be set an invalid value
+                        // and will be deal with in BE's DataStreamSender
+                        dest.fragment_instance_id = new TUniqueId(-1, -1);
+                        dest.server = dummyServer;
+                        dest.setBrpc_server(dummyServer);
+
+                        for (FInstanceExecParam instanceExecParams : destParams.instanceExecParams) {
+                            if (instanceExecParams.bucketSeqSet.contains(bucketSeq)) {
+                                dest.fragment_instance_id = instanceExecParams.instanceId;
+                                dest.server = toRpcHost(instanceExecParams.host);
+                                dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
+                                break;
+                            }
+                        }
+                        Preconditions.checkState(dest.isSetFragment_instance_id());
+                        bucketSeq++;
+                        multiSink.getDestinations().get(i).add(dest);
+                    }
+                } else {
+                    // add destination host to this fragment's destination
+                    for (int j = 0; j < destParams.instanceExecParams.size(); ++j) {
+                        TPlanFragmentDestination dest = new TPlanFragmentDestination();
+                        dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
+                        dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
+                        dest.setBrpc_server(toBrpcHost(destParams.instanceExecParams.get(j).host));
+                        multiSink.getDestinations().get(i).add(dest);
+                    }
                 }
             }
         }
@@ -1761,7 +1832,6 @@ public class Coordinator {
         public List<TPlanFragmentDestination> destinations = Lists.newArrayList();
         public Map<Integer, Integer> perExchNumSenders = Maps.newHashMap();
 
-        public List<PlanFragmentId> inputFragments = Lists.newArrayList();
         public List<FInstanceExecParam> instanceExecParams = Lists.newArrayList();
         public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
         TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();

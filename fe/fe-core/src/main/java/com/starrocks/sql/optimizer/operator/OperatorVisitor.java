@@ -42,7 +42,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalNoOpOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -151,17 +151,14 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 
     public R visitLogicalCTEConsume(LogicalCTEConsumeOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 
     public R visitLogicalCTEProduce(LogicalCTEProduceOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 
@@ -271,7 +268,7 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalNoOp(PhysicalNoOpOperator node, C context) {
+    public R visitPhysicalNoCTE(PhysicalNoCTEOperator node, C context) {
         Preconditions.checkState(false);
         return visitOperator(node, context);
     }

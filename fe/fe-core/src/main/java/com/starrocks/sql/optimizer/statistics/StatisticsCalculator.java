@@ -31,10 +31,11 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -63,6 +64,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
@@ -73,6 +77,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -120,14 +125,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private final ExpressionContext expressionContext;
     private final ColumnRefFactory columnRefFactory;
-    private final DumpInfo dumpInfo;
+    private final OptimizerContext optimizerContext;
 
     public StatisticsCalculator(ExpressionContext expressionContext,
                                 ColumnRefFactory columnRefFactory,
-                                DumpInfo dumpInfo) {
+                                OptimizerContext optimizerContext) {
         this.expressionContext = expressionContext;
         this.columnRefFactory = columnRefFactory;
-        this.dumpInfo = dumpInfo;
+        this.optimizerContext = optimizerContext;
     }
 
     public void estimatorStats() {
@@ -276,7 +281,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
         for (int i = 0; i < requiredColumns.size(); ++i) {
             builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));
-            dumpInfo.addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
+            optimizerContext.getDumpInfo()
+                    .addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
         }
 
         return builder;
@@ -303,7 +309,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
         for (int i = 0; i < requiredColumns.size(); ++i) {
             builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));
-            dumpInfo.addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
+            optimizerContext.getDumpInfo()
+                    .addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
         }
 
         return builder;
@@ -400,7 +407,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String partitionColumn = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
             ColumnStatistic partitionColumnStatistic =
                     Catalog.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
-            dumpInfo.addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
+            optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
 
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo instanceof RangePartitionInfo) {
@@ -458,7 +465,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             long rowCount = 0;
             for (Partition partition : selectedPartitions) {
                 rowCount += partition.getBaseIndex().getRowCount();
-                dumpInfo.addPartitionRowCount(table, partition.getName(), partition.getBaseIndex().getRowCount());
+                optimizerContext.getDumpInfo()
+                        .addPartitionRowCount(table, partition.getName(), partition.getBaseIndex().getRowCount());
             }
             // Currently, after FE just start, the row count of table is always 0.
             // Explicitly set table row count to 1 to make our cost estimate work.
@@ -635,7 +643,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         // because of we need cardinality to estimate count function.
         double estimateCount = rowCount;
         aggregations.forEach((key, value) -> builder
-                .addColumnStatistic(key, ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount)));
+                .addColumnStatistic(key,
+                        ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount)));
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
@@ -1196,13 +1205,52 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
+    public Void visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
+        context.setStatistics(context.getChildStatistics(1));
+        return visitOperator(node, context);
+    }
+
+    @Override
     public Void visitLogicalCTEConsume(LogicalCTEConsumeOperator node, ExpressionContext context) {
-        Preconditions.checkState(false);
+        return computeCTEConsume(node, context, node.getCteId(), node.getCteOutputColumnRefMap());
+    }
+
+    @Override
+    public Void visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
+        return computeCTEConsume(node, context, node.getCteId(), node.getCteOutputColumnRefMap());
+    }
+
+    private Void computeCTEConsume(Operator node, ExpressionContext context, String cteId,
+                                   Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
+        OptExpression produce = optimizerContext.getCteContext().getCTEProduce(cteId);
+        Statistics produceStatistics = produce.getGroupExpression().getGroup().getStatistics();
+
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator ref : columnRefMap.keySet()) {
+            ColumnRefOperator produceRef = columnRefMap.get(ref);
+            ColumnStatistic statistic = produceStatistics.getColumnStatistic(produceRef);
+            builder.addColumnStatistic(ref, statistic);
+        }
+
+        builder.setOutputRowCount(produceStatistics.getOutputRowCount());
+        context.setStatistics(builder.build());
         return visitOperator(node, context);
     }
 
     @Override
     public Void visitLogicalCTEProduce(LogicalCTEProduceOperator node, ExpressionContext context) {
+        context.setStatistics(context.getChildStatistics(0));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
+        context.setStatistics(context.getChildStatistics(0));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
         context.setStatistics(context.getChildStatistics(0));
         return visitOperator(node, context);
     }

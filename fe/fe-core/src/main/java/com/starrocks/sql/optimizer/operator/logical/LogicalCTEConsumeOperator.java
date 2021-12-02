@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Objects;
 
 /*
  * This operator denotes the place in the query where a CTE is referenced. The number of CTEConsumer
@@ -24,7 +25,7 @@ import java.util.Map;
 public class LogicalCTEConsumeOperator extends LogicalOperator {
     private final String cteId;
 
-    private Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
+    private final Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
 
     public LogicalCTEConsumeOperator(String cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
         super(OperatorType.LOGICAL_CTE_CONSUME, -1, null, null);
@@ -37,6 +38,10 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
         super(OperatorType.LOGICAL_CTE_CONSUME, limit, predicate, projection);
         this.cteId = cteId;
         this.cteOutputColumnRefMap = cteOutputColumnRefMap;
+    }
+
+    public Map<ColumnRefOperator, ColumnRefOperator> getCteOutputColumnRefMap() {
+        return cteOutputColumnRefMap;
     }
 
     @Override
@@ -60,5 +65,26 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalCTEConsume(optExpression, context);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        LogicalCTEConsumeOperator that = (LogicalCTEConsumeOperator) o;
+        return Objects.equals(cteId, that.cteId) &&
+                Objects.equals(cteOutputColumnRefMap, that.cteOutputColumnRefMap);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), cteId, cteOutputColumnRefMap);
     }
 }

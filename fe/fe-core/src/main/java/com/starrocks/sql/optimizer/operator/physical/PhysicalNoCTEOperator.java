@@ -9,11 +9,11 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 import java.util.Objects;
 
-public class PhysicalCTEAnchorOperator extends PhysicalOperator {
+public class PhysicalNoCTEOperator extends PhysicalOperator {
     private final String cteId;
 
-    public PhysicalCTEAnchorOperator(String cteId) {
-        super(OperatorType.PHYSICAL_CTE_ANCHOR);
+    public PhysicalNoCTEOperator(String cteId) {
+        super(OperatorType.PHYSICAL_NO_CTE);
         this.cteId = cteId;
     }
 
@@ -23,12 +23,12 @@ public class PhysicalCTEAnchorOperator extends PhysicalOperator {
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalCTEAnchor(optExpression, context);
+        return visitor.visitPhysicalNoCTE(optExpression, context);
     }
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalCTEAnchor(this, context);
+        return visitor.visitPhysicalNoCTE(this, context);
     }
 
     @Override
@@ -42,7 +42,7 @@ public class PhysicalCTEAnchorOperator extends PhysicalOperator {
         if (!super.equals(o)) {
             return false;
         }
-        PhysicalCTEAnchorOperator that = (PhysicalCTEAnchorOperator) o;
+        PhysicalNoCTEOperator that = (PhysicalNoCTEOperator) o;
         return Objects.equals(cteId, that.cteId);
     }
 
