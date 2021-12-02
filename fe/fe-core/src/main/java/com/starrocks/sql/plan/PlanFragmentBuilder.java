@@ -384,15 +384,17 @@ public class PlanFragmentBuilder {
                 ArrayList<SlotDescriptor> slots = childTuple.getSlots();
                 for (SlotDescriptor slot : slots) {
                     int slotId = slot.getId().asInt();
+                    boolean isNullable = slot.getIsNullable();
                     if (node.getDictToStrings().containsKey(slotId)) {
                         Integer stringSlotId = node.getDictToStrings().get(slotId);
                         SlotDescriptor slotDescriptor =
                                 context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(stringSlotId));
-                        slotDescriptor.setIsNullable(true);
+                        slotDescriptor.setIsNullable(isNullable);
                         slotDescriptor.setIsMaterialized(true);
                         slotDescriptor.setType(Type.VARCHAR);
 
-                        context.getColRefToExpr().put(new ColumnRefOperator(stringSlotId, Type.VARCHAR, "xxx", true),
+                        context.getColRefToExpr().put(new ColumnRefOperator(stringSlotId, Type.VARCHAR,
+                                        "<dict-code>", slotDescriptor.getIsNullable()),
                                 new SlotRef(stringSlotId.toString(), slotDescriptor));
                     } else {
                         // Note: must change the parent tuple id

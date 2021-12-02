@@ -476,4 +476,22 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <slot 9> : hex(10)\n" +
                 "  |  <slot 10> : 10: S_ADDRESS"));
     }
+
+    @Test
+    public void testAssignWrongNullableProperty() throws Exception {
+        String sql = "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier UNION SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier;";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [3, VARCHAR, false] | [9, BIGINT, true]\n" +
+                "  |      [14, VARCHAR, false] | [20, BIGINT, true]"));
+        Assert.assertTrue(plan.contains("  13:Project\n" +
+                "  |  output columns:\n" +
+                "  |  14 <-> [14: S_ADDRESS, VARCHAR, false]\n" +
+                "  |  20 <-> [20: dense_rank(), BIGINT, true]"));
+        Assert.assertTrue(plan.contains("  9:Decode\n" +
+                "  |  <dict id 22> : <string id 14>\n" +
+                "  |  cardinality: 1"));
+
+    }
 }
