@@ -680,7 +680,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Boolean visitCall(CallOperator call, Void context) {
-            if (call.getUsedColumns().cardinality() > 1) {
+            // Can not apply it on calling function on constant value such as `hex(10)`
+            if (call.getUsedColumns().cardinality() != 1) {
                 return false;
             }
             if (!call.getFunction().isCouldApplyDictOptimize()) {
