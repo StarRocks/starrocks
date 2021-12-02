@@ -21,8 +21,7 @@ public:
     Status execute(ExecEnv* exec_env);
 
 private:
-    void _convert_data_sink_to_operator(const TPlanFragmentExecParams& params, PipelineBuilderContext* context,
-                                        DataSink* datasink);
+    void _convert_data_sink_to_operator(PipelineBuilderContext* context, DataSink* datasink);
     QueryContext* _query_ctx = nullptr;
     FragmentContext* _fragment_ctx = nullptr;
 };

@@ -108,6 +108,10 @@ public:
 
     PlanNodeId get_dest_node_id() const { return _dest_node_id; }
 
+    const std::vector<TPlanFragmentDestination>& destinations() { return _destinations; }
+
+    int sender_id() const { return _sender_id; }
+
 private:
     class Channel;
 
@@ -197,6 +201,8 @@ private:
 
     // Identifier of the destination plan node.
     PlanNodeId _dest_node_id;
+
+    std::vector<TPlanFragmentDestination> _destinations;
 };
 
 } // namespace starrocks
