@@ -191,9 +191,23 @@ public:
                                           [](auto* holder) { return holder->is_ready(); });
         return !_all_local_rf_ready;
     }
+
+    bool global_rf_block() {
+        if (_all_global_rf_ready_or_timeout) {
+            return false;
+        }
+
+        _all_global_rf_ready_or_timeout =
+                _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
+                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(),
+                            [](auto* rf_desc) { return rf_desc->runtime_filter() != nullptr; }); // or ready.
+
+        return !_all_global_rf_ready_or_timeout;
+    }
+
     // return true if either dependencies_block or local_rf_block return true, which means that the current driver
     // should wait for both hash table and local runtime filters' readiness.
-    bool is_precondition_block() { return dependencies_block() || local_rf_block(); }
+    bool is_precondition_block() { return dependencies_block() || local_rf_block() || global_rf_block(); }
 
     bool is_not_blocked() {
         if (_state == DriverState::PRECONDITION_BLOCK) {
@@ -219,10 +233,17 @@ private:
     void _close_operators(RuntimeState* runtime_state);
 
     Operators _operators;
+
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
+
     mutable std::vector<RuntimeFilterHolder*> _local_rf_holders;
     bool _all_local_rf_ready = false;
+
+    std::vector<vectorized::RuntimeFilterProbeDescriptor*> _global_rf_descriptors;
+    bool _all_global_rf_ready_or_timeout = false;
+    int64_t _global_rf_wait_timeout_ns = -1;
+
     size_t _first_unfinished;
     QueryContext* _query_ctx;
     FragmentContext* _fragment_ctx;
