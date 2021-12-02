@@ -464,4 +464,16 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("reverse(conv(CAST(3: S_ADDRESS AS BIGINT), NULL, NULL))"));
     }
+
+    @Test
+    public void testCallFunctionOnConstant() throws Exception {
+        String sql = "select hex(10), s_address from supplier";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 9> : hex(10)\n" +
+                "  |  <slot 10> : 10: S_ADDRESS"));
+    }
 }
