@@ -4792,7 +4792,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE"));
 
-
         sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
         plan = getFragmentPlan(sql);
         // check use 3 stage agg plan
@@ -4823,5 +4822,27 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(" 1:Project\n" +
                 "  |  <slot 4> : NULL"));
+    }
+
+    @Test
+    public void testJoinAssociativityConst() throws Exception {
+        String sql = "SELECT x0.*\n" +
+                "FROM (\n" +
+                "    SELECT 49 AS v0, v1\n" +
+                "    FROM t0\n" +
+                "    WHERE v1 is not null\n" +
+                ") x0\n" +
+                "    INNER JOIN test_all_type s0 ON x0.v0 = s0.t1a\n" +
+                "    INNER JOIN tall l1 ON x0.v0 = l1.tf\n" +
+                "\n" +
+                "WHERE l1.tc < s0.t1c";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 49\n" +
+                "  |  <slot 25> : CAST(49 AS DOUBLE)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
     }
 }
