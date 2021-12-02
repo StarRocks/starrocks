@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class JoinPredicateUtils {
     public static OptExpression pushDownPredicate(OptExpression root, ScalarOperator leftPushDown,
@@ -225,7 +226,13 @@ public class JoinPredicateUtils {
 
     public static ScalarOperator rangePredicateDerive(ScalarOperator predicate) {
         ScalarRangePredicateExtractor scalarRangePredicateExtractor = new ScalarRangePredicateExtractor();
-        return scalarRangePredicateExtractor.rewriteAll(predicate);
+
+        List<ScalarOperator> a = Utils.extractConjuncts(predicate);
+        ScalarOperator p =
+                Utils.compoundAnd(
+                        a.stream().map(scalarRangePredicateExtractor::rewriteAll).collect(Collectors.toList()));
+
+        return scalarRangePredicateExtractor.rewriteAll(p);
     }
 
     public static void getJoinOnPredicatesColumns(List<BinaryPredicateOperator> equalOnPredicates,

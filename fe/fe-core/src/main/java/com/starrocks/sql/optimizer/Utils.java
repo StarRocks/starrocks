@@ -55,6 +55,7 @@ public class Utils {
         }
 
         CompoundPredicateOperator cpo = (CompoundPredicateOperator) root;
+
         if (!cpo.isAnd()) {
             list.add(root);
             return list;
