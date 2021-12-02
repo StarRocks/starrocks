@@ -23,8 +23,8 @@
 #define STARROCKS_BE_UTIL_FILE_UTILS_H
 
 #include <functional>
-#include <string>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "common/statusor.h"

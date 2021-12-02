@@ -4,9 +4,9 @@
 
 #include "common/status.h"
 
+#include "gen_cpp/Status_types.h"  // for TStatus
+#include "gen_cpp/status.pb.h"     // for PStatus
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
-#include "gen_cpp/Status_types.h" // for TStatus
-#include "gen_cpp/status.pb.h"    // for PStatus
 
 namespace starrocks {
 

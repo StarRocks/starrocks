@@ -10,7 +10,7 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "gen_cpp/StatusCode_types.h" // for TStatus
-#include "util/slice.h"           // for Slice
+#include "util/slice.h"               // for Slice
 
 namespace starrocks {
 
