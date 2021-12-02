@@ -3154,11 +3154,20 @@ public class Catalog {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Set<String> existPartitionNameSet =
                     CatalogChecker.checkPartitionNameExistForAddPartitions(olapTable, singleRangePartitionDescs);
-
+            // partition properties is prior to clause properties
+            // clause properties is prior to table properties
+            Map<String, String> properties = Maps.newHashMap();
+            properties = getOrSetDefaultProperties(olapTable, properties);
+            Map<String, String> clauseProperties = addPartitionClause.getProperties();
+            if (clauseProperties != null && !clauseProperties.isEmpty()) {
+                properties.putAll(clauseProperties);
+            }
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-                Map<String, String> sourceProperties = singleRangePartitionDesc.getProperties();
-                Map<String, String> properties = getOrSetDefaultProperties(olapTable, sourceProperties);
                 Map<String, String> cloneProperties = Maps.newHashMap(properties);
+                Map<String, String> sourceProperties = singleRangePartitionDesc.getProperties();
+                if (sourceProperties != null && !sourceProperties.isEmpty()) {
+                    cloneProperties.putAll(sourceProperties);
+                }
                 singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumns().size(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
                     rangePartitionInfo.checkAndCreateRange(singleRangePartitionDesc, isTempPartition);
