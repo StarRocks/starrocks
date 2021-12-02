@@ -9,11 +9,13 @@
 
 #include "common/compiler_util.h"
 #include "common/logging.h"
-#include "gen_cpp/Status_types.h" // for TStatus
-#include "gen_cpp/status.pb.h"    // for PStatus
+#include "gen_cpp/StatusCode_types.h" // for TStatus
 #include "util/slice.h"           // for Slice
 
 namespace starrocks {
+
+class PStatus;
+class TStatus;
 
 class Status {
 public:

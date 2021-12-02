@@ -40,6 +40,3 @@ ${BUILD_DIR}/gen_cpp:
 # handwrite thrift
 ${BUILD_DIR}/gen_cpp/%_types.cpp: ${CURDIR}/%.thrift | ${BUILD_DIR}/gen_cpp
 	${THRIFT} ${THRIFT_CPP_ARGS} $<
-# generated thrift
-${BUILD_DIR}/gen_cpp/%_types.cpp: ${BUILD_DIR}/thrift/%.thrift | ${BUILD_DIR}/gen_cpp
-	${THRIFT} ${THRIFT_CPP_ARGS} $<

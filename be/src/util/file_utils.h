@@ -24,6 +24,7 @@
 
 #include <functional>
 #include <string>
+#include <set>
 #include <vector>
 
 #include "common/statusor.h"
