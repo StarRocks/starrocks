@@ -33,6 +33,7 @@ set(RUNTIME_FILES
     client_cache.cpp
     data_stream_mgr.cpp
     data_stream_sender.cpp
+    mcast_data_stream_sink.cpp
     datetime_value.cpp
     descriptors.cpp
     exec_env.cpp
