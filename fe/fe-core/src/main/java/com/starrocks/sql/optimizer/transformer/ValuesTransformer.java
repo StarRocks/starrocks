@@ -8,6 +8,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
@@ -30,12 +31,14 @@ import java.util.Map;
 
 public class ValuesTransformer {
     private final ColumnRefFactory columnRefFactory;
+    private final ConnectContext session;
 
     private final BitSet subqueriesIndex = new BitSet();
     private final List<ColumnRefOperator> outputColumns = Lists.newArrayList();
 
-    ValuesTransformer(ColumnRefFactory columnRefFactory) {
+    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this.columnRefFactory = columnRefFactory;
+        this.session = session;
     }
 
     public LogicalPlan plan(ValuesRelation node) {
@@ -120,7 +123,7 @@ public class ValuesTransformer {
 
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
         for (int i = 0; i < node.getOutputExpr().size(); i++) {
             if (!subqueriesIndex.get(i)) {

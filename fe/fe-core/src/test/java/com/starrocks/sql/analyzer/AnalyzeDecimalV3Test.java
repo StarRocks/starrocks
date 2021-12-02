@@ -383,7 +383,7 @@ public class AnalyzeDecimalV3Test {
             QuerySpecification queryRelation = (QuerySpecification) analyzeSuccess(sql);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(queryRelation);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
             ScalarOperator op =
                     ((LogicalOperator) logicalPlan.getRoot().inputAt(0).inputAt(0).inputAt(0).getOp()).getPredicate();
 
@@ -666,7 +666,7 @@ public class AnalyzeDecimalV3Test {
             Assert.assertEquals(expr.getType(), Type.BOOLEAN);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(queryRelation);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
             ScalarOperator op =
                     ((LogicalProjectOperator) logicalPlan.getRoot().getOp()).getColumnRefMap()
                             .get(logicalPlan.getOutputColumn().get(0));
@@ -690,7 +690,7 @@ public class AnalyzeDecimalV3Test {
             Assert.assertEquals(expr.getType(), Type.BOOLEAN);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(queryRelation);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
             ScalarOperator op =
                     ((LogicalProjectOperator) logicalPlan.getRoot().getOp()).getColumnRefMap()
                             .get(logicalPlan.getOutputColumn().get(0));
@@ -827,7 +827,7 @@ public class AnalyzeDecimalV3Test {
             List<Expr> items = queryRelation.getOutputExpr();
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(queryRelation);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
             ScalarOperator op =
                     ((LogicalProjectOperator) logicalPlan.getRoot().getOp()).getColumnRefMap()
                             .get(logicalPlan.getOutputColumn().get(0));
