@@ -227,7 +227,7 @@ public:
             if (k < i) {
                 _partial_in_filters[k] = std::move(_partial_in_filters[i]);
             }
-            num_rows += _ht_row_counts[i];
+            num_rows = std::max(num_rows, _ht_row_counts[i]);
         }
 
         can_merge_in_filters = can_merge_in_filters && (num_rows <= 1024) && k >= 0;
