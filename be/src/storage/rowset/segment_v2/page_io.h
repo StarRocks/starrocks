@@ -55,12 +55,13 @@ struct PageReadOptions {
     bool verify_checksum = true;
     // whether to use page cache in read path
     bool use_page_cache = true;
+    // whether to save page in page cache
+    // at most time, it is equal to use_page_cache
+    // unless page is encoding by bitshuffle
+    bool save_in_page_cache = true;
     // if true, use DURABLE CachePriority in page cache
     // currently used for in memory olap table
     bool kept_in_memory = false;
-
-    // page encoding type
-    EncodingTypePB encoding_type = EncodingTypePB::UNKNOWN_ENCODING;
 
     void sanity_check() const {
         CHECK_NOTNULL(rblock);
@@ -110,9 +111,6 @@ public:
     //     `footer' stores the page footer.
     static Status read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
                                            PageFooterPB* footer);
-
-    static Status decompress_bitshuffle_page(const PageReadOptions& opts, Slice& page_slice, PageFooterPB* footer,
-                                             uint32_t footer_size, std::unique_ptr<char[]>& page);
 };
 
 } // namespace segment_v2

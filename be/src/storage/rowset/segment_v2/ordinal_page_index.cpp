@@ -83,6 +83,7 @@ Status OrdinalIndexReader::load(fs::BlockManager* block_mgr, const std::string& 
     OlapReaderStatistics tmp_stats;
     opts.stats = &tmp_stats;
     opts.use_page_cache = use_page_cache;
+    opts.save_in_page_cache = use_page_cache;
     opts.kept_in_memory = kept_in_memory;
 
     // read index page

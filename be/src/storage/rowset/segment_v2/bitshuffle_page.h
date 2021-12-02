@@ -237,7 +237,8 @@ public:
               _size_of_element(0),
               _cur_index(0),
               _parsed(false),
-              _is_decoded(false) {}
+              _is_decoded(false),
+              _data_from_cache(false) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -246,9 +247,15 @@ public:
             ss << "file corrupton: invalid data size:" << _data.size << ", header size:" << BITSHUFFLE_PAGE_HEADER_SIZE;
             return Status::InternalError(ss.str());
         }
+        // if page_handle is data owner, we need to decode data page
+        // if not, data page is handle by page cache and data has been decoded
+        if (_options.page_handle) {
+            _data_from_cache = !_options.page_handle->is_data_owner();
+        }
+
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _compressed_size = decode_fixed32_le((const uint8_t*)&_data[4]);
-        if (_compressed_size != _data.size && !_options.use_cache) {
+        if (_compressed_size != _data.size && !_data_from_cache) {
             std::stringstream ss;
             ss << "Size information unmatched, _compressed_size:" << _compressed_size
                << ", _num_elements:" << _num_elements << ", data size:" << _data.size;
@@ -289,7 +296,7 @@ public:
             ss << "invalid size info. size of element:" << _size_of_element << ", SIZE_OF_TYPE:" << SIZE_OF_TYPE;
             return Status::InternalError(ss.str());
         }
-        if (_options.use_cache &&
+        if (_data_from_cache &&
             _data.size != _num_element_after_padding * _size_of_element + BITSHUFFLE_PAGE_HEADER_SIZE) {
             std::stringstream ss;
             ss << "Size information unmatched, _data.size:" << _data.size << ", _num_elements:" << _num_elements
@@ -363,6 +370,51 @@ public:
         return Status::OK();
     }
 
+    Status save_in_page_cache(PageCacheOptions* opts) override {
+        DCHECK(_parsed);
+        if (!opts->save_in_page_cache || _data_from_cache) {
+            return Status::OK();
+        }
+
+        auto cache = StoragePageCache::instance();
+        PageCacheHandle cache_handle;
+        StoragePageCache::CacheKey cache_key(opts->rblock->path(), opts->page_pointer.offset);
+        Slice page_slice = _options.page_handle->data();
+
+        uint32_t footer_size = decode_fixed32_le((uint8_t*)page_slice.data + page_slice.size - 4);
+        size_t data_size = _num_element_after_padding * _size_of_element;
+        size_t header_size = page_slice.size - 4 - footer_size - opts->nullmap_size -
+                             (_compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);
+
+        std::unique_ptr<char[]> decompressed_page(
+                new char[page_slice.size + data_size - (_compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE)]);
+        memcpy(decompressed_page.get(), page_slice.data, header_size);
+        Slice compressed_body(page_slice.data + header_size, _compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);
+        Slice decompressed_body(&(decompressed_page.get()[header_size]), data_size);
+        int64_t bytes = bitshuffle::decompress_lz4(compressed_body.data, decompressed_body.data,
+                                                   _num_element_after_padding, _size_of_element, 0);
+        if (bytes != compressed_body.size) {
+            return Status::Corruption(
+                    strings::Substitute("decompress failed: expected number of bytes consumed=&0 vs real consumed=$1",
+                                        compressed_body.size, bytes));
+        }
+        memcpy(decompressed_body.data + decompressed_body.size,
+               page_slice.data + header_size + (_compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE),
+               opts->nullmap_size + footer_size + 4);
+
+        Slice cache_slice =
+                Slice(decompressed_page.get(), header_size + data_size + opts->nullmap_size + footer_size + 4);
+        cache->insert(cache_key, cache_slice, &cache_handle, opts->kept_in_memory);
+        // data page has been decoded and save in page cache
+        // set _from_cache to true and use _data for data read
+        _data = Slice(cache_slice.data + header_size - BITSHUFFLE_PAGE_HEADER_SIZE,
+                      BITSHUFFLE_PAGE_HEADER_SIZE + data_size);
+        _data_from_cache = true;
+
+        decompressed_page.release(); // memory now managed by cache handle
+        return Status::OK();
+    }
+
     Status next_batch(size_t* count, vectorized::Column* dst) override;
 
     size_t count() const override { return _num_elements; }
@@ -373,8 +425,8 @@ public:
 
 private:
     inline const void* get_data(size_t pos) {
-        return (_options.use_cache) ? static_cast<const void*>(&_data[pos + BITSHUFFLE_PAGE_HEADER_SIZE])
-                                    : static_cast<const void*>(&_decoded[pos]);
+        return (_data_from_cache) ? static_cast<const void*>(&_data[pos + BITSHUFFLE_PAGE_HEADER_SIZE])
+                                  : static_cast<const void*>(&_decoded[pos]);
     }
 
     void _copy_next_values(size_t n, void* data) {
@@ -389,7 +441,7 @@ private:
             _decoded.resize(_num_element_after_padding * _size_of_element);
             RETURN_IF_ERROR(_decode_to(_decoded.data()));
             // release original memory
-            if (_options.page_handle) {
+            if (_options.page_handle && _options.release_handle_memroy) {
                 _options.page_handle->release_memory();
             }
         }
@@ -398,7 +450,7 @@ private:
     }
 
     Status _decode_to(uint8_t* to) {
-        if (!_options.use_cache) {
+        if (!_data_from_cache) {
             char* in = const_cast<char*>(&_data[BITSHUFFLE_PAGE_HEADER_SIZE]);
             int64_t bytes = bitshuffle::decompress_lz4(in, to, _num_element_after_padding, _size_of_element, 0);
             if (PREDICT_FALSE(bytes < 0)) {
@@ -425,6 +477,7 @@ private:
     size_t _cur_index;
     bool _parsed;
     bool _is_decoded;
+    bool _data_from_cache;
 };
 
 template <FieldType Type>
@@ -436,7 +489,7 @@ inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized:
     }
 
     if (_options.enable_direct_copy && !_is_decoded && *count >= _num_elements && _cur_index <= 0 &&
-        dst->capacity() - dst->size() >= _num_element_after_padding && !_options.use_cache) {
+        dst->capacity() - dst->size() >= _num_element_after_padding && !_data_from_cache) {
         // if the page is not decoded and to read the whole page data
         // decode the page directly to dst to save mem copy from _decoded to dst
         // Now this can be used to optimize compaction

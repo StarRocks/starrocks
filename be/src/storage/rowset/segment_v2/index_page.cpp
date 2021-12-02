@@ -73,10 +73,10 @@ Status IndexPageReader::parse(const Slice& body, const IndexPageFooterPB& footer
         Slice key;
         PagePointer value;
         if (!get_length_prefixed_slice(&input, &key)) {
-            return Status::InternalError("Data corruption");
+            return Status::InternalError("index page get prefix Data corruption");
         }
         if (!value.decode_from(&input)) {
-            return Status::InternalError("Data corruption");
+            return Status::InternalError("index page decode Data corruption");
         }
         _keys.push_back(key);
         _values.push_back(value);

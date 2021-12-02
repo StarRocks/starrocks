@@ -113,56 +113,6 @@ Status PageIO::write_page(fs::WritableBlock* wblock, const std::vector<Slice>& b
     return Status::OK();
 }
 
-Status PageIO::decompress_bitshuffle_page(const PageReadOptions& opts, Slice& page_slice, PageFooterPB* footer,
-                                          uint32_t footer_size, std::unique_ptr<char[]>& page) {
-    size_t dict_header_size = BINARY_DICT_PAGE_HEADER_SIZE;
-    size_t bitshuffle_header_size = BITSHUFFLE_PAGE_HEADER_SIZE;
-    size_t type = EncodingTypePB::BIT_SHUFFLE;
-    if (opts.encoding_type == EncodingTypePB::DICT_ENCODING) {
-        type = decode_fixed32_le((const uint8_t*)&page_slice.data[0]);
-        if (type != EncodingTypePB::DICT_ENCODING && type != EncodingTypePB::PLAIN_ENCODING) {
-            return Status::InternalError(strings::Substitute(
-                    "error encoding type, expected is: DICT_ENCODING or PLAIN_ENCODING, actual is:$0", type));
-        }
-    } else {
-        dict_header_size = 0;
-    }
-
-    if (type == opts.encoding_type) {
-        size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)&page_slice[8 + dict_header_size]);
-        size_t size_of_element = decode_fixed32_le((const uint8_t*)&page_slice[12 + dict_header_size]);
-
-        size_t header_size = dict_header_size + bitshuffle_header_size;
-        size_t data_size = num_element_after_padding * size_of_element;
-        size_t null_size = footer->data_page_footer().nullmap_size();
-
-        std::unique_ptr<char[]> decompressed_page(new char[header_size + data_size + null_size + footer_size + 4 +
-                                                           vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
-        // append dict_Header and bitshuffle_header
-        memcpy(decompressed_page.get(), page_slice.data, header_size);
-        Slice compressed_body(page_slice.data + header_size,
-                              page_slice.size - 4 - footer_size - header_size - null_size);
-        Slice decompressed_body(&(decompressed_page.get()[header_size]), data_size);
-        {
-            SCOPED_RAW_TIMER(&opts.stats->decompress_ns);
-            int64_t bytes = bitshuffle::decompress_lz4(compressed_body.data, decompressed_body.data,
-                                                       num_element_after_padding, size_of_element, 0);
-            if (bytes != compressed_body.size) {
-                return Status::Corruption(strings::Substitute(
-                        "decompress failed: expected number of bytes consumed=&0 vs real consumed=$1",
-                        compressed_body.size, bytes));
-            }
-        }
-        // append null_flag and footer and footer size
-        memcpy(decompressed_body.data + decompressed_body.size,
-               page_slice.data + page_slice.size - 4 - footer_size - null_size, null_size + footer_size + 4);
-        // free memory of compressed page
-        page = std::move(decompressed_page);
-        page_slice = Slice(page.get(), header_size + data_size + null_size + footer_size + 4);
-    }
-    return Status::OK();
-}
-
 Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
                                         PageFooterPB* footer) {
     opts.sanity_check();
@@ -248,13 +198,8 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         opts.stats->uncompressed_bytes_read += body_size;
     }
 
-    if (opts.use_page_cache &&
-        (opts.encoding_type == EncodingTypePB::DICT_ENCODING || opts.encoding_type == EncodingTypePB::BIT_SHUFFLE)) {
-        RETURN_IF_ERROR(decompress_bitshuffle_page(opts, page_slice, footer, footer_size, page));
-    }
-
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
-    if (opts.use_page_cache) {
+    if (opts.save_in_page_cache) {
         // insert this page into cache and return the cache handle
         cache->insert(cache_key, page_slice, &cache_handle, opts.kept_in_memory);
         *handle = PageHandle(std::move(cache_handle));
