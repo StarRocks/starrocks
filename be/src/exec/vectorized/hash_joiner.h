@@ -160,6 +160,7 @@ private:
         // special cases of short-circuit break.
         if (_ht.get_row_count() == 0 && (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN)) {
             _phase = HashJoinPhase::EOS;
+            set_finished();
         }
 
         if (_ht.get_row_count() > 0) {
@@ -172,6 +173,7 @@ private:
                 // TODO: This reserved field will be removed in the implementation mechanism in the future.
                 // at that time, you can directly use Column::has_null() to judge
                 _phase = HashJoinPhase::EOS;
+                set_finished();
             }
         }
     }
