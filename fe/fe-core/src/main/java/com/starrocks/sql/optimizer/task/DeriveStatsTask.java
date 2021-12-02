@@ -45,7 +45,7 @@ public class DeriveStatsTask extends OptimizerTask implements Cloneable {
 
         boolean needDerivedChildren = false;
         // If we haven't got enough stats to compute the current stats, derive them from the child first.
-        // For CTE, we need derive right tree first, then derive left
+        // For CTE, we need derive left tree first, then derive right
         for (int i = groupExpression.arity() - 1; i >= 0; --i) {
             // TODO(kks): Currently we use the first child expression in the child
             // group to derive stats, in the future we may want to pick the one with

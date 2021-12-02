@@ -11,6 +11,16 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/*
+ *  For Multi-cast, like:
+ *
+ *  Fragment-2              Fragment-3
+ *      \                       /
+ *   shuffle by v1      shuffle by v2
+ *             \         /
+ *              Fragment-1
+ *
+ */
 public class MultiCastPlanFragment extends PlanFragment {
     private final List<ExchangeNode> destNodeList = Lists.newArrayList();
 
