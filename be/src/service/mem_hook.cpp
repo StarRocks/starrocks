@@ -188,7 +188,9 @@ void* my_alloc(size_t size) __THROW {
     // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
     // call the `my_alloc`, and result in a deadloop.
 #ifndef BE_TEST
-    MEMORY_CONSUME_SIZE(tc_nallocx(size, 0));
+    if (LIKELY(ptr != nullptr)) {
+        MEMORY_CONSUME_SIZE(tc_nallocx(size, 0));
+    }
 #endif
     return ptr;
 }
