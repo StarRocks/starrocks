@@ -197,6 +197,7 @@ void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ct
             continue;
         }
         pipeline_profile->remove_childs();
+        pipeline_driver_profile_with_max_active_time->reset_parent();
         pipeline_profile->add_child(pipeline_driver_profile_with_max_active_time, true, nullptr);
         pipeline_profile->add_info_string("ContainsAllPipelineDrivers", "false");
     }
