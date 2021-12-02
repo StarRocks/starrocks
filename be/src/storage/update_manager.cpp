@@ -32,6 +32,13 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
 }
 
 UpdateManager::~UpdateManager() {
+    if (_apply_thread_pool != nullptr) {
+        // DynamicCache may be still used by apply thread.
+        // Before deconstrut the DynamicCache, apply thread
+        // should be shutdown.
+        _apply_thread_pool->shutdown();
+    }
+    clear_cache();
     if (_compaction_state_mem_tracker) {
         _compaction_state_mem_tracker.reset();
     }
@@ -44,10 +51,6 @@ UpdateManager::~UpdateManager() {
     if (_index_cache_mem_tracker) {
         _index_cache_mem_tracker.reset();
     }
-    if (_apply_thread_pool != nullptr) {
-        _apply_thread_pool->shutdown();
-    }
-    clear_cache();
 }
 
 Status UpdateManager::init() {
