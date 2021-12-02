@@ -26,8 +26,11 @@
 
 namespace starrocks::pipeline {
 
-static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelinePtr& pipeline, const DriverPtr& driver) {
+static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelinePtr& pipeline) {
     runtime_state->runtime_profile()->add_child(pipeline->runtime_profile(), true, nullptr);
+}
+
+static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr& driver) {
     pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
     pipeline->runtime_profile()->add_info_string(
             "DegreeOfParallelism",
@@ -192,6 +195,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         const bool is_root = (n == num_pipelines - 1);
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only ScanOperator need a MorselQueue attached.
+        setup_profile_hierarchy(runtime_state, pipeline);
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queues.count(source_id));
@@ -209,7 +213,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
-                setup_profile_hierarchy(runtime_state, pipeline, driver);
+                setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }
         } else {
@@ -220,7 +224,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
                                                                     driver_id++, is_root);
-                setup_profile_hierarchy(runtime_state, pipeline, driver);
+                setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }
         }
