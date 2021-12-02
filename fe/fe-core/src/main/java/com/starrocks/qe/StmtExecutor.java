@@ -417,6 +417,23 @@ public class StmtExecutor {
                 } else {
                     throw new AnalysisException("old planner does not support CTAS statement");
                 }
+            } else if (parsedStmt instanceof InsertStmt) { // Must ahead of DdlStmt because InsertStmt is its subclass
+                try {
+                    if (execPlanBuildByNewPlanner) {
+                        handleInsertStmtWithNewPlanner(execPlan, (InsertStmt) parsedStmt);
+                    } else {
+                        handleInsertStmt(uuid);
+                    }
+                    if (context.getSessionVariable().isReportSucc()) {
+                        writeProfile(beginTimeInNanoSecond);
+                    }
+                } catch (Throwable t) {
+                    LOG.warn("handle insert stmt fail", t);
+                    // the transaction of this insert may already begun, we will abort it at outer finally block.
+                    throw t;
+                } finally {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
             } else if (parsedStmt instanceof DdlStmt) {
                 handleDdlStmt();
             } else if (parsedStmt instanceof ShowStmt) {
