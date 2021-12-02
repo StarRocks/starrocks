@@ -26,8 +26,12 @@
 
 namespace starrocks::pipeline {
 
-static void setup_profile_hierarchy(RuntimeState* runtime_state, const DriverPtr& driver) {
-    runtime_state->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
+static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelinePtr& pipeline, const DriverPtr& driver) {
+    runtime_state->runtime_profile()->add_child(pipeline->runtime_profile(), true, nullptr);
+    pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
+    pipeline->runtime_profile()->add_info_string(
+            "DegreeOfParallelism",
+            strings::Substitute("$0", pipeline->source_operator_factory()->degree_of_parallelism()));
     auto& operators = driver->operators();
     for (int32_t j = operators.size() - 1; j >= 0; --j) {
         auto& curr_op = operators[j];
@@ -89,6 +93,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
+
+    if (query_options.__isset.pipeline_profile_mode) {
+        _fragment_ctx->set_profile_mode(query_options.pipeline_profile_mode);
+    }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
@@ -201,7 +209,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
-                setup_profile_hierarchy(runtime_state, driver);
+                setup_profile_hierarchy(runtime_state, pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }
         } else {
@@ -212,10 +220,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
                                                                     driver_id++, is_root);
-                setup_profile_hierarchy(runtime_state, driver);
+                setup_profile_hierarchy(runtime_state, pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }
         }
+        // The pipeline created later should be placed in the front
+        runtime_state->runtime_profile()->reverse_childs();
     }
     _fragment_ctx->set_drivers(std::move(drivers));
     return Status::OK();
