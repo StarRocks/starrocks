@@ -4792,7 +4792,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE"));
 
-
         sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
         plan = getFragmentPlan(sql);
         // check use 3 stage agg plan
