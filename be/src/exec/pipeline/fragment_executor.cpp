@@ -109,8 +109,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
-    auto&& runtime_filter_port = std::make_unique<RuntimeFilterPort>(runtime_state);
-    _fragment_ctx->set_runtime_filter_port(std::move(runtime_filter_port));
     runtime_state->set_batch_size(config::vector_chunk_size);
     runtime_state->init_mem_trackers(query_id);
     runtime_state->set_be_number(backend_num);
