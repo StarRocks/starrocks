@@ -122,7 +122,8 @@ Status JsonScanner::_construct_json_types() {
             break;
         }
 
-        // Treat BIGINT(8B), INT(4B), SMALLINT(2B), TINYINT(1B) as BIGINT(8B).
+        case TYPE_FLOAT:
+        case TYPE_DOUBLE:
         case TYPE_BIGINT:
         case TYPE_INT:
         case TYPE_SMALLINT:
@@ -131,7 +132,7 @@ Status JsonScanner::_construct_json_types() {
             break;
         }
 
-        // Treat DOUBLE, FLOAT as VARCHAR.
+        // Treat other types as VARCHAR.
         default: {
             auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             _json_types[column_pos] = std::move(varchar_type);
@@ -802,17 +803,17 @@ void JsonReader::_construct_number_column(simdjson::ondemand::value& value, Colu
             break;
         }
 
-        case TYPE_FLOAT:
-        case TYPE_DOUBLE: {
-            // Integer value, float/double column.
-            std::string_view sv;
-            err = simdjson::to_json_string(value).get(sv);
-            if (UNLIKELY(err)) {
-                column->append_nulls(1);
-                break;
-            }
+        // Float column, integer value.
+        case TYPE_FLOAT: {
+            auto f = static_cast<float>(i64);
+            column->append_numbers(&f, sizeof(f));
+            break;
+        }
 
-            column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
+        // Double column, integer value.
+        case TYPE_DOUBLE: {
+            auto d = static_cast<double>(i64);
+            column->append_numbers(&d, sizeof(d));
             break;
         }
 
@@ -821,6 +822,35 @@ void JsonReader::_construct_number_column(simdjson::ondemand::value& value, Colu
             return;
         }
         }
+
+    } else if (tp == simdjson::ondemand::number_type::floating_point_number) {
+        double d = 0;
+        err = value.get_double().get(d);
+        if (UNLIKELY(err)) {
+            column->append_nulls(1);
+            return;
+        }
+
+        switch (type_desc.type) {
+        // Float column, integer value.
+        case TYPE_FLOAT: {
+            auto f = static_cast<float>(d);
+            column->append_numbers(&f, sizeof(f));
+            break;
+        }
+
+        // Double column, integer value.
+        case TYPE_DOUBLE: {
+            column->append_numbers(&d, sizeof(d));
+            break;
+        }
+
+        default: {
+            column->append_nulls(1);
+            return;
+        }
+        }
+
     } else {
         // Float, double, integer out of range [9223372036854775808,18446744073709551616).
         std::string_view sv;
