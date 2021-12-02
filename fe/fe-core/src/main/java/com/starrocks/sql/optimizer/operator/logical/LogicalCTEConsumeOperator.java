@@ -26,6 +26,12 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
 
     private Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
 
+    public LogicalCTEConsumeOperator(String cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
+        super(OperatorType.LOGICAL_CTE_CONSUME, -1, null, null);
+        this.cteId = cteId;
+        this.cteOutputColumnRefMap = cteOutputColumnRefMap;
+    }
+
     public LogicalCTEConsumeOperator(long limit, ScalarOperator predicate, Projection projection, String cteId,
                                      Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
         super(OperatorType.LOGICAL_CTE_CONSUME, limit, predicate, projection);
