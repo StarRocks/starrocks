@@ -102,7 +102,7 @@ public class LogicalProperty implements Property {
 
         @Override
         public Integer visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, ExpressionContext context) {
-            Preconditions.checkState(context.arity() != 2);
+            Preconditions.checkState(context.arity() == 2);
             return context.getChildLeftMostScanTabletsNum(1);
         }
 
@@ -165,7 +165,7 @@ public class LogicalProperty implements Property {
 
         @Override
         public Boolean visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, ExpressionContext context) {
-            Preconditions.checkState(context.arity() != 2);
+            Preconditions.checkState(context.arity() == 2);
             return context.isExecuteInOneTablet(1);
         }
 
