@@ -132,6 +132,7 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange.cpp
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
+    pipeline/exchange/mcast_local_exchange.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
     pipeline/operator_with_dependency.cpp
