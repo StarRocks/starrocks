@@ -31,7 +31,6 @@ import java.util.List;
 
 public class PartitionLoadInfo implements Writable {
     private long version;
-    private long versionHash;
     private List<Source> sources;
     private boolean needLoad;
 
@@ -41,7 +40,6 @@ public class PartitionLoadInfo implements Writable {
 
     public PartitionLoadInfo(List<Source> sources) {
         this.version = -1L;
-        this.versionHash = 0L;
         this.sources = sources;
         this.needLoad = true;
     }
@@ -52,14 +50,6 @@ public class PartitionLoadInfo implements Writable {
 
     public long getVersion() {
         return version;
-    }
-
-    public void setVersionHash(long versionHash) {
-        this.versionHash = versionHash;
-    }
-
-    public long getVersionHash() {
-        return versionHash;
     }
 
     public List<Source> getSources() {
@@ -76,7 +66,7 @@ public class PartitionLoadInfo implements Writable {
 
     public void write(DataOutput out) throws IOException {
         out.writeLong(version);
-        out.writeLong(versionHash);
+        out.writeLong(0);
 
         int count = 0;
         if (sources == null) {
@@ -95,7 +85,7 @@ public class PartitionLoadInfo implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         version = in.readLong();
-        versionHash = in.readLong();
+        in.readLong();
         int count = 0;
 
         if (in.readBoolean()) {
@@ -112,7 +102,7 @@ public class PartitionLoadInfo implements Writable {
 
     @Override
     public String toString() {
-        return "PartitionLoadInfo{version=" + version + ", versionHash=" + versionHash
+        return "PartitionLoadInfo{version=" + version
                 + ", needLoad=" + needLoad + "}";
     }
 
@@ -142,13 +132,11 @@ public class PartitionLoadInfo implements Writable {
         }
 
         return version == info.version
-                && versionHash == info.versionHash
                 && needLoad == info.needLoad;
     }
 
     public int hashCode() {
-        int ret = (int) (version ^ versionHash);
-        ret ^= sources.size();
+        int ret = (int) (version ^ sources.size());
         return ret;
     }
 }
