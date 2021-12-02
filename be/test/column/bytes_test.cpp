@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <ctime>
 
 #include "malloc.h"
@@ -14,7 +15,7 @@ int MallocHook_AddNewHook(MallocHook_NewHook hook);
 int MallocHook_RemoveNewHook(MallocHook_NewHook hook);
 } // extern "C"
 
-extern int64_t g_mem_usage;
+extern std::atomic<int64_t> g_mem_usage;
 
 static size_t count = 0;
 void NewHook(const void* ptr, size_t size) {

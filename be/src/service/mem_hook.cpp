@@ -3,6 +3,7 @@
 #include <gperftools/nallocx.h>
 #include <gperftools/tcmalloc.h>
 
+#include <atomic>
 #include <iostream>
 #include <new>
 
@@ -177,11 +178,11 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 #define MEMORY_RELEASE_PTR(ptr) starrocks::tls_thread_status.mem_release(tc_malloc_size(ptr))
 #define MEMORY_CONSUME_SIZE(size) starrocks::tls_thread_status.mem_consume(size)
 #else
-int64_t g_mem_usage = 0;
+std::atomic<int64_t> g_mem_usage(0);
 #define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
-#define MEMORY_CONSUME_PTR(ptr) g_mem_usage += tc_malloc_size(ptr)
-#define MEMORY_RELEASE_PTR(ptr) g_mem_usage -= tc_malloc_size(ptr)
-#define MEMORY_CONSUME_SIZE(size) g_mem_usage += size;
+#define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(tc_malloc_size(ptr))
+#define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(tc_malloc_size(ptr))
+#define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)
 #endif
 
 extern "C" {
