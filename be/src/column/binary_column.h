@@ -165,7 +165,7 @@ public:
         _offsets.emplace_back(_bytes.size());
         _slices_cache = false;
         return 1;
-     }
+    }
 
     void append_value_multiple_times(const void* value, size_t count) override;
 
