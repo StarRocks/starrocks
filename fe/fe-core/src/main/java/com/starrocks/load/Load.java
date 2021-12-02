@@ -95,7 +95,7 @@ public class Load {
     public static List<ImportColumnDesc> getSchemaChangeShadowColumnDesc(Table tbl, Map<String, Expr> columnExprMap) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
-            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) && 
+            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) &&
                     !column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 continue;
             }
@@ -489,12 +489,14 @@ public class Load {
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
-    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs) {
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs) throws UserException {
         Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
             if (specified.contains(col.getName())) {
                 ret.add(col);
+            } else if (col.isKey()) {
+                throw new DdlException("key column " + col.getName() + " not in partial update columns");
             }
         }
         return ret;
