@@ -467,7 +467,7 @@ public class DecodeRewriteTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
-                "  |\n" +
+                "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 9> : hex(10)\n" +
                 "  |  <slot 10> : 10: S_ADDRESS"));
