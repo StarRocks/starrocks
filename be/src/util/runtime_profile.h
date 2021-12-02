@@ -258,6 +258,8 @@ public:
 
     RuntimeProfile* parent() const { return _parent; }
 
+    void reset_parent() { _parent = nullptr; }
+
     // Adds a child profile.  This is thread safe.
     // 'indent' indicates whether the child will be printed w/ extra indentation
     // relative to the parent.
