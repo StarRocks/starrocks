@@ -98,6 +98,9 @@ export_mem_limit_from_conf() {
     if [ $mem -lt 1024 ]; then
         echo "invalid mem limit: mem_limit<1024M"
         return 1
+    elif [ $mem -gt `expr $mem_total / 1024` ]; then
+        echo "mem_limit is larger then machine memory"
+        return 1
     fi
 
     export TCMALLOC_HEAP_LIMIT_MB=${mem}
