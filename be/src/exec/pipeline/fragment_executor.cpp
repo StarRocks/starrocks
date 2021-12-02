@@ -116,7 +116,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // RuntimeFilterWorker::open_query is idempotent
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
         _query_ctx->set_is_runtime_filter_coordinator(true);
-        exec_env->runtime_filter_worker()->open_query(query_id, request.query_options, params.runtime_filter_params);
+        exec_env->runtime_filter_worker()->open_query(query_id, request.query_options, params.runtime_filter_params,
+                                                      true);
     }
 
     // Set up desc tbl
