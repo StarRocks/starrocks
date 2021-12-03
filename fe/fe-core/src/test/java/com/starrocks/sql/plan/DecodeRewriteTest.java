@@ -471,10 +471,12 @@ public class DecodeRewriteTest extends PlanTestBase{
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 9> : hex(10)\n" +
-                "  |  <slot 10> : 10: S_ADDRESS"));
+                "  |  <slot 10> : 10: S_ADDRESS\n" +
+                "  |  use vectorized: true"));
     }
 
     @Test
@@ -482,7 +484,7 @@ public class DecodeRewriteTest extends PlanTestBase{
         String sql = "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier UNION SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier;";
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
-                "  |  child exprs:\n" +
+                "  |  child exprs: \n" +
                 "  |      [3, VARCHAR, false] | [9, BIGINT, true]\n" +
                 "  |      [14, VARCHAR, false] | [20, BIGINT, true]"));
         Assert.assertTrue(plan.contains("  13:Project\n" +
