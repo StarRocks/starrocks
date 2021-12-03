@@ -188,6 +188,8 @@ Status ExecEnv::init_mem_tracker() {
     std::stringstream ss;
     // --mem_limit="" means no memory limit
     bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, &is_percent);
+    // use 90% of mem_limit as the soft mem limit of BE
+    bytes_limit = bytes_limit * 0.9;
     if (bytes_limit <= 0) {
         ss << "Failed to parse mem limit from '" + config::mem_limit + "'.";
         return Status::InternalError(ss.str());
