@@ -27,8 +27,19 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         if (auto* op_with_dep = dynamic_cast<DriverDependencyPtr>(op.get())) {
             _dependencies.push_back(op_with_dep);
         }
+
         const auto& rf_set = op->rf_waiting_set();
         all_local_rf_set.insert(rf_set.begin(), rf_set.end());
+
+        const auto* global_rf_collector = op->runtime_bloom_filters();
+        if (global_rf_collector != nullptr) {
+            for (const auto& [_, desc] : global_rf_collector->descriptors()) {
+                _global_rf_descriptors.emplace_back(desc);
+            }
+
+            _global_rf_wait_timeout_ns =
+                    std::max(_global_rf_wait_timeout_ns, global_rf_collector->wait_timeout_ms() * 1000L * 1000L);
+        }
     }
     _local_rf_waiting_set_counter->set((int64_t)all_local_rf_set.size());
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
@@ -38,10 +49,13 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         RETURN_IF_ERROR(op->prepare(runtime_state));
         _operator_stages[op->get_id()] = OperatorStage::PREPARED;
     }
+
     // Driver has no dependencies always sets _all_dependencies_ready to true;
     _all_dependencies_ready = _dependencies.empty();
     // Driver has no local rf to wait for completion always sets _all_local_rf_ready to true;
     _all_local_rf_ready = _local_rf_holders.empty();
+    // Driver has no global rf to wait for completion always sets _all_global_rf_ready_or_timeout to true;
+    _all_global_rf_ready_or_timeout = _global_rf_descriptors.empty();
     _state = DriverState::READY;
 
     _total_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
