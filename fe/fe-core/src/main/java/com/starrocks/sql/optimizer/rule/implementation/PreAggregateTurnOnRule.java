@@ -57,26 +57,17 @@ public class PreAggregateTurnOnRule {
                 .add(FunctionSet.BITMAP_UNION_INT.toUpperCase()).build();
 
         @Override
-        public Void visit(OptExpression optExpression, PreAggregationContext context) {
-            // Avoid left child modify context will effect right child
-            if (optExpression.getInputs().size() <= 1) {
-                for (OptExpression opt : optExpression.getInputs()) {
-                    if (opt.getOp().getProjection() != null) {
-                        rewriteProject(opt, context);
-                    }
+        public Void visit(OptExpression opt, PreAggregationContext context) {
+            opt.getInputs().forEach(o -> process(o, context.clone()));
+            return null;
+        }
 
-                    opt.getOp().accept(this, opt, context);
-                }
-            } else {
-                for (OptExpression opt : optExpression.getInputs()) {
-                    if (opt.getOp().getProjection() != null) {
-                        rewriteProject(opt, context);
-                    }
-
-                    opt.getOp().accept(this, opt, context.clone());
-                }
+        public Void process(OptExpression opt, PreAggregationContext context) {
+            if (opt.getOp().getProjection() != null) {
+                rewriteProject(opt, context);
             }
 
+            opt.getOp().accept(this, opt, context.clone());
             return null;
         }
 
@@ -93,6 +84,10 @@ public class PreAggregateTurnOnRule {
             context.groupings = context.groupings.stream()
                     .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
                     .collect(Collectors.toList());
+
+            context.joinPredicates = context.joinPredicates.stream().filter(Objects::nonNull)
+                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                    .collect(Collectors.toList());
         }
 
         @Override
@@ -105,7 +100,7 @@ public class PreAggregateTurnOnRule {
                     aggregate.getGroupBys().stream().map(ScalarOperator::clone).collect(Collectors.toList());
             context.notPreAggregationJoin = false;
 
-            return visit(optExpression, context);
+            return process(optExpression.inputAt(0), context);
         }
 
         @Override
@@ -313,7 +308,10 @@ public class PreAggregateTurnOnRule {
                 context.notPreAggregationJoin = true;
                 context.groupings.clear();
                 context.aggregations.clear();
-                return visit(optExpression, context);
+                process(optExpression.inputAt(0), context);
+                // Avoid left child modify context will effect right child
+                process(optExpression.inputAt(1), context.clone());
+                return null;
             }
 
             // For other types of joins, only one side can turn on pre aggregation which side has aggregation.
@@ -338,23 +336,27 @@ public class PreAggregateTurnOnRule {
             boolean checkLeft = leftOutputColumns.contains(aggregationColumns);
             boolean checkRight = rightOutputColumns.contains(aggregationColumns);
             // Add join on predicate and predicate to context
-            context.joinPredicates.add(hashJoinOperator.getJoinPredicate());
-            context.joinPredicates.add(hashJoinOperator.getPredicate());
+            if (hashJoinOperator.getJoinPredicate() != null) {
+                context.joinPredicates.add(hashJoinOperator.getJoinPredicate().clone());
+            }
+            if (hashJoinOperator.getPredicate() != null) {
+                context.joinPredicates.add(hashJoinOperator.getPredicate().clone());
+            }
 
             PreAggregationContext disableContext = new PreAggregationContext();
             disableContext.notPreAggregationJoin = true;
 
             if (checkLeft) {
                 context.groupings = leftGroupOperator;
-                leftChild.getOp().accept(this, leftChild, context);
-                rightChild.getOp().accept(this, rightChild, disableContext);
+                process(leftChild, context);
+                process(rightChild, disableContext);
             } else if (checkRight) {
                 context.groupings = rightGroupOperator;
-                rightChild.getOp().accept(this, rightChild, context);
-                leftChild.getOp().accept(this, leftChild, disableContext);
+                process(rightChild, context);
+                process(leftChild, disableContext);
             } else {
-                leftChild.getOp().accept(this, leftChild, disableContext);
-                rightChild.getOp().accept(this, rightChild, disableContext);
+                process(leftChild, disableContext);
+                process(rightChild, disableContext);
             }
             return null;
         }
