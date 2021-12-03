@@ -41,6 +41,10 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         (*chunk)->reset();
     }
 
+#ifdef DEBUG
+    static int loop = 0;
+#endif
+
     // TODO: merge small chunks to large chunk for optimization
     while (!_child_eos) {
         ChunkPtr input_chunk;
@@ -94,6 +98,14 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                         _aggregator->hash_map_variant().capacity() - _aggregator->hash_map_variant().capacity() / 8;
                 size_t remain_size = real_capacity - _aggregator->hash_map_variant().size();
                 bool ht_needs_expansion = remain_size < input_chunk_size;
+
+#ifdef DEBUG
+                // chaos test for streaming or agg, The results have to be consistent
+                // when group by type of double, it maybe cause dissonant result because of precision loss for double
+                // thus, so check case will fail, so it only work under DEBUG mode
+                loop++;
+                if (loop % 2 == 0) {
+#else
                 if (!ht_needs_expansion ||
                     _aggregator->should_expand_preagg_hash_tables(_children[0]->rows_returned(), input_chunk_size,
                                                                   _aggregator->mem_pool()->total_allocated_bytes(),
