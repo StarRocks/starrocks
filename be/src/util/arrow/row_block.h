@@ -47,12 +47,6 @@ Status convert_to_arrow_schema(const Schema& row_desc, std::shared_ptr<arrow::Sc
 // Convert Arrow Schema to StarRocks Schema.
 Status convert_to_starrocks_schema(const arrow::Schema& schema, std::shared_ptr<Schema>* result);
 
-// Convert a StarRocks RowBlockV2 to an Arrow RecordBatch. A valid Arrow Schema
-// who should match RowBlockV2's schema is given. Memory used by result RecordBatch
-// will be allocated from input pool.
-Status convert_to_arrow_batch(const RowBlockV2& block, const std::shared_ptr<arrow::Schema>& schema,
-                              arrow::MemoryPool* pool, std::shared_ptr<arrow::RecordBatch>* result);
-
 // Convert an Arrow RecordBatch to a StarRocks RowBlockV2. Schema should match
 // with RecordBatch's schema.
 Status convert_to_row_block(const arrow::RecordBatch& batch, const Schema& schema, std::shared_ptr<RowBlockV2>* result);
