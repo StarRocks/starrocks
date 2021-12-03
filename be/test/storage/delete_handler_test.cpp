@@ -44,6 +44,7 @@ static StorageEngine* k_engine = nullptr;
 static MemTracker* k_schema_change_mem_tracker = nullptr;
 
 void set_up() {
+    ExecEnv::GetInstance()->init_mem_tracker();
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
     FileUtils::remove_all(config::storage_root_path);
     FileUtils::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
