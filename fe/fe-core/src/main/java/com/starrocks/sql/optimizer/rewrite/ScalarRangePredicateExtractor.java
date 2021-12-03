@@ -52,24 +52,21 @@ public class ScalarRangePredicateExtractor {
         Set<ScalarOperator> conjuncts = Sets.newLinkedHashSet();
         conjuncts.addAll(Utils.extractConjuncts(predicate));
 
-        Map<ScalarOperator, ValueDescriptor> hashMap = extractImpl(predicate);
+        Map<ScalarOperator, ValueDescriptor> extractMap = extractImpl(predicate);
 
         Set<ScalarOperator> result = Sets.newLinkedHashSet();
-        hashMap.keySet().stream().filter(k -> !onlyExtractColumnRef || k.isColumnRef())
-                .map(hashMap::get)
+        extractMap.keySet().stream().filter(k -> !onlyExtractColumnRef || k.isColumnRef())
+                .map(extractMap::get)
                 .filter(d -> d.sourceCount > 1)
                 .map(ValueDescriptor::toScalarOperator).forEach(result::addAll);
-        result.forEach(f -> f.setFromPredicateRangeDerive(true));
-        result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
-                .forEach(f -> f.setNotEvalEstimate(true));
 
         ScalarOperator extractExpr = Utils.compoundAnd(Lists.newArrayList(result));
         predicate = Utils.compoundAnd(Lists.newArrayList(conjuncts));
 
         if (isOnlyOrCompound(predicate)) {
             Set<ColumnRefOperator> c = new HashSet<>(Utils.extractColumnRef(predicate));
-            if (c.size() == hashMap.size() &&
-                    hashMap.values().stream().allMatch(v -> v instanceof MultiValuesDescriptor)) {
+            if (c.size() == extractMap.size() &&
+                    extractMap.values().stream().allMatch(v -> v instanceof MultiValuesDescriptor)) {
                 return extractExpr;
             }
         }
@@ -78,13 +75,16 @@ public class ScalarRangePredicateExtractor {
             List<ScalarOperator> cs = Utils.extractConjuncts(predicate);
             Set<ColumnRefOperator> cf = new HashSet<>(Utils.extractColumnRef(predicate));
 
-            if (hashMap.values().stream().allMatch(valueDescriptor -> valueDescriptor.sourceCount == cs.size())
-                    && hashMap.size() == cf.size()) {
+            if (extractMap.values().stream().allMatch(valueDescriptor -> valueDescriptor.sourceCount == cs.size())
+                    && extractMap.size() == cf.size()) {
                 return extractExpr;
             }
         }
 
         if (extractExpr != null && !conjuncts.contains(extractExpr)) {
+            result.forEach(f -> f.setFromPredicateRangeDerive(true));
+            result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
+                    .forEach(f -> f.setNotEvalEstimate(true));
             // The newly extracted predicate will not be used to estimate the statistics,
             // which will cause the cardinality to be too small
             extractExpr.setFromPredicateRangeDerive(true);
