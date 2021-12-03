@@ -35,6 +35,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
@@ -111,8 +112,31 @@ public class LoadingTaskPlanner {
         // Generate tuple descriptor
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        // use full schema to fill the descriptor table
-        for (Column col : table.getFullSchema()) {
+        List<Column> destColumns = Lists.newArrayList();
+        boolean isPrimaryKey = table.getKeysType() == KeysType.PRIMARY_KEYS;
+        if (isPrimaryKey) {
+            if (partialUpdate) {
+                if (fileGroups.size() > 1) {
+                    throw new DdlException("partial update only support single filegroup.");
+                } else if (fileGroups.size() == 1) {
+                    if (fileGroups.get(0).isNegative()) {
+                        throw new DdlException("Primary key table does not support negative load");
+                    }
+                    destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList());
+                } else {
+                    throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
+                }
+            } else {
+                destColumns = table.getFullSchema();
+            }
+        } else {
+            if (partialUpdate) {
+                throw new DdlException("Only primary key table support partial update");
+            } else {
+                destColumns = table.getFullSchema();
+            }
+        }
+        for (Column col : destColumns) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(col);
@@ -124,7 +148,7 @@ public class LoadingTaskPlanner {
                 globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
             }
         }
-        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+        if (isPrimaryKey) {
             // add op type column
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
