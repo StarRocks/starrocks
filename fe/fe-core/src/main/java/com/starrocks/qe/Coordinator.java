@@ -1228,6 +1228,10 @@ public class Coordinator {
         if (colocateFragmentIds.contains(node.getFragmentId().asInt())) {
             return true;
         }
+        // can not cross fragment
+        if (node instanceof ExchangeNode) {
+            return false;
+        }
 
         if (node.isColocate()) {
             colocateFragmentIds.add(node.getFragmentId().asInt());
@@ -1252,17 +1256,22 @@ public class Coordinator {
             return true;
         }
 
+        // can not cross fragment
+        if (node instanceof ExchangeNode) {
+            return false;
+        }
+
         if (node.isReplicated()) {
             replicateFragmentIds.add(node.getFragmentId().asInt());
             return true;
         }
 
-        boolean childHasColocate = false;
+        boolean childHasReplicated = false;
         for (PlanNode childNode : node.getChildren()) {
-            childHasColocate |= isReplicatedFragment(childNode);
+            childHasReplicated |= isReplicatedFragment(childNode);
         }
 
-        return childHasColocate;
+        return childHasReplicated;
     }
 
     // check whether the node fragment is bucket shuffle join fragment
@@ -1274,6 +1283,10 @@ public class Coordinator {
 
         if (bucketShuffleFragmentIds.contains(fragmentId)) {
             return true;
+        }
+        // can not cross fragment
+        if (node instanceof ExchangeNode) {
+            return false;
         }
 
         // One fragment could only have one HashJoinNode
