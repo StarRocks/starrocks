@@ -95,8 +95,8 @@ export_mem_limit_from_conf() {
             esac
     fi
 
-    if [ $mem -lt 1024 ]; then
-        echo "invalid mem limit: mem_limit<1024M"
+    if [ $mem -le 0 ]; then
+        echo "invalid mem limit: mem_limit<=0M"
         return 1
     elif [ $mem -gt `expr $mem_total / 1024` ]; then
         echo "mem_limit is larger then machine memory"
