@@ -41,13 +41,10 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         (*chunk)->reset();
     }
 
-<<<<<<< HEAD
-=======
 #ifdef DEBUG
     static int loop = 0;
 #endif
 
->>>>>>> d7989408 (cherry-pick 1818 to 2.0)
     // TODO: merge small chunks to large chunk for optimization
     while (!_child_eos) {
         ChunkPtr input_chunk;
