@@ -37,23 +37,30 @@ public:
             _plan->close(_runtime_state.get());
         }
 
-        std::stringstream os;
-        bool has_thread_shedule_overhead = false;
-        for (int i = 0; i < _thread_shedule_time.size(); ++i) {
-            auto milliseconds = ((double)_thread_shedule_time[i]) / 1000000;
-            if (milliseconds >= config::pipeline_thread_schedule_threshold) {
-                has_thread_shedule_overhead = true;
-                os << "THREAD " << i;
-                os << ": " << _thread_shedule_frequency[i] << "-" << milliseconds << "ms(" << (milliseconds / 1000)
-                   << "s) " << ((milliseconds * 1000) / _thread_shedule_frequency[i]) << "us/frequency"
-                   << "; ";
+        if (config::enable_pipeline_schedule_statistics) {
+            std::stringstream os;
+            bool has_thread_shedule_overhead = false;
+            int thread_count = 0;
+            for (int i = 0; i < _thread_shedule_time.size(); ++i) {
+                auto milliseconds = ((double)_thread_shedule_time[i]) / 1000000;
+                if (milliseconds >= config::pipeline_thread_schedule_threshold) {
+                    has_thread_shedule_overhead = true;
+                    if (thread_count > 0 && (thread_count % 3) == 0) {
+                        os << "\n";
+                    }
+                    ++thread_count;
+                    os << "THREAD " << i << ": ";
+                    os << _thread_shedule_frequency[i] << "-" << milliseconds << "ms(" << (milliseconds / 1000) << "s) "
+                       << ((milliseconds * 1000) / _thread_shedule_frequency[i]) << "us/frequency"
+                       << "; ";
+                }
             }
-        }
 
-        if (has_thread_shedule_overhead) {
-            LOG(INFO) << "[schedule overhead " << config::pipeline_thread_schedule_threshold << "ms] "
-                      << "fragment_instance_id=" << print_id(fragment_instance_id()) << "\n"
-                      << os.str() << "\n";
+            if (has_thread_shedule_overhead) {
+                LOG(INFO) << "[SCHEDULE OVERHEAD " << config::pipeline_thread_schedule_threshold << "ms] "
+                          << "fragment_instance_id=" << print_id(fragment_instance_id()) << "\n"
+                          << os.str() << "\n\n";
+            }
         }
     }
     const TUniqueId& query_id() const { return _query_id; }

@@ -644,6 +644,8 @@ CONF_Int64(pipeline_exchange_thread_pool_queue_size, "102400");
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
+// enable pipeline's schedule overhead
+CONF_Bool(enable_pipeline_schedule_statistics, "true");
 // the threshold(ms) of work thread's schedule overhead for fragment instance.
 CONF_Int64(pipeline_thread_schedule_threshold, "100");
 // bitmap serialize version

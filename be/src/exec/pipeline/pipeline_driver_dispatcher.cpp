@@ -66,10 +66,14 @@ void GlobalDriverDispatcher::run(size_t thread_id) {
         size_t queue_index;
 
         timespec start;
-        clock_gettime(CLOCK_MONOTONIC, &start);
+        if (config::enable_pipeline_schedule_statistics) {
+            clock_gettime(CLOCK_MONOTONIC, &start);
+        }
         auto maybe_driver = this->_driver_queue->take(&queue_index);
         timespec end;
-        clock_gettime(CLOCK_MONOTONIC, &end);
+        if (config::enable_pipeline_schedule_statistics) {
+            clock_gettime(CLOCK_MONOTONIC, &end);
+        }
 
         if (maybe_driver.status().is_cancelled()) {
             return;
@@ -77,12 +81,13 @@ void GlobalDriverDispatcher::run(size_t thread_id) {
         auto driver = maybe_driver.value();
         DCHECK(driver != nullptr);
 
-        int64_t elapsed0 = (end.tv_sec - start.tv_sec) * 1000L * 1000L * 1000L + (end.tv_nsec - start.tv_nsec);
-        int64_t elapsed1 = (end.tv_sec - driver->_time_into_priority_queue.tv_sec) * 1000L * 1000L * 1000L +
-                           (end.tv_nsec - driver->_time_into_priority_queue.tv_nsec);
-
-        driver->fragment_ctx()->_thread_shedule_time[thread_id] += (elapsed0 < elapsed1 ? elapsed0 : elapsed1);
-        driver->fragment_ctx()->_thread_shedule_frequency[thread_id] += 1;
+        if (config::enable_pipeline_schedule_statistics) {
+            int64_t elapsed0 = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
+            int64_t elapsed1 = (end.tv_sec - driver->_time_into_priority_queue.tv_sec) * 1000000000L +
+                               (end.tv_nsec - driver->_time_into_priority_queue.tv_nsec);
+            driver->fragment_ctx()->_thread_shedule_time[thread_id] += (elapsed0 < elapsed1 ? elapsed0 : elapsed1);
+            driver->fragment_ctx()->_thread_shedule_frequency[thread_id] += 1;
+        }
 
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
