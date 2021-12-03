@@ -41,7 +41,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         (*chunk)->reset();
     }
 
-#ifndef NDEBUG
+#ifdef ADDRESS_SANITIZER
     static int loop = 0;
 #endif
 
@@ -99,8 +99,9 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                 size_t remain_size = real_capacity - _aggregator->hash_map_variant().size();
                 bool ht_needs_expansion = remain_size < input_chunk_size;
 
-#ifndef NDEBUG
+#ifdef ADDRESS_SANITIZER
                 // chaos test for streaming or agg, The results have to be consistent
+                // only work in ASAN
                 loop++;
                 if (loop % 2 == 0) {
 #else
