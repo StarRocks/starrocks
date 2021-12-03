@@ -4853,4 +4853,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
                 "     partitions=0/1"));
     }
+
+    @Test
+    public void testJoinWithLimit() throws Exception {
+        String sql = "select t2.v8 from (select v1, v2, v1 as v3 from t0 where v2<> v3 limit 15) as a join t1 " +
+                "on a.v3 = t1.v4 join t2 on v4 = v7 join t2 as b" +
+                " on a.v1 = b.v7 where b.v8 > t1.v5 limit 10";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
 }
