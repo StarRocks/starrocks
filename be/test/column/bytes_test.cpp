@@ -142,13 +142,6 @@ TEST(BytesTest, test_hook_malloc) {
     free(ptr);
     after = g_mem_usage;
     ASSERT_EQ(before, after);
-
-    // alloc failed
-    before = g_mem_usage;
-    ptr = malloc(8l * 1024l * 1024l * 1024l * 1024l);
-    ASSERT_TRUE(ptr == nullptr);
-    after = g_mem_usage;
-    ASSERT_EQ(before, after);
 }
 
 // NOLINTNEXTLINE
