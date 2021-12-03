@@ -23,6 +23,7 @@
 
 #include <mntent.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 #include <sys/statfs.h>
 #include <utime.h>
 
