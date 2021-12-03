@@ -4727,5 +4727,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 " on a.v1 = b.v7 where b.v8 > t1.v5 limit 10";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
+        // check join on predicate which has expression with limit operator
+        sql = "select t2.v8 from (select v1, v2, v1 as v3 from t0 where v2<> v3 limit 15) as a join t1 " +
+                "on a.v3 + 1 = t1.v4 join t2 on v4 = v7 join t2 as b" +
+                " on a.v3 + 2 = b.v7 where b.v8 > t1.v5 limit 10";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
     }
 }
