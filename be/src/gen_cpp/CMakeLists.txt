@@ -68,6 +68,8 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/RuntimeProfile_types.cpp
     ${GEN_CPP_DIR}/Status_constants.cpp
     ${GEN_CPP_DIR}/Status_types.cpp
+    ${GEN_CPP_DIR}/StatusCode_constants.cpp
+    ${GEN_CPP_DIR}/StatusCode_types.cpp
     ${GEN_CPP_DIR}/Types_constants.cpp
     ${GEN_CPP_DIR}/Types_types.cpp
     ${GEN_CPP_DIR}/parquet_types.cpp
