@@ -94,7 +94,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // initialize query's deadline
     _query_ctx->extend_lifetime();
 
-    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_instance_id);
+    auto fragment_ctx = std::make_unique<FragmentContext>();
+    _fragment_ctx = fragment_ctx.get();
+
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
@@ -233,6 +235,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         runtime_state->runtime_profile()->reverse_childs();
     }
     _fragment_ctx->set_drivers(std::move(drivers));
+
+    _query_ctx->fragment_mgr()->register_ctx(fragment_instance_id, std::move(fragment_ctx));
+
     return Status::OK();
 }
 
