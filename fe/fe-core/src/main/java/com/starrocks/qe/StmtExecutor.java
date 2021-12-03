@@ -508,10 +508,7 @@ public class StmtExecutor {
         // and for other cases the exception will throw and the rest of the code will not be executed.
         createTableAsSelectStmt.createTable(context);
         try {
-            com.starrocks.sql.analyzer.Analyzer analyzer =
-                        new com.starrocks.sql.analyzer.Analyzer(context.catalog, context);
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
-            analyzer.analyze(insertStmt);
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
             handleInsertStmtWithNewPlanner(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
             if (context.getSessionVariable().isReportSucc()) {

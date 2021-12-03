@@ -59,7 +59,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 
 public class CreateTableStmt extends DdlStmt {
-    private static final Logger LOG = LogManager.getLogger(CreateTableStmt.class);
 
     private static final String DEFAULT_ENGINE_NAME = "olap";
 
