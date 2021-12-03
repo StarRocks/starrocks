@@ -353,6 +353,7 @@ TEST(BytesTest, test_hook_posix_memalign) {
     ASSERT_EQ(before, after);
 
     // alloc failed
+    ptr = nullptr;
     before = g_mem_usage;
     ret = posix_memalign(&ptr, 1, 8);
     ASSERT_TRUE(ret != 0);
