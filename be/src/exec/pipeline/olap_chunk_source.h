@@ -78,7 +78,6 @@ private:
     vectorized::TabletReaderParams _params = {};
 
     int32_t _tuple_id;
-    int64_t _limit; // -1: no limit
     std::vector<ExprContext*> _conjunct_ctxs;
     const std::vector<ExprContext*>& _runtime_in_filters;
     const vectorized::RuntimeFilterProbeCollector& _runtime_bloom_filters;
@@ -109,6 +108,9 @@ private:
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 
     const std::vector<std::string>* _unused_output_columns = nullptr;
+    RuntimeProfile* _runtime_profile = nullptr;
+    int64_t _limit; // -1: no limit
+    
     std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
     using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
@@ -122,7 +124,6 @@ private:
     int64_t _raw_rows_read = 0;
     int64_t _compressed_bytes_read = 0;
 
-    RuntimeProfile* _runtime_profile = nullptr;
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 

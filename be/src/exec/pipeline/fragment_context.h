@@ -38,18 +38,23 @@ public:
         }
 
         std::stringstream os;
+        bool has_thread_shedule_overhead = false;
         for (int i = 0; i < _thread_shedule_time.size(); ++i) {
-            auto milliseconds = ((double)_thread_shedule_time[i]) / 10000000;
-            if (milliseconds > 1) {
-                os << i;
-                os << ": " << _thread_shedule_frequency[i] << "-" << (milliseconds * 10) << "ms("
-                   << (milliseconds / 100) << "s) " << ((milliseconds * 10000) / _thread_shedule_frequency[i])
-                   << "us/frequency"
-                   << "\n";
+            auto milliseconds = ((double)_thread_shedule_time[i]) / 1000000;
+            if (milliseconds >= config::pipeline_thread_schedule_threshold) {
+                has_thread_shedule_overhead = true;
+                os << "THREAD " << i;
+                os << ": " << _thread_shedule_frequency[i] << "-" << milliseconds << "ms(" << (milliseconds / 1000)
+                   << "s) " << ((milliseconds * 1000) / _thread_shedule_frequency[i]) << "us/frequency"
+                   << "; ";
             }
         }
 
-        LOG(INFO) << "fragment context:\n" << print_id(fragment_instance_id()) << "\n" << os.str();
+        if (has_thread_shedule_overhead) {
+            LOG(INFO) << "[schedule overhead " << config::pipeline_thread_schedule_threshold << "ms] "
+                      << "fragment_instance_id=" << print_id(fragment_instance_id()) << "\n"
+                      << os.str() << "\n";
+        }
     }
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
