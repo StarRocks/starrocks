@@ -101,7 +101,8 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
 #ifdef ADDRESS_SANITIZER
                 // chaos test for streaming or agg, The results have to be consistent
-                // only work in ASAN
+                // when group by type of double, it maybe cause dissonant result because of precision loss for double
+                // thus, so check case will fail, so it only work under ASAN mode
                 loop++;
                 if (loop % 2 == 0) {
 #else
