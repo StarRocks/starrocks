@@ -4839,4 +4839,18 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
                 "     partitions=0/1"));
     }
+
+    @Test
+    public void testPreAggregation() throws Exception {
+        String sql = "select k1 from t0 inner join baseall on v1 = cast(k8 as int) group by k1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:Project\n" +
+                "  |  <slot 4> : 4: k1\n" +
+                "  |  <slot 15> : CAST(CAST(13: k8 AS INT) AS BIGINT)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
+                "     partitions=0/1"));
+    }
 }
