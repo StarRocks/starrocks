@@ -119,7 +119,7 @@ void PInternalServiceImpl<T>::transmit_runtime_filter(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     VLOG_FILE << "transmit runtime filter: fragment_instance_id=" << print_id(request->finst_id())
               << " query_id=" << request->query_id() << ", is_partital=" << request->is_partial()
-              << ", filter_id=" << request->filter_id();
+              << ", filter_id=" << request->filter_id() << ", is_pipeline=" << request->is_pipeline();
     ClosureGuard closure_guard(done);
     _exec_env->runtime_filter_worker()->receive_runtime_filter(*request);
     Status st;

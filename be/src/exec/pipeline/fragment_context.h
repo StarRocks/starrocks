@@ -109,11 +109,7 @@ public:
 
     RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
 
-    void set_runtime_filter_port(std::unique_ptr<RuntimeFilterPort>&& runtime_filter_port) {
-        _runtime_filter_port = std::move(runtime_filter_port);
-    }
-
-    RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port.get(); }
+    RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
 
 private:
     // Id of this query
@@ -134,7 +130,7 @@ private:
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     Pipelines _pipelines;
     Drivers _drivers;
-    std::unique_ptr<RuntimeFilterPort> _runtime_filter_port;
+
     RuntimeFilterHub _runtime_filter_hub;
     // _morsel_queues is mapping from an source_id to its corresponding
     // MorselQueue that is shared among drivers created from the same pipeline,
