@@ -13,8 +13,11 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.DataSink;
+import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlannerContext;
 import com.starrocks.qe.ConnectContext;
@@ -24,6 +27,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.relation.InsertRelation;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.analyzer.relation.ValuesRelation;
@@ -96,7 +100,7 @@ public class InsertPlanner {
         PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
 
         ExecPlan execPlan;
-        if (optimizedPlan.getOp().hasLimit()) {
+        if (optimizedPlan.getOp().hasLimit() || insertRelation.getTargetTable() instanceof MysqlTable) {
             execPlan = new PlanFragmentBuilder().createPhysicalPlan(
                     optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     insertRelation.getQueryRelation().getColumnOutputNames());
@@ -124,10 +128,15 @@ public class InsertPlanner {
         }
         olapTuple.computeMemLayout();
 
-        checkPlanIsVectorized(execPlan.getFragments());
-
-        OlapTableSink dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
-                insertRelation.getTargetPartitionIds());
+        DataSink dataSink;
+        if (insertRelation.getTargetTable() instanceof OlapTable) {
+            dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
+                    insertRelation.getTargetPartitionIds());
+        } else if (insertRelation.getTargetTable() instanceof MysqlTable) {
+            dataSink = new MysqlTableSink((MysqlTable) insertRelation.getTargetTable());
+        } else {
+            throw new SemanticException("Unknown table type " + insertRelation.getTargetTable().getType());
+        }
         execPlan.getFragments().get(0).setSink(dataSink);
         execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
         return execPlan;
@@ -206,7 +215,7 @@ public class InsertPlanner {
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
 
-            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) || 
+            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
                     targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 String originName = Column.removeNamePrefix(targetColumn.getName());
                 Column originColumn = fullSchema.stream()
