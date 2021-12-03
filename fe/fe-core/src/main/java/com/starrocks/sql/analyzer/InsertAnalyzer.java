@@ -11,6 +11,7 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
@@ -49,13 +50,17 @@ public class InsertAnalyzer {
         Database database = MetaUtils.getStarRocks(session, insertStmt.getTableName());
         Table table = MetaUtils.getStarRocksTable(session, insertStmt.getTableName());
 
+        if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
+            throw unsupportedException("Only support insert into olap table or mysql table");
+        }
+
+        List<Long> targetPartitionIds = Lists.newArrayList();
         if (table instanceof OlapTable) {
-            OlapTable targetTable = (OlapTable) table;
+            OlapTable olapTable = (OlapTable) table;
             PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
-            List<Long> targetPartitionIds = Lists.newArrayList();
 
             if (targetPartitionNames != null) {
-                if (targetTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
+                if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                     throw new SemanticException("PARTITION clause is not valid for INSERT into unpartitioned table");
                 }
 
@@ -68,82 +73,80 @@ public class InsertAnalyzer {
                         throw new SemanticException("there are empty partition name");
                     }
 
-                    Partition partition = targetTable.getPartition(partitionName, targetPartitionNames.isTemp());
+                    Partition partition = olapTable.getPartition(partitionName, targetPartitionNames.isTemp());
                     if (partition == null) {
                         throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
-                                targetTable.getName());
+                                olapTable.getName());
                     }
                     targetPartitionIds.add(partition.getId());
                 }
             } else {
-                for (Partition partition : targetTable.getPartitions()) {
+                for (Partition partition : olapTable.getPartitions()) {
                     targetPartitionIds.add(partition.getId());
                 }
                 if (targetPartitionIds.isEmpty()) {
                     throw new SemanticException("data cannot be inserted into table with empty partition." +
                             "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. ",
-                            targetTable.getName());
+                            olapTable.getName());
                 }
             }
-
-            // Build target columns
-            List<Column> targetColumns;
-            Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-            if (insertStmt.getTargetColumnNames() == null) {
-                targetColumns = new ArrayList<>(targetTable.getBaseSchema());
-                mentionedColumns =
-                        targetTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
-            } else {
-                targetColumns = new ArrayList<>();
-                for (String colName : insertStmt.getTargetColumnNames()) {
-                    Column column = targetTable.getColumn(colName);
-                    if (column == null) {
-                        throw new SemanticException("Unknown column '%s' in '%s'", colName, targetTable.getName());
-                    }
-                    if (!mentionedColumns.add(colName)) {
-                        throw new SemanticException("Column '%s' specified twice", colName);
-                    }
-                    targetColumns.add(column);
-                }
-
-                // object column must in mentionedColumns
-                for (Column col : targetTable.getBaseSchema()) {
-                    if (col.getType().isOnlyMetricType() && !mentionedColumns.contains(col.getName())) {
-                        throw new SemanticException(
-                                col.getType() + " type column " + col.getName() + " must in insert into columns");
-                    }
-                }
-            }
-
-            for (Column column : targetTable.getBaseSchema()) {
-                if (column.getDefaultValue() == null && !column.isAllowNull() &&
-                        !mentionedColumns.contains(column.getName())) {
-                    throw new SemanticException("'%s' must be explicitly mentioned in column permutation",
-                            column.getName());
-                }
-            }
-
-            if (query.getOutputExpr().size() != mentionedColumns.size()) {
-                throw new SemanticException("Column count doesn't match value count");
-            }
-            // check default value expr
-            if (query instanceof ValuesRelation) {
-                ValuesRelation valuesRelation = (ValuesRelation) query;
-                for (List<Expr> row : valuesRelation.getRows()) {
-                    for (int columnIdx = 0; columnIdx < row.size(); ++columnIdx) {
-                        if (row.get(columnIdx) instanceof DefaultValueExpr &&
-                                targetColumns.get(columnIdx).getDefaultValue() == null) {
-                            throw new SemanticException(
-                                    "Column has no default value, column=" + targetColumns.get(columnIdx).getName());
-                        }
-                    }
-                }
-            }
-
-            return new InsertRelation(query, database, targetTable, targetPartitionIds, targetColumns,
-                    insertStmt.getTargetColumnNames());
-        } else {
-            throw unsupportedException("New planner only support insert into olap table");
         }
+
+        // Build target columns
+        List<Column> targetColumns;
+        Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        if (insertStmt.getTargetColumnNames() == null) {
+            targetColumns = new ArrayList<>(table.getBaseSchema());
+            mentionedColumns =
+                    table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+        } else {
+            targetColumns = new ArrayList<>();
+            for (String colName : insertStmt.getTargetColumnNames()) {
+                Column column = table.getColumn(colName);
+                if (column == null) {
+                    throw new SemanticException("Unknown column '%s' in '%s'", colName, table.getName());
+                }
+                if (!mentionedColumns.add(colName)) {
+                    throw new SemanticException("Column '%s' specified twice", colName);
+                }
+                targetColumns.add(column);
+            }
+
+            // object column must in mentionedColumns
+            for (Column col : table.getBaseSchema()) {
+                if (col.getType().isOnlyMetricType() && !mentionedColumns.contains(col.getName())) {
+                    throw new SemanticException(
+                            col.getType() + " type column " + col.getName() + " must in insert into columns");
+                }
+            }
+        }
+
+        for (Column column : table.getBaseSchema()) {
+            if (column.getDefaultValue() == null && !column.isAllowNull() &&
+                    !mentionedColumns.contains(column.getName())) {
+                throw new SemanticException("'%s' must be explicitly mentioned in column permutation",
+                        column.getName());
+            }
+        }
+
+        if (query.getOutputExpr().size() != mentionedColumns.size()) {
+            throw new SemanticException("Column count doesn't match value count");
+        }
+        // check default value expr
+        if (query instanceof ValuesRelation) {
+            ValuesRelation valuesRelation = (ValuesRelation) query;
+            for (List<Expr> row : valuesRelation.getRows()) {
+                for (int columnIdx = 0; columnIdx < row.size(); ++columnIdx) {
+                    if (row.get(columnIdx) instanceof DefaultValueExpr &&
+                            targetColumns.get(columnIdx).getDefaultValue() == null) {
+                        throw new SemanticException(
+                                "Column has no default value, column=" + targetColumns.get(columnIdx).getName());
+                    }
+                }
+            }
+        }
+
+        return new InsertRelation(query, database, table, targetPartitionIds, targetColumns,
+                insertStmt.getTargetColumnNames());
     }
 }

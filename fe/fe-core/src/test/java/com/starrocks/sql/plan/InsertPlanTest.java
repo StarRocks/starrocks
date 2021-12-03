@@ -205,6 +205,57 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testInsertIntoMysqlTable() throws Exception {
+        String sql = "insert into test.mysql_table select v1,v2 from t0";
+        String explainString = getInsertExecPlan(sql);
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: k1 | 5: k2\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  MYSQL TABLE SINK\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : CAST(1: v1 AS INT)\n" +
+                "  |  <slot 5> : CAST(2: v2 AS INT)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=4.0\n" +
+                "     numNodes=0"));
+
+        sql = "insert into test.mysql_table(k1) select v1 from t0";
+        explainString = getInsertExecPlan(sql);
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:5: k1 | 4: expr\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  MYSQL TABLE SINK\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : NULL\n" +
+                "  |  <slot 5> : CAST(1: v1 AS INT)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0"));
+    }
+
+    @Test
     public void testInsertDefaultValue() throws Exception {
         starRocksAssert.withTable(" CREATE TABLE `duplicate_table_with_default` ( " +
                 "`k1`  date default \"1970-01-01\", " +
