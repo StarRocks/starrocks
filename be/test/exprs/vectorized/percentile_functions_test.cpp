@@ -5,6 +5,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "util/percentile_value.h"
+
 namespace starrocks {
 namespace vectorized {
 class PercentileFunctionsTest : public ::testing::Test {

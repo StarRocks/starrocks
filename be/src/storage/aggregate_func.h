@@ -32,6 +32,7 @@
 #include "storage/row_cursor_cell.h"
 #include "storage/types.h"
 #include "util/bitmap_value.h"
+#include "util/percentile_value.h"
 #include "util/tdigest.h"
 
 namespace starrocks {
