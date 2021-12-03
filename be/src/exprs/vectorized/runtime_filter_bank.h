@@ -151,9 +151,12 @@ public:
     void push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids);
     std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() { return _descriptors; }
     const std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() const { return _descriptors; }
+
     void set_wait_timeout_ms(int v) { _wait_timeout_ms = v; }
+    int wait_timeout_ms() const { return _wait_timeout_ms; }
     // wait for all runtime filters are ready.
     void wait();
+
     std::string debug_string() const;
     bool empty() const { return _descriptors.empty(); }
     void init_counter();
