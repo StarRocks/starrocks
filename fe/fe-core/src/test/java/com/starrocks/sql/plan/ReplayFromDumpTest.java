@@ -163,7 +163,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testSSB10() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/ssb10"));
-        Assert.assertTrue(replayPair.second.contains("cardinality: 1597"));
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("cardinality: 1600"));
         Assert.assertTrue(replayPair.second.contains("  |----7:EXCHANGE\n"
                 + "  |       cardinality: 30"));
     }
