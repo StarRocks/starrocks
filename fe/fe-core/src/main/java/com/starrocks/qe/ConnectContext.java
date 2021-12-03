@@ -39,6 +39,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.channels.SocketChannel;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -108,6 +109,8 @@ public class ConnectContext {
     protected volatile long startTime;
     // Cache thread info for this connection.
     protected volatile ThreadInfo threadInfo;
+    // One start time for each transaction
+    protected volatile LocalDateTime transactionStartTime;
 
     // Catalog: put catalog here is convenient for unit test,
     // because catalog is singleton, hard to mock
@@ -437,6 +440,14 @@ public class ConnectContext {
 
     public void setCurrentSqlDbIds(Set<Long> currentSqlDbIds) {
         this.currentSqlDbIds = currentSqlDbIds;
+    }
+
+    public LocalDateTime getTransactionStartTime() {
+        return transactionStartTime;
+    }
+
+    public void resetTransactionStartTime() {
+        this.transactionStartTime = LocalDateTime.now();
     }
 
     // kill operation with no protect.
