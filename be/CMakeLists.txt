@@ -429,7 +429,7 @@ set(STARROCKS_LINK_LIBS
     Exprs
     Formats
     Gutil
-    Olap
+    Storage
     Rowset
     OlapFs
     Runtime

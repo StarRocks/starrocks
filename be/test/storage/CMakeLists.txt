@@ -20,10 +20,10 @@
 # under the License.
 
 # where to put generated libraries
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/test/olap")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/test/storage")
 
 # where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/test/olap")
+set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/test/storage")
 
 ADD_BE_TEST(delete_handler_test)
 ADD_BE_TEST(options_test)

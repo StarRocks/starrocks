@@ -38,7 +38,6 @@
 #include "storage/data_dir.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
-#include "storage/rowset/rowset_reader.h"
 #include "storage/tablet_meta.h"
 #include "storage/tuple.h"
 #include "storage/utils.h"
@@ -129,8 +128,6 @@ public:
 
     // REQUIRE: `obtain_header_rdlock()`ed
     Status capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
-    Status capture_rs_readers(const Version& spec_version, vector<RowsetReaderSharedPtr>* rs_readers) const;
-    Status capture_rs_readers(const vector<Version>& version_path, vector<RowsetReaderSharedPtr>* rs_readers) const;
 
     using IteratorList = std::vector<ChunkIteratorPtr>;
 

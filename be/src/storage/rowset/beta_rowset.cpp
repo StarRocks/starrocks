@@ -29,7 +29,6 @@
 #include <set>
 
 #include "gutil/strings/substitute.h"
-#include "storage/rowset/beta_rowset_reader.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
@@ -85,12 +84,6 @@ Status BetaRowset::do_load() {
         _segments.push_back(std::move(res).value());
     }
     return Status::OK();
-}
-
-OLAPStatus BetaRowset::create_reader(RowsetReaderSharedPtr* result) {
-    // NOTE: We use std::static_pointer_cast for performance
-    *result = std::make_shared<BetaRowsetReader>(std::static_pointer_cast<BetaRowset>(shared_from_this()));
-    return OLAP_SUCCESS;
 }
 
 OLAPStatus BetaRowset::remove() {

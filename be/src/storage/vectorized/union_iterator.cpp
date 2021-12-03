@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "column/chunk.h"
-#include "storage/iterators.h" // StorageReadOptions
 
 namespace starrocks::vectorized {
 

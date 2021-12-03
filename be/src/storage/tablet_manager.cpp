@@ -38,7 +38,6 @@ DIAGNOSTIC_POP
 #include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
-#include "storage/reader.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"

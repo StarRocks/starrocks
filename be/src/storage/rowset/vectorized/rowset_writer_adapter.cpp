@@ -32,22 +32,6 @@ OLAPStatus RowsetWriterAdapter::init() {
     return _status;
 }
 
-OLAPStatus RowsetWriterAdapter::add_row(const RowCursor& row) {
-    if (_row_converter == nullptr) {
-        RETURN_NOT_OK(_init_row_converter());
-    }
-    _row_converter->convert(_row.get(), row);
-    return _writer->add_row(*_row);
-}
-
-OLAPStatus RowsetWriterAdapter::add_row(const ContiguousRow& row) {
-    if (_row_converter == nullptr) {
-        RETURN_NOT_OK(_init_row_converter());
-    }
-    _row_converter->convert(_row.get(), row);
-    return _writer->add_row(*_row);
-}
-
 OLAPStatus RowsetWriterAdapter::add_chunk(const vectorized::Chunk& chunk) {
     if (_chunk_converter == nullptr) {
         RETURN_NOT_OK(_init_chunk_converter());
@@ -60,25 +44,6 @@ OLAPStatus RowsetWriterAdapter::flush_chunk(const vectorized::Chunk& chunk) {
         RETURN_NOT_OK(_init_chunk_converter());
     }
     return _writer->flush_chunk(*_chunk_converter->copy_convert(chunk));
-}
-
-OLAPStatus RowsetWriterAdapter::_init_row_converter() {
-    _row_converter = std::make_unique<RowConverter>();
-    auto st = _row_converter->init(*_in_schema, *_out_schema);
-    if (!st.ok()) {
-        _row_converter.reset();
-        return OLAP_ERR_INVALID_SCHEMA;
-    }
-    _row = std::make_unique<RowCursor>();
-    if (_row->init(*_out_schema) != OLAP_SUCCESS) {
-        _row_converter.reset();
-        _row.reset();
-        return OLAP_ERR_INVALID_SCHEMA;
-    }
-    // |_in_schema| and |_out_schema| can be freed now.
-    _in_schema.reset();
-    _out_schema.reset();
-    return OLAP_SUCCESS;
 }
 
 OLAPStatus RowsetWriterAdapter::_init_chunk_converter() {

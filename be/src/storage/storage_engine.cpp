@@ -46,7 +46,6 @@
 #include "storage/fs/file_block_manager.h"
 #include "storage/lru_cache.h"
 #include "storage/memtable_flush_executor.h"
-#include "storage/reader.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
