@@ -187,15 +187,6 @@ TEST(BytesTest, test_hook_realloc) {
     free(new_ptr);
     after = g_mem_usage;
     ASSERT_EQ(before, after);
-
-    // alloc failed
-    before = g_mem_usage;
-    ptr = malloc(1024);
-    new_ptr = realloc(ptr, 8l * 1024l * 1024l * 1024l * 1024l);
-    ASSERT_TRUE(new_ptr == nullptr);
-    free(ptr);
-    after = g_mem_usage;
-    ASSERT_EQ(before, after);
 }
 
 // NOLINTNEXTLINE
@@ -222,13 +213,6 @@ TEST(BytesTest, test_hook_calloc) {
     before = g_mem_usage;
     ptr = calloc(0, 0);
     cfree(ptr);
-    after = g_mem_usage;
-    ASSERT_EQ(before, after);
-
-    // alloc failed
-    before = g_mem_usage;
-    ptr = calloc(8l * 1024l * 1024l * 1024l * 1024l, 1);
-    ASSERT_TRUE(ptr == nullptr);
     after = g_mem_usage;
     ASSERT_EQ(before, after);
 }
@@ -259,13 +243,6 @@ TEST(BytesTest, test_hook_memalign) {
     free(ptr);
     after = g_mem_usage;
     ASSERT_EQ(before, after);
-
-    // alloc failed
-    before = g_mem_usage;
-    ptr = memalign(1, 8l * 1024l * 1024l * 1024l * 1024l);
-    ASSERT_TRUE(ptr == nullptr);
-    after = g_mem_usage;
-    ASSERT_EQ(before, after);
 }
 
 // NOLINTNEXTLINE
@@ -294,13 +271,6 @@ TEST(BytesTest, test_hook_aligned_alloc) {
     free(ptr);
     after = g_mem_usage;
     ASSERT_EQ(before, after);
-
-    // alloc failed
-    before = g_mem_usage;
-    ptr = aligned_alloc(1, 8l * 1024l * 1024l * 1024l * 1024l);
-    ASSERT_TRUE(ptr == nullptr);
-    after = g_mem_usage;
-    ASSERT_EQ(before, after);
 }
 
 // NOLINTNEXTLINE
@@ -327,13 +297,6 @@ TEST(BytesTest, test_hook_valloc) {
     free(ptr);
     after = g_mem_usage;
     ASSERT_EQ(before, after);
-
-    // alloc failed
-    before = g_mem_usage;
-    ptr = valloc(8l * 1024l * 1024l * 1024l * 1024l);
-    ASSERT_TRUE(ptr == nullptr);
-    after = g_mem_usage;
-    ASSERT_EQ(before, after);
 }
 
 // NOLINTNEXTLINE
@@ -358,13 +321,6 @@ TEST(BytesTest, test_hook_pvalloc) {
     before = g_mem_usage;
     ptr = pvalloc(0);
     free(ptr);
-    after = g_mem_usage;
-    ASSERT_EQ(before, after);
-
-    // alloc failed
-    before = g_mem_usage;
-    ptr = pvalloc(8l * 1024l * 1024l * 1024l * 1024l);
-    ASSERT_TRUE(ptr == nullptr);
     after = g_mem_usage;
     ASSERT_EQ(before, after);
 }
@@ -404,14 +360,6 @@ TEST(BytesTest, test_hook_posix_memalign) {
     ASSERT_EQ(before, after);
 
     // alloc failed
-    before = g_mem_usage;
-    ptr = nullptr;
-    ret = posix_memalign(&ptr, 1, 8l * 1024l * 1024l * 1024l * 1024l);
-    ASSERT_TRUE(ret != 0);
-    ASSERT_TRUE(ptr == nullptr);
-    after = g_mem_usage;
-    ASSERT_EQ(before, after);
-
     before = g_mem_usage;
     ret = posix_memalign(&ptr, 1, 8);
     ASSERT_TRUE(ret != 0);
