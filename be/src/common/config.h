@@ -624,6 +624,9 @@ CONF_Int64(pipeline_yield_max_time_spent, "100000000");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 
+// max hdfs file handle
+CONF_mInt32(max_hdfs_file_handle, "1000");
+
 } // namespace config
 
 } // namespace starrocks

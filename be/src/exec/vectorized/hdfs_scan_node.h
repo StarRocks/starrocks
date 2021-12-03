@@ -3,6 +3,7 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 
 #include "env/env.h"
 #include "exec/scan_node.h"
@@ -15,14 +16,15 @@ namespace starrocks::vectorized {
 
 struct HdfsFileDesc {
     hdfsFS hdfs_fs;
-    hdfsFile hdfs_file;
     THdfsFileFormat::type hdfs_file_format;
-    std::shared_ptr<RandomAccessFile> fs = nullptr;
+    std::shared_ptr<RandomAccessFile> fs;
 
     int partition_id = 0;
     std::string path;
     int64_t file_length = 0;
     std::vector<const THdfsScanRange*> splits;
+
+    std::atomic<int32_t>* open_limit = nullptr;
 };
 
 class HdfsScanNode final : public starrocks::ScanNode {
@@ -144,6 +146,8 @@ private:
     mutable SpinLock _status_mutex;
     Status _status;
     RuntimeState* _runtime_state = nullptr;
+
+    std::atomic_bool _pending_token = true;
 
     std::atomic<int32_t> _scanner_submit_count = 0;
     std::atomic<int32_t> _running_threads = 0;

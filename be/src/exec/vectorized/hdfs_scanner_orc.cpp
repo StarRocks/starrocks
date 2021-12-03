@@ -299,10 +299,9 @@ void HdfsOrcScanner::update_counter() {
 #endif
 }
 
-Status HdfsParquetScanner::do_close(RuntimeState* runtime_state) {
+void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {
     update_counter();
     _reader.reset();
-    return Status::OK();
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
@@ -358,10 +357,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-Status HdfsOrcScanner::do_close(RuntimeState* runtime_state) {
+void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
     _orc_adapter.reset(nullptr);
     update_counter();
-    return Status::OK();
 }
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {

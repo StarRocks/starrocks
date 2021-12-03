@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <utility>
 
 #include "column/chunk.h"
@@ -77,6 +78,8 @@ struct HdfsScannerParams {
     std::vector<std::string>* hive_column_names;
 
     HdfsScanNode* parent = nullptr;
+
+    std::atomic<int32_t>* open_limit;
 };
 
 struct HdfsFileReaderParam {
@@ -133,13 +136,20 @@ struct HdfsFileReaderParam {
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
 };
 
+// if *lvalue == expect, swap(*lvalue,*rvalue)
+inline bool atomic_cas(std::atomic_bool* lvalue, std::atomic_bool* rvalue, bool expect) {
+    bool res = lvalue->compare_exchange_strong(expect, *rvalue);
+    if (res) *rvalue = expect;
+    return res;
+}
+
 class HdfsScanner {
 public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
     Status open(RuntimeState* runtime_state);
-    Status close(RuntimeState* runtime_state);
+    void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
 
@@ -148,8 +158,30 @@ public:
     bool keep_priority() const { return _keep_priority; }
     void update_counter();
 
+    RuntimeState* runtime_state() { return _runtime_state; }
+
+    int open_limit() { return *_scanner_params.open_limit; }
+
+    bool is_open() { return _is_open; }
+
+    bool acquire_pending_token(std::atomic_bool* token) {
+        // acquire resource
+        return atomic_cas(token, &_pending_token, true);
+    }
+
+    bool release_pending_token(std::atomic_bool* token) {
+        if (_pending_token) {
+            _pending_token = false;
+            *token = true;
+            return true;
+        }
+        return false;
+    }
+
+    bool has_pending_token() { return _pending_token; }
+
     virtual Status do_open(RuntimeState* runtime_state) = 0;
-    virtual Status do_close(RuntimeState* runtime_state) = 0;
+    virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
 
@@ -160,6 +192,8 @@ private:
     void _build_file_read_param();
 
 protected:
+    std::atomic_bool _pending_token = false;
+
     HdfsFileReaderParam _file_read_param;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
@@ -181,7 +215,7 @@ public:
 
     void update_counter();
     Status do_open(RuntimeState* runtime_state) override;
-    Status do_close(RuntimeState* runtime_state) override;
+    void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
 
