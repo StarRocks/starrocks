@@ -25,6 +25,12 @@ public class LogicalLimitOperator extends LogicalOperator {
         this.offset = offset;
     }
 
+    public LogicalLimitOperator(Builder builder) {
+        super(OperatorType.LOGICAL_LIMIT);
+        this.limit = builder.getLimit();
+        this.offset = builder.offset;
+    }
+
     public boolean hasOffset() {
         return offset > 0;
     }
@@ -65,5 +71,27 @@ public class LogicalLimitOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), offset);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalLimitOperator, LogicalLimitOperator.Builder> {
+        private long offset = -1;
+
+        @Override
+        public LogicalLimitOperator build() {
+            return new LogicalLimitOperator(this);
+        }
+
+        @Override
+        public LogicalLimitOperator.Builder withOperator(LogicalLimitOperator operator) {
+            super.withOperator(operator);
+            this.offset = operator.offset;
+            return this;
+        }
+
+        public Builder setOffset(long offset) {
+            this.offset = offset;
+            return this;
+        }
     }
 }
