@@ -3,8 +3,11 @@
 #include <gperftools/nallocx.h>
 #include <gperftools/tcmalloc.h>
 
+#include <atomic>
 #include <iostream>
 #include <new>
+
+#include "common/compiler_util.h"
 
 #ifndef BE_TEST
 #include "runtime/current_thread.h"
@@ -175,23 +178,22 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 #define MEMORY_RELEASE_PTR(ptr) starrocks::tls_thread_status.mem_release(tc_malloc_size(ptr))
 #define MEMORY_CONSUME_SIZE(size) starrocks::tls_thread_status.mem_consume(size)
 #else
-#define TC_MALLOC_SIZE(ptr) 0
-#define MEMORY_CONSUME_PTR(ptr) (void)(ptr)
-#define MEMORY_RELEASE_PTR(ptr) (void)(ptr)
-#define MEMORY_CONSUME_SIZE(size) (void)(size)
+std::atomic<int64_t> g_mem_usage(0);
+#define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
+#define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(tc_malloc_size(ptr))
+#define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(tc_malloc_size(ptr))
+#define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)
 #endif
 
 extern "C" {
 // malloc
-void* my_alloc(size_t size) __THROW {
+void* my_malloc(size_t size) __THROW {
     void* ptr = tc_malloc(size);
     // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
-    // call the `my_alloc`, and result in a deadloop.
-#ifndef BE_TEST
+    // call the `my_malloc`, and result in a deadloop.
     if (LIKELY(ptr != nullptr)) {
         MEMORY_CONSUME_SIZE(tc_nallocx(size, 0));
     }
-#endif
     return ptr;
 }
 
@@ -264,7 +266,7 @@ int my_posix_memalign(void** r, size_t a, size_t s) __THROW {
     return ret;
 }
 
-void* malloc(size_t size) __THROW ALIAS(my_alloc);
+void* malloc(size_t size) __THROW ALIAS(my_malloc);
 void free(void* p) __THROW ALIAS(my_free);
 void* realloc(void* p, size_t size) __THROW ALIAS(my_realloc);
 void* calloc(size_t n, size_t size) __THROW ALIAS(my_calloc);
