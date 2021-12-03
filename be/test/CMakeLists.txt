@@ -205,8 +205,6 @@ set(EXEC_FILES
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
-        ./util/arrow/arrow_row_batch_test.cpp
-        ./util/arrow/arrow_row_block_test.cpp
         ./util/bitmap_test.cpp
         ./util/bitmap_value_test.cpp
         ./util/bit_stream_utils_test.cpp
