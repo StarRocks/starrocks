@@ -235,8 +235,10 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     using namespace pipeline;
     OpFactories operators;
     if (!_is_merging) {
-        operators.emplace_back(std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                               _num_senders, _input_row_desc));
+        auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
+                                                                                  _num_senders, _input_row_desc);
+        exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
+        operators.emplace_back(exchange_source_op);
         if (limit() != -1) {
             operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
         }
