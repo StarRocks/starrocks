@@ -248,7 +248,7 @@ Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     try {
         _big_chunk->append(*chunk);
     } catch (std::bad_alloc const&) {
-        return Status::InternalError("Mem usage has exceed the limit of BE");
+        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
     }
     DCHECK(!_big_chunk->has_const_column());
     return Status::OK();

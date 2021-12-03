@@ -484,7 +484,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
                                                                        row_number);
                     }
                 } catch (std::bad_alloc const&) {
-                    return Status::InternalError("Mem usage has exceed the limit of BE");
+                    return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
                 }
             }
         }

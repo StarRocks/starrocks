@@ -181,7 +181,7 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
         try {
             permutation_second.resize(row_count);
         } catch (std::bad_alloc const&) {
-            return Status::InternalError("Mem usage has exceed the limit of BE");
+            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
         }
 
         uint32_t perm_index = 0;
