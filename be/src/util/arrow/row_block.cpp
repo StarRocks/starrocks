@@ -216,12 +216,6 @@ Status FromRowBlockConverter::convert(std::shared_ptr<arrow::RecordBatch>* out) 
     return Status::OK();
 }
 
-Status convert_to_arrow_batch(const RowBlockV2& block, const std::shared_ptr<arrow::Schema>& schema,
-                              arrow::MemoryPool* pool, std::shared_ptr<arrow::RecordBatch>* result) {
-    FromRowBlockConverter converter(block, schema, pool);
-    return converter.convert(result);
-}
-
 // Convert Arrow RecordBatch to StarRocks RowBlockV2
 class ToRowBlockConverter : public arrow::ArrayVisitor {
 public:
