@@ -33,6 +33,7 @@
 #include "storage/storage_engine.h"
 #include "util/file_utils.h"
 #include "util/logging.h"
+#include "util/mem_info.h"
 
 using namespace std;
 using namespace starrocks;
@@ -1027,8 +1028,10 @@ TEST_F(TestDeleteHandler, FilterDataVersion) {
 
 int main(int argc, char** argv) {
     starrocks::init_glog("be-test");
+    starrocks::MemInfo::init();
     int ret = starrocks::OLAP_SUCCESS;
     testing::InitGoogleTest(&argc, argv);
+    config::mem_limit="10g";
 
     starrocks::set_up();
     ret = RUN_ALL_TESTS();
