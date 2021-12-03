@@ -4841,8 +4841,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
-                "  |  <slot 25> : CAST(49 AS DOUBLE)\n" +
-                "  |  \n" +
-                "  0:OlapScanNode"));
+                "  |  <slot 25> : CAST(49 AS DOUBLE)"));
     }
 }
