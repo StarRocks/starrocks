@@ -4,11 +4,18 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <ctime>
+
+#include "malloc.h"
+
 extern "C" {
 typedef void (*MallocHook_NewHook)(const void* ptr, size_t size);
 int MallocHook_AddNewHook(MallocHook_NewHook hook);
 int MallocHook_RemoveNewHook(MallocHook_NewHook hook);
 } // extern "C"
+
+extern std::atomic<int64_t> g_mem_usage;
 
 static size_t count = 0;
 void NewHook(const void* ptr, size_t size) {
@@ -109,6 +116,250 @@ TEST(BytesTest, test_alloc_without_init) {
 
     ASSERT_EQ(8, b.size());
     ASSERT_EQ(8, b.capacity());
+}
+
+// NOLINTNEXTLINE
+TEST(BytesTest, test_hook_malloc) {
+    srand((int)time(NULL));
+
+    void* ptr;
+    int before;
+    int after;
+    int size;
+
+    for (int i = 0; i < 1000; i++) {
+        size = rand() % (8 * 1024 * 1024);
+        before = g_mem_usage;
+        ptr = malloc(size);
+        free(ptr);
+        after = g_mem_usage;
+        ASSERT_EQ(before, after);
+    }
+
+    // alloc 0
+    before = g_mem_usage;
+    ptr = malloc(0);
+    free(ptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
+}
+
+// NOLINTNEXTLINE
+TEST(BytesTest, test_hook_realloc) {
+    srand((int)time(NULL));
+
+    void* ptr;
+    void* new_ptr;
+    int before;
+    int after;
+    int size;
+    int new_size;
+
+    for (int i = 0; i < 1000; i++) {
+        size = rand() % (8 * 1024 * 1024);
+        before = g_mem_usage;
+        ptr = malloc(size);
+        new_size = rand() % (8 * 1024 * 1024);
+        new_ptr = realloc(ptr, new_size);
+        free(new_ptr);
+        after = g_mem_usage;
+        ASSERT_EQ(before, after);
+    }
+
+    // alloc 0
+    before = g_mem_usage;
+    ptr = malloc(1024);
+    new_ptr = realloc(ptr, 0);
+    ASSERT_TRUE(new_ptr == nullptr);
+    free(ptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
+
+    before = g_mem_usage;
+    new_ptr = realloc(nullptr, 1024);
+    free(new_ptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
+}
+
+// NOLINTNEXTLINE
+TEST(BytesTest, test_hook_calloc) {
+    srand((int)time(NULL));
+
+    void* ptr;
+    int before;
+    int after;
+    int size;
+    int count;
+
+    for (int i = 0; i < 1000; i++) {
+        size = rand() % (1024 * 1024);
+        count = rand() % 10;
+        before = g_mem_usage;
+        ptr = calloc(size, count);
+        cfree(ptr);
+        after = g_mem_usage;
+        ASSERT_EQ(before, after);
+    }
+
+    // alloc 0
+    before = g_mem_usage;
+    ptr = calloc(0, 0);
+    cfree(ptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
+}
+
+// NOLINTNEXTLINE
+TEST(BytesTest, test_hook_memalign) {
+    srand((int)time(NULL));
+
+    void* ptr;
+    int before;
+    int after;
+    int size;
+    int align;
+
+    for (int i = 0; i < 1000; i++) {
+        size = rand() % (8 * 1024 * 1024);
+        align = rand() % (8 * 1024 * 1024);
+        before = g_mem_usage;
+        ptr = memalign(align, size);
+        free(ptr);
+        after = g_mem_usage;
+        ASSERT_EQ(before, after);
+    }
+
+    // alloc 0
+    before = g_mem_usage;
+    ptr = memalign(4, 0);
+    free(ptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
+}
+
+// NOLINTNEXTLINE
+TEST(BytesTest, test_hook_aligned_alloc) {
+    srand((int)time(NULL));
+
+    void* ptr;
+    int before;
+    int after;
+    int size;
+    int align;
+
+    for (int i = 0; i < 1000; i++) {
+        size = rand() % (8 * 1024 * 1024);
+        align = rand() % (8 * 1024 * 1024);
+        before = g_mem_usage;
+        ptr = aligned_alloc(align, size);
+        free(ptr);
+        after = g_mem_usage;
+        ASSERT_EQ(before, after);
+    }
+
+    // alloc 0
+    before = g_mem_usage;
+    ptr = aligned_alloc(4, 0);
+    free(ptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
+}
+
+// NOLINTNEXTLINE
+TEST(BytesTest, test_hook_valloc) {
+    srand((int)time(NULL));
+
+    void* ptr;
+    int before;
+    int after;
+    int size;
+
+    for (int i = 0; i < 1000; i++) {
+        size = rand() % (8 * 1024 * 1024);
+        before = g_mem_usage;
+        ptr = valloc(size);
+        free(ptr);
+        after = g_mem_usage;
+        ASSERT_EQ(before, after);
+    }
+
+    // alloc 0
+    before = g_mem_usage;
+    ptr = valloc(0);
+    free(ptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
+}
+
+// NOLINTNEXTLINE
+TEST(BytesTest, test_hook_pvalloc) {
+    srand((int)time(NULL));
+
+    void* ptr;
+    int before;
+    int after;
+    int size;
+
+    for (int i = 0; i < 1000; i++) {
+        size = rand() % (8 * 1024 * 1024);
+        before = g_mem_usage;
+        ptr = pvalloc(size);
+        free(ptr);
+        after = g_mem_usage;
+        ASSERT_EQ(before, after);
+    }
+
+    // alloc 0
+    before = g_mem_usage;
+    ptr = pvalloc(0);
+    free(ptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
+}
+
+// NOLINTNEXTLINE
+TEST(BytesTest, test_hook_posix_memalign) {
+    srand((int)time(NULL));
+
+    void* ptr;
+    int before;
+    int after;
+    int size;
+    int align;
+    int ret;
+
+    for (int i = 0; i < 1000; i++) {
+        size = rand() % (8 * 1024 * 1024);
+        align = 2 ^ (3 + rand() % 10);
+        before = g_mem_usage;
+        if (align % 8 == 0) {
+            ret = posix_memalign(&ptr, align, size);
+            ASSERT_EQ(ret, 0);
+            free(ptr);
+        } else {
+            ret = posix_memalign(&ptr, align, size);
+            ASSERT_NE(ret, 0);
+        }
+        after = g_mem_usage;
+        ASSERT_EQ(before, after);
+    }
+
+    // alloc 0
+    before = g_mem_usage;
+    ret = posix_memalign(&ptr, 8, 0);
+    free(ptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
+
+    // alloc failed
+    ptr = nullptr;
+    before = g_mem_usage;
+    ret = posix_memalign(&ptr, 1, 8);
+    ASSERT_TRUE(ret != 0);
+    ASSERT_TRUE(ptr == nullptr);
+    after = g_mem_usage;
+    ASSERT_EQ(before, after);
 }
 
 } // namespace starrocks::vectorized
