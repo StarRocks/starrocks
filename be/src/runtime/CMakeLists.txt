@@ -93,7 +93,6 @@ set(RUNTIME_FILES
     hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
     global_dicts.cpp
-    current_thread.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

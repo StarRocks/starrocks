@@ -2,107 +2,60 @@
 
 #pragma once
 
-#include <string>
-
-#include "gen_cpp/Types_types.h"
-#include "gutil/macros.h"
-#include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
-#include "util/uid_util.h"
+#include "runtime/current_thread_impl.h"
 
 #define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
-    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
+    auto VARNAME_LINENUM(tracker_setter) = starrocks::CurrentThreadMemTrackerSetter(mem_tracker)
 
 namespace starrocks {
+namespace current_thread {
 
-class TUniqueId;
+inline void set_query_id(const TUniqueId& query_id) {
+    impl::ThreadLocalData::get_or_create()->set_query_id(query_id);
+}
 
-class CurrentThread {
-public:
-    CurrentThread() = default;
-    ~CurrentThread();
+inline UniqueId query_id() {
+    impl::ThreadLocalData* tls = impl::ThreadLocalData::get();
+    return tls ? tls->query_id() : UniqueId(0, 0);
+}
 
-    void commit() {
-        MemTracker* cur_tracker = mem_tracker();
-        if (_cache_size != 0 && cur_tracker != nullptr) {
-            cur_tracker->consume(_cache_size);
-            _cache_size = 0;
-        }
+// Return prev memory tracker.
+inline MemTracker* set_mem_tracker(MemTracker* mem_tracker) {
+    impl::clear_tls_cache();
+    return impl::ThreadLocalData::get_or_create()->set_mem_tracker(mem_tracker);
+}
+
+inline MemTracker* mem_tracker() {
+    impl::ThreadLocalData* tls = impl::ThreadLocalData::get();
+    return tls ? tls->mem_tracker() : ExecEnv::GetInstance()->process_mem_tracker();
+}
+
+inline void mem_consume(int64_t size) {
+    impl::ThreadLocalData* tls = impl::ThreadLocalData::get();
+    if (tls) {
+        tls->mem_consume(size);
+    } else {
+        impl::consume_tls_cache(size);
     }
+}
 
-    void set_query_id(const starrocks::TUniqueId& query_id) {
-        _query_id = query_id;
-        _str_query_id = starrocks::print_id(query_id);
+inline void mem_release(int64_t size) {
+    impl::ThreadLocalData* tls = impl::ThreadLocalData::get();
+    if (tls) {
+        tls->mem_release(size);
+    } else {
+        impl::release_tls_cache(size);
     }
+}
 
-    const starrocks::TUniqueId& query_id() { return _query_id; }
-    const std::string& query_id_string() { return _str_query_id; }
-
-    // Return prev memory tracker.
-    starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
-        commit();
-        auto* prev = _mem_tracker;
-        _mem_tracker = mem_tracker;
-        return prev;
-    }
-
-    starrocks::MemTracker* mem_tracker() {
-        if (UNLIKELY(_mem_tracker == nullptr)) {
-            _mem_tracker = ExecEnv::GetInstance()->process_mem_tracker();
-        }
-        return _mem_tracker;
-    }
-
-    void mem_consume(int64_t size) {
-        MemTracker* cur_tracker = mem_tracker();
-        _cache_size += size;
-        if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-            cur_tracker->consume(_cache_size);
-            _cache_size = 0;
-        }
-    }
-
-    void mem_consume_without_cache(int64_t size) {
-        MemTracker* cur_tracker = mem_tracker();
-        if (cur_tracker != nullptr && size != 0) {
-            cur_tracker->consume(size);
-        }
-    }
-
-    void mem_release(int64_t size) {
-        MemTracker* cur_tracker = mem_tracker();
-        _cache_size -= size;
-        if (cur_tracker != nullptr && _cache_size <= -BATCH_SIZE) {
-            cur_tracker->release(-_cache_size);
-            _cache_size = 0;
-        }
-    }
-
-    void mem_release_without_cache(int64_t size) {
-        MemTracker* cur_tracker = mem_tracker();
-        if (cur_tracker != nullptr && size != 0) {
-            cur_tracker->release(size);
-        }
-    }
-
-private:
-    int64_t _cache_size = 0;
-    MemTracker* _mem_tracker = nullptr;
-    TUniqueId _query_id;
-    std::string _str_query_id;
-
-    const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
-};
-
-inline thread_local CurrentThread tls_thread_status;
+} // namespace current_thread
 
 class CurrentThreadMemTrackerSetter {
 public:
-    explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
-        _old_mem_tracker = tls_thread_status.set_mem_tracker(new_mem_tracker);
-    }
+    explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker)
+            : _old_mem_tracker(current_thread::set_mem_tracker(new_mem_tracker)) {}
 
-    ~CurrentThreadMemTrackerSetter() { (void)tls_thread_status.set_mem_tracker(_old_mem_tracker); }
+    ~CurrentThreadMemTrackerSetter() { (void)current_thread::set_mem_tracker(_old_mem_tracker); }
 
     CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
     void operator=(const CurrentThreadMemTrackerSetter&) = delete;

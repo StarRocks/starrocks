@@ -1453,8 +1453,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
               << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
               << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
 
     Status st = _do_compaction(&info, true);
     if (!st.ok()) {

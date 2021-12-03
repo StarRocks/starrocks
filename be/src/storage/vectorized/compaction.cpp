@@ -187,7 +187,7 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
         Status status;
         while (!bg_worker_stopped) {
 #ifndef BE_TEST
-            status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
+            status = current_thread::mem_tracker()->check_mem_limit("Compaction");
             if (!status.ok()) {
                 LOG(WARNING) << "fail to execute compaction: " << status.message() << std::endl;
                 return status;
