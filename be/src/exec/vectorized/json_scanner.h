@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "env/env.h"
 #include "env/env_stream_pipe.h"
@@ -76,9 +77,12 @@ public:
 private:
     Status _read_and_parse_json();
 
-    void _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc);
-    void _construct_number_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc);
-    void _construct_string_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc);
+    void _construct_column(simdjson::ondemand::value& value, NullableColumn *column,
+                           const TypeDescriptor& type_desc);
+    void _construct_number_column(simdjson::ondemand::value& value, NullableColumn *column,
+                                  const TypeDescriptor& type_desc);
+    void _construct_string_column(simdjson::ondemand::value& value, NullableColumn *column,
+                                  const TypeDescriptor& type_desc);
 
     Status _process_array(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::array& arr);
 
