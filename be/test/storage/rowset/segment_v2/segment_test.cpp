@@ -164,10 +164,6 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     SegmentWriter writer(std::move(wblock), 0, tablet_schema.get(), opts);
     ASSERT_OK(writer.init());
 
-    RowCursor row;
-    auto olap_st = row.init(*tablet_schema);
-    ASSERT_EQ(OLAP_SUCCESS, olap_st);
-
     // 0, 1, 2, 3
     // 10, 11, 12, 13
     // 20, 21, 22, 23
@@ -177,11 +173,10 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     for (size_t rid = 0; rid < nrows; ++rid) {
         auto& cols = chunk->columns();
         for (int cid = 0; cid < tablet_schema->num_columns(); ++cid) {
-            int row_block_id = rid / opts.num_rows_per_block;
             cols[cid]->append_datum(vectorized::Datum(static_cast<int32_t>(rid * 10 + cid)));
         }
-        ASSERT_OK(writer.append_chunk(*chunk));
     }
+    ASSERT_OK(writer.append_chunk(*chunk));
 
     uint32_t segment_size = writer.estimate_segment_size();
     LOG(INFO) << "estimated segment sizes=" << segment_size;
