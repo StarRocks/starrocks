@@ -166,7 +166,7 @@ IN_LIST_PRED_BITMAP_EVALUATE(NotInListPredicate, -=)
         }                                                                                                  \
         auto converter = vectorized::get_field_converter(from_type, to_type);                              \
         if (converter == nullptr) {                                                                        \
-            return Status::InternalError("Cannot get filed converter");                                    \
+            return Status::InternalError("Cannot get field converter");                                    \
         }                                                                                                  \
         switch (to_type) {                                                                                 \
         default:                                                                                           \
