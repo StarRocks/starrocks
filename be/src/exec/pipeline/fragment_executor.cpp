@@ -293,6 +293,7 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
             OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
                     context->next_operator_id(), mcast_local_exchanger);
             _fragment_ctx->pipelines().back()->add_op_factory(sink_op);
+            _fragment_ctx->pipelines().back()->unset_root();
         }
 
         // ==== create source/sink pipelines ====

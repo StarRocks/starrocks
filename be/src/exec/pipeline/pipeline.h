@@ -72,6 +72,7 @@ public:
 
     bool is_root() const { return _is_root; }
     void set_root() { _is_root = true; }
+    void unset_root() { _is_root = false; }
 
 private:
     uint32_t _id = 0;
