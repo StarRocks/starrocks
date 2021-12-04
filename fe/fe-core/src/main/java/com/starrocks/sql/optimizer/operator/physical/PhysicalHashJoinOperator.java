@@ -57,10 +57,13 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
         return visitor.visitPhysicalHashJoin(optExpression, context);
     }
 
+    @Override
     public String toString() {
-        return "PhysicalHashJoin" + " {" +
-                "joinType='" + joinType.toString() + '\'' +
-                ", onConjuncts='" + joinPredicate + '\'' +
+        return "PhysicalHashJoinOperator{" +
+                "joinType=" + joinType +
+                ", joinPredicate=" + joinPredicate +
+                ", limit=" + limit +
+                ", predicate=" + predicate +
                 '}';
     }
 

@@ -44,7 +44,7 @@ public class ScalarRangePredicateExtractor {
         return rewrite(predicate, false);
     }
 
-    public ScalarOperator rewrite(ScalarOperator predicate, boolean onlyExtractColumnRef) {
+    private ScalarOperator rewrite(ScalarOperator predicate, boolean onlyExtractColumnRef) {
         if (predicate.getOpType() != OperatorType.COMPOUND) {
             return predicate;
         }
