@@ -121,8 +121,8 @@ protected:
                 int row_block_id = rid / opts.num_rows_per_block;
                 cols[cid]->append_datum(generator(rid, cid, row_block_id));
             }
-            ASSERT_OK(writer.append_chunk(*chunk));
         }
+        ASSERT_OK(writer.append_chunk(*chunk));
 
         uint64_t file_size, index_size;
         ASSERT_OK(writer.finalize(&file_size, &index_size));
