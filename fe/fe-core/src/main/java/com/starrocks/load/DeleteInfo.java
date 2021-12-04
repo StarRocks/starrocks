@@ -131,7 +131,7 @@ public class DeleteInfo implements Writable {
         out.writeLong(tableId);
         out.writeLong(partitionId);
         out.writeLong(partitionVersion);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
         out.writeInt(replicaInfos.size());
         for (ReplicaPersistInfo info : replicaInfos) {
             info.write(out);
@@ -156,7 +156,7 @@ public class DeleteInfo implements Writable {
         tableId = in.readLong();
         partitionId = in.readLong();
         partitionVersion = in.readLong();
-        in.readLong();
+        in.readLong(); // read a version_hash for compatibility
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             ReplicaPersistInfo info = ReplicaPersistInfo.read(in);

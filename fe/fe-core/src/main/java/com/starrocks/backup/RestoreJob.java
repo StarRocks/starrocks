@@ -1492,6 +1492,7 @@ public class RestoreJob extends AbstractJob {
             for (Map.Entry<Long, Long> entry : restoredVersionInfo.row(tblId).entrySet()) {
                 out.writeLong(entry.getKey());
                 out.writeLong(entry.getValue());
+                out.writeLong(0); // write a version_hash for compatibility
             }
         }
 
@@ -1548,7 +1549,7 @@ public class RestoreJob extends AbstractJob {
             for (int j = 0; j < innerSize; j++) {
                 long partId = in.readLong();
                 long version = in.readLong();
-                in.readLong();
+                in.readLong(); // read a version_hash for compatibility
                 restoredVersionInfo.put(tblId, partId, version);
             }
         }

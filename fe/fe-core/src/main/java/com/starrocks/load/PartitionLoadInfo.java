@@ -66,7 +66,7 @@ public class PartitionLoadInfo implements Writable {
 
     public void write(DataOutput out) throws IOException {
         out.writeLong(version);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
 
         int count = 0;
         if (sources == null) {
@@ -85,7 +85,7 @@ public class PartitionLoadInfo implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         version = in.readLong();
-        in.readLong();
+        in.readLong(); // read a version_hash for compatibility
         int count = 0;
 
         if (in.readBoolean()) {

@@ -299,15 +299,15 @@ public class ReplicaPersistInfo implements Writable {
         out.writeLong(backendId);
         out.writeLong(replicaId);
         out.writeLong(version);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
         out.writeLong(dataSize);
         out.writeLong(rowCount);
 
         out.writeInt(opType.value);
         out.writeLong(lastFailedVersion);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
         out.writeLong(lastSuccessVersion);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
 
         out.writeInt(schemaHash);
     }
@@ -322,7 +322,7 @@ public class ReplicaPersistInfo implements Writable {
         backendId = in.readLong();
         replicaId = in.readLong();
         version = in.readLong();
-        in.readLong();
+        in.readLong(); // read a version_hash for compatibility
         dataSize = in.readLong();
         rowCount = in.readLong();
         opType = ReplicaOperationType.DEFAULT_OP;
@@ -332,9 +332,9 @@ public class ReplicaPersistInfo implements Writable {
                 throw new IOException("could not parse operation type from replica info");
             }
             lastFailedVersion = in.readLong();
-            in.readLong();
+            in.readLong(); // read a version_hash for compatibility
             lastSuccessVersion = in.readLong();
-            in.readLong();
+            in.readLong(); // read a version_hash for compatibility
         }
 
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_48) {

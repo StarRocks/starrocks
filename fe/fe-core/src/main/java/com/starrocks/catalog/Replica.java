@@ -454,30 +454,30 @@ public class Replica implements Writable {
         out.writeLong(id);
         out.writeLong(backendId);
         out.writeLong(version);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
         out.writeLong(dataSize);
         out.writeLong(rowCount);
         Text.writeString(out, state.name());
 
         out.writeLong(lastFailedVersion);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
         out.writeLong(lastSuccessVersion);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
     }
 
     public void readFields(DataInput in) throws IOException {
         id = in.readLong();
         backendId = in.readLong();
         version = in.readLong();
-        in.readLong();
+        in.readLong(); // read a version_hash for compatibility
         dataSize = in.readLong();
         rowCount = in.readLong();
         state = ReplicaState.valueOf(Text.readString(in));
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
             lastFailedVersion = in.readLong();
-            in.readLong();
+            in.readLong(); // read a version_hash for compatibility
             lastSuccessVersion = in.readLong();
-            in.readLong();
+            in.readLong(); // read a version_hash for compatibility
         }
     }
 

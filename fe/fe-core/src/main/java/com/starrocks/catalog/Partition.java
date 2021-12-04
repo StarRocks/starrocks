@@ -357,11 +357,11 @@ public class Partition extends MetaObject implements Writable {
 
         out.writeLong(visibleVersion);
         out.writeLong(visibleVersionTime);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
 
         out.writeLong(nextVersion);
-        out.writeLong(0);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
+        out.writeLong(0); // write a version_hash for compatibility
 
         Text.writeString(out, distributionInfo.getType().name());
         distributionInfo.write(out);
@@ -397,11 +397,11 @@ public class Partition extends MetaObject implements Writable {
         } else {
             visibleVersionTime = System.currentTimeMillis();
         }
-        in.readLong();
+        in.readLong(); // read a version_hash for compatibility
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
             nextVersion = in.readLong();
-            in.readLong();
-            in.readLong();
+            in.readLong(); // read a version_hash for compatibility
+            in.readLong(); // read a version_hash for compatibility
         } else {
             // the partition is created and not import any data
             if (visibleVersion == PARTITION_INIT_VERSION + 1) {

@@ -102,7 +102,7 @@ public class ConsistencyCheckInfo implements Writable {
 
         out.writeLong(lastCheckTime);
         out.writeLong(checkedVersion);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
 
         out.writeBoolean(isConsistent);
     }
@@ -116,7 +116,7 @@ public class ConsistencyCheckInfo implements Writable {
 
         lastCheckTime = in.readLong();
         checkedVersion = in.readLong();
-        in.readLong();
+        in.readLong(); // read a version_hash for compatibility
 
         isConsistent = in.readBoolean();
     }

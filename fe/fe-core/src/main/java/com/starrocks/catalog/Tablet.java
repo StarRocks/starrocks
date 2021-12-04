@@ -334,7 +334,7 @@ public class Tablet extends MetaObject implements Writable {
         }
 
         out.writeLong(checkedVersion);
-        out.writeLong(0);
+        out.writeLong(0); // write a version_hash for compatibility
         out.writeBoolean(isConsistent);
     }
 
@@ -353,7 +353,7 @@ public class Tablet extends MetaObject implements Writable {
 
         if (Catalog.getCurrentCatalogJournalVersion() >= 6) {
             checkedVersion = in.readLong();
-            in.readLong();
+            in.readLong(); // read a version_hash for compatibility
             isConsistent = in.readBoolean();
         }
     }
