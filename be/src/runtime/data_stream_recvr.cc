@@ -221,7 +221,6 @@ Status DataStreamRecvr::SenderQueue::_do_get_chunk(vectorized::Chunk** chunk) {
     }
 
     if (_chunk_queue.empty()) {
-        DCHECK_EQ(_num_remaining_senders, 0);
         return Status::OK();
     }
 
