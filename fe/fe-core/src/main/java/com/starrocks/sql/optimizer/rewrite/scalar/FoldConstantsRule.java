@@ -23,7 +23,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
-        if (call.isAggregate() || notAllConstant(call.getChildren())) {
+        if (call.isAggregate() || notAllConstantRef(call.getChildren())) {
             return call;
         }
         return ScalarOperatorEvaluator.INSTANCE.evaluation(call);
@@ -193,10 +193,6 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
     private boolean notAllConstantRef(List<ScalarOperator> operators) {
         return !operators.stream().allMatch(ScalarOperator::isConstantRef);
-    }
-
-    private boolean notAllConstant(List<ScalarOperator> operators) {
-        return !operators.stream().allMatch(ScalarOperator::isConstant);
     }
 
     private boolean hasNull(List<ScalarOperator> operators) {
