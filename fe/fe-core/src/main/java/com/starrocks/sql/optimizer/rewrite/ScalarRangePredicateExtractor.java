@@ -10,7 +10,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -18,7 +17,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,39 +50,21 @@ public class ScalarRangePredicateExtractor {
         Set<ScalarOperator> conjuncts = Sets.newLinkedHashSet();
         conjuncts.addAll(Utils.extractConjuncts(predicate));
 
-        Map<ScalarOperator, ValueDescriptor> extractMap = extractImpl(predicate);
+        Map<ScalarOperator, ValueDescriptor> hashMap = extractImpl(predicate);
 
         Set<ScalarOperator> result = Sets.newLinkedHashSet();
-        extractMap.keySet().stream().filter(k -> !onlyExtractColumnRef || k.isColumnRef())
-                .map(extractMap::get)
+        hashMap.keySet().stream().filter(k -> !onlyExtractColumnRef || k.isColumnRef())
+                .map(hashMap::get)
                 .filter(d -> d.sourceCount > 1)
                 .map(ValueDescriptor::toScalarOperator).forEach(result::addAll);
+        result.removeIf(conjuncts::contains);
+        result.forEach(f -> f.setFromPredicateRangeDerive(true));
+        result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
+                .forEach(f -> f.setNotEvalEstimate(true));
 
         ScalarOperator extractExpr = Utils.compoundAnd(Lists.newArrayList(result));
         predicate = Utils.compoundAnd(Lists.newArrayList(conjuncts));
-
-        if (isOnlyOrCompound(predicate)) {
-            Set<ColumnRefOperator> c = new HashSet<>(Utils.extractColumnRef(predicate));
-            if (c.size() == extractMap.size() &&
-                    extractMap.values().stream().allMatch(v -> v instanceof MultiValuesDescriptor)) {
-                return extractExpr;
-            }
-        }
-
-        if (isOnlyAndCompound(predicate)) {
-            List<ScalarOperator> cs = Utils.extractConjuncts(predicate);
-            Set<ColumnRefOperator> cf = new HashSet<>(Utils.extractColumnRef(predicate));
-
-            if (extractMap.values().stream().allMatch(valueDescriptor -> valueDescriptor.sourceCount == cs.size())
-                    && extractMap.size() == cf.size()) {
-                return extractExpr;
-            }
-        }
-
         if (extractExpr != null && !conjuncts.contains(extractExpr)) {
-            result.forEach(f -> f.setFromPredicateRangeDerive(true));
-            result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
-                    .forEach(f -> f.setNotEvalEstimate(true));
             // The newly extracted predicate will not be used to estimate the statistics,
             // which will cause the cardinality to be too small
             extractExpr.setFromPredicateRangeDerive(true);
@@ -115,7 +95,7 @@ public class ScalarRangePredicateExtractor {
         return re.apply(scalarOperator, null);
     }
 
-    private class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
+    private static class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
         private final Map<ScalarOperator, ValueDescriptor> descMap = Maps.newHashMap();
 
         public Map<ScalarOperator, ValueDescriptor> apply(ScalarOperator scalarOperator, Void context) {
@@ -405,33 +385,6 @@ public class ScalarRangePredicateExtractor {
             }
 
             return operators;
-        }
-    }
-
-    private static boolean isOnlyAndCompound(ScalarOperator predicate) {
-        if (predicate instanceof CompoundPredicateOperator) {
-            CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
-            if (compoundPredicateOperator.isOr() || compoundPredicateOperator.isNot()) {
-                return false;
-            }
-
-            return isOnlyAndCompound(compoundPredicateOperator.getChild(0)) &&
-                    isOnlyAndCompound(compoundPredicateOperator.getChild(1));
-        } else {
-            return true;
-        }
-    }
-
-    private static boolean isOnlyOrCompound(ScalarOperator predicate) {
-        if (predicate instanceof CompoundPredicateOperator) {
-            CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
-            if (compoundPredicateOperator.isAnd() || compoundPredicateOperator.isNot()) {
-                return false;
-            }
-
-            return isOnlyOrCompound(predicate.getChild(0)) && isOnlyOrCompound(predicate.getChild(1));
-        } else {
-            return true;
         }
     }
 }
