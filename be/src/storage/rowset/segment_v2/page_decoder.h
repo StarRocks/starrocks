@@ -40,7 +40,7 @@ struct PageCacheOptions {
     PagePointer page_pointer;
     size_t nullmap_size = 0;
     size_t footer_size = 0;
-    bool save_in_page_cache = false;
+    bool fill_page_cache = false;
     bool kept_in_memory = false;
 };
 
@@ -125,7 +125,7 @@ public:
 
     virtual const PageDecoder* dict_page_decoder() const { return nullptr; }
 
-    virtual Status save_in_page_cache(PageCacheOptions* opts) { return Status::OK(); }
+    virtual Status fill_page_cache(PageCacheOptions* opts) { return Status::OK(); }
 
 private:
     PageDecoder(const PageDecoder&) = delete;

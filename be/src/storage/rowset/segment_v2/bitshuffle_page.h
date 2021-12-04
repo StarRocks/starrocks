@@ -370,9 +370,9 @@ public:
         return Status::OK();
     }
 
-    Status save_in_page_cache(PageCacheOptions* opts) override {
+    Status fill_page_cache(PageCacheOptions* opts) override {
         DCHECK(_parsed);
-        if (!opts->save_in_page_cache || _data_from_cache) {
+        if (!opts->fill_page_cache || _data_from_cache) {
             return Status::OK();
         }
 
@@ -410,6 +410,7 @@ public:
         _data = Slice(cache_slice.data + header_size - BITSHUFFLE_PAGE_HEADER_SIZE,
                       BITSHUFFLE_PAGE_HEADER_SIZE + data_size);
         _data_from_cache = true;
+        _handle = std::move(_handle);
 
         decompressed_page.release(); // memory now managed by cache handle
         return Status::OK();
@@ -478,6 +479,7 @@ private:
     bool _parsed;
     bool _is_decoded;
     bool _data_from_cache;
+    PageCacheHandle _handle;
 };
 
 template <FieldType Type>

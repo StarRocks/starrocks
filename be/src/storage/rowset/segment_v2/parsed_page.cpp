@@ -280,7 +280,7 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
     RETURN_IF_ERROR(page->_data_decoder->init());
-    RETURN_IF_ERROR(page->_data_decoder->save_in_page_cache(cache_opts));
+    RETURN_IF_ERROR(page->_data_decoder->fill_page_cache(cache_opts));
 
     page->_first_ordinal = footer.first_ordinal();
     page->_num_rows = footer.num_values();
@@ -340,7 +340,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
     RETURN_IF_ERROR(page->_data_decoder->init());
-    RETURN_IF_ERROR(page->_data_decoder->save_in_page_cache(cache_opts));
+    RETURN_IF_ERROR(page->_data_decoder->fill_page_cache(cache_opts));
 
     page->_first_ordinal = footer.first_ordinal();
     page->_num_rows = footer.num_values();

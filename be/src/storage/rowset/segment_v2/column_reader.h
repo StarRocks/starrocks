@@ -118,7 +118,7 @@ public:
 
     // read a page from file into a page handle
     Status read_page(const ColumnIteratorOptions& iter_opts, const PagePointer& pp, PageHandle* handle,
-                     Slice* page_body, PageFooterPB* footer, bool save_in_page_cache);
+                     Slice* page_body, PageFooterPB* footer, bool fill_page_cache);
 
     bool is_nullable() const { return _flags[kIsNullablePos]; }
 

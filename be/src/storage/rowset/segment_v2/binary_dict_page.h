@@ -136,7 +136,7 @@ public:
 
     Status next_dict_codes(size_t* n, vectorized::Column* dst) override;
 
-    Status save_in_page_cache(PageCacheOptions* opts) override;
+    Status fill_page_cache(PageCacheOptions* opts) override;
 
 private:
     Slice _data;

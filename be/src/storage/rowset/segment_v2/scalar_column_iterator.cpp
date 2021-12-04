@@ -234,15 +234,15 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
     Slice page_body;
     PageFooterPB footer;
     // if page is encoding by bitshuffle, data page will be pushed into page cache after decode
-    // set save_in_page_cache as fales to prevent cache undecoded data page
-    bool save_in_page_cache =
+    // set fill_page_cache as fales to prevent cache undecoded data page
+    bool fill_page_cache =
             _opts.use_page_cache && (_reader->encoding_info()->encoding() != EncodingTypePB::DICT_ENCODING &&
                                      _reader->encoding_info()->encoding() != EncodingTypePB::BIT_SHUFFLE);
-    RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer, save_in_page_cache));
+    RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer, fill_page_cache));
 
     PageCacheOptions opts;
     opts.rblock = _opts.rblock;
-    opts.save_in_page_cache =
+    opts.fill_page_cache =
             _opts.use_page_cache && (_reader->encoding_info()->encoding() == EncodingTypePB::DICT_ENCODING ||
                                      _reader->encoding_info()->encoding() == EncodingTypePB::BIT_SHUFFLE);
     opts.kept_in_memory = _reader->kept_in_memory();

@@ -201,9 +201,9 @@ Status BinaryDictPageDecoder<Type>::init() {
 }
 
 template <FieldType Type>
-Status BinaryDictPageDecoder<Type>::save_in_page_cache(PageCacheOptions* opts) {
+Status BinaryDictPageDecoder<Type>::fill_page_cache(PageCacheOptions* opts) {
     CHECK(_parsed);
-    return _data_page_decoder->save_in_page_cache(opts);
+    return _data_page_decoder->fill_page_cache(opts);
 }
 
 template <FieldType Type>

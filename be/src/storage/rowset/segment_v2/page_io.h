@@ -58,7 +58,7 @@ struct PageReadOptions {
     // whether to save page in page cache
     // at most time, it is equal to use_page_cache
     // unless page is encoding by bitshuffle
-    bool save_in_page_cache = true;
+    bool fill_page_cache = true;
     // if true, use DURABLE CachePriority in page cache
     // currently used for in memory olap table
     bool kept_in_memory = false;

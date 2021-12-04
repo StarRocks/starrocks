@@ -79,7 +79,7 @@ Status IndexedColumnReader::load_index_page(fs::ReadableBlock* rblock, const Pag
 }
 
 Status IndexedColumnReader::read_page(fs::ReadableBlock* rblock, const PagePointer& pp, PageHandle* handle, Slice* body,
-                                      PageFooterPB* footer, bool save_in_page_cache) const {
+                                      PageFooterPB* footer, bool fill_page_cache) const {
     PageReadOptions opts;
     opts.rblock = rblock;
     opts.page_pointer = pp;
@@ -88,7 +88,7 @@ Status IndexedColumnReader::read_page(fs::ReadableBlock* rblock, const PagePoint
     opts.stats = &tmp_stats;
     opts.use_page_cache = _use_page_cache;
     opts.kept_in_memory = _kept_in_memory;
-    opts.save_in_page_cache = save_in_page_cache;
+    opts.fill_page_cache = fill_page_cache;
 
     return PageIO::read_and_decompress_page(opts, handle, body, footer);
 }
@@ -116,16 +116,16 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
     Slice body;
     PageFooterPB footer;
     // if page is encoding by bitshuffle, data page will be pushed into page cache after decode
-    // set save_in_page_cache as fales to prevent cache undecoded data page
-    bool save_in_page_cache =
+    // set fill_page_cache as fales to prevent cache undecoded data page
+    bool fill_page_cache =
             _reader->use_page_cache() && (_reader->encoding_info()->encoding() != EncodingTypePB::DICT_ENCODING &&
                                           _reader->encoding_info()->encoding() != EncodingTypePB::BIT_SHUFFLE);
-    RETURN_IF_ERROR(_reader->read_page(_rblock.get(), pp, &handle, &body, &footer, save_in_page_cache));
+    RETURN_IF_ERROR(_reader->read_page(_rblock.get(), pp, &handle, &body, &footer, fill_page_cache));
     // parse data page
     // note that page_index is not used in IndexedColumnIterator, so we pass 0
     PageCacheOptions opts;
     opts.rblock = _rblock.get();
-    opts.save_in_page_cache =
+    opts.fill_page_cache =
             _reader->use_page_cache() && (_reader->encoding_info()->encoding() == EncodingTypePB::DICT_ENCODING ||
                                           _reader->encoding_info()->encoding() == EncodingTypePB::BIT_SHUFFLE);
     opts.kept_in_memory = _reader->kept_in_memory();

@@ -260,7 +260,7 @@ Status Segment::_load_index() {
 
         PageReadOptions opts;
         opts.use_page_cache = !config::disable_storage_page_cache;
-        opts.save_in_page_cache = !config::disable_storage_page_cache;
+        opts.fill_page_cache = !config::disable_storage_page_cache;
         opts.rblock = rblock.get();
         opts.page_pointer = _short_key_index_page;
         opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
