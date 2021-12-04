@@ -181,7 +181,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         if (sink_profile != nullptr) {
             runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
         }
-        _convert_data_sink_to_operator(&context, sink.get());
+        _convert_data_sink_to_operator(&context, fragment.output_sink, sink.get());
     }
 
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
@@ -251,13 +251,14 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     return Status::OK();
 }
 
-void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* context, DataSink* datasink) {
+void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* context, const TDataSink& t_datasink,
+                                                      DataSink* datasink) {
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
         starrocks::ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink);
         // Result sink doesn't have plan node id;
-        OpFactoryPtr op = std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), -1,
-                                                                      result_sink->get_sink_type(),
-                                                                      result_sink->get_output_exprs(), _fragment_ctx);
+        OpFactoryPtr op =
+                std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
+                                                            result_sink->get_output_exprs(), _fragment_ctx);
         // Add result sink operator to last pipeline
         _fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
@@ -267,8 +268,9 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
                 std::make_shared<SinkBuffer>(_fragment_ctx->runtime_state(), sender->destinations(), dop);
 
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
-                context->next_operator_id(), -1, sink_buffer, sender->get_partition_type(), sender->destinations(),
-                sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(), _fragment_ctx);
+                context->next_operator_id(), t_datasink.stream_sink.dest_node_id, sink_buffer,
+                sender->get_partition_type(), sender->destinations(), sender->sender_id(), sender->get_dest_node_id(),
+                sender->get_partition_exprs(), _fragment_ctx);
         _fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
 
     } else if (typeid(*datasink) == typeid(starrocks::MultiCastDataStreamSink)) {
@@ -290,9 +292,10 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
         auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(sinks.size());
 
         // === create sink op ====
+        auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
         {
             OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
-                    context->next_operator_id(), mcast_local_exchanger);
+                    context->next_operator_id(), pseudo_plan_node_id, mcast_local_exchanger);
             _fragment_ctx->pipelines().back()->add_op_factory(sink_op);
         }
 
@@ -303,8 +306,8 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
             // it's okary to set arbitrary dop.
             const size_t dop = 1;
             // source op
-            auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(context->next_operator_id(),
-                                                                                           i, mcast_local_exchanger);
+            auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
+                    context->next_operator_id(), pseudo_plan_node_id, i, mcast_local_exchanger);
             source_op->set_degree_of_parallelism(dop);
 
             // sink op
