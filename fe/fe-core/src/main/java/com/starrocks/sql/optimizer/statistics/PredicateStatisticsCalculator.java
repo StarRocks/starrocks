@@ -171,8 +171,9 @@ public class PredicateStatisticsCalculator {
                 leftChildOpt = leftChild.isColumnRef() ? Optional.of((ColumnRefOperator) leftChild) : Optional.empty();
 
                 if (rightChild.isConstant()) {
-                    OptionalDouble constant = (rightColumnStatistic.isInfiniteRange()) ? OptionalDouble.empty() :
-                            OptionalDouble.of(rightColumnStatistic.getMaxValue());
+                    OptionalDouble constant =
+                            (rightColumnStatistic.isInfiniteRange() || rightColumnStatistic.hasNaNValue()) ?
+                                    OptionalDouble.empty() : OptionalDouble.of(rightColumnStatistic.getMaxValue());
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
                                     leftColumnStatistic, predicate, constant, statistics);

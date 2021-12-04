@@ -863,4 +863,24 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("     tabletList=10213\n" +
                 "     cardinality=1"));
     }
+
+    @Test
+    public void testNullArithmeticExpression() throws Exception {
+        String sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL)/(CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        String plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) + (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) - (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
 }
