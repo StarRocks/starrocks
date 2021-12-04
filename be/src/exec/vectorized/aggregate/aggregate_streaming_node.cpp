@@ -97,10 +97,10 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                 size_t real_capacity =
                         _aggregator->hash_map_variant().capacity() - _aggregator->hash_map_variant().capacity() / 8;
                 size_t remain_size = real_capacity - _aggregator->hash_map_variant().size();
-                bool ht_needs_expansion = remain_size < input_chunk_size;
+                [[maybe_unused]] bool ht_needs_expansion = remain_size < input_chunk_size;
 
 #ifdef DEBUG
-                // chaos test for streaming or agg, The results have to be consistent
+                // chaos test for streaming or agg, The results have to be consistent
                 // when group by type of double, it maybe cause dissonant result because of precision loss for double
                 // thus, so check case will fail, so it only work under DEBUG mode
                 loop++;
