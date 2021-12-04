@@ -866,6 +866,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testNullArithmeticExpression() throws Exception {
+        // check constant operator with null
         String sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
                 "BETWEEN (((NULL)/(CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
         String plan = getFragmentPlan(sql);
@@ -881,6 +882,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
                 "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        // check variable operator with null
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY / null) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / S_NAME) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
     }
 }

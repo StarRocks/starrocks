@@ -36,7 +36,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createNull(Type.BOOLEAN);
         }
 
-        if (notAllConstant(predicate.getChildren())) {
+        if (notAllConstantRef(predicate.getChildren())) {
             return predicate;
         }
 
@@ -78,7 +78,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createBoolean(!predicate.isNotNull());
         }
 
-        if (notAllConstant(predicate.getChildren())) {
+        if (notAllConstantRef(predicate.getChildren())) {
             return predicate;
         }
 
@@ -107,7 +107,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createNull(operator.getType());
         }
 
-        if (notAllConstant(operator.getChildren())) {
+        if (notAllConstantRef(operator.getChildren())) {
             return operator;
         }
 
@@ -148,7 +148,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createNull(Type.BOOLEAN);
         }
 
-        if (notAllConstant(predicate.getChildren())) {
+        if (notAllConstantRef(predicate.getChildren())) {
             return predicate;
         }
 
@@ -191,8 +191,12 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         return predicate;
     }
 
-    private boolean notAllConstant(List<ScalarOperator> operators) {
+    private boolean notAllConstantRef(List<ScalarOperator> operators) {
         return !operators.stream().allMatch(ScalarOperator::isConstantRef);
+    }
+
+    private boolean notAllConstant(List<ScalarOperator> operators) {
+        return !operators.stream().allMatch(ScalarOperator::isConstant);
     }
 
     private boolean hasNull(List<ScalarOperator> operators) {
