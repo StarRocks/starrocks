@@ -162,7 +162,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
 
         public void setValue(String[] row) {
             if (row.length != 12) {
-                Log.warn("row miss some filed");
+                Log.warn("row miss some field");
                 return;
             }
             this.tableId = row[0];
