@@ -443,6 +443,9 @@ public class ConnectContext {
     }
 
     public LocalDateTime getTransactionStartTime() {
+        if (transactionStartTime == null) {
+            transactionStartTime = LocalDateTime.now();
+        }
         return transactionStartTime;
     }
 

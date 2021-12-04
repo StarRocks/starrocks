@@ -40,6 +40,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -259,8 +260,8 @@ public class ScalarOperatorFunctions {
     @FEFunction(name = "utc_timestamp", argTypes = {}, returnType = "DATETIME")
     public static ConstantOperator utcTimestamp() {
         LocalDateTime transactionStartTime = ConnectContext.get().getTransactionStartTime();
-        ZonedDateTime zonedDateTime = transactionStartTime.atZone(ZoneOffset.UTC);
-        return ConstantOperator.createDatetime(zonedDateTime.toLocalDateTime());
+        ZonedDateTime zonedDateTime = transactionStartTime.atZone(ZoneId.systemDefault());
+        return ConstantOperator.createDatetime(zonedDateTime.withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime());
     }
 
     /**
