@@ -295,25 +295,4 @@ std::string RowCursor::to_string() const {
     return result;
 }
 
-Status RowCursor::convert_to(const RowCursor** output, const std::vector<FieldType>& new_types,
-                             ObjectPool* obj_pool) const {
-    bool converted = false;
-    std::unique_ptr<Schema> new_schema;
-    RETURN_IF_ERROR(_schema->convert_to(new_types, &converted, &new_schema));
-    if (!converted) {
-        *output = this;
-        return Status::OK();
-    }
-
-    RowCursor* new_cursor = obj_pool->add(new RowCursor());
-    new_cursor->init(std::move(new_schema));
-
-    vectorized::RowConverter converter;
-    RETURN_IF_ERROR(converter.init(*_schema, *new_cursor->_schema));
-    converter.convert(new_cursor, *this);
-
-    *output = new_cursor;
-    return Status::OK();
-}
-
 } // namespace starrocks

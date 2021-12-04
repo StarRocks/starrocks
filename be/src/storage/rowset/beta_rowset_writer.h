@@ -83,10 +83,6 @@ public:
     explicit HorizontalBetaRowsetWriter(const RowsetWriterContext& context);
     ~HorizontalBetaRowsetWriter() override;
 
-    OLAPStatus add_row(const RowCursor& row) override { return _add_row(row); }
-    // For Memtable::flush()
-    OLAPStatus add_row(const ContiguousRow& row) override { return _add_row(row); }
-
     OLAPStatus add_chunk(const vectorized::Chunk& chunk) override;
     OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override;
 
@@ -104,9 +100,6 @@ public:
 
 private:
     std::unique_ptr<segment_v2::SegmentWriter> _create_segment_writer();
-
-    template <typename RowType>
-    OLAPStatus _add_row(const RowType& row);
 
     OLAPStatus _flush_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* segment_writer);
 

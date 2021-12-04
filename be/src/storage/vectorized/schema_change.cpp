@@ -32,7 +32,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/mem_pool.h"
-#include "storage/merger.h"
 #include "storage/row.h"
 #include "storage/row_block.h"
 #include "storage/row_cursor.h"

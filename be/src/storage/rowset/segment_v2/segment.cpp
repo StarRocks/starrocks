@@ -37,14 +37,11 @@
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/default_value_column_iterator.h"
-#include "storage/rowset/segment_v2/empty_segment_iterator.h"
 #include "storage/rowset/segment_v2/page_io.h"
-#include "storage/rowset/segment_v2/segment_iterator.h"
 #include "storage/rowset/segment_v2/segment_writer.h" // k_segment_magic_length
 #include "storage/rowset/vectorized/segment_chunk_iterator_adapter.h"
 #include "storage/rowset/vectorized/segment_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
-#include "storage/rowset/vectorized/segment_v2_iterator_adapter.h"
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/type_utils.h"
 #include "util/crc32c.h"
@@ -86,51 +83,6 @@ Status Segment::_open(size_t* footer_length_hint) {
     _short_key_index_page = PagePointer(footer.short_key_index_page());
     _prepare_adapter_info();
     return Status::OK();
-}
-
-Status Segment::_new_iterator(const Schema& schema, const StorageReadOptions& read_options,
-                              std::unique_ptr<RowwiseIterator>* iter) {
-    DCHECK_NOTNULL(read_options.stats);
-    // trying to prune the current segment by segment-level zone map
-    if (read_options.conditions != nullptr) {
-        for (const auto& column_condition : read_options.conditions->columns()) {
-            int32_t column_id = column_condition.first;
-            if (_column_readers[column_id] == nullptr || !_column_readers[column_id]->has_zone_map()) {
-                continue;
-            }
-            if (!_column_readers[column_id]->match_condition(column_condition.second)) {
-                // any condition not satisfied, return.
-                *iter = std::make_unique<EmptySegmentIterator>(schema);
-                return Status::OK();
-            }
-        }
-    }
-    RETURN_IF_ERROR(_load_index());
-    *iter = std::make_unique<SegmentIterator>(this->shared_from_this(), schema);
-    iter->get()->init(read_options);
-    return Status::OK();
-}
-
-Status Segment::new_iterator(const Schema& schema, const StorageReadOptions& read_options,
-                             std::unique_ptr<RowwiseIterator>* output) {
-    DCHECK_NOTNULL(read_options.stats);
-
-    // If input schema is not match the actual meta, must convert the read_options according
-    // to the actual format. And create an AdaptSegmentIterator to wrap
-    if (_needs_block_adapter) {
-        std::unique_ptr<vectorized::SegmentV2IteratorAdapter> adapter(
-                new vectorized::SegmentV2IteratorAdapter(*_tablet_schema, *_column_storage_types, schema));
-
-        RETURN_IF_ERROR(adapter->init(read_options));
-
-        std::unique_ptr<RowwiseIterator> iter;
-        RETURN_IF_ERROR(_new_iterator(adapter->in_schema(), adapter->in_read_options(), &iter));
-        adapter->set_iterator(std::move(iter));
-        *output = std::move(adapter);
-        return Status::OK();
-    } else {
-        return _new_iterator(schema, read_options, output);
-    }
 }
 
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::Schema& schema,

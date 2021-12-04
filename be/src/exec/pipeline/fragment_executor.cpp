@@ -94,7 +94,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // initialize query's deadline
     _query_ctx->extend_lifetime();
 
-    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_instance_id);
+    auto fragment_ctx = std::make_unique<FragmentContext>();
+    _fragment_ctx = fragment_ctx.get();
+
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
@@ -179,7 +181,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         if (sink_profile != nullptr) {
             runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
         }
-        _convert_data_sink_to_operator(&context, sink.get());
+        _convert_data_sink_to_operator(&context, fragment.output_sink, sink.get());
     }
 
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
@@ -187,13 +189,14 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
     size_t driver_id = 0;
+    size_t num_root_drivers = 0;
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
         LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
                   << " fragment_instance_id=" << print_id(params.fragment_instance_id);
-        const bool is_root = (n == num_pipelines - 1);
+        const bool is_root = pipeline->is_root();
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only ScanOperator need a MorselQueue attached.
         setup_profile_hierarchy(runtime_state, pipeline);
@@ -205,7 +208,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 DCHECK(degree_of_parallelism <= morsel_queue->num_morsels());
             }
             if (is_root) {
-                _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
+                num_root_drivers += degree_of_parallelism;
             }
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
@@ -219,8 +222,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             }
         } else {
             if (is_root) {
-                _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
+                num_root_drivers += degree_of_parallelism;
             }
+
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
@@ -232,7 +236,11 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         // The pipeline created later should be placed in the front
         runtime_state->runtime_profile()->reverse_childs();
     }
+    _fragment_ctx->set_num_root_drivers(num_root_drivers);
     _fragment_ctx->set_drivers(std::move(drivers));
+
+    _query_ctx->fragment_mgr()->register_ctx(fragment_instance_id, std::move(fragment_ctx));
+
     return Status::OK();
 }
 
@@ -246,16 +254,16 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     return Status::OK();
 }
 
-void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* context, DataSink* datasink) {
+void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* context, const TDataSink& t_datasink,
+                                                      DataSink* datasink) {
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
         starrocks::ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink);
         // Result sink doesn't have plan node id;
-        OpFactoryPtr op = std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), -1,
-                                                                      result_sink->get_sink_type(),
-                                                                      result_sink->get_output_exprs(), _fragment_ctx);
+        OpFactoryPtr op =
+                std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
+                                                            result_sink->get_output_exprs(), _fragment_ctx);
         // Add result sink operator to last pipeline
         _fragment_ctx->pipelines().back()->add_op_factory(op);
-
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
         starrocks::DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink);
         auto dop = _fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
@@ -263,8 +271,9 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
                 std::make_shared<SinkBuffer>(_fragment_ctx->runtime_state(), sender->destinations(), dop);
 
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
-                context->next_operator_id(), -1, sink_buffer, sender->get_partition_type(), sender->destinations(),
-                sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(), _fragment_ctx);
+                context->next_operator_id(), t_datasink.stream_sink.dest_node_id, sink_buffer,
+                sender->get_partition_type(), sender->destinations(), sender->sender_id(), sender->get_dest_node_id(),
+                sender->get_partition_exprs(), _fragment_ctx);
         _fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
 
     } else if (typeid(*datasink) == typeid(starrocks::MultiCastDataStreamSink)) {
@@ -286,10 +295,12 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
         auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(sinks.size());
 
         // === create sink op ====
+        auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
         {
             OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
-                    context->next_operator_id(), mcast_local_exchanger);
+                    context->next_operator_id(), pseudo_plan_node_id, mcast_local_exchanger);
             _fragment_ctx->pipelines().back()->add_op_factory(sink_op);
+            _fragment_ctx->pipelines().back()->unset_root();
         }
 
         // ==== create source/sink pipelines ====
@@ -299,8 +310,8 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
             // it's okary to set arbitrary dop.
             const size_t dop = 1;
             // source op
-            auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(context->next_operator_id(),
-                                                                                           i, mcast_local_exchanger);
+            auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
+                    context->next_operator_id(), pseudo_plan_node_id, i, mcast_local_exchanger);
             source_op->set_degree_of_parallelism(dop);
 
             // sink op
@@ -313,6 +324,7 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);
             auto pp = std::make_shared<Pipeline>(context->next_pipe_id(), ops);
+            pp->set_root();
             _fragment_ctx->pipelines().emplace_back(pp);
         }
     }

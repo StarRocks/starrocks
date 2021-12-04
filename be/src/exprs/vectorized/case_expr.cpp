@@ -13,6 +13,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "gutil/casts.h"
 #include "simd/mulselector.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 

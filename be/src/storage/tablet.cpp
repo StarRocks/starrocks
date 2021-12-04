@@ -35,8 +35,6 @@
 #include "runtime/exec_env.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/reader.h"
-#include "storage/row_cursor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
@@ -549,42 +547,6 @@ Status Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Version>& 
             LOG(WARNING) << "fail to find Rowset for version. tablet=" << full_name() << ", version='" << version;
             return Status::NotFound("no rowset of specific version");
         }
-    }
-    return Status::OK();
-}
-
-Status Tablet::capture_rs_readers(const Version& spec_version, std::vector<RowsetReaderSharedPtr>* rs_readers) const {
-    CHECK(!_updates) << "updatable tablet should not call capture_rs_readers";
-    std::vector<Version> version_path;
-    RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
-    RETURN_IF_ERROR(capture_rs_readers(version_path, rs_readers));
-    return Status::OK();
-}
-
-Status Tablet::capture_rs_readers(const std::vector<Version>& version_path,
-                                  std::vector<RowsetReaderSharedPtr>* rs_readers) const {
-    CHECK(!_updates) << "updatable tablet should not call capture_rs_readers";
-    DCHECK(rs_readers != nullptr && rs_readers->empty());
-    for (auto version : version_path) {
-        auto it = _rs_version_map.find(version);
-        if (it == _rs_version_map.end()) {
-            VLOG(3) << "fail to find Rowset in rs_version for version. tablet=" << full_name() << ", version='"
-                    << version.first << "-" << version.second;
-
-            it = _stale_rs_version_map.find(version);
-            if (it == _stale_rs_version_map.end()) {
-                LOG(WARNING) << "fail to find Rowset in stale_rs_version for version. tablet=" << full_name()
-                             << ", version='" << version.first << "-" << version.second;
-                return Status::NotFound("no rowset of specific version");
-            }
-        }
-        RowsetReaderSharedPtr rs_reader;
-        auto res = it->second->create_reader(&rs_reader);
-        if (res != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to create reader for rowset:" << it->second->rowset_id();
-            return Status::InternalError("fail to create rowset reader");
-        }
-        rs_readers->push_back(std::move(rs_reader));
     }
     return Status::OK();
 }
