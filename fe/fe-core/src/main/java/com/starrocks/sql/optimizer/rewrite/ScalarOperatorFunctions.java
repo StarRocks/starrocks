@@ -29,6 +29,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.FEFunction;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
@@ -242,7 +243,8 @@ public class ScalarOperatorFunctions {
 
     @FEFunction(name = "now", argTypes = {}, returnType = "DATETIME")
     public static ConstantOperator now() {
-        return ConstantOperator.createDatetime(LocalDateTime.now());
+        LocalDateTime transactionStartTime = ConnectContext.get().getTransactionStartTime();
+        return ConstantOperator.createDatetime(transactionStartTime);
     }
 
     @FEFunction.List(list = {
@@ -250,12 +252,15 @@ public class ScalarOperatorFunctions {
             @FEFunction(name = "current_date", argTypes = {}, returnType = "DATE")
     })
     public static ConstantOperator curDate() {
-        return ConstantOperator.createDate(LocalDateTime.now().truncatedTo(ChronoUnit.DAYS));
+        LocalDateTime transactionStartTime = ConnectContext.get().getTransactionStartTime();
+        return ConstantOperator.createDate(transactionStartTime.truncatedTo(ChronoUnit.DAYS));
     }
 
     @FEFunction(name = "utc_timestamp", argTypes = {}, returnType = "DATETIME")
     public static ConstantOperator utcTimestamp() {
-        return ConstantOperator.createDatetime(LocalDateTime.now(ZoneOffset.UTC));
+        LocalDateTime transactionStartTime = ConnectContext.get().getTransactionStartTime();
+        ZonedDateTime zonedDateTime = transactionStartTime.atZone(ZoneOffset.UTC);
+        return ConstantOperator.createDatetime(zonedDateTime.toLocalDateTime());
     }
 
     /**
