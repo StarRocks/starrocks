@@ -37,11 +37,11 @@ namespace segment_v2 {
 
 struct PageCacheOptions {
     fs::ReadableBlock* rblock = nullptr;
-    bool save_in_page_cache = false;
-    bool kept_in_memory = false;
     PagePointer page_pointer;
     size_t nullmap_size = 0;
     size_t footer_size = 0;
+    bool save_in_page_cache = false;
+    bool kept_in_memory = false;
 };
 
 // PageDecoder is used to decode page.
