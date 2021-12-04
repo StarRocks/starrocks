@@ -4844,6 +4844,32 @@ public class PlanFragmentTest extends PlanTestBase {
                 "on a.v3 = t1.v4 join t2 on v4 = v7 join t2 as b" +
                 " on a.v1 = b.v7 where b.v8 > t1.v5 limit 10";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+    }
+
+    @Test
+    public void testFourTableShuffleBucketShuffle() throws Exception {
+        // check top join use shuffle bucket join
+        //                   join(shuffle bucket)
+        //                   /                  \
+        //              join(partitioned)   join(partitioned)
+        String sql = "with join1 as (\n" +
+                "  select * from t2 join t3 on v7=v1\n" +
+                "), \n" +
+                "join2 as (\n" +
+                "  select * from t0 join t1 on v1=v4\n" +
+                ")\n" +
+                "SELECT \n" +
+                "  * \n" +
+                "from \n" +
+                "  join1 \n" +
+                "  inner join[shuffle] join2 on v4 = v7;";
+
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("10:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
+        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)"));
+        Assert.assertTrue(plan.contains("9:HASH JOIN\n" +
+                "  |    |  join op: INNER JOIN (PARTITIONED)"));
     }
 }
