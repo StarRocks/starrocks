@@ -4826,43 +4826,14 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testJoinAssociativityConst() throws Exception {
-        String sql = "SELECT x0.*\n" +
-                "FROM (\n" +
-                "    SELECT 49 AS v0, v1\n" +
-                "    FROM t0\n" +
-                "    WHERE v1 is not null\n" +
-                ") x0\n" +
-                "    INNER JOIN test_all_type s0 ON x0.v0 = s0.t1a\n" +
-                "    INNER JOIN tall l1 ON x0.v0 = l1.tf\n" +
-                "\n" +
-                "WHERE l1.tc < s0.t1c";
-        String plan = getFragmentPlan(sql);
-        System.out.println(plan);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
-                "  |  <slot 1> : 1: v1\n" +
-                "  |  <slot 4> : 49\n" +
-                "  |  <slot 25> : CAST(49 AS DOUBLE)\n" +
-                "  |  \n" +
-                "  0:OlapScanNode"));
-    }
-
-    @Test
-    public void testJoinWithLimit() throws Exception {
-        String sql = "select t2.v8 from (select v1, v2, v1 as v3 from t0 where v2<> v3 limit 15) as a join t1 " +
-                "on a.v3 = t1.v4 join t2 on v4 = v7 join t2 as b" +
-                " on a.v1 = b.v7 where b.v8 > t1.v5 limit 10";
-        String plan = getFragmentPlan(sql);
-        System.out.println(plan);
-    }
-
-    @Test
     public void testPreAggregation() throws Exception {
         String sql = "select k1 from t0 inner join baseall on v1 = cast(k8 as int) group by k1";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("1:Project\n" +
                 "  |  <slot 4> : 4: k1\n" +
                 "  |  <slot 15> : CAST(CAST(13: k8 AS INT) AS BIGINT)\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +

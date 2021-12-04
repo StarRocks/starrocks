@@ -58,8 +58,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.planner.AdapterNode.checkPlanIsVectorized;
-
 public class InsertPlanner {
     public ExecPlan plan(Relation relation, ConnectContext session) {
         InsertRelation insertRelation = (InsertRelation) relation;
