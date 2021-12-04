@@ -193,10 +193,10 @@ TEST(BytesTest, test_hook_calloc) {
     int count;
 
     for (int i = 0; i < 1000; i++) {
-        size = rand() % (1024 * 1024);
+        size = rand() % 1024;
         count = rand() % 10;
         before = g_mem_usage;
-        ptr = calloc(size, count);
+        ptr = calloc(count, size);
         cfree(ptr);
         after = g_mem_usage;
         ASSERT_EQ(before, after);
