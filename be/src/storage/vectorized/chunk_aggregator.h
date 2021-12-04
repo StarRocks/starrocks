@@ -18,15 +18,16 @@ using CompareFN = void (*)(const Column* col, uint8_t* flags);
 
 class ChunkAggregator {
 private:
-    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t aggregate_rows, double factor,
+    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor,
                     bool is_vertical_merge, bool is_key);
 
 public:
-    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t aggregate_rows, double factor);
+    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor);
 
-    ChunkAggregator(const Schema* schema, uint32_t aggregate_rows, double factor);
+    ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor);
 
-    ChunkAggregator(const Schema* schema, uint32_t aggregate_rows, double factor, bool is_vertical_merge, bool is_key);
+    ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor, bool is_vertical_merge,
+                    bool is_key);
 
     void update_source(ChunkPtr& chunk) { update_source(chunk, nullptr); }
     // |source_masks| is used if |_is_vertical_merge| is true.
@@ -70,8 +71,7 @@ private:
 
     uint32_t _reserve_rows;
 
-    // total limit of aggregate rows
-    uint32_t _aggregate_rows;
+    uint32_t _max_aggregate_rows;
 
     std::vector<CompareFN> _comparator;
 
