@@ -243,14 +243,14 @@ public class SystemInfoServiceTest {
         DropBackendClause dropStmt = new DropBackendClause(Lists.newArrayList("192.168.0.1:1234"));
         dropStmt.analyze(analyzer);
         try {
-            Catalog.getCurrentSystemInfo().dropBackends(dropStmt);
+            Catalog.getCurrentSystemInfo().dropBackends(dropStmt.getHostPortPairs());
         } catch (DdlException e) {
             e.printStackTrace();
             Assert.fail();
         }
 
         try {
-            Catalog.getCurrentSystemInfo().dropBackends(dropStmt);
+            Catalog.getCurrentSystemInfo().dropBackends(dropStmt.getHostPortPairs());
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }

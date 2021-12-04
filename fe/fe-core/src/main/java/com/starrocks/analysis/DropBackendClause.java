@@ -26,31 +26,18 @@ import java.util.List;
 public class DropBackendClause extends BackendClause {
     private boolean force;
 
-    // [DROPP backend] syntax is the old style, we will remove the [DROPP] in a future version.
-    @Deprecated
-    private boolean oldStyle;
-
     public DropBackendClause(List<String> hostPorts) {
         super(hostPorts);
         this.force = true;
     }
 
     public DropBackendClause(List<String> hostPorts, boolean force) {
-        this(hostPorts, force, false);
-    }
-
-    public DropBackendClause(List<String> hostPorts, boolean force, boolean oldStyle) {
         super(hostPorts);
         this.force = force;
-        this.oldStyle = oldStyle;
     }
 
     public boolean isForce() {
         return force;
-    }
-
-    public boolean isOldStyle() {
-        return oldStyle;
     }
 
     @Override
