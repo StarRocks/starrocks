@@ -2,7 +2,6 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
@@ -1293,6 +1292,8 @@ public class PlanFragmentBuilder {
                     } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
                             rightFragment.getPlanRoot().canDoReplicatedJoin()) {
                         distributionMode = HashJoinNode.DistributionMode.REPLICATED;
+                    } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                        distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                     } else {
                         Preconditions.checkState(false, "Must be replicate join or colocate join");
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
@@ -1451,7 +1452,19 @@ public class PlanFragmentBuilder {
                     setJoinPushDown(hashJoinNode);
 
                     // distributionMode is SHUFFLE_HASH_BUCKET
-                    if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
+                    if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
+                            !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
+                        hashJoinNode.setChild(0, leftFragment.getPlanRoot());
+                        hashJoinNode.setChild(1, rightFragment.getPlanRoot());
+                        leftFragment.setPlanRoot(hashJoinNode);
+                        context.getFragments().remove(rightFragment);
+
+                        context.getFragments().remove(leftFragment);
+                        context.getFragments().add(leftFragment);
+
+                        leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+                        return leftFragment;
+                    } else if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
                             !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
                         return computeRunTimeBucketShufflePlanFragment(context, rightFragment,
                                 leftFragment, hashJoinNode);
@@ -1479,16 +1492,26 @@ public class PlanFragmentBuilder {
             }
         }
 
+        private void collectOlapScanInFragment(PlanNode root, List<OlapScanNode> scanNodeList) {
+            if (root instanceof OlapScanNode) {
+                scanNodeList.add((OlapScanNode) root);
+                return;
+            }
+            if (root instanceof ExchangeNode) {
+                return;
+            }
+            for (PlanNode child : root.getChildren()) {
+                collectOlapScanInFragment(child, scanNodeList);
+            }
+        }
+
         private boolean isColocateJoin(OptExpression optExpression, ExecPlan context, PlanNode left, PlanNode right) {
             List<OlapScanNode> rightScanNodes = Lists.newArrayList();
-            right.collectAll((Predicate<PlanNode>) node -> node instanceof OlapScanNode, rightScanNodes);
-            if (rightScanNodes.size() != 1) {
-                return true;
-            }
+            collectOlapScanInFragment(right, rightScanNodes);
 
             PhysicalHashJoinOperator joinNode = (PhysicalHashJoinOperator) optExpression.getOp();
             List<OlapScanNode> leftScanNodes = Lists.newArrayList();
-            left.collectAll((Predicate<PlanNode>) node -> node instanceof OlapScanNode, leftScanNodes);
+            collectOlapScanInFragment(left, leftScanNodes);
 
             ColumnRefSet leftChildColumns = optExpression.getInputs().get(0).getOutputColumns();
             ColumnRefSet rightChildColumns = optExpression.getInputs().get(1).getOutputColumns();
