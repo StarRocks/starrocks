@@ -29,8 +29,6 @@
 #include "common/logging.h" // LOG
 #include "env/env.h"        // Env
 #include "storage/fs/block_manager.h"
-#include "storage/row.h"                             // ContiguousRow
-#include "storage/row_cursor.h"                      // RowCursor
 #include "storage/rowset/segment_v2/column_writer.h" // ColumnWriter
 #include "storage/rowset/segment_v2/page_io.h"
 #include "storage/schema.h"
@@ -139,26 +137,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     }
     return Status::OK();
 }
-
-template <typename RowType>
-Status SegmentWriter::append_row(const RowType& row) {
-    for (size_t cid = 0; cid < _column_writers.size(); ++cid) {
-        auto cell = row.cell(cid);
-        RETURN_IF_ERROR(_column_writers[cid]->append(cell));
-    }
-
-    // At the begin of one block, so add a short key index entry
-    if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
-        std::string encoded_key;
-        encode_key(&encoded_key, row, _tablet_schema->num_short_key_columns());
-        RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
-    }
-    ++_num_rows_written;
-    return Status::OK();
-}
-
-template Status SegmentWriter::append_row(const RowCursor& row);
-template Status SegmentWriter::append_row(const ContiguousRow& row);
 
 // TODO(lingbin): Currently this function does not include the size of various indexes,
 // We should make this more precise.

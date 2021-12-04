@@ -120,8 +120,6 @@ public:
 
     char* row_ptr() const { return _fixed_buf; }
 
-    Status convert_to(const RowCursor** outpout, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const;
-
 private:
     // common init function
     OLAPStatus _init(const std::vector<TabletColumn>& schema, const std::vector<uint32_t>& columns);

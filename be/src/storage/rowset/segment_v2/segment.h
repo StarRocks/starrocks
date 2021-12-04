@@ -29,7 +29,6 @@
 #include "common/statusor.h"
 #include "gen_cpp/segment_v2.pb.h"
 #include "gutil/macros.h"
-#include "storage/iterators.h"
 #include "storage/rowset/segment_v2/page_handle.h"
 #include "storage/rowset/segment_v2/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -85,9 +84,6 @@ public:
             const TabletSchema* tablet_schema);
 
     ~Segment();
-
-    Status new_iterator(const starrocks::Schema& schema, const StorageReadOptions& read_options,
-                        std::unique_ptr<RowwiseIterator>* iter);
 
     // Returns `EndOfFile` if |read_options| has predicate and no record in this segment
     // matched with the predicate.
@@ -150,9 +146,6 @@ private:
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status _load_index();
-
-    Status _new_iterator(const Schema& schema, const StorageReadOptions& read_options,
-                         std::unique_ptr<RowwiseIterator>* iter);
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const vectorized::Schema& schema,
                                              const vectorized::SegmentReadOptions& read_options);

@@ -126,9 +126,6 @@ public:
 
     const TabletSchema& schema() const { return *_schema; }
 
-    // returns OLAP_ERR_ROWSET_CREATE_READER when failed to create reader
-    virtual OLAPStatus create_reader(std::shared_ptr<RowsetReader>* result) = 0;
-
     virtual StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                                 const vectorized::RowsetReadOptions& options) = 0;
 
