@@ -50,6 +50,7 @@
 #include "runtime/thread_resource_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
@@ -61,6 +62,7 @@
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
+
 namespace starrocks {
 
 // Calculate the total memory limit of all load tasks on this BE
@@ -230,6 +232,7 @@ Status ExecEnv::init_mem_tracker() {
 
     ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
 
+    GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
 

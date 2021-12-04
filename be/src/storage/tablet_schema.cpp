@@ -394,18 +394,22 @@ bool TabletColumn::is_format_v2_column() const {
  * TabletSchema
  ******************************************************************/
 
-TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb) {
-    init_from_pb(schema_pb);
-    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage());
+std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb) {
+    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb),
+                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
+    mem_tracker->consume(schema->mem_usage());
+    return schema;
 }
 
-TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
-    init_from_pb(schema_pb);
-    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(mem_usage());
+std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
+                                                   TabletSchemaMap* schema_map) {
+    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb, schema_map),
+                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
+    mem_tracker->consume(schema->mem_usage());
+    return schema;
 }
 
 TabletSchema::~TabletSchema() {
-    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->release(mem_usage());
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
     }

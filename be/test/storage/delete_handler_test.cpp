@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/row_cursor.h"
@@ -42,6 +43,7 @@ using google::protobuf::RepeatedPtrField;
 namespace starrocks {
 
 static StorageEngine* k_engine = nullptr;
+static MemTracker* k_tablet_meta_mem_tracker = nullptr;
 static MemTracker* k_schema_change_mem_tracker = nullptr;
 
 void set_up() {
@@ -58,9 +60,11 @@ void set_up() {
     config::txn_shard_size = 1;
     config::storage_format_version = 2;
 
+    k_tablet_meta_mem_tracker = new MemTracker();
     k_schema_change_mem_tracker = new MemTracker();
     starrocks::EngineOptions options;
     options.store_paths = paths;
+    options.tablet_meta_mem_tracker = k_tablet_meta_mem_tracker;
     options.schema_change_mem_tracker = k_schema_change_mem_tracker;
     Status s = starrocks::StorageEngine::open(options, &k_engine);
     ASSERT_TRUE(s.ok()) << s.to_string();
@@ -70,7 +74,9 @@ void tear_down() {
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
     FileUtils::remove_all(config::storage_root_path);
     FileUtils::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
+    k_tablet_meta_mem_tracker->release(k_tablet_meta_mem_tracker->consumption());
     k_schema_change_mem_tracker->release(k_schema_change_mem_tracker->consumption());
+    delete k_schema_change_mem_tracker;
     delete k_schema_change_mem_tracker;
 }
 
@@ -1031,7 +1037,7 @@ int main(int argc, char** argv) {
     starrocks::MemInfo::init();
     int ret = starrocks::OLAP_SUCCESS;
     testing::InitGoogleTest(&argc, argv);
-    config::mem_limit="10g";
+    config::mem_limit = "10g";
 
     starrocks::set_up();
     ret = RUN_ALL_TESTS();

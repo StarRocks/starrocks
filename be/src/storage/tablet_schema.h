@@ -36,6 +36,7 @@
 namespace starrocks {
 
 class TabletSchemaMap;
+class MemTracker;
 
 namespace segment_v2 {
 class SegmentReaderWriterTest;
@@ -210,14 +211,20 @@ class TabletSchema {
 public:
     using SchemaId = int64_t;
 
+    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb);
+    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
+                                                TabletSchemaMap* schema_map);
+
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
     constexpr static SchemaId invalid_id() { return 0; }
 
     TabletSchema() = default;
-    explicit TabletSchema(const TabletSchemaPB& schema_pb);
+    explicit TabletSchema(const TabletSchemaPB& schema_pb) { init_from_pb(schema_pb); }
     // Does NOT take ownership of |schema_map| and |schema_map| must outlive TabletSchema.
-    TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
+    TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
+        init_from_pb(schema_pb);
+    }
 
     ~TabletSchema();
 

@@ -97,10 +97,11 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(const ColumnReaderOptions& opts, ColumnMetaPB* meta,
-                                                          const std::string& file_name);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(MemTracker* mem_tracker, const ColumnReaderOptions& opts,
+                                                          ColumnMetaPB* meta, const std::string& file_name);
 
-    ColumnReader(const private_type&, const ColumnReaderOptions& opts, const std::string& file_name);
+    ColumnReader(MemTracker* mem_tracker, const private_type&, const ColumnReaderOptions& opts,
+                 const std::string& file_name);
 
     ~ColumnReader();
 
@@ -240,6 +241,8 @@ private:
                             const vectorized::ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
+    MemTracker* _mem_tracker = nullptr;
+
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
@@ -274,7 +277,6 @@ private:
     StarRocksCallOnce<Status> _bloomfilter_index_once;
 
     std::bitset<16> _flags;
-    uint32_t _mem_usage = 0;
 };
 
 } // namespace segment_v2

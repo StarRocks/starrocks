@@ -47,8 +47,12 @@
 
 namespace starrocks {
 
-TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir) {
-    return std::make_shared<Tablet>(tablet_meta, data_dir);
+TabletSharedPtr Tablet::create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
+                                                DataDir* data_dir) {
+    auto tablet =
+            std::shared_ptr<Tablet>(new Tablet(tablet_meta, data_dir), DeleterWithMemTracker<Tablet>(mem_tracker));
+    mem_tracker->consume(tablet->mem_usage());
+    return tablet;
 }
 
 Tablet::Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
@@ -60,12 +64,9 @@ Tablet::Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
-    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consume(sizeof(Tablet));
 }
 
-Tablet::~Tablet() {
-    ExecEnv::GetInstance()->tablet_meta_mem_tracker()->release(sizeof(Tablet));
-}
+Tablet::~Tablet() {}
 
 Status Tablet::_init_once_action() {
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
@@ -116,7 +117,7 @@ void Tablet::save_meta() {
     CHECK(st.ok()) << "fail to save tablet_meta: " << st;
 }
 
-Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+Status Tablet::revise_tablet_meta(MemTracker* mem_tracker, const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                                   const std::vector<Version>& versions_to_delete) {
     LOG(INFO) << "begin to clone data to tablet. tablet=" << full_name()
               << ", rowsets_to_clone=" << rowsets_to_clone.size()
@@ -129,7 +130,8 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     Status st;
     do {
         // load new local tablet_meta to operate on
-        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta());
+        auto new_tablet_meta = TabletMeta::create(mem_tracker);
+
         generate_tablet_meta_copy_unlocked(new_tablet_meta);
         // Segment store the pointer of TabletSchema, so don't release the TabletSchema of old TabletMeta
         // Shared the pointer of TabletSchema to the new TabletMeta
