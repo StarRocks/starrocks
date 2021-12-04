@@ -115,7 +115,6 @@ set(EXEC_FILES
         ./storage/del_vector_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/fs/file_block_manager_test.cpp
-        ./storage/generic_iterators_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/in_list_predicate_test.cpp

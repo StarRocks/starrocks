@@ -34,7 +34,6 @@
 namespace starrocks {
 
 class RowBlock;
-class RowCursor;
 class TabletSchema;
 class TabletColumn;
 class ShortKeyIndexBuilder;
@@ -97,9 +96,6 @@ public:
 
     // Used for vertical compaction
     Status init(const std::vector<uint32_t>& column_indexes, bool has_key);
-
-    template <typename RowType>
-    Status append_row(const RowType& row);
 
     // |chunk| contains partial or all columns data corresponding to _column_writers.
     Status append_chunk(const vectorized::Chunk& chunk);
