@@ -51,6 +51,11 @@ export LOG_DIR=${STARROCKS_HOME}/log
 export PID_DIR=`cd "$curdir"; pwd`
 
 export_env_from_conf $STARROCKS_HOME/conf/be.conf
+export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
+
+if [ $? -ne 0 ]; then
+    exit 1
+fi
 
 if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
     source $STARROCKS_HOME/conf/hadoop_env.sh

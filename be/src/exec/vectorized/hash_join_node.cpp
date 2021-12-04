@@ -177,7 +177,11 @@ Status HashJoinNode::open(RuntimeState* state) {
             RETURN_IF_ERROR(state->check_mem_limit("HashJoinNode"));
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
-            RETURN_IF_ERROR(_ht.append_chunk(state, chunk));
+            try {
+                RETURN_IF_ERROR(_ht.append_chunk(state, chunk));
+            } catch (std::bad_alloc const&) {
+                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+            }
         }
     }
 
