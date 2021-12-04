@@ -101,7 +101,7 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
     ASSERT_EQ(true, aggregator.source_exhausted());
     ASSERT_EQ(true, aggregator.has_aggregate_data());
     ASSERT_EQ(false, aggregator.is_finish());
-    ASSERT_EQ(512, aggregator._aggregated_rows);
+    ASSERT_EQ(512, aggregator._aggregate_rows);
 
     auto ck = aggregator.aggregate_result();
     ASSERT_EQ(512, ck->num_rows());
