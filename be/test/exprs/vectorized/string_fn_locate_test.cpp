@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "exprs/vectorized/string_functions.h"
+#include "gen_cpp/Exprs_types.h"
 
 namespace starrocks {
 namespace vectorized {

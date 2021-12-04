@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include "column/const_column.h"
+#include "storage/hll.h"
 
 namespace starrocks::vectorized {
 
