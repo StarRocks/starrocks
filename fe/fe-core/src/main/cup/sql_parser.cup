@@ -1035,10 +1035,6 @@ alter_system_clause ::=
     :}
     | KW_DROPP KW_BACKEND string_list:hostPorts
     {:
-        RESULT = new DropBackendClause(hostPorts, true, true);
-    :}
-    | KW_DROP KW_BACKEND string_list:hostPorts KW_FORCE
-    {:
         RESULT = new DropBackendClause(hostPorts, true);
     :}
     | KW_DECOMMISSION KW_BACKEND string_list:hostPorts
