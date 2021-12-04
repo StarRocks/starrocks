@@ -28,41 +28,8 @@ class FragmentContext {
 
 public:
     FragmentContext() : _cancel_flag(false) {}
-    ~FragmentContext() {
-        auto runtime_state_ptr = _runtime_state;
-        _runtime_filter_hub.close_all_in_filters(runtime_state_ptr.get());
-        _drivers.clear();
-        close_all_pipelines();
-        if (_plan != nullptr) {
-            _plan->close(_runtime_state.get());
-        }
+    ~FragmentContext();
 
-        if (config::enable_pipeline_schedule_statistics) {
-            std::stringstream os;
-            bool has_thread_shedule_overhead = false;
-            int thread_count = 0;
-            for (int i = 0; i < _thread_shedule_time.size(); ++i) {
-                auto milliseconds = ((double)_thread_shedule_time[i]) / 1000000;
-                if (milliseconds >= config::pipeline_thread_schedule_threshold) {
-                    has_thread_shedule_overhead = true;
-                    if (thread_count > 0 && (thread_count % 3) == 0) {
-                        os << "\n";
-                    }
-                    ++thread_count;
-                    os << "THREAD " << i << ": ";
-                    os << _thread_shedule_frequency[i] << "-" << milliseconds << "ms(" << (milliseconds / 1000) << "s) "
-                       << ((milliseconds * 1000) / _thread_shedule_frequency[i]) << "us/frequency"
-                       << "; ";
-                }
-            }
-
-            if (has_thread_shedule_overhead) {
-                LOG(INFO) << "[SCHEDULE OVERHEAD " << config::pipeline_thread_schedule_threshold << "ms] "
-                          << "fragment_instance_id=" << print_id(fragment_instance_id()) << "\n"
-                          << os.str() << "\n\n";
-            }
-        }
-    }
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }

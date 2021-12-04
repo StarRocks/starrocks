@@ -89,8 +89,15 @@ public:
     void update_last_chunks_moved(int64_t chunks_moved) {
         this->last_chunks_moved = chunks_moved;
         this->accumulated_chunk_moved += chunks_moved;
+        this->empty_chunk_moved += (chunks_moved == 0) ? 1 : 0;
     }
     void increment_schedule_times() { this->schedule_times += 1; }
+
+    int64_t get_accumulated_chunk_moved() { return accumulated_chunk_moved; }
+
+    int64_t get_empty_moved_times() { return empty_chunk_moved; }
+
+    int64_t get_schedule_times() { return schedule_times; }
 
 private:
     int64_t schedule_times{0};
@@ -98,6 +105,7 @@ private:
     int64_t last_chunks_moved{0};
     int64_t accumulated_time_spent{0};
     int64_t accumulated_chunk_moved{0};
+    int64_t empty_chunk_moved{0};
 };
 
 // OperatorExecState is used to guarantee that some hooks of operator
@@ -224,6 +232,7 @@ public:
 
     std::string to_readable_string() const;
 
+    // record last put_back time.
     timespec _time_into_priority_queue;
 
 private:

@@ -65,11 +65,14 @@ void GlobalDriverDispatcher::run(size_t thread_id) {
 
         size_t queue_index;
 
+        // get take time of consumer.
         timespec start;
         if (config::enable_pipeline_schedule_statistics) {
             clock_gettime(CLOCK_MONOTONIC, &start);
         }
         auto maybe_driver = this->_driver_queue->take(&queue_index);
+
+        // get taken time of consumer.
         timespec end;
         if (config::enable_pipeline_schedule_statistics) {
             clock_gettime(CLOCK_MONOTONIC, &end);
@@ -82,9 +85,12 @@ void GlobalDriverDispatcher::run(size_t thread_id) {
         DCHECK(driver != nullptr);
 
         if (config::enable_pipeline_schedule_statistics) {
+            // elapsed0 is elapsed time between take and taken of consumer.
             int64_t elapsed0 = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
+            // elapsed1 is elapsed time between put_back of producer and taken of consumer.
             int64_t elapsed1 = (end.tv_sec - driver->_time_into_priority_queue.tv_sec) * 1000000000L +
                                (end.tv_nsec - driver->_time_into_priority_queue.tv_nsec);
+            // min(elapsed0, elapsed1) is the schedule time, the smaller the better.
             driver->fragment_ctx()->_thread_shedule_time[thread_id] += (elapsed0 < elapsed1 ? elapsed0 : elapsed1);
             driver->fragment_ctx()->_thread_shedule_frequency[thread_id] += 1;
         }
@@ -119,7 +125,7 @@ void GlobalDriverDispatcher::run(size_t thread_id) {
             // query context has ready drivers to run, so extend its lifetime.
             query_ctx->extend_lifetime();
             auto status = driver->process(runtime_state);
-            this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
+            //this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
 
             if (!status.ok()) {
                 VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
