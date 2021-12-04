@@ -4742,4 +4742,84 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
                 "     partitions=0/1"));
     }
+
+    @Test
+    public void testSemiReorder() throws Exception {
+        String sql = "select 0 from t0,t1 left semi join t2 on v1 = v7";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:10: expr\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  8:Project\n" +
+                "  |  <slot 10> : 0\n" +
+                "  |  \n" +
+                "  7:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v7\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  \n" +
+                "  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=1.0\n" +
+                "     numNodes=0\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  5:OlapScanNode\n" +
+                "     TABLE: t2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t2\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=1.0\n" +
+                "     numNodes=0\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t1\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=1.0\n" +
+                "     numNodes=0"));
+    }
 }
