@@ -21,6 +21,8 @@
 
 #include "storage/task/engine_clone_task.h"
 
+#include <sys/stat.h>
+
 #include <filesystem>
 #include <set>
 
