@@ -14,6 +14,11 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level();
     {
         std::lock_guard<std::mutex> lock(_global_mutex);
+
+        if (driver->_state == DriverState::READY) {
+            driver->_ready_in_dispatcher_queue_timer_sw->reset();
+        }
+
         _queues[level % QUEUE_SIZE].queue.emplace(driver);
         _cv.notify_one();
     }
@@ -27,6 +32,10 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
 
     std::lock_guard<std::mutex> lock(_global_mutex);
     for (int i = 0; i < drivers.size(); i++) {
+        if (drivers[i]->_state == DriverState::READY) {
+            drivers[i]->_ready_in_dispatcher_queue_timer_sw->reset();
+        }
+
         _queues[levels[i] % QUEUE_SIZE].queue.emplace(drivers[i]);
         _cv.notify_one();
     }
@@ -68,6 +77,11 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
         *queue_index = queue_idx;
         driver_ptr = _queues[queue_idx].queue.front();
         _queues[queue_idx].queue.pop();
+    }
+
+    if (driver_ptr->_state == DriverState::READY) {
+        driver_ptr->_ready_in_dispatcher_queue_timer->update(
+                driver_ptr->_ready_in_dispatcher_queue_timer_sw->elapsed_time());
     }
 
     // next pipeline driver to execute.

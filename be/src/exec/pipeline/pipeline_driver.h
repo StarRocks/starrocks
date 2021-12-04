@@ -26,17 +26,20 @@ using Drivers = std::vector<DriverPtr>;
 enum DriverState : uint32_t {
     NOT_READY = 0,
     READY = 1,
+
     RUNNING = 2,
+
     INPUT_EMPTY = 3,
     OUTPUT_FULL = 4,
     PRECONDITION_BLOCK = 5,
-    FINISH = 6,
-    CANCELED = 7,
-    INTERNAL_ERROR = 8,
     // PENDING_FINISH means a driver's SinkOperator has finished, but its SourceOperator still have a pending
     // io task executed by io threads synchronously, a driver turns to FINISH from PENDING_FINISH after the
     // pending io task's completion.
-    PENDING_FINISH = 9,
+    PENDING_FINISH = 6,
+
+    FINISH = 7,
+    CANCELED = 8,
+    INTERNAL_ERROR = 9,
 };
 
 static inline std::string ds_to_string(DriverState ds) {
@@ -114,6 +117,7 @@ enum OperatorStage {
 
 class PipelineDriver {
     friend class PipelineDriverPoller;
+    friend class QuerySharedDriverQueue;
 
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
@@ -149,7 +153,18 @@ public:
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
-    void set_driver_state(DriverState state) { _state = state; }
+    inline void set_driver_state(DriverState state) {
+        // Record the previous state time.
+        if (_state < DriverState::FINISH) {
+            _state_timers[_state]->update(_state_timer_sws[_state]->elapsed_time());
+        }
+        // Reset the next state timer.
+        if (state < DriverState::FINISH) {
+            _state_timer_sws[state]->reset();
+        }
+
+        _state = state;
+    }
     Operators& operators() { return _operators; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
@@ -197,10 +212,12 @@ public:
             return false;
         }
 
+        const auto wait_ns = _state_timers[DriverState::PRECONDITION_BLOCK]->value() +
+                             _state_timer_sws[DriverState::PRECONDITION_BLOCK]->elapsed_time();
         _all_global_rf_ready_or_timeout =
-                _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
+                wait_ns >= _global_rf_wait_timeout_ns ||
                 std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(),
-                            [](auto* rf_desc) { return rf_desc->runtime_filter() != nullptr; }); // or ready.
+                            [](auto* rf_desc) { return rf_desc->runtime_filter() != nullptr; });
 
         return !_all_global_rf_ready_or_timeout;
     }
@@ -254,6 +271,7 @@ private:
     DriverAcct _driver_acct;
     // The first one is source operator
     MorselQueue* _morsel_queue = nullptr;
+    // _state must be updated by set_driver_state() to record the corresponding state timer.
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     const size_t _yield_max_chunks_moved;
@@ -263,13 +281,17 @@ private:
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
-    RuntimeProfile::Counter* _active_timer = nullptr;
-    RuntimeProfile::Counter* _pending_timer = nullptr;
-    RuntimeProfile::Counter* _precondition_block_timer = nullptr;
-    RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
     MonotonicStopWatch* _total_timer_sw = nullptr;
-    MonotonicStopWatch* _pending_timer_sw = nullptr;
-    MonotonicStopWatch* _precondition_block_timer_sw = nullptr;
+    RuntimeProfile::Counter* _state_timers[DriverState::FINISH];
+    MonotonicStopWatch* _state_timer_sws[DriverState::FINISH];
+    RuntimeProfile::Counter* _active_timer = nullptr;
+
+    RuntimeProfile::Counter* _ready_in_dispatcher_queue_timer = nullptr;
+    MonotonicStopWatch* _ready_in_dispatcher_queue_timer_sw = nullptr;
+    RuntimeProfile::Counter* _pending_in_poller_timer = nullptr;
+    MonotonicStopWatch* _pending_in_poller_timer_sw = nullptr;
+
+    RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
 };
 
 } // namespace pipeline

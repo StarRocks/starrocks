@@ -100,7 +100,6 @@ void PipelineDriverPoller::run_internal() {
                     //  This writing method is a bit tricky, and when there is a better way, replace it
                     auto runtime_state_ptr = driver->fragment_ctx()->runtime_state_ptr();
                     driver->mark_precondition_ready(runtime_state_ptr.get());
-                    driver->_precondition_block_timer->update(driver->_precondition_block_timer_sw->elapsed_time());
                 }
                 driver->set_driver_state(DriverState::READY);
                 remove_blocked_driver(local_blocked_drivers, driver_it);
@@ -116,6 +115,12 @@ void PipelineDriverPoller::run_internal() {
             spin_count = 0;
 
             _dispatch_queue->put_back(ready_drivers);
+
+            for (auto* ready_driver : ready_drivers) {
+                ready_driver->_pending_in_poller_timer->update(
+                        ready_driver->_pending_in_poller_timer_sw->elapsed_time());
+            }
+
             ready_drivers.clear();
         }
 
@@ -136,17 +141,14 @@ void PipelineDriverPoller::run_internal() {
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(this->_mutex);
-    driver->_pending_timer_sw->reset();
-    if (driver->driver_state() == DriverState::PRECONDITION_BLOCK) {
-        driver->_precondition_block_timer_sw->reset();
-    }
+
+    driver->_pending_in_poller_timer_sw->reset();
+
     this->_blocked_drivers.push_back(driver);
     this->_cond.notify_one();
 }
 
 void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {
-    auto& driver = *driver_it;
-    driver->_pending_timer->update(driver->_pending_timer_sw->elapsed_time());
     local_blocked_drivers.erase(driver_it++);
 }
 

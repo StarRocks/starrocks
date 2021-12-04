@@ -13,10 +13,31 @@
 
 namespace starrocks::pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+    // Init timer.
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
+    for (int i = DriverState::NOT_READY; i < DriverState::FINISH; i++) {
+        _state_timers[i] =
+                ADD_CHILD_TIMER(_runtime_profile, ds_to_string(static_cast<DriverState>(i)), "DriverTotalTime");
+    }
+    _ready_in_dispatcher_queue_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "ReadyInDispatcherQueue", ds_to_string(DriverState::READY));
+    _pending_in_poller_timer = ADD_CHILD_TIMER(_runtime_profile, "PendingInPoller", "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "DriverActiveTime");
-    _pending_timer = ADD_TIMER(_runtime_profile, "DriverPendingTime");
-    _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverPreconditionBlockTime", "DriverPendingTime");
+
+    // Init timer stop watch.
+    _total_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _total_timer_sw->start();
+    for (int i = DriverState::NOT_READY; i < DriverState::FINISH; i++) {
+        _state_timer_sws[i] = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    }
+    // Start NOT_READY timer at the beginning of prepare phase,
+    // and start the other state timers at the end of prepare phase.
+    _state_timer_sws[DriverState::NOT_READY]->start();
+    _ready_in_dispatcher_queue_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _ready_in_dispatcher_queue_timer_sw->start();
+    _pending_in_poller_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _pending_in_poller_timer_sw->start();
+
     _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
 
     DCHECK(_state == DriverState::NOT_READY);
@@ -57,21 +78,19 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _all_local_rf_ready = _local_rf_holders.empty();
     // Driver has no global rf to wait for completion always sets _all_global_rf_ready_or_timeout to true;
     _all_global_rf_ready_or_timeout = _global_rf_descriptors.empty();
-    _state = DriverState::READY;
 
-    _total_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
-    _pending_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
-    _precondition_block_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
-    _total_timer_sw->start();
-    _pending_timer_sw->start();
-    _precondition_block_timer_sw->start();
+    for (int i = DriverState::READY; i < DriverState::FINISH; i++) {
+        _state_timer_sws[i]->start();
+    }
+
+    set_driver_state(DriverState::READY);
 
     return Status::OK();
 }
 
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     SCOPED_TIMER(_active_timer);
-    _state = DriverState::RUNNING;
+    set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     int64_t time_spent = 0;
     while (true) {
@@ -172,7 +191,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
-            _state = is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
+            set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
             return _state;
         }
 
@@ -185,17 +204,17 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             driver_acct().update_last_chunks_moved(total_chunks_moved);
             driver_acct().update_last_time_spent(time_spent);
             if (is_precondition_block()) {
-                _state = DriverState::PRECONDITION_BLOCK;
+                set_driver_state(DriverState::PRECONDITION_BLOCK);
                 return DriverState::PRECONDITION_BLOCK;
             } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
-                _state = DriverState::OUTPUT_FULL;
+                set_driver_state(DriverState::OUTPUT_FULL);
                 return DriverState::OUTPUT_FULL;
             }
             if (!source_operator()->is_finished() && !source_operator()->has_output()) {
-                _state = DriverState::INPUT_EMPTY;
+                set_driver_state(DriverState::INPUT_EMPTY);
                 return DriverState::INPUT_EMPTY;
             }
-            _state = DriverState::READY;
+            set_driver_state(DriverState::READY);
             return DriverState::READY;
         }
     }
@@ -236,8 +255,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
 
     _close_operators(runtime_state);
-
-    _state = state;
+    set_driver_state(state);
 
     // Calculate total time before report profile
     _total_timer->update(_total_timer_sw->elapsed_time());
@@ -283,9 +301,9 @@ bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
         // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
         // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
         if (is_still_pending_finish()) {
-            _state = DriverState::PENDING_FINISH;
+            set_driver_state(DriverState::PENDING_FINISH);
         } else {
-            _state = _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
+            set_driver_state(_fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED);
         }
         return true;
     }
