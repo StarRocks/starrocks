@@ -4690,7 +4690,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = false;
     }
 
-    @Test 
+    @Test
     public void testLimitPushDownJoin() throws Exception {
         String sql = "select * from t0 left join[shuffle] t1 on t0.v2 = t1.v5 where t1.v6 is null limit 2";
         String plan = getFragmentPlan(sql);
@@ -4823,5 +4823,21 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(" 1:Project\n" +
                 "  |  <slot 4> : NULL"));
+    }
+
+    @Test
+    public void testPreAggregation() throws Exception {
+        String sql = "select k1 from t0 inner join baseall on v1 = cast(k8 as int) group by k1";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("1:Project\n" +
+                "  |  <slot 4> : 4: k1\n" +
+                "  |  <slot 15> : CAST(CAST(13: k8 AS INT) AS BIGINT)\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
+                "     partitions=0/1"));
     }
 }
