@@ -272,7 +272,7 @@ public:
             desc->set_is_pipeline(true);
             // skip if it does not have consumer.
             if (!desc->has_consumer()) continue;
-            // skip if ht.size() > limit and it's only for local.
+            // skip if ht.size() > limit, and it's only for local.
             if (!desc->has_remote_targets() && row_count > _limit) continue;
             PrimitiveType build_type = desc->build_expr_type();
             vectorized::JoinRuntimeFilter* filter =
@@ -289,7 +289,7 @@ public:
             while (param_it != params.end()) {
                 auto& desc = *(desc_it++);
                 auto& param = *(param_it++);
-                if (desc->runtime_filter() == nullptr) {
+                if (desc->runtime_filter() == nullptr || param.column == nullptr) {
                     continue;
                 }
                 auto status = vectorized::RuntimeFilterHelper::fill_runtime_bloom_filter(
