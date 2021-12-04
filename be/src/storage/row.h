@@ -32,20 +32,6 @@ namespace starrocks {
 class MemPool;
 class Arena;
 
-// The row has all columns layed out in memory based on the schema.column_offset()
-struct ContiguousRow {
-    ContiguousRow(const Schema* schema, const void* row) : _schema(schema), _row((void*)row) {}
-    ContiguousRow(const Schema* schema, void* row) : _schema(schema), _row(row) {}
-    RowCursorCell cell(uint32_t cid) const { return RowCursorCell((char*)_row + _schema->column_offset(cid)); }
-    void set_is_null(uint32_t cid, bool is_null) const { _schema->set_is_null(_row, cid, is_null); }
-    const Schema* schema() const { return _schema; }
-    void* row_ptr() const { return _row; }
-
-private:
-    const Schema* _schema;
-    void* _row;
-};
-
 template <typename LhsRowType, typename RhsRowType>
 bool equal_row(const std::vector<uint32_t>& ids, const LhsRowType& lhs, const RhsRowType& rhs) {
     for (auto id : ids) {

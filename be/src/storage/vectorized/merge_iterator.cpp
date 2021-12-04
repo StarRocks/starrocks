@@ -9,7 +9,6 @@
 #include "boost/heap/skew_heap.hpp"
 #include "column/chunk.h"
 #include "common/config.h"
-#include "storage/iterators.h" // StorageReadOptions
 #include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks::vectorized {

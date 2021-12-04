@@ -105,7 +105,7 @@ private:
             _final_chunk.reset();
         }
 
-        Status seek_columns(ordinal_t pos) {
+        Status seek_columns(segment_v2::ordinal_t pos) {
             for (auto iter : _column_iterators) {
                 RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
             }
@@ -209,7 +209,7 @@ private:
     std::shared_ptr<Segment> _segment;
     vectorized::SegmentReadOptions _opts;
     std::vector<ColumnIterator*> _column_iterators;
-    std::vector<ColumnDecoder> _column_decoders;
+    std::vector<segment_v2::ColumnDecoder> _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
@@ -716,7 +716,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
 void SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
-        const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
+        const segment_v2::ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
         for (ColumnIterator* iter : to->_column_iterators) {
             iter->seek_to_ordinal(ordinal);
         }
