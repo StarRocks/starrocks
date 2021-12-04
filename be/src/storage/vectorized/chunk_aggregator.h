@@ -90,8 +90,8 @@ private:
     ChunkPtr _aggregate_chunk;
     // the last row of non-key column is in aggregator (not in aggregate chunk) before finalize.
     // in vertical compaction, there maybe only non-key column in aggregate chunk,
-    // so we cannot use _aggregate_chunk->num_rows() as aggregated rows.
-    uint32_t _aggregated_rows = 0;
+    // so we cannot use _aggregate_chunk->num_rows() as aggregate rows.
+    uint32_t _aggregate_rows = 0;
 
     // aggregate factor
     double _factor;

@@ -238,8 +238,8 @@ void ChunkAggregator::update_source(ChunkPtr& chunk, std::vector<RowSourceMask>*
             }
         }
 
-        if (_aggregated_rows > 0 && _key_fields > 0) {
-            _is_eq[0] = _row_equal(_aggregate_chunk.get(), _aggregated_rows - 1, chunk.get(), 0);
+        if (_aggregate_rows > 0 && _key_fields > 0) {
+            _is_eq[0] = _row_equal(_aggregate_chunk.get(), _aggregate_rows - 1, chunk.get(), 0);
         } else {
             _is_eq[0] = 0;
         }
@@ -276,7 +276,7 @@ void ChunkAggregator::aggregate() {
     _aggregate_loops.clear();
 
     // first key is not equal with last row in previous chunk
-    bool previous_neq = !_is_eq[_source_row] && (_aggregated_rows > 0);
+    bool previous_neq = !_is_eq[_source_row] && (_aggregate_rows > 0);
 
     // same with last row
     if (_is_eq[_source_row] == 1) {
@@ -288,10 +288,10 @@ void ChunkAggregator::aggregate() {
     uint32_t row = _source_row;
     for (; row < _source_size; ++row) {
         if (_is_eq[row] == 0) {
-            if (_aggregated_rows >= _max_aggregate_rows) {
+            if (_aggregate_rows >= _max_aggregate_rows) {
                 break;
             }
-            ++_aggregated_rows;
+            ++_aggregate_rows;
             _selective_index.emplace_back(row);
             _aggregate_loops.emplace_back(1);
         } else {
@@ -315,12 +315,12 @@ void ChunkAggregator::aggregate() {
 }
 
 bool ChunkAggregator::is_finish() {
-    return (_aggregate_chunk == nullptr || _aggregated_rows >= _max_aggregate_rows);
+    return (_aggregate_chunk == nullptr || _aggregate_rows >= _max_aggregate_rows);
 }
 
 void ChunkAggregator::aggregate_reset() {
     _aggregate_chunk = ChunkHelper::new_chunk(*_schema, _reserve_rows);
-    _aggregated_rows = 0;
+    _aggregate_rows = 0;
 
     for (int i = 0; i < _num_fields; ++i) {
         auto p = _aggregate_chunk->get_column_by_index(i).get();
