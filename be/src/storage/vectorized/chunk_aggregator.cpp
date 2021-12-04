@@ -90,10 +90,10 @@ inline CompareFN get_comparator(bool null_type) {
 }
 
 ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t reserve_rows,
-                                 uint32_t aggregate_rows, double factor, bool is_vertical_merge, bool is_key)
+                                 uint32_t max_aggregate_rows, double factor, bool is_vertical_merge, bool is_key)
         : _schema(schema),
           _reserve_rows(reserve_rows),
-          _aggregate_rows(aggregate_rows),
+          _max_aggregate_rows(max_aggregate_rows),
           _factor(factor),
           _has_aggregate(false),
           _is_vertical_merge(is_vertical_merge),
@@ -136,15 +136,16 @@ ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, ui
     aggregate_reset();
 }
 
-ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t aggregate_rows, double factor)
-        : ChunkAggregator(schema, aggregate_rows, aggregate_rows, factor, false, false) {}
+ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor)
+        : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, false, false) {}
 
-ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t aggregate_rows, double factor)
-        : ChunkAggregator(schema, reserve_rows, aggregate_rows, factor, false, false) {}
+ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
+                                 double factor)
+        : ChunkAggregator(schema, reserve_rows, max_aggregate_rows, factor, false, false) {}
 
-ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t aggregate_rows, double factor, bool is_vertical_merge,
-                                 bool is_key)
-        : ChunkAggregator(schema, aggregate_rows, aggregate_rows, factor, is_vertical_merge, is_key) {}
+ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor,
+                                 bool is_vertical_merge, bool is_key)
+        : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, is_vertical_merge, is_key) {}
 
 CompareFN ChunkAggregator::_choose_comparator(const FieldPtr& field) {
     switch (field->type()->type()) {
@@ -284,14 +285,14 @@ void ChunkAggregator::aggregate() {
 
     // 1. Calculate the key rows selective arrays
     // 2. Calculate the value rows that can be aggregated for each key row
-    uint32_t aggregate_rows = _source_row;
-    for (; aggregate_rows < _source_size; ++aggregate_rows) {
-        if (_is_eq[aggregate_rows] == 0) {
-            if (_aggregated_rows >= _aggregate_rows) {
+    uint32_t row = _source_row;
+    for (; row < _source_size; ++row) {
+        if (_is_eq[row] == 0) {
+            if (_aggregated_rows >= _max_aggregate_rows) {
                 break;
             }
             ++_aggregated_rows;
-            _selective_index.emplace_back(aggregate_rows);
+            _selective_index.emplace_back(row);
             _aggregate_loops.emplace_back(1);
         } else {
             _aggregate_loops[_aggregate_loops.size() - 1] += 1;
@@ -309,12 +310,12 @@ void ChunkAggregator::aggregate() {
                                                 previous_neq);
     }
 
-    _source_row = aggregate_rows;
+    _source_row = row;
     _has_aggregate = true;
 }
 
 bool ChunkAggregator::is_finish() {
-    return (_aggregate_chunk == nullptr || _aggregated_rows >= _aggregate_rows);
+    return (_aggregate_chunk == nullptr || _aggregated_rows >= _max_aggregate_rows);
 }
 
 void ChunkAggregator::aggregate_reset() {
