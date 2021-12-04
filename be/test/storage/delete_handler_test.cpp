@@ -76,7 +76,7 @@ void tear_down() {
     FileUtils::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
     k_tablet_meta_mem_tracker->release(k_tablet_meta_mem_tracker->consumption());
     k_schema_change_mem_tracker->release(k_schema_change_mem_tracker->consumption());
-    delete k_schema_change_mem_tracker;
+    delete k_tablet_meta_mem_tracker;
     delete k_schema_change_mem_tracker;
 }
 
