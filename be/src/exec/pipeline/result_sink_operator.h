@@ -72,9 +72,9 @@ private:
 
 class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
-    ResultSinkOperatorFactory(int32_t id, int32_t plan_node_id, TResultSinkType::type sink_type,
-                              std::vector<TExpr> t_output_expr, FragmentContext* const fragment_ctx)
-            : OperatorFactory(id, "result_sink", plan_node_id),
+    ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, std::vector<TExpr> t_output_expr,
+                              FragmentContext* const fragment_ctx)
+            : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
               _sink_type(sink_type),
               _t_output_expr(std::move(t_output_expr)),
               _fragment_ctx(fragment_ctx) {}
