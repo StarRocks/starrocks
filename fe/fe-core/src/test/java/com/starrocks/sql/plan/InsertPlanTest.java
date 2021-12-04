@@ -218,6 +218,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  <slot 4> : CAST(1: v1 AS INT)\n" +
                 "  |  <slot 5> : CAST(2: v2 AS INT)\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
@@ -228,7 +229,8 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=4.0\n" +
-                "     numNodes=0"));
+                "     numNodes=0\n" +
+                "     use vectorized: true"));
 
         sql = "insert into test.mysql_table(k1) select v1 from t0";
         explainString = getInsertExecPlan(sql);
@@ -242,6 +244,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  <slot 4> : NULL\n" +
                 "  |  <slot 5> : CAST(1: v1 AS INT)\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
@@ -252,7 +255,8 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     numNodes=0\n" +
+                "     use vectorized: true"));
     }
 
     @Test
