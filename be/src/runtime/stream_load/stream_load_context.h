@@ -41,6 +41,8 @@
 
 namespace starrocks {
 
+class RuntimeProfile;
+
 // kafka related info
 class KafkaLoadInfo {
 public:

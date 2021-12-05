@@ -5,6 +5,8 @@
 #include <random>
 
 #include "column/nullable_column.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "runtime/date_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/vectorized/chunk_helper.h"

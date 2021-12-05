@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "exec/pipeline/source_operator.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
