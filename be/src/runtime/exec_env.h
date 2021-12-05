@@ -19,15 +19,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_EXEC_ENV_H
-#define STARROCKS_BE_RUNTIME_EXEC_ENV_H
+#pragma once
 
 #include <atomic>
 #include <memory>
 
 #include "common/status.h"
-#include "exec/pipeline/pipeline_driver_dispatcher.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "storage/options.h"
 
 namespace starrocks {
@@ -65,6 +62,10 @@ class TFileBrokerServiceClient;
 template <class T>
 class ClientCache;
 class HeartbeatFlags;
+
+namespace pipeline {
+class DriverDispatcher;
+}
 
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
@@ -242,5 +243,3 @@ inline ClientCache<TFileBrokerServiceClient>* ExecEnv::get_client_cache<TFileBro
 }
 
 } // namespace starrocks
-
-#endif
