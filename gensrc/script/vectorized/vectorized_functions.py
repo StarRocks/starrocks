@@ -581,4 +581,6 @@ vectorized_functions = [
     #[150012, 'array_max', 'DECIMAL64', ['ARRAY_DECIMAL32'], 'ArrayFunctions::array_max'],
     #[150013, 'array_max', 'DECIMAL64', ['ARRAY_DECIMAL64'], 'ArrayFunctions::array_max'],
     #[150014, 'array_max', 'DECIMAL128', ['ARRAY_DECIMAL128'], 'ArrayFunctions::array_max'],
+
+    [150083, 'array_remove', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_remove'],
 ]
