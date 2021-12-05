@@ -3154,11 +3154,20 @@ public class Catalog {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Set<String> existPartitionNameSet =
                     CatalogChecker.checkPartitionNameExistForAddPartitions(olapTable, singleRangePartitionDescs);
-
+            // partition properties is prior to clause properties
+            // clause properties is prior to table properties
+            Map<String, String> properties = Maps.newHashMap();
+            properties = getOrSetDefaultProperties(olapTable, properties);
+            Map<String, String> clauseProperties = addPartitionClause.getProperties();
+            if (clauseProperties != null && !clauseProperties.isEmpty()) {
+                properties.putAll(clauseProperties);
+            }
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-                Map<String, String> sourceProperties = singleRangePartitionDesc.getProperties();
-                Map<String, String> properties = getOrSetDefaultProperties(olapTable, sourceProperties);
                 Map<String, String> cloneProperties = Maps.newHashMap(properties);
+                Map<String, String> sourceProperties = singleRangePartitionDesc.getProperties();
+                if (sourceProperties != null && !sourceProperties.isEmpty()) {
+                    cloneProperties.putAll(sourceProperties);
+                }
                 singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumns().size(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
                     rangePartitionInfo.checkAndCreateRange(singleRangePartitionDesc, isTempPartition);
@@ -3398,6 +3407,11 @@ public class Catalog {
         }
         if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
             sourceProperties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, olapTable.isInMemory().toString());
+        }
+        Map<String, String> tableProperty = olapTable.getTableProperty().getProperties();
+        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            sourceProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
         }
         return sourceProperties;
     }
@@ -3916,8 +3930,14 @@ public class Catalog {
             long partitionId = partitionNameToId.get(tableName);
             DataProperty dataProperty = null;
             try {
-                dataProperty = PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(),
-                        DataProperty.DEFAULT_DATA_PROPERTY);
+                boolean hasMedium = false;
+                if (properties != null) {
+                    hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                }
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
+                if (hasMedium) {
+                    olapTable.setStorageMedium(dataProperty.getStorageMedium());
+                }
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -4028,9 +4048,16 @@ public class Catalog {
                     try {
                         // just for remove entries in stmt.getProperties(),
                         // and then check if there still has unknown properties
-                        PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(), DataProperty.DEFAULT_DATA_PROPERTY);
+                        boolean hasMedium = false;
+                        if (properties != null) {
+                            hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                        }
+                        DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                                DataProperty.DEFAULT_DATA_PROPERTY);
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
-
+                        if (hasMedium) {
+                            olapTable.setStorageMedium(dataProperty.getStorageMedium());
+                        }
                         if (properties != null && !properties.isEmpty()) {
                             // here, all properties should be checked
                             throw new DdlException("Unknown properties: " + properties);
@@ -4052,7 +4079,7 @@ public class Catalog {
                         olapTable.addPartition(partition);
                     }
                 } else {
-                    throw new DdlException("Unsupport partition method: " + partitionInfo.getType().name());
+                    throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
                 }
             }
 
@@ -4362,7 +4389,17 @@ public class Catalog {
             // storage type
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
-            sb.append("\n");
+
+
+            // storage media
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
+            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                sb.append("\n");
+            } else {
+                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                sb.append("\n");
+            }
 
             if (table.getType() == TableType.OLAP_EXTERNAL) {
                 ExternalOlapTable externalOlapTable = (ExternalOlapTable) table;
