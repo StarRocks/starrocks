@@ -26,6 +26,7 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+#include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"

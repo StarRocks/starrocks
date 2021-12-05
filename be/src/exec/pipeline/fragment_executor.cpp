@@ -12,6 +12,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/scan_node.h"

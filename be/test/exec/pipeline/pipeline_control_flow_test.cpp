@@ -3,6 +3,7 @@
 #include <mutex>
 #include <random>
 
+#include "exec/pipeline/pipeline.h"
 #include "pipeline_test_base.h"
 #include "util/thrift_util.h"
 
