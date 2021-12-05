@@ -52,9 +52,7 @@ public class MetaScanNode extends ScanNode {
             List<Tablet> tablets = index.getTablets();
 
             long visibleVersion = partition.getVisibleVersion();
-            long visibleVersionHash = partition.getVisibleVersionHash();
             String visibleVersionStr = String.valueOf(visibleVersion);
-            String visibleVersionHashStr = String.valueOf(partition.getVisibleVersionHash());
 
             for (Tablet tablet : tablets) {
                 long tabletId = tablet.getId();
@@ -64,16 +62,16 @@ public class MetaScanNode extends ScanNode {
                 internalRange.setDb_name("");
                 internalRange.setSchema_hash(String.valueOf(schemaHash));
                 internalRange.setVersion(visibleVersionStr);
-                internalRange.setVersion_hash(visibleVersionHashStr);
+                internalRange.setVersion_hash("0");
                 internalRange.setTablet_id(tabletId);
 
                 // random shuffle List && only collect one copy
                 List<Replica> allQueryableReplicas = com.google.common.collect.Lists.newArrayList();
                 tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                        visibleVersion, visibleVersionHash, -1, schemaHash);
+                        visibleVersion, -1, schemaHash);
                 if (allQueryableReplicas.isEmpty()) {
-                    LOG.error("no queryable replica found in tablet {}. visible version {}-{}",
-                            tabletId, visibleVersion, visibleVersionHash);
+                    LOG.error("no queryable replica found in tablet {}. visible version {}",
+                            tabletId, visibleVersion);
                     if (LOG.isDebugEnabled()) {
                         for (Replica replica : tablet.getReplicas()) {
                             LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());

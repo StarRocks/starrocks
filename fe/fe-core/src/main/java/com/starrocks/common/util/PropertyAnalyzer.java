@@ -32,7 +32,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -255,21 +254,14 @@ public class PropertyAnalyzer {
         return tTabletType;
     }
 
-    public static Pair<Long, Long> analyzeVersionInfo(Map<String, String> properties) throws AnalysisException {
-        Pair<Long, Long> versionInfo = new Pair<>(Partition.PARTITION_INIT_VERSION,
-                Partition.PARTITION_INIT_VERSION_HASH);
+    public static Long analyzeVersionInfo(Map<String, String> properties) throws AnalysisException {
+        Long versionInfo = Partition.PARTITION_INIT_VERSION;
         if (properties != null && properties.containsKey(PROPERTIES_VERSION_INFO)) {
             String versionInfoStr = properties.get(PROPERTIES_VERSION_INFO);
-            String[] versionInfoArr = versionInfoStr.split(COMMA_SEPARATOR);
-            if (versionInfoArr.length == 2) {
-                try {
-                    versionInfo.first = Long.parseLong(versionInfoArr[0]);
-                    versionInfo.second = Long.parseLong(versionInfoArr[1]);
-                } catch (NumberFormatException e) {
-                    throw new AnalysisException("version info number format error");
-                }
-            } else {
-                throw new AnalysisException("version info format error. format: version,version_hash");
+            try {
+                versionInfo = Long.parseLong(versionInfoStr);
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("version info format error.");
             }
 
             properties.remove(PROPERTIES_VERSION_INFO);

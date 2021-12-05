@@ -1208,7 +1208,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                 .checkState(originReplica.getState() == ReplicaState.NORMAL, originReplica.getState());
                         // replica's init state is ALTER, so that tablet report process will ignore its report
                         Replica shadowReplica = new Replica(shadowReplicaId, backendId, ReplicaState.ALTER,
-                                Partition.PARTITION_INIT_VERSION, Partition.PARTITION_INIT_VERSION_HASH,
+                                Partition.PARTITION_INIT_VERSION,
                                 newSchemaHash);
                         shadowTablet.addReplica(shadowReplica);
                         healthyReplicaNum++;
