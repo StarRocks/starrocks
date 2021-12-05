@@ -19,14 +19,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_THRIFT_SERVER_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_THRIFT_SERVER_H
+#pragma once
 
 #include <thrift/TProcessor.h>
 #include <thrift/server/TServer.h>
 
-#include <boost/thread.hpp>
-#include <boost/unordered_map.hpp>
+#include <thread>
+#include <unordered_map>
 
 #include "common/status.h"
 #include "util/metrics.h"
@@ -121,7 +120,7 @@ private:
     const std::string _name;
 
     // Thread that runs the TNonblockingServer::serve loop
-    std::unique_ptr<boost::thread> _server_thread;
+    std::unique_ptr<std::thread> _server_thread;
 
     // Thrift housekeeping
     std::unique_ptr<apache::thrift::server::TServer> _server;
@@ -135,7 +134,7 @@ private:
 
     // Map of active session keys to shared_ptr containing that key; when a key is
     // removed it is automatically freed.
-    typedef boost::unordered_map<SessionKey*, std::shared_ptr<SessionKey> > SessionKeySet;
+    typedef std::unordered_map<SessionKey*, std::shared_ptr<SessionKey> > SessionKeySet;
     SessionKeySet _session_keys;
 
     // True if metrics are enabled
@@ -154,5 +153,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif
