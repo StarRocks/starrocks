@@ -51,7 +51,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
     private Short replicationNum;
     private boolean isInMemory = false;
     private TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
-    private Pair<Long, Long> versionInfo;
+    private Long versionInfo;
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
                                     Map<String, String> properties) {
@@ -95,7 +95,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         return tabletType;
     }
 
-    public Pair<Long, Long> getVersionInfo() {
+    public Long getVersionInfo() {
         return versionInfo;
     }
 

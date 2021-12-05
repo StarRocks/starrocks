@@ -45,7 +45,6 @@ public class AlterReplicaTask extends AgentTask {
     private int baseSchemaHash;
     private int newSchemaHash;
     private long version;
-    private long versionHash;
     private long jobId;
     private AlterJobV2.JobType jobType;
 
@@ -54,17 +53,17 @@ public class AlterReplicaTask extends AgentTask {
     public AlterReplicaTask(long backendId, long dbId, long tableId,
                             long partitionId, long rollupIndexId, long baseIndexId, long rollupTabletId,
                             long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash,
-                            long version, long versionHash, long jobId, AlterJobV2.JobType jobType) {
+                            long version, long jobId, AlterJobV2.JobType jobType) {
         this(backendId, dbId, tableId, partitionId,
                 rollupIndexId, baseIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash,
-                version, versionHash, jobId, jobType, null);
+                version, jobId, jobType, null);
     }
 
     public AlterReplicaTask(long backendId, long dbId, long tableId,
                             long partitionId, long rollupIndexId, long baseIndexId, long rollupTabletId,
                             long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash,
-                            long version, long versionHash, long jobId, AlterJobV2.JobType jobType,
+                            long version, long jobId, AlterJobV2.JobType jobType,
                             Map<String, Expr> defineExprs) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
@@ -75,7 +74,6 @@ public class AlterReplicaTask extends AgentTask {
         this.baseSchemaHash = baseSchemaHash;
 
         this.version = version;
-        this.versionHash = versionHash;
         this.jobId = jobId;
 
         this.jobType = jobType;
@@ -102,10 +100,6 @@ public class AlterReplicaTask extends AgentTask {
         return version;
     }
 
-    public long getVersionHash() {
-        return versionHash;
-    }
-
     public long getJobId() {
         return jobId;
     }
@@ -117,7 +111,6 @@ public class AlterReplicaTask extends AgentTask {
     public TAlterTabletReqV2 toThrift() {
         TAlterTabletReqV2 req = new TAlterTabletReqV2(baseTabletId, signature, baseSchemaHash, newSchemaHash);
         req.setAlter_version(version);
-        req.setAlter_version_hash(versionHash);
         if (defineExprs != null) {
             for (Map.Entry<String, Expr> entry : defineExprs.entrySet()) {
                 List<SlotRef> slots = Lists.newArrayList();

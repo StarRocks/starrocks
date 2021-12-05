@@ -854,7 +854,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 result = -1;
                 replica.getBackendId();
                 result = 10001;
-                replica.checkVersionCatchUp(anyLong, anyLong, anyBoolean);
+                replica.checkVersionCatchUp(anyLong, anyBoolean);
                 result = true;
             }
         };
