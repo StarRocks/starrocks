@@ -26,6 +26,8 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"

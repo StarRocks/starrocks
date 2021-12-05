@@ -8,6 +8,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks::vectorized {
