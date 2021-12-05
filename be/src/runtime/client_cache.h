@@ -19,17 +19,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_CLIENT_CACHE_H
-#define STARROCKS_BE_RUNTIME_CLIENT_CACHE_H
+#pragma once
 
-#include <boost/unordered_map.hpp>
 #include <functional>
 #include <list>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "common/status.h"
+#include "util/hash_util.hpp"
 #include "util/metrics.h"
 #include "util/thrift_client.h"
 
@@ -104,11 +104,11 @@ private:
     std::mutex _lock;
 
     // map from (host, port) to list of client keys for that address
-    typedef boost::unordered_map<TNetworkAddress, std::list<void*> > ClientCacheMap;
+    typedef std::unordered_map<TNetworkAddress, std::list<void*> > ClientCacheMap;
     ClientCacheMap _client_cache;
 
     // Map from client key back to its associated ThriftClientImpl transport
-    typedef boost::unordered_map<void*, ThriftClientImpl*> ClientMap;
+    typedef std::unordered_map<void*, ThriftClientImpl*> ClientMap;
     ClientMap _client_map;
 
     // MetricRegistry
@@ -273,5 +273,3 @@ typedef ClientCache<TFileBrokerServiceClient> BrokerServiceClientCache;
 typedef ClientConnection<TFileBrokerServiceClient> BrokerServiceConnection;
 
 } // namespace starrocks
-
-#endif
