@@ -61,8 +61,11 @@ public class ScalarRangePredicateExtractor {
                 .map(ValueDescriptor::toScalarOperator).forEach(result::addAll);
 
         ScalarOperator extractExpr = Utils.compoundAnd(Lists.newArrayList(result));
-        predicate = Utils.compoundAnd(Lists.newArrayList(conjuncts));
+        if (extractExpr == null) {
+            return predicate;
+        }
 
+        predicate = Utils.compoundAnd(Lists.newArrayList(conjuncts));
         if (isOnlyOrCompound(predicate)) {
             Set<ColumnRefOperator> c = new HashSet<>(Utils.extractColumnRef(predicate));
             if (c.size() == extractMap.size() &&

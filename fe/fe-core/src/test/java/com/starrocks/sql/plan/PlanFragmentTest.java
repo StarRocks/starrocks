@@ -418,6 +418,16 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode"));
+
+        sql = "select * from t0 join test_all_type on NOT 69 IS NOT NULL where true";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:EMPTYSET"));
     }
 
     @Test
@@ -4778,5 +4788,12 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (PARTITIONED)"));
         Assert.assertTrue(plan.contains("9:HASH JOIN\n" +
                 "  |    |  join op: INNER JOIN (PARTITIONED)"));
+    }
+
+    @Test
+    public void testArrayFunctionFilter() throws Exception {
+        String sql = "select * from test_array where array_length(c1) between 2 and 3;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: array_length(2: c1) >= 2, array_length(2: c1) <= 3"));
     }
 }
