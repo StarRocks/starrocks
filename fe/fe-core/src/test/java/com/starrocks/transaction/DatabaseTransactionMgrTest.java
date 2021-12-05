@@ -263,10 +263,9 @@ public class DatabaseTransactionMgrTest {
                 masterDbTransMgr.getPartitionTransInfo(txnId, CatalogTestUtil.testTableId1);
         assertEquals(1, partitionTransInfos.size());
         List<Comparable> partitionTransInfo = partitionTransInfos.get(0);
-        assertEquals(3, partitionTransInfo.size());
+        assertEquals(2, partitionTransInfo.size());
         assertEquals(3L, partitionTransInfo.get(0));
         assertEquals(13L, partitionTransInfo.get(1));
-        assertEquals(123123123L, partitionTransInfo.get(2));
     }
 
     @Test

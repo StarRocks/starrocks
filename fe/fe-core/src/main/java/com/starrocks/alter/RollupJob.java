@@ -218,7 +218,7 @@ public class RollupJob extends AlterJob {
     }
 
     public synchronized void updateRollupReplicaInfo(long partitionId, long indexId, long tabletId, long backendId,
-                                                     int schemaHash, long version, long versionHash, long rowCount,
+                                                     int schemaHash, long version, long rowCount,
                                                      long dataSize) throws MetaNotFoundException {
         MaterializedIndex rollupIndex = this.partitionIdToRollupIndex.get(partitionId);
         if (rollupIndex == null || rollupIndex.getId() != indexId) {
@@ -236,7 +236,7 @@ public class RollupJob extends AlterJob {
             throw new MetaNotFoundException("cannot find replica in tablet[" + tabletId + "], backend[" + backendId
                     + "]");
         }
-        replica.updateVersionInfo(version, versionHash, dataSize, rowCount);
+        replica.updateRowCount(version, dataSize, rowCount);
         LOG.debug("rollup replica[{}] info updated. schemaHash:{}", replica.getId(), schemaHash);
     }
 
@@ -264,34 +264,6 @@ public class RollupJob extends AlterJob {
         Collections.sort(rollupJobInfos, comparator);
 
         return rollupJobInfos;
-    }
-
-    public synchronized List<List<Comparable>> getRollupIndexInfo(long partitionId) {
-        List<List<Comparable>> tabletInfos = new ArrayList<List<Comparable>>();
-
-        MaterializedIndex index = this.partitionIdToRollupIndex.get(partitionId);
-        if (index == null) {
-            return tabletInfos;
-        }
-
-        for (Tablet tablet : index.getTablets()) {
-            long tabletId = tablet.getId();
-            for (Replica replica : tablet.getReplicas()) {
-                List<Comparable> tabletInfo = new ArrayList<Comparable>();
-                // tabletId -- replicaId -- backendId -- version -- versionHash -- dataSize -- rowCount -- state
-                tabletInfo.add(tabletId);
-                tabletInfo.add(replica.getId());
-                tabletInfo.add(replica.getBackendId());
-                tabletInfo.add(replica.getVersion());
-                tabletInfo.add(replica.getVersionHash());
-                tabletInfo.add(replica.getDataSize());
-                tabletInfo.add(replica.getRowCount());
-                tabletInfo.add(replica.getState());
-                tabletInfos.add(tabletInfo);
-            }
-        }
-
-        return tabletInfos;
     }
 
     public synchronized MaterializedIndex getRollupIndex(long partitionId) {
@@ -593,12 +565,11 @@ public class RollupJob extends AlterJob {
         }
 
         long version = finishTabletInfo.getVersion();
-        long versionHash = finishTabletInfo.getVersion_hash();
         long dataSize = finishTabletInfo.getData_size();
         long rowCount = finishTabletInfo.getRow_count();
         // yiguolei: not check version here because the replica's first version will be set by rollup job
         // the version is not set now
-        rollupReplica.updateVersionInfo(version, versionHash, dataSize, rowCount);
+        rollupReplica.updateRowCount(version, dataSize, rowCount);
 
         if (finishTabletInfo.isSetPath_hash()) {
             rollupReplica.setPathHash(finishTabletInfo.getPath_hash());
@@ -607,8 +578,8 @@ public class RollupJob extends AlterJob {
         setReplicaFinished(partitionId, rollupReplicaId);
         rollupReplica.setState(ReplicaState.NORMAL);
 
-        LOG.info("finished rollup replica[{}]. index[{}]. tablet[{}]. backend[{}], version: {}-{}",
-                rollupReplicaId, rollupIndexId, rollupTabletId, task.getBackendId(), version, versionHash);
+        LOG.info("finished rollup replica[{}]. index[{}]. tablet[{}]. backend[{}], version: {}",
+                rollupReplicaId, rollupIndexId, rollupTabletId, task.getBackendId(), version);
     }
 
     /*
@@ -729,13 +700,11 @@ public class RollupJob extends AlterJob {
                         for (Replica replica : tablet.getReplicas()) {
                             ReplicaPersistInfo replicaInfo =
                                     ReplicaPersistInfo.createForRollup(rollupIndexId, tabletId, replica.getBackendId(),
-                                            replica.getVersion(), replica.getVersionHash(),
+                                            replica.getVersion(),
                                             rollupSchemaHash,
                                             replica.getDataSize(), replica.getRowCount(),
                                             replica.getLastFailedVersion(),
-                                            replica.getLastFailedVersionHash(),
-                                            replica.getLastSuccessVersion(),
-                                            replica.getLastSuccessVersionHash());
+                                            replica.getLastSuccessVersion());
                             this.partitionIdToReplicaInfos.put(partitionId, replicaInfo);
                         }
                     } // end for tablets
@@ -879,11 +848,9 @@ public class RollupJob extends AlterJob {
                         MaterializedIndex mIndex = partition.getIndex(info.getIndexId());
                         Tablet tablet = mIndex.getTablet(info.getTabletId());
                         Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
-                        replica.updateVersionInfo(info.getVersion(), info.getVersionHash(),
+                        replica.updateVersionInfo(info.getVersion(),
                                 info.getLastFailedVersion(),
-                                info.getLastFailedVersionHash(),
-                                info.getLastSuccessVersion(),
-                                info.getLastSuccessVersionHash());
+                                info.getLastSuccessVersion());
                     }
                 }
             }
