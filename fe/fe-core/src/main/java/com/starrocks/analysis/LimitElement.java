@@ -91,9 +91,21 @@ public class LimitElement {
         }
         StringBuilder sb = new StringBuilder(" LIMIT ");
         if (offset != 0) {
-            sb.append(offset + ", ");
+            sb.append(offset).append(", ");
         }
-        sb.append("" + limit);
+        sb.append("").append(limit);
+        return sb.toString();
+    }
+
+    public String toDigest() {
+        if (limit == -1) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(" limit ");
+        if (offset != 0) {
+            sb.append(" ?, ");
+        }
+        sb.append("").append(" ? ");
         return sb.toString();
     }
 

@@ -79,6 +79,8 @@ public class AuditEvent {
     public String feIp = "";
     @AuditField(value = "Stmt")
     public String stmt = "";
+    @AuditField(value = "Digest")
+    public String digest = "";
 
     public static class AuditEventBuilder {
 
@@ -163,6 +165,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setStmt(String stmt) {
             auditEvent.stmt = stmt;
+            return this;
+        }
+
+        public AuditEventBuilder setDigest(String digest) {
+            auditEvent.digest = digest;
             return this;
         }
 
