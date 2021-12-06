@@ -57,6 +57,7 @@ MemTracker* k_tablet_meta_mem_tracker = nullptr;
 MemTracker* k_schema_change_mem_tracker = nullptr;
 
 void set_up() {
+    ExecEnv::GetInstance()->init_mem_tracker();
     k_tablet_meta_mem_tracker = new MemTracker();
     k_schema_change_mem_tracker = new MemTracker();
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
@@ -269,14 +270,6 @@ class TestDeltaWriter : public ::testing::Test {
 public:
     TestDeltaWriter() {}
     ~TestDeltaWriter() {}
-
-    void SetUp() { ExecEnv::GetInstance()->init_mem_tracker(); }
-
-    void TearDown() {
-        std::cout << "tear down" << std::endl;
-        //starrocks::tear_down();
-        //ASSERT_EQ(OLAP_SUCCESS, remove_all_dir(config::storage_root_path));
-    }
 };
 
 TEST_F(TestDeltaWriter, open) {
