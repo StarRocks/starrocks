@@ -172,7 +172,12 @@ Status DeltaWriter::write(Chunk* chunk, const uint32_t* indexes, uint32_t from, 
         RETURN_IF_ERROR(_init());
     }
 
-    bool flush = _mem_table->insert(chunk, indexes, from, size);
+    bool flush = false;
+    try {
+        flush = _mem_table->insert(chunk, indexes, from, size);
+    } catch (std::bad_alloc const&) {
+        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+    }
 
     if (flush || _mem_table->is_full()) {
         RETURN_IF_ERROR(_flush_memtable_async());

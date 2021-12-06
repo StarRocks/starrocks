@@ -46,7 +46,10 @@ public class MysqlTableSink extends DataSink {
 
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
-        return null;
+        StringBuilder strBuilder = new StringBuilder();
+        strBuilder.append(prefix + "MYSQL TABLE SINK\n");
+        strBuilder.append(prefix + "  " + DataPartition.UNPARTITIONED.getExplainString(explainLevel));
+        return strBuilder.toString();
     }
 
     @Override

@@ -482,9 +482,13 @@ Status CrossJoinNode::_build(RuntimeState* state) {
                 // the complexity and time of cross-join chunks from left table with small chunks
                 // from right table.
                 size_t col_number = chunk->num_columns();
-                for (size_t col = 0; col < col_number; ++col) {
-                    _build_chunk->get_column_by_index(col)->append(*(chunk->get_column_by_index(col).get()), 0,
-                                                                   row_number);
+                try {
+                    for (size_t col = 0; col < col_number; ++col) {
+                        _build_chunk->get_column_by_index(col)->append(*(chunk->get_column_by_index(col).get()), 0,
+                                                                       row_number);
+                    }
+                } catch (std::bad_alloc const&) {
+                    return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
                 }
             }
         }
