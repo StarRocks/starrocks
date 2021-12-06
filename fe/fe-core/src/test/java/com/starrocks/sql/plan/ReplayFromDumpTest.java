@@ -142,6 +142,17 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testTPCH17WithUse2AggStage() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/tpch17"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setNewPlanerAggStage(2);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch17"), sessionVariable);
+        Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update serialize)"));
+        Assert.assertTrue(replayPair.second.contains("4:AGGREGATE (merge finalize)"));
+    }
+
+    @Test
     public void testTPCH20() throws Exception {
         compareDumpWithOriginTest("tpchcost/q20");
     }
