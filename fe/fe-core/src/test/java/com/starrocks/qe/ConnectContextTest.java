@@ -120,7 +120,8 @@ public class ConnectContextTest {
 
         // Thread info
         Assert.assertNotNull(ctx.toThreadInfo());
-        List<String> row = ctx.toThreadInfo().toRow(1000, false);
+        long currentTimeMillis = System.currentTimeMillis();
+        List<String> row = ctx.toThreadInfo().toRow(currentTimeMillis, false);
         Assert.assertEquals(9, row.size());
         Assert.assertEquals("101", row.get(0));
         Assert.assertEquals("testUser", row.get(1));
@@ -128,12 +129,11 @@ public class ConnectContextTest {
         Assert.assertEquals("testCluster", row.get(3));
         Assert.assertEquals("testDb", row.get(4));
         Assert.assertEquals("Ping", row.get(5));
-        Assert.assertEquals("1", row.get(6));
+        Assert.assertEquals(Long.toString((currentTimeMillis-ctx.getStartTime()) / 1000), row.get(6));
         Assert.assertEquals("", row.get(7));
         Assert.assertEquals("", row.get(8));
 
         // Start time
-        Assert.assertEquals(0, ctx.getStartTime());
         ctx.setStartTime();
         Assert.assertNotSame(0, ctx.getStartTime());
 
