@@ -110,7 +110,7 @@ private:
     const std::vector<std::string>* _unused_output_columns = nullptr;
     RuntimeProfile* _runtime_profile = nullptr;
     int64_t _limit; // -1: no limit
-    
+
     std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
     using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;

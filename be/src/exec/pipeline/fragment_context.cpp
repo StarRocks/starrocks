@@ -39,7 +39,8 @@ FragmentContext::~FragmentContext() {
             LOG(INFO) << "[SCHEDULE OVERHEAD " << config::pipeline_thread_schedule_threshold << "ms] "
                       << "fragment_instance_id=" << print_id(fragment_instance_id()) << "\n"
                       << os.str() << "\n"
-                      << "PROCESS_TIMES: " << process_times << " PROCESS_TIME_NANOS: " << ((double) process_time_nanos / 1000000L) << "ms";
+                      << "PROCESS_TIMES: " << process_times
+                      << " PROCESS_TIME_NANOS: " << ((double)process_time_nanos / 1000000L) << "ms";
         }
 
         int64_t accumulate_chunks = 0;
@@ -52,7 +53,8 @@ FragmentContext::~FragmentContext() {
         }
         LOG(INFO) << "[ACCUMULATED_CHUNK_MOVED] "
                   << "fragment_instance_id=" << print_id(fragment_instance_id()) << " NUMS: " << accumulate_chunks
-                  << " EFFECTIVE_MOVED_TIMES: " << (schedule_times - empty_moved_times) << " SCHEDULE_TIMES: " << schedule_times;
+                  << " EFFECTIVE_MOVED_TIMES: " << (schedule_times - empty_moved_times)
+                  << " SCHEDULE_TIMES: " << schedule_times;
     }
 
     _drivers.clear();
