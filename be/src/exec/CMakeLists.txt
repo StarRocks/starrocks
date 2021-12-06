@@ -91,6 +91,7 @@ set(EXEC_FILES
     vectorized/intersect_node.cpp
     vectorized/hdfs_scanner.cpp
     vectorized/hdfs_scanner_orc.cpp
+    vectorized/hdfs_scanner_text.cpp
     vectorized/json_scanner.cpp
     vectorized/project_node.cpp
     vectorized/dict_decode_node.cpp
@@ -202,8 +203,7 @@ set(EXEC_FILES
 
 IF (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES}
-        vectorized/hdfs_scan_node.cpp
-    )
+        vectorized/hdfs_scan_node.cpp)
 endif()
 
 add_library(Exec STATIC

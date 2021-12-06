@@ -3,6 +3,7 @@
 package com.starrocks.external.hive;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.external.hive.text.TextFileFormatDesc;
 
 public class HdfsFileDesc {
     private String fileName;
@@ -10,6 +11,7 @@ public class HdfsFileDesc {
     private long length;
     private ImmutableList<HdfsFileBlockDesc> blockDescs;
     private boolean splittable;
+    private TextFileFormatDesc textFileFormatDesc;
 
     public HdfsFileDesc(String fileName, String compression, long length,
                         ImmutableList<HdfsFileBlockDesc> blockDescs) {
@@ -21,9 +23,11 @@ public class HdfsFileDesc {
     }
 
     public HdfsFileDesc(String fileName, String compression, long length,
-                        ImmutableList<HdfsFileBlockDesc> blockDescs, boolean splittable) {
+                        ImmutableList<HdfsFileBlockDesc> blockDescs, boolean splittable,
+                        TextFileFormatDesc textFileFormatDesc) {
         this(fileName, compression, length, blockDescs);
         this.splittable = splittable;
+        this.textFileFormatDesc = textFileFormatDesc;
     }
 
     public String getFileName() {
@@ -44,5 +48,9 @@ public class HdfsFileDesc {
 
     public boolean isSplittable() {
         return splittable;
+    }
+
+    public TextFileFormatDesc getTextFileFormatDesc() {
+        return textFileFormatDesc;
     }
 }
