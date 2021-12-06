@@ -62,6 +62,14 @@ public:
         }
     }
 
+    static bool check_root_limit(int64_t size) {
+        MemTracker* root_tracker = ExecEnv::GetInstance()->process_mem_tracker();
+        if (root_tracker != nullptr) {
+            return root_tracker->check_limit(size);
+        }
+        return false;
+    }
+
     void mem_consume_without_cache(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         if (cur_tracker != nullptr && size != 0) {

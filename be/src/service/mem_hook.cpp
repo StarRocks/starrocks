@@ -177,17 +177,24 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 #define MEMORY_CONSUME_PTR(ptr) starrocks::tls_thread_status.mem_consume(tc_malloc_size(ptr))
 #define MEMORY_RELEASE_PTR(ptr) starrocks::tls_thread_status.mem_release(tc_malloc_size(ptr))
 #define MEMORY_CONSUME_SIZE(size) starrocks::tls_thread_status.mem_consume(size)
+#define CHECK_ROOT_LIMIT(size) RETURN_IF(starrocks::CurrentThread::check_root_limit(size), nullptr)
 #else
 std::atomic<int64_t> g_mem_usage(0);
 #define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
 #define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(tc_malloc_size(ptr))
 #define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(tc_malloc_size(ptr))
 #define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)
+#define CHECK_ROOT_LIMIT(size) (void)(size)
 #endif
+
+const int64_t TRY_CONSUME_SIZE = 64 * 1024 * 1024;
 
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
+    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
+        CHECK_ROOT_LIMIT(size);
+    }
     void* ptr = tc_malloc(size);
     // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
     // call the `my_malloc`, and result in a deadloop.
@@ -205,6 +212,9 @@ void my_free(void* p) __THROW {
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
+    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
+        CHECK_ROOT_LIMIT(size);
+    }
     int64_t old_size = TC_MALLOC_SIZE(p);
     void* ptr = tc_realloc(p, size);
     if (ptr != nullptr) {
@@ -224,7 +234,9 @@ void* my_calloc(size_t n, size_t size) __THROW {
     if (UNLIKELY(size == 0)) {
         return nullptr;
     }
-
+    if (UNLIKELY(n * size >= TRY_CONSUME_SIZE)) {
+        CHECK_ROOT_LIMIT(n * size);
+    }
     void* ptr = tc_calloc(n, size);
     MEMORY_CONSUME_PTR(ptr);
     return ptr;
@@ -237,6 +249,9 @@ void my_cfree(void* ptr) __THROW {
 
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
+    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
+        CHECK_ROOT_LIMIT(size);
+    }
     void* ptr = tc_memalign(align, size);
     MEMORY_CONSUME_PTR(ptr);
     return ptr;
@@ -244,6 +259,9 @@ void* my_memalign(size_t align, size_t size) __THROW {
 
 // aligned_alloc
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
+    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
+        CHECK_ROOT_LIMIT(size);
+    }
     void* ptr = tc_memalign(align, size);
     MEMORY_CONSUME_PTR(ptr);
     return ptr;
@@ -251,6 +269,9 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 
 // valloc
 void* my_valloc(size_t size) __THROW {
+    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
+        CHECK_ROOT_LIMIT(size);
+    }
     void* ptr = tc_valloc(size);
     MEMORY_CONSUME_PTR(ptr);
     return ptr;
@@ -258,6 +279,9 @@ void* my_valloc(size_t size) __THROW {
 
 // pvalloc
 void* my_pvalloc(size_t size) __THROW {
+    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
+        CHECK_ROOT_LIMIT(size);
+    }
     void* ptr = tc_pvalloc(size);
     MEMORY_CONSUME_PTR(ptr);
     return ptr;
@@ -265,6 +289,11 @@ void* my_pvalloc(size_t size) __THROW {
 
 // posix_memalign
 int my_posix_memalign(void** r, size_t a, size_t s) __THROW {
+    if (UNLIKELY(s >= TRY_CONSUME_SIZE)) {
+#ifndef BE_TEST
+    RETURN_IF(starrocks::CurrentThread::check_root_limit(s), ENOMEM);
+#endif
+    }
     int ret = tc_posix_memalign(r, a, s);
     if (ret == 0) {
         MEMORY_CONSUME_PTR(*r);

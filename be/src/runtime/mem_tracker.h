@@ -201,6 +201,16 @@ public:
         return true;
     }
 
+    bool check_limit(int64_t bytes) {
+        if (UNLIKELY(limit() <= 0)) {
+            return false;
+        }
+        if (UNLIKELY(consumption() + bytes >= limit())) {
+            return true;
+        }
+        return false;
+    }
+
     /// Decreases consumption of this tracker and its ancestors by 'bytes'.
     void release(int64_t bytes) {
         if (bytes <= 0) {
