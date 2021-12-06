@@ -40,7 +40,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -246,7 +245,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
         LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
-                .atZone(ZoneId.of(connectContext.getSessionVariable().getTimeZone())).toLocalDateTime();
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }
 
@@ -257,7 +256,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator curDate() {
         ConnectContext connectContext = ConnectContext.get();
         LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
-                .atZone(ZoneId.of(connectContext.getSessionVariable().getTimeZone())).toLocalDateTime();
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDate(startTime.truncatedTo(ChronoUnit.DAYS));
     }
 
