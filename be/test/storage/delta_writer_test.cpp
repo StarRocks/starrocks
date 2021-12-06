@@ -26,6 +26,7 @@
 
 #include <string>
 
+#include "common/config.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
@@ -42,6 +43,7 @@
 #include "storage/utils.h"
 #include "util/file_utils.h"
 #include "util/logging.h"
+#include "util/mem_info.h"
 
 namespace starrocks {
 
@@ -55,6 +57,7 @@ MemTracker* k_tablet_meta_mem_tracker = nullptr;
 MemTracker* k_schema_change_mem_tracker = nullptr;
 
 void set_up() {
+    ExecEnv::GetInstance()->init_mem_tracker();
     k_tablet_meta_mem_tracker = new MemTracker();
     k_schema_change_mem_tracker = new MemTracker();
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
@@ -267,14 +270,6 @@ class TestDeltaWriter : public ::testing::Test {
 public:
     TestDeltaWriter() {}
     ~TestDeltaWriter() {}
-
-    void SetUp() { std::cout << "setup" << std::endl; }
-
-    void TearDown() {
-        std::cout << "tear down" << std::endl;
-        //starrocks::tear_down();
-        //ASSERT_EQ(OLAP_SUCCESS, remove_all_dir(config::storage_root_path));
-    }
 };
 
 TEST_F(TestDeltaWriter, open) {
@@ -435,6 +430,8 @@ int main(int argc, char** argv) {
     int ret = starrocks::OLAP_SUCCESS;
     testing::InitGoogleTest(&argc, argv);
     starrocks::CpuInfo::init();
+    starrocks::MemInfo::init();
+    starrocks::config::mem_limit = "10g";
     starrocks::set_up();
     ret = RUN_ALL_TESTS();
     starrocks::tear_down();

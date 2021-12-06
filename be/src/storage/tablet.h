@@ -64,7 +64,8 @@ using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:
-    static TabletSharedPtr create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir = nullptr);
+    static TabletSharedPtr create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
+                                                   DataDir* data_dir = nullptr);
 
     Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
 
@@ -80,7 +81,7 @@ public:
 
     void save_meta();
     // Used in clone task, to update local meta when finishing a clone job
-    Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+    Status revise_tablet_meta(MemTracker* mem_tracker, const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                               const std::vector<Version>& versions_to_delete);
 
     inline const int64_t cumulative_layer_point() const;
@@ -246,6 +247,8 @@ public:
     TabletUpdates* updates() { return _updates.get(); }
     Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
 
+    int64_t mem_usage() { return sizeof(Tablet); }
+
 protected:
     void on_shutdown() override;
 
@@ -263,7 +266,6 @@ private:
     Status _capture_consistent_rowsets_unlocked(const vector<Version>& version_path,
                                                 vector<RowsetSharedPtr>* rowsets) const;
 
-private:
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
 

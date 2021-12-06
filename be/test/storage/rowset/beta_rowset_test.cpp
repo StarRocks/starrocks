@@ -695,7 +695,8 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
         std::string segment_file =
                 BetaRowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
 
-        auto segment = *segment_v2::Segment::open(fs::fs_util::block_manager(), segment_file, 0, &tablet_schema);
+        auto segment = *segment_v2::Segment::open(_tablet_meta_mem_tracker.get(), fs::fs_util::block_manager(),
+                                                  segment_file, 0, &tablet_schema);
         ASSERT_NE(segment->num_rows(), 0);
         auto res = segment->new_iterator(schema, seg_options);
         ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);

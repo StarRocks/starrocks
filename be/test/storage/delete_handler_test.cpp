@@ -27,12 +27,14 @@
 #include <string>
 #include <vector>
 
+#include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
 #include "util/file_utils.h"
 #include "util/logging.h"
+#include "util/mem_info.h"
 
 using namespace std;
 using namespace starrocks;
@@ -45,6 +47,7 @@ static MemTracker* k_tablet_meta_mem_tracker = nullptr;
 static MemTracker* k_schema_change_mem_tracker = nullptr;
 
 void set_up() {
+    ExecEnv::GetInstance()->init_mem_tracker();
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
     FileUtils::remove_all(config::storage_root_path);
     FileUtils::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
@@ -1031,8 +1034,10 @@ TEST_F(TestDeleteHandler, FilterDataVersion) {
 
 int main(int argc, char** argv) {
     starrocks::init_glog("be-test");
+    starrocks::MemInfo::init();
     int ret = starrocks::OLAP_SUCCESS;
     testing::InitGoogleTest(&argc, argv);
+    config::mem_limit = "10g";
 
     starrocks::set_up();
     ret = RUN_ALL_TESTS();

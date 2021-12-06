@@ -219,6 +219,12 @@ void* my_realloc(void* p, size_t size) __THROW {
 
 // calloc
 void* my_calloc(size_t n, size_t size) __THROW {
+    // If size is zero, the behavior is implementation defined (null pointer may be returned
+    // or some non-null pointer may be returned that may not be used to access storage)
+    if (UNLIKELY(n == 0 || size == 0)) {
+        return nullptr;
+    }
+
     void* ptr = tc_calloc(n, size);
     MEMORY_CONSUME_PTR(ptr);
     return ptr;

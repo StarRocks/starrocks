@@ -186,7 +186,7 @@ TEST(BytesTest, test_hook_realloc) {
 TEST(BytesTest, test_hook_calloc) {
     srand((int)time(NULL));
 
-    void* ptr;
+    void* ptr = nullptr;
     int before;
     int after;
     int size;
@@ -196,20 +196,17 @@ TEST(BytesTest, test_hook_calloc) {
         size = rand() % (1024 * 1024);
         count = rand() % 10;
         before = g_mem_usage;
+        if (size == 0 || count == 0) {
+            continue;
+        }
         ptr = calloc(count, size);
         if (ptr != nullptr) {
           cfree(ptr);
+          ptr = nullptr;
         }
         after = g_mem_usage;
         ASSERT_EQ(before, after);
     }
-
-    // alloc 0
-    before = g_mem_usage;
-    ptr = calloc(0, 0);
-    cfree(ptr);
-    after = g_mem_usage;
-    ASSERT_EQ(before, after);
 }
 
 // NOLINTNEXTLINE
