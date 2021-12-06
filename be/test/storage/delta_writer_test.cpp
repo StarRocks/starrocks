@@ -270,7 +270,7 @@ public:
     TestDeltaWriter() {}
     ~TestDeltaWriter() {}
 
-    void SetUp() { std::cout << "setup" << std::endl; }
+    void SetUp() { ExecEnv::GetInstance()->init_mem_tracker(); }
 
     void TearDown() {
         std::cout << "tear down" << std::endl;
