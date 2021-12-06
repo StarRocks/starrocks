@@ -36,6 +36,8 @@ using SliceAggHashSet =
 // ==================
 // one level fixed size slice hash set
 template <PhmapSeed seed>
+using FixedSize4SliceAggHashSet = phmap::flat_hash_set<SliceKey4, FixedSizeSliceKeyHash<SliceKey4, seed>>;
+template <PhmapSeed seed>
 using FixedSize8SliceAggHashSet = phmap::flat_hash_set<SliceKey8, FixedSizeSliceKeyHash<SliceKey8, seed>>;
 template <PhmapSeed seed>
 using FixedSize16SliceAggHashSet = phmap::flat_hash_set<SliceKey16, FixedSizeSliceKeyHash<SliceKey16, seed>>;
