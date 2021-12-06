@@ -17,6 +17,7 @@ class ExprContext;
 class RuntimeProfile;
 class RuntimeState;
 using RuntimeFilterProbeCollector = starrocks::vectorized::RuntimeFilterProbeCollector;
+
 namespace pipeline {
 class Operator;
 class OperatorFactory;
@@ -112,6 +113,8 @@ public:
 
     RuntimeFilterProbeCollector* runtime_bloom_filters();
 
+    const std::vector<SlotId>& filter_null_value_columns() const;
+
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     void eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk);
 
@@ -178,12 +181,14 @@ public:
     // invoked by ExecNode::init_runtime_filter_for_operator to initialize fields involving runtime filter
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
                              const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
-                             const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector) {
+                             const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,
+                             std::vector<SlotId>&& filter_null_value_columns) {
         _runtime_filter_hub = runtime_filter_hub;
         _tuple_ids = tuple_ids;
         _rf_waiting_set = rf_waiting_set;
         _row_desc = row_desc;
         _runtime_filter_collector = runtime_filter_collector;
+        _filter_null_value_columns = std::move(filter_null_value_columns);
     }
     // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
     // to bound its runtime in-filters.
@@ -204,6 +209,7 @@ public:
             return nullptr;
         }
     }
+    const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
 
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state) {
@@ -232,6 +238,7 @@ protected:
     RowDescriptor _row_desc;
     std::vector<ExprContext*> _runtime_in_filters;
     std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector;
+    std::vector<SlotId> _filter_null_value_columns;
 };
 
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;
