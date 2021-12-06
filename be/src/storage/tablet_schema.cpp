@@ -25,6 +25,7 @@
 #include <cctype>
 #include <vector>
 
+#include "runtime/mem_tracker.h"
 #include "runtime/exec_env.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/vectorized/type_utils.h"
