@@ -39,6 +39,7 @@ private:
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
     std::vector<OrderByType> _order_by_types;
+    std::vector<ExprContext*> _analytic_partition_exprs;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().
     TupleDescriptor* _materialized_tuple_desc;

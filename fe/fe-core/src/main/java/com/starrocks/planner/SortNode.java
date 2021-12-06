@@ -33,6 +33,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -41,6 +42,7 @@ import com.starrocks.thrift.TSortNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -56,6 +58,7 @@ public class SortNode extends PlanNode {
     private long offset;
     // if true, the output of this node feeds an AnalyticNode
     private boolean isAnalyticSort;
+    private List<Expr> analyticPartitionExprs = Collections.emptyList();
 
     // info_.sortTupleSlotExprs_ substituted with the outputSmap_ for materialized slots in init().
     public List<Expr> resolvedTupleExprs;
@@ -66,6 +69,14 @@ public class SortNode extends PlanNode {
 
     public boolean isAnalyticSort() {
         return isAnalyticSort;
+    }
+
+    public List<Expr> getAnalyticPartitionExprs() {
+        return this.analyticPartitionExprs;
+    }
+
+    public void setAnalyticPartitionExprs(List<Expr> exprs) {
+        this.analyticPartitionExprs = exprs;
     }
 
     private DataPartition inputPartition;
@@ -163,6 +174,7 @@ public class SortNode extends PlanNode {
         msg.sort_node.setOrdering_exprs(Expr.treesToThrift(info.getOrderingExprs()));
         msg.sort_node.setIs_asc_order(info.getIsAscOrder());
         msg.sort_node.setNulls_first(info.getNullsFirst());
+        msg.sort_node.setAnalytic_partition_exprs(Expr.treesToThrift(analyticPartitionExprs));
         if (info.getSortTupleSlotExprs() != null) {
             msg.sort_node.setSort_tuple_slot_exprs(Expr.treesToThrift(info.getSortTupleSlotExprs()));
         }

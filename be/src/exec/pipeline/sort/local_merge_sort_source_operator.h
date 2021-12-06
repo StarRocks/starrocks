@@ -45,19 +45,18 @@ private:
 
 class LocalMergeSortSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    LocalMergeSortSourceOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<SortContext>&& sort_context)
+    LocalMergeSortSourceOperatorFactory(int32_t id, int32_t plan_node_id,
+                                        const std::shared_ptr<SortContextFactory>& sort_context_factory)
             : SourceOperatorFactory(id, "local_merge_sort_source", plan_node_id),
-              _sort_context(std::move(sort_context)) {}
+              _sort_context_factory(sort_context_factory) {}
 
     ~LocalMergeSortSourceOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LocalMergeSortSourceOperator>(this, _id, _plan_node_id, _sort_context.get());
-    }
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
     // share data with multiple partition sort sink opeartor through _sort_context.
-    std::shared_ptr<SortContext> _sort_context;
+    std::shared_ptr<SortContextFactory> _sort_context_factory;
 };
 
 } // namespace pipeline
