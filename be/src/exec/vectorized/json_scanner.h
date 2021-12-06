@@ -79,9 +79,9 @@ private:
 
     void _construct_column(simdjson::ondemand::value& value, NullableColumn *column,
                            const TypeDescriptor& type_desc);
-    void _construct_number_column(simdjson::ondemand::value& value, NullableColumn *column,
+    void _construct_column_with_number(simdjson::ondemand::value& value, NullableColumn *column,
                                   const TypeDescriptor& type_desc);
-    void _construct_string_column(simdjson::ondemand::value& value, NullableColumn *column,
+    void _construct_column_with_string(simdjson::ondemand::value& value, NullableColumn *column,
                                   const TypeDescriptor& type_desc);
 
     Status _process_array(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::array& arr);

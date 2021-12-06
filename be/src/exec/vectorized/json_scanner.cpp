@@ -738,12 +738,12 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, NullableCol
     }
 
     case simdjson::ondemand::json_type::number: {
-        _construct_number_column(value, column, type_desc);
+        _construct_column_with_number(value, column, type_desc);
         break;
     }
 
     case simdjson::ondemand::json_type::string: {
-        _construct_string_column(value, column, type_desc);
+        _construct_column_with_string(value, column, type_desc);
         break;
     }
 
@@ -764,7 +764,7 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, NullableCol
     }
 }
 
-void JsonReader::_construct_number_column(simdjson::ondemand::value& value, NullableColumn* column,
+void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value, NullableColumn* column,
                                           const TypeDescriptor& type_desc) {
     simdjson::ondemand::number_type tp;
 
@@ -783,6 +783,8 @@ void JsonReader::_construct_number_column(simdjson::ondemand::value& value, Null
         }
 
         switch (type_desc.type) {
+        // Treat LARGEINT as BIGINT.
+        case TYPE_LARGEINT:
         case TYPE_BIGINT: {
             column->append_numbers(&i64, sizeof(i64));
             break;
@@ -820,6 +822,12 @@ void JsonReader::_construct_number_column(simdjson::ondemand::value& value, Null
             break;
         }
 
+        case TYPE_VARCHAR: {
+            auto f = fmt::format_int(i64);
+            column->append_datum(Slice{f.data(), f.size()});
+            break;
+        }
+
         default: {
             column->append_nulls(1);
             return;
@@ -835,16 +843,49 @@ void JsonReader::_construct_number_column(simdjson::ondemand::value& value, Null
         }
 
         switch (type_desc.type) {
-        // Float column, integer value.
+        // Double column, float value.
+        case TYPE_DOUBLE: {
+            column->append_numbers(&d, sizeof(d));
+            break;
+        }
+
+        // Float column, float value.
         case TYPE_FLOAT: {
             auto f = static_cast<float>(d);
             column->append_numbers(&f, sizeof(f));
             break;
         }
 
-        // Double column, integer value.
-        case TYPE_DOUBLE: {
-            column->append_numbers(&d, sizeof(d));
+        // Treat LARGEINT as BIGINT.
+        case TYPE_LARGEINT:
+        case TYPE_BIGINT: {
+            auto i64 = static_cast<int64_t>(d);
+            column->append_numbers(&i64, sizeof(i64));
+            break;
+        }
+
+        case TYPE_INT: {
+            auto i32= static_cast<int32_t>(d);
+            column->append_numbers(&i32, sizeof(i32));
+            break;
+        }
+
+        case TYPE_SMALLINT: {
+            auto i16= static_cast<int16_t>(d);
+            column->append_numbers(&i16, sizeof(i16));
+            break;
+        }
+
+        case TYPE_TINYINT: {
+            auto i8= static_cast<int8_t>(d);
+            column->append_numbers(&i8, sizeof(i8));
+            break;
+        }
+
+        case TYPE_VARCHAR: {
+            std::ostringstream oss;
+            oss << d;
+            column->append_datum(Slice{oss.str()});
             break;
         }
 
@@ -867,7 +908,7 @@ void JsonReader::_construct_number_column(simdjson::ondemand::value& value, Null
     }
 }
 
-void JsonReader::_construct_string_column(simdjson::ondemand::value& value, NullableColumn* column,
+void JsonReader::_construct_column_with_string(simdjson::ondemand::value& value, NullableColumn* column,
                                           const TypeDescriptor& type_desc) {
     std::string_view sv;
     auto err = value.get_string().get(sv);
@@ -878,7 +919,7 @@ void JsonReader::_construct_string_column(simdjson::ondemand::value& value, Null
 
     switch (type_desc.type) {
     case TYPE_VARCHAR: {
-        column->append_strings(std::vector<Slice>{Slice(sv.data(), sv.length())});
+        column->append_datum(Slice{sv.data(), sv.length()});
         break;
     }
 
@@ -937,10 +978,25 @@ void JsonReader::_construct_string_column(simdjson::ondemand::value& value, Null
         break;
     }
 
-    case TYPE_FLOAT:
+    case TYPE_FLOAT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto f = StringParser::string_to_float<float>(sv.data(), sv.length(), &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS) {
+            column->append_numbers(&f, sizeof(f));
+        } else {
+            column->append_nulls(1);
+        }
+        break;
+    }
+
     case TYPE_DOUBLE: {
-        // Treat FLOAT/DOUBLE as VARCAHR. Casting would be done in _cast_chunk().
-        column->append_strings(std::vector<Slice>{Slice(sv.data(), sv.length())});
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto d = StringParser::string_to_float<double>(sv.data(), sv.length(), &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS) {
+            column->append_numbers(&d, sizeof(d));
+        } else {
+            column->append_nulls(1);
+        }
         break;
     }
 
