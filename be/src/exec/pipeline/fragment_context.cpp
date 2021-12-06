@@ -20,6 +20,7 @@ FragmentContext::~FragmentContext() {
         for (int i = 0; i < _thread_shedule_time.size(); ++i) {
             process_times += _thread_shedule_frequency[i];
             process_time_nanos += _thread_shedule_time[i];
+
             auto milliseconds = ((double)_thread_shedule_time[i]) / 1000000;
             if (milliseconds >= config::pipeline_thread_schedule_threshold) {
                 has_thread_shedule_overhead = true;

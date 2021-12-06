@@ -232,7 +232,11 @@ public:
 
     std::string to_readable_string() const;
 
+<<<<<<< Updated upstream
     // record last put_back time.
+=======
+    // record last put_back time. 
+>>>>>>> Stashed changes
     timespec _time_into_priority_queue;
 
 private:
