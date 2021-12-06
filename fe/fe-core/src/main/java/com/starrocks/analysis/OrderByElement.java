@@ -138,6 +138,20 @@ public class OrderByElement {
         return strBuilder.toString();
     }
 
+    public String toDigest() {
+        StringBuilder strBuilder = new StringBuilder();
+        strBuilder.append(expr.toDigest());
+        strBuilder.append(isAsc ? " asc" : " desc");
+        if (nullsFirstParam != null) {
+            if (isAsc && !nullsFirstParam) {
+                strBuilder.append(" nulls last");
+            } else if (!isAsc && nullsFirstParam) {
+                strBuilder.append(" nulls first");
+            }
+        }
+        return strBuilder.toString();
+    }
+
     public String explain() {
         StringBuilder strBuilder = new StringBuilder();
         strBuilder.append(expr.explain());

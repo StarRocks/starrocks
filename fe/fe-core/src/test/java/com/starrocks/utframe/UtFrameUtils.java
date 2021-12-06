@@ -26,6 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
@@ -72,6 +73,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockedFrontend.EnvVarNotSetException;
 import com.starrocks.utframe.MockedFrontend.FeStartException;
 import com.starrocks.utframe.MockedFrontend.NotInitException;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -83,6 +85,8 @@ import java.io.StringReader;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -300,7 +304,7 @@ public class UtFrameUtils {
     public static int findValidPort() {
         String starRocksHome = System.getenv("STARROCKS_HOME");
         File portDir = new File(starRocksHome + "/fe/ut_ports");
-        if (!portDir.exists()){
+        if (!portDir.exists()) {
             Preconditions.checkState(portDir.mkdirs());
         }
         for (int i = 0; i < 10; i++) {
@@ -394,12 +398,31 @@ public class UtFrameUtils {
         }
     }
 
+    public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
+        SqlScanner input =
+                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
+        SqlParser parser = new SqlParser(input);
+        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+        Preconditions.checkState(statementBase instanceof QueryStmt);
+        QueryStmt queryStmt = (QueryStmt) statementBase;
+        String digest = queryStmt.toDigest();
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            md.reset();
+            md.update(digest.getBytes());
+            return Hex.encodeHexString(md.digest());
+        } catch (NoSuchAlgorithmException e) {
+            return "";
+        }
+    }
+
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         // mock statistics table
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         if (!starRocksAssert.databaseExist("_statistics_")) {
-            starRocksAssert.withDatabaseWithoutAnalyze(Constants.StatisticsDBName).useDatabase(Constants.StatisticsDBName);
+            starRocksAssert.withDatabaseWithoutAnalyze(Constants.StatisticsDBName)
+                    .useDatabase(Constants.StatisticsDBName);
             starRocksAssert.withTable(createStatisticsTableStmt);
         }
         // prepare dump mock environment

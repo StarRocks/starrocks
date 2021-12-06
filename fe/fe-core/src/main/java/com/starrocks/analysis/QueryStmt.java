@@ -573,24 +573,12 @@ public abstract class QueryStmt extends StatementBase {
         resultExprs = Expr.substituteList(resultExprs, smap, analyzer, true);
     }
 
-    public boolean isForbiddenMVRewrite() {
-        return forbiddenMVRewrite;
-    }
-
     public void forbiddenMVRewrite() {
         this.forbiddenMVRewrite = true;
     }
 
     public void updateDisableTuplesMVRewriter(TupleId tupleId) {
         disableTuplesMVRewriter.add(tupleId);
-    }
-
-    public void updateDisableTuplesMVRewriter(Set<TupleId> tupleIds) {
-        disableTuplesMVRewriter.addAll(tupleIds);
-    }
-
-    public Set<TupleId> getDisableTuplesMVRewriter() {
-        return disableTuplesMVRewriter;
     }
 
     /**
@@ -638,6 +626,10 @@ public abstract class QueryStmt extends StatementBase {
 
     public OutFileClause cloneOutfileCluse() {
         return outFileClause != null ? outFileClause.clone() : null;
+    }
+
+    public String toDigest() {
+        return "";
     }
 
     /**
