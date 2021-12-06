@@ -82,6 +82,10 @@ public class ColumnStatistic {
         return this.minValue == NEGATIVE_INFINITY || this.maxValue == POSITIVE_INFINITY;
     }
 
+    public boolean hasNaNValue() {
+        return Double.isNaN(minValue) || Double.isNaN(maxValue);
+    }
+
     // TODO(ywb): remove this after user can dump statistics with type
     public boolean isUnknownValue() {
         return this.minValue == NEGATIVE_INFINITY && this.maxValue == POSITIVE_INFINITY && this.nullsFraction == 0 &&
