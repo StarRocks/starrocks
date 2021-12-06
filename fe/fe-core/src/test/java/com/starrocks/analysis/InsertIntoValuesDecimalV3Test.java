@@ -88,10 +88,9 @@ public class InsertIntoValuesDecimalV3Test {
     @Test
     public void testInsertArray() throws Exception {
         String sql = "insert into tarray values (1, 2, []) ";
-        try {
-            String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
-        } catch (NullPointerException ignored) {
-        }
+        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("constant exprs: \n" +
+                "         1 | 2 | ARRAY<bigint(20)>[]"));
     }
 }
 
