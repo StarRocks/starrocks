@@ -74,8 +74,8 @@ uint32_t Compaction::get_segment_max_rows(int64_t max_segment_file_size, int64_t
     return max_segment_rows;
 }
 
-void Compaction::get_column_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
-                                   std::vector<std::vector<uint32_t>>* column_groups) {
+void Compaction::split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
+                                          std::vector<std::vector<uint32_t>>* column_groups) {
     std::vector<uint32_t> key_columns;
     for (size_t i = 0; i < num_key_columns; ++i) {
         key_columns.emplace_back(i);
@@ -131,8 +131,8 @@ Status Compaction::do_compaction_impl() {
     CompactionAlgorithm algorithm =
             choose_compaction_algorithm(num_columns, max_columns_per_group, segment_iterator_num);
     if (algorithm == VERTICAL) {
-        // split columns into column group
-        get_column_groups(_tablet->num_columns(), _tablet->num_key_columns(), max_columns_per_group, &_column_groups);
+        split_column_into_groups(_tablet->num_columns(), _tablet->num_key_columns(), max_columns_per_group,
+                                 &_column_groups);
     }
 
     // max rows per segment
@@ -153,9 +153,9 @@ Status Compaction::do_compaction_impl() {
     Statistics stats;
     Status res;
     if (algorithm == VERTICAL) {
-        res = merge_rowsets_vertical(&stats);
+        res = merge_rowsets_vertically(&stats);
     } else {
-        res = merge_rowsets_horizontal(config::compaction_memory_limit_per_worker, &stats);
+        res = merge_rowsets_horizontally(config::compaction_memory_limit_per_worker, &stats);
     }
     if (!res.ok()) {
         LOG(WARNING) << "fail to do " << compaction_name() << ". res=" << res.to_string()
@@ -250,7 +250,7 @@ Status Compaction::construct_output_rowset_writer(uint32_t max_rows_per_segment,
     return Status::OK();
 }
 
-Status Compaction::merge_rowsets_horizontal(int64_t mem_limit, Statistics* stats_output) {
+Status Compaction::merge_rowsets_horizontally(int64_t mem_limit, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     TabletReader reader(_tablet, _output_rs_writer->version(), schema);
@@ -338,7 +338,7 @@ Status Compaction::merge_rowsets_horizontal(int64_t mem_limit, Statistics* stats
     return Status::OK();
 }
 
-Status Compaction::merge_rowsets_vertical(Statistics* stats_output) {
+Status Compaction::merge_rowsets_vertically(Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     std::unique_ptr<RowSourceMaskBuffer> mask_buffer =
             std::make_unique<RowSourceMaskBuffer>(_tablet->tablet_id(), _tablet->data_dir()->path());

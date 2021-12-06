@@ -61,8 +61,8 @@ public:
 
     static uint32_t get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size);
 
-    static void get_column_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
-                                  std::vector<std::vector<uint32_t>>* column_groups);
+    static void split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
+                                         std::vector<std::vector<uint32_t>>* column_groups);
 
 protected:
     virtual Status pick_rowsets_to_compact() = 0;
@@ -71,12 +71,6 @@ protected:
 
     Status do_compaction();
     Status do_compaction_impl();
-
-    // merge rows from vectorized reader and write into `_output_rs_writer`.
-    // return Status::OK() and set statistics into `*stats_output`.
-    // return others on error
-    Status merge_rowsets_horizontal(int64_t mem_limit, Statistics* stats_output);
-    Status merge_rowsets_vertical(Statistics* stats_output);
 
     Status modify_rowsets();
 
@@ -90,6 +84,12 @@ protected:
 
 private:
     StatusOr<size_t> _get_segment_iterator_num();
+
+    // merge rows from vectorized reader and write into `_output_rs_writer`.
+    // return Status::OK() and set statistics into `*stats_output`.
+    // return others on error
+    Status merge_rowsets_horizontally(int64_t mem_limit, Statistics* stats_output);
+    Status merge_rowsets_vertically(Statistics* stats_output);
 
 protected:
     MemTracker* _mem_tracker = nullptr;
