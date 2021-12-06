@@ -110,16 +110,19 @@ using AlterTabletTaskSharedPtr = std::shared_ptr<AlterTabletTask>;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
-                         uint32_t next_unique_id,
+    static Status create(MemTracker* mem_tracker, const TCreateTabletReq& request, const TabletUid& tablet_uid,
+                         uint64_t shard_id, uint32_t next_unique_id,
                          const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                          RowsetTypePB rowset_type, TabletMetaSharedPtr* tablet_meta);
 
-    explicit TabletMeta();
+    static TabletMetaSharedPtr create(MemTracker* mem_tracker);
+
+    explicit TabletMeta() : _tablet_uid(0, 0) {}
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
                const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
                TTabletType::type tabletType, RowsetTypePB roset_type);
+
     virtual ~TabletMeta() {}
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
@@ -213,6 +216,8 @@ public:
         _updates = updates;
         return _updatesPB.release();
     }
+
+    int64_t mem_usage() const { return sizeof(TabletMeta); }
 
 private:
     Status _save_meta(DataDir* data_dir);
