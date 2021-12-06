@@ -459,7 +459,10 @@ Status ScalarColumnWriter::write_data() {
     Page* page = _pages.head;
     while (page != nullptr) {
         RETURN_IF_ERROR(_write_data_page(page));
+        Page* last_page = page;
         page = page->next;
+        delete last_page;
+        _pages.head = page;
     }
     return Status::OK();
 }
