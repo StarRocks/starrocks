@@ -7,6 +7,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "util/percentile_value.h"
 #include "util/tdigest.h"
 
 namespace starrocks::vectorized {

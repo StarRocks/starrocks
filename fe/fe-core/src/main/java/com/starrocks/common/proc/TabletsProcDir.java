@@ -91,18 +91,18 @@ public class TabletsProcDir implements ProcDirInterface {
                     tabletInfo.add(-1); // schema hash
                     tabletInfo.add(FeConstants.null_string); // host name
                     tabletInfo.add(-1); // version
-                    tabletInfo.add(-1); // version hash
+                    tabletInfo.add(0); // version hash
                     tabletInfo.add(-1); // lst success version
-                    tabletInfo.add(-1); // lst success version hash
+                    tabletInfo.add(0); // lst success version hash
                     tabletInfo.add(-1); // lst failed version
-                    tabletInfo.add(-1); // lst failed version hash
+                    tabletInfo.add(0); // lst failed version hash
                     tabletInfo.add(-1); // lst failed time
                     tabletInfo.add(-1); // data size
                     tabletInfo.add(-1); // row count
                     tabletInfo.add(FeConstants.null_string); // state
                     tabletInfo.add(-1); // lst consistency check time
                     tabletInfo.add(-1); // check version
-                    tabletInfo.add(-1); // check version hash
+                    tabletInfo.add(0); // check version hash
                     tabletInfo.add(-1); // version count
                     tabletInfo.add(-1); // path hash
                     tabletInfo.add(FeConstants.null_string); // meta url
@@ -123,11 +123,11 @@ public class TabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(replica.getBackendId());
                         tabletInfo.add(replica.getSchemaHash());
                         tabletInfo.add(replica.getVersion());
-                        tabletInfo.add(replica.getVersionHash());
+                        tabletInfo.add(0);
                         tabletInfo.add(replica.getLastSuccessVersion());
-                        tabletInfo.add(replica.getLastSuccessVersionHash());
+                        tabletInfo.add(0);
                         tabletInfo.add(replica.getLastFailedVersion());
-                        tabletInfo.add(replica.getLastFailedVersionHash());
+                        tabletInfo.add(0);
                         tabletInfo.add(TimeUtils.longToTimeString(replica.getLastFailedTimestamp()));
                         tabletInfo.add(replica.getDataSize());
                         tabletInfo.add(replica.getRowCount());
@@ -135,7 +135,7 @@ public class TabletsProcDir implements ProcDirInterface {
 
                         tabletInfo.add(TimeUtils.longToTimeString(tablet.getLastCheckTime()));
                         tabletInfo.add(tablet.getCheckedVersion());
-                        tabletInfo.add(tablet.getCheckedVersionHash());
+                        tabletInfo.add(0);
                         tabletInfo.add(replica.getVersionCount());
                         tabletInfo.add(replica.getPathHash());
                         Backend backend = backendMap.get(replica.getBackendId());

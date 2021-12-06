@@ -165,7 +165,10 @@ public:
 
     FragmentContext* get_or_register(const TUniqueId& fragment_id);
     FragmentContextPtr get(const TUniqueId& fragment_id);
+
+    void register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
     void unregister(const TUniqueId& fragment_id);
+
     void cancel(const Status& status);
 
 private:

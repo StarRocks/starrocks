@@ -108,7 +108,6 @@ private:
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 
     const std::vector<std::string>* _unused_output_columns = nullptr;
-    RuntimeProfile* _runtime_profile = nullptr;
     int64_t _limit; // -1: no limit
 
     std::unordered_set<uint32_t> _unused_output_column_ids;
@@ -124,6 +123,7 @@ private:
     int64_t _raw_rows_read = 0;
     int64_t _compressed_bytes_read = 0;
 
+    RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 

@@ -12,6 +12,7 @@
 #include "column/chunk.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
 #include "util/brpc_stub_cache.h"
 #include "util/callback_closure.h"

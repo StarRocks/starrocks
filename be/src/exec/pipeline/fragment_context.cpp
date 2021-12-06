@@ -73,6 +73,16 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
     }
 }
 
+void FragmentContextManager::register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx) {
+    std::lock_guard<std::mutex> lock(_lock);
+
+    if (_fragment_contexts.find(fragment_id) != _fragment_contexts.end()) {
+        return;
+    }
+
+    _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
+}
+
 FragmentContextPtr FragmentContextManager::get(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _fragment_contexts.find(fragment_id);

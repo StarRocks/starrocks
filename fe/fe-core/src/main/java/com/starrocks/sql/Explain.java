@@ -488,6 +488,27 @@ public class Explain {
         public String visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
             if (CompoundPredicateOperator.CompoundType.NOT.equals(predicate.getCompoundType())) {
                 return "NOT " + print(predicate.getChild(0));
+            } else if (CompoundPredicateOperator.CompoundType.AND.equals(predicate.getCompoundType())) {
+
+                String leftPredicate;
+                if (predicate.getChild(0) instanceof CompoundPredicateOperator
+                        && ((CompoundPredicateOperator) predicate.getChild(0)).getCompoundType().equals(
+                        CompoundPredicateOperator.CompoundType.OR)) {
+                    leftPredicate = "(" + print(predicate.getChild(0)) + ")";
+                } else {
+                    leftPredicate = print(predicate.getChild(0));
+                }
+
+                String rightPredicate;
+                if (predicate.getChild(1) instanceof CompoundPredicateOperator
+                        && ((CompoundPredicateOperator) predicate.getChild(1)).getCompoundType().equals(
+                        CompoundPredicateOperator.CompoundType.OR)) {
+                    rightPredicate = "(" + print(predicate.getChild(1)) + ")";
+                } else {
+                    rightPredicate = print(predicate.getChild(1));
+                }
+
+                return leftPredicate + " " + predicate.getCompoundType().toString() + " " + rightPredicate;
             } else {
                 return print(predicate.getChild(0)) + " " + predicate.getCompoundType().toString() + " " +
                         print(predicate.getChild(1));

@@ -22,6 +22,7 @@
 #include "storage/tablet_meta_manager.h"
 
 #include <boost/algorithm/string/trim.hpp>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -39,6 +40,7 @@
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
+#include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/url_coding.h"
 

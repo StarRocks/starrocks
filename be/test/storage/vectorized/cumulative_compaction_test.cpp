@@ -11,6 +11,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
+#include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/compaction.h"
 #include "util/file_utils.h"
 
@@ -97,20 +98,18 @@ public:
     }
 
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer) {
-        RowCursor row;
-        ASSERT_EQ(row.init(*_tablet_schema.get()), OLAP_SUCCESS);
         std::vector<std::string> test_data;
-        for (int i = 0; i < 1024; ++i) {
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_tablet_schema);
+        auto chunk = vectorized::ChunkHelper::new_chunk(schema, 1024);
+        for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
-
-            int32_t field_0 = i;
-            row.set_field_content(0, reinterpret_cast<char*>(&field_0), _mem_pool.get());
+            auto& cols = chunk->columns();
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
-            row.set_field_content(1, reinterpret_cast<char*>(&field_1), _mem_pool.get());
-            int32_t field_2 = 10000 + i;
-            row.set_field_content(2, reinterpret_cast<char*>(&field_2), _mem_pool.get());
-            writer->add_row(row);
+            cols[1]->append_datum(vectorized::Datum(field_1));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
         }
+        EXPECT_EQ(OLAP_SUCCESS, writer->add_chunk(*chunk));
     }
 
     void SetUp() override {

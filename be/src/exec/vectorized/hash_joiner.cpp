@@ -16,7 +16,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
+#include "util/debug_util.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks::vectorized {
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)

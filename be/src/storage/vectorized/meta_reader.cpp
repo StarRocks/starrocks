@@ -241,7 +241,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
                 RETURN_IF_ERROR(_segment->new_column_iterator(cid, &_column_iterators[cid]));
                 _obj_pool.add(_column_iterators[cid]);
 
-                ColumnIteratorOptions iter_opts;
+                segment_v2::ColumnIteratorOptions iter_opts;
                 iter_opts.check_dict_encoding = true;
                 iter_opts.rblock = _rblock.get();
                 iter_opts.stats = &_stats;
@@ -317,14 +317,14 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Colu
     if (cid >= _segment->num_columns()) {
         return Status::NotFound("");
     }
-    const ColumnReader* col_reader = _segment->column(cid);
+    const segment_v2::ColumnReader* col_reader = _segment->column(cid);
     if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
         return Status::NotFound("");
     }
     if (col_reader->column_type() != type) {
         return Status::InternalError("column type mismatch");
     }
-    const ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
+    const segment_v2::ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
     if constexpr (!is_max) {
         vectorized::Datum min;

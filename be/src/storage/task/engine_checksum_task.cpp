@@ -25,7 +25,6 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "storage/reader.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/tablet_reader.h"
 #include "util/defer_op.h"

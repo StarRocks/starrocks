@@ -620,11 +620,10 @@ public class SchemaChangeJob extends AlterJob {
             // replica's state may be NORMAL(due to clone), so no need to check
 
             long version = finishTabletInfo.getVersion();
-            long versionHash = finishTabletInfo.getVersion_hash();
             long dataSize = finishTabletInfo.getData_size();
             long rowCount = finishTabletInfo.getRow_count();
             // do not need check version > replica.getVersion, because the new replica's version is first set by sc
-            replica.updateVersionInfo(version, versionHash, dataSize, rowCount);
+            replica.updateRowCount(version, dataSize, rowCount);
             if (finishTabletInfo.isSetPath_hash()) {
                 replica.setPathHash(finishTabletInfo.getPath_hash());
             }
@@ -815,14 +814,11 @@ public class SchemaChangeJob extends AlterJob {
                                         indexId, tabletId,
                                         replica.getBackendId(),
                                         replica.getVersion(),
-                                        replica.getVersionHash(),
                                         schemaHash,
                                         replica.getDataSize(),
                                         replica.getRowCount(),
                                         replica.getLastFailedVersion(),
-                                        replica.getLastFailedVersionHash(),
-                                        replica.getLastSuccessVersion(),
-                                        replica.getLastSuccessVersionHash());
+                                        replica.getLastSuccessVersion());
                                 this.replicaInfos.put(partitionId, replicaInfo);
 
                                 replica.setState(ReplicaState.NORMAL);
@@ -992,11 +988,9 @@ public class SchemaChangeJob extends AlterJob {
                         Tablet tablet = mIndex.getTablet(info.getTabletId());
                         if (info.getOpType() == ReplicaOperationType.SCHEMA_CHANGE) {
                             Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
-                            replica.updateVersionInfo(info.getVersion(), info.getVersionHash(),
+                            replica.updateVersionInfo(info.getVersion(),
                                     info.getLastFailedVersion(),
-                                    info.getLastFailedVersionHash(),
-                                    info.getLastSuccessVersion(),
-                                    info.getLastSuccessVersionHash());
+                                    info.getLastSuccessVersion());
                             replica.setSchemaHash(schemaHash);
                         } else if (info.getOpType() == ReplicaOperationType.DELETE) {
                             // remove the replica from replica group

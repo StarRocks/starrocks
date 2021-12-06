@@ -70,7 +70,6 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             Assert.assertNotNull(tabletObject.getJSONArray("routings"));
             Assert.assertEquals(3, tabletObject.getJSONArray("routings").length());
             Assert.assertEquals(testStartVersion, tabletObject.getLong("version"));
-            Assert.assertEquals(testStartVersionHash, tabletObject.getLong("versionHash"));
             Assert.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
 
         }

@@ -44,6 +44,8 @@ public:
 
     uint32_t next_operator_id() { return _next_operator_id++; }
 
+    int32_t next_pseudo_plan_node_id() { return _next_pseudo_plan_node_id--; }
+
     size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
     Pipelines get_pipelines() const { return _pipelines; }
@@ -55,6 +57,7 @@ private:
     Pipelines _pipelines;
     uint32_t _next_pipeline_id = 0;
     uint32_t _next_operator_id = 0;
+    int32_t _next_pseudo_plan_node_id = Operator::s_pseudo_plan_node_id_upper_bound;
     size_t _degree_of_parallelism = 1;
 };
 

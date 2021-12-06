@@ -27,7 +27,6 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
-#include "storage/rowset/rowset_reader.h"
 #include "storage/rowset/segment_v2/segment.h"
 
 namespace starrocks {
@@ -45,8 +44,6 @@ class BetaRowset : public Rowset {
 public:
     BetaRowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
     ~BetaRowset() override {}
-
-    OLAPStatus create_reader(RowsetReaderSharedPtr* result) override;
 
     StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                         const vectorized::RowsetReadOptions& options) override;

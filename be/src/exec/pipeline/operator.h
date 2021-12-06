@@ -118,12 +118,19 @@ public:
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(vectorized::Chunk* chunk);
 
+    // 1. (-∞, s_pseudo_plan_node_id_upper_bound] is for operator which is not in the query's plan
+    // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
+    // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
+    // for example, ResultSink
+    static const int32_t s_pseudo_plan_node_id_for_result_sink;
+    static const int32_t s_pseudo_plan_node_id_upper_bound;
+
 protected:
     OperatorFactory* _factory;
-    int32_t _id = 0;
-    std::string _name;
+    const int32_t _id;
+    const std::string _name;
     // Which plan node this operator belongs to
-    int32_t _plan_node_id = -1;
+    const int32_t _plan_node_id;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
     std::unique_ptr<MemTracker> _mem_tracker;
     bool _conjuncts_and_in_filters_is_cached = false;
@@ -213,9 +220,9 @@ protected:
         }
     }
 
-    int32_t _id = 0;
-    std::string _name;
-    int32_t _plan_node_id = -1;
+    const int32_t _id;
+    const std::string _name;
+    const int32_t _plan_node_id;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
     RuntimeFilterHub* _runtime_filter_hub;
     std::vector<TupleId> _tuple_ids;

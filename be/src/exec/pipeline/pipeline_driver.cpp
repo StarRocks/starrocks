@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "exec/pipeline/source_operator.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -69,7 +70,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 }
 
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
-    // VLOG_ROW << "[Driver] enter process: " << this->to_readable_string();
     SCOPED_TIMER(_active_timer);
     _state = DriverState::RUNNING;
     size_t total_chunks_moved = 0;
@@ -128,8 +128,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                     COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
                     if (maybe_chunk.value() && maybe_chunk.value()->num_rows() > 0) {
                         size_t row_num = maybe_chunk.value()->num_rows();
-                        //VLOG_ROW << "[Driver] Transfer chunk: num_rows=" << row_num << ", "
-                        //         << this->to_readable_string();
                         {
                             SCOPED_TIMER(next_op->_push_timer);
                             status = next_op->push_chunk(runtime_state, maybe_chunk.value());
@@ -261,7 +259,6 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     if (_fragment_ctx->count_down_drivers()) {
         auto status = _fragment_ctx->final_status();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
-        // VLOG_ROW << "[Driver] Last driver finished: final_status=" << status.to_string();
         _query_ctx->count_down_fragments();
     }
 }

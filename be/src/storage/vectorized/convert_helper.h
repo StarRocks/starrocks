@@ -12,7 +12,6 @@
 
 namespace starrocks {
 class ColumnVectorBatch;
-class RowCursor;
 class TabletSchema;
 class Schema;
 class RowBlockV2;
@@ -79,9 +78,6 @@ public:
 
     Status init(const ::starrocks::Schema& in_schema, const ::starrocks::Schema& out_schema);
     Status init(const Schema& in_schema, const Schema& out_schema);
-
-    template <typename RowType>
-    void convert(RowCursor* dst, const RowType& src) const;
 
     void convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const;
 
