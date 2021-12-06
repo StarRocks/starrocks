@@ -26,6 +26,7 @@
 
 #include <string>
 
+#include "common/config.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
@@ -42,6 +43,7 @@
 #include "storage/utils.h"
 #include "util/file_utils.h"
 #include "util/logging.h"
+#include "util/mem_info.h"
 
 namespace starrocks {
 
@@ -435,6 +437,8 @@ int main(int argc, char** argv) {
     int ret = starrocks::OLAP_SUCCESS;
     testing::InitGoogleTest(&argc, argv);
     starrocks::CpuInfo::init();
+    starrocks::MemInfo::init();
+    starrocks::config::mem_limit = "10g";
     starrocks::set_up();
     ret = RUN_ALL_TESTS();
     starrocks::tear_down();

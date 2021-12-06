@@ -61,7 +61,7 @@ public:
     ~ColumnReaderWriterTest() override = default;
 
 protected:
-    void SetUp() override {}
+    void SetUp() override { _tablet_meta_mem_tracker = std::make_unique<MemTracker>(); }
 
     void TearDown() override {}
 
@@ -132,7 +132,7 @@ protected:
             ColumnReaderOptions reader_opts;
             reader_opts.storage_format_version = version;
             reader_opts.block_mgr = block_mgr.get();
-            auto res = ColumnReader::create(reader_opts, &meta, fname);
+            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), reader_opts, &meta, fname);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -345,7 +345,7 @@ protected:
             ColumnReaderOptions reader_opts;
             reader_opts.block_mgr = block_mgr.get();
             reader_opts.storage_format_version = 2;
-            auto res = ColumnReader::create(reader_opts, &meta, fname);
+            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), reader_opts, &meta, fname);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -502,6 +502,7 @@ protected:
     }
 
     MemPool _pool;
+    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
 };
 
 // NOLINTNEXTLINE

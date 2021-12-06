@@ -387,6 +387,20 @@ private:
     bool _auto_unregister = false;
 };
 
+template <typename T>
+class DeleterWithMemTracker {
+public:
+    DeleterWithMemTracker(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
+
+    void operator()(T* ptr) const {
+        _mem_tracker->release(ptr->mem_usage());
+        delete ptr;
+    }
+
+private:
+    MemTracker* _mem_tracker = nullptr;
+};
+
 } // namespace starrocks
 
 #endif

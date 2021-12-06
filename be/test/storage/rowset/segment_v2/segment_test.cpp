@@ -76,6 +76,7 @@ protected:
         _block_mgr = new fs::FileBlockManager(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
+        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
@@ -127,7 +128,7 @@ protected:
         uint64_t file_size, index_size;
         ASSERT_OK(writer.finalize(&file_size, &index_size));
 
-        *res = *Segment::open(_block_mgr, filename, 0, &query_schema);
+        *res = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, filename, 0, &query_schema);
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
@@ -136,6 +137,7 @@ protected:
     EnvMemory* _env = nullptr;
     fs::FileBlockManager* _block_mgr = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
 };
 
 TEST_F(SegmentReaderWriterTest, normal) {
@@ -702,57 +704,6 @@ TEST_F(SegmentReaderWriterTest, TestDefaultValueColumn) {
             }
         }
     }
-
-    // add a column with non-null default value
-    {
-        std::vector<TabletColumn> read_columns = columns;
-        read_columns.push_back(create_int_value(5, OLAP_FIELD_AGGREGATION_SUM, true, "10086"));
-        TabletSchema query_schema = create_schema(read_columns);
-
-        std::shared_ptr<Segment> segment;
-        SegmentWriterOptions opts;
-        build_segment(opts, build_schema, query_schema, 4096, DefaultIntGenerator, &segment);
-
-        Schema schema(query_schema);
-        OlapReaderStatistics stats;
-        // scan all rows
-        {
-            StorageReadOptions read_opts;
-            read_opts.block_mgr = _block_mgr;
-            read_opts.stats = &stats;
-            std::unique_ptr<RowwiseIterator> iter;
-            segment->new_iterator(schema, read_opts, &iter);
-
-            RowBlockV2 block(schema, 1024);
-
-            int left = 4096;
-
-            int rowid = 0;
-            while (left > 0) {
-                int rows_read = left > 1024 ? 1024 : left;
-                block.clear();
-                ASSERT_OK(iter->next_batch(&block));
-                ASSERT_EQ(rows_read, block.num_rows());
-                left -= rows_read;
-
-                for (int j = 0; j < block.schema()->column_ids().size(); ++j) {
-                    auto cid = block.schema()->column_ids()[j];
-                    auto column_block = block.column_block(j);
-                    for (int i = 0; i < rows_read; ++i) {
-                        int rid = rowid + i;
-                        if (cid == 4) {
-                            ASSERT_FALSE(column_block.is_null(i));
-                            ASSERT_EQ(10086, *(int*)column_block.cell_ptr(i));
-                        } else {
-                            ASSERT_FALSE(column_block.is_null(i));
-                            ASSERT_EQ(rid * 10 + cid, *(int*)column_block.cell_ptr(i));
-                        }
-                    }
-                }
-                rowid += rows_read;
-            }
-        }
-    }
 }
 
 TEST_F(SegmentReaderWriterTest, TestStringDict) {
@@ -801,7 +752,7 @@ TEST_F(SegmentReaderWriterTest, TestStringDict) {
     ASSERT_OK(writer.finalize(&file_size, &index_size));
 
     {
-        auto segment = *Segment::open(_block_mgr, fname, 0, tablet_schema.get());
+        auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, fname, 0, tablet_schema.get());
         ASSERT_EQ(4096, segment->num_rows());
         Schema schema(*tablet_schema);
         OlapReaderStatistics stats;

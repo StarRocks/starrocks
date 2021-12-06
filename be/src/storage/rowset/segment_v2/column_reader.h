@@ -97,10 +97,11 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(const ColumnReaderOptions& opts, ColumnMetaPB* meta,
-                                                          const std::string& file_name);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(MemTracker* mem_tracker, const ColumnReaderOptions& opts,
+                                                          ColumnMetaPB* meta, const std::string& file_name);
 
-    ColumnReader(const private_type&, const ColumnReaderOptions& opts, const std::string& file_name);
+    ColumnReader(MemTracker* mem_tracker, const private_type&, const ColumnReaderOptions& opts,
+                 const std::string& file_name);
 
     ~ColumnReader();
 
@@ -235,6 +236,8 @@ private:
     Status _zone_map_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
                             const vectorized::ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
+
+    MemTracker* _mem_tracker = nullptr;
 
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,

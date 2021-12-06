@@ -77,14 +77,15 @@ class Segment : public std::enable_shared_from_this<Segment> {
     struct private_type;
 
 public:
-    static StatusOr<std::shared_ptr<Segment>> open(fs::BlockManager* blk_mgr, const std::string& filename,
-                                                   uint32_t segment_id, const TabletSchema* tablet_schema,
+    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
+                                                   const std::string& filename, uint32_t segment_id,
+                                                   const TabletSchema* tablet_schema,
                                                    size_t* footer_length_hint = nullptr);
 
     Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
             const TabletSchema* tablet_schema);
 
-    ~Segment();
+    ~Segment() = default;
 
     Status new_iterator(const starrocks::Schema& schema, const StorageReadOptions& read_options,
                         std::unique_ptr<RowwiseIterator>* iter);
@@ -135,6 +136,14 @@ public:
 
     const ColumnReader* column(size_t i) const { return _column_readers[i].get(); }
 
+    int64_t mem_usage() {
+        int64_t size = sizeof(Segment) + _sk_index_handle.mem_usage();
+        if (_sk_index_decoder != nullptr) {
+            size += _sk_index_decoder->mem_usage();
+        }
+        return size;
+    }
+
 private:
     Segment(const Segment&) = delete;
     const Segment& operator=(const Segment&) = delete;
@@ -144,12 +153,12 @@ private:
     };
 
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open(size_t* footer_length_hint);
+    Status _open(MemTracker* mem_tracker, size_t* footer_length_hint);
     Status _parse_footer(size_t* footer_length_hint, SegmentFooterPB* footer);
-    Status _create_column_readers(SegmentFooterPB* footer);
+    Status _create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer);
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    Status _load_index();
+    Status _load_index(MemTracker* mem_tracker);
 
     Status _new_iterator(const Schema& schema, const StorageReadOptions& read_options,
                          std::unique_ptr<RowwiseIterator>* iter);

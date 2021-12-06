@@ -35,7 +35,8 @@ namespace starrocks {
 Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
     if (rowset_meta->rowset_type() == BETA_ROWSET) {
-        *rowset = std::make_shared<BetaRowset>(schema, rowset_path, rowset_meta);
+        *rowset =
+                BetaRowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
         return (*rowset)->init() == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to init rowset");
     }
     return Status::NotSupported("unsupported rowset type");
