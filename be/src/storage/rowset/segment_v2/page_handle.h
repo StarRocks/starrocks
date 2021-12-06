@@ -80,7 +80,13 @@ public:
         return _cache_data.data();
     }
 
-    int64_t mem_usage() const { return sizeof(PageHandle) + _data.size; }
+    int64_t mem_usage() const {
+        if (_is_data_owner) {
+            return _data.size;
+        } else {
+            return 0;
+        }
+    }
 
 private:
     // when this is true, it means this struct own data and _data is valid.

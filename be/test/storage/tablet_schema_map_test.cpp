@@ -4,10 +4,13 @@
 
 #include <gtest/gtest.h>
 
+#include "runtime/mem_tracker.h"
+
 namespace starrocks {
 
 // NOLINTNEXTLINE
 TEST(TabletSchemaMapTest, test_all) {
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>();
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(UNIQUE_KEYS);
     schema_pb.set_num_short_key_columns(1);
@@ -20,6 +23,7 @@ TEST(TabletSchemaMapTest, test_all) {
     c0->set_is_nullable(true);
 
     TabletSchemaMap schema_map;
+    schema_map.set_mem_tracker(mem_tracker.get());
 
     auto stats0 = schema_map.stats();
     ASSERT_EQ(0, stats0.num_items);
