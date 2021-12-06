@@ -212,14 +212,14 @@ public class Coordinator {
         this.returnedAllResults = false;
         this.queryOptions = context.getSessionVariable().toThrift();
         long startTime = context.getStartTime();
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.systemDefault()));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
         if (context.getSessionVariable().getTimeZone().equals("CST")) {
             this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
         } else {
             this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
         }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
@@ -244,14 +244,14 @@ public class Coordinator {
         this.returnedAllResults = false;
         this.queryOptions = context.getSessionVariable().toThrift();
         long startTime = context.getStartTime();
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.systemDefault()));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
         if (context.getSessionVariable().getTimeZone().equals("CST")) {
             this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
         } else {
             this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
         }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
@@ -276,7 +276,7 @@ public class Coordinator {
         this.scanNodes = scanNodes;
         this.queryOptions = new TQueryOptions();
         long startTime = System.currentTimeMillis();
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.systemDefault()));
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);

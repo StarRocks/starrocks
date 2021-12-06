@@ -244,8 +244,9 @@ public class ScalarOperatorFunctions {
 
     @FEFunction(name = "now", argTypes = {}, returnType = "DATETIME")
     public static ConstantOperator now() {
-        LocalDateTime startTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
-                .atZone(ZoneId.systemDefault()).toLocalDateTime();
+        ConnectContext connectContext = ConnectContext.get();
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+                .atZone(ZoneId.of(connectContext.getSessionVariable().getTimeZone())).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }
 
@@ -254,8 +255,9 @@ public class ScalarOperatorFunctions {
             @FEFunction(name = "current_date", argTypes = {}, returnType = "DATE")
     })
     public static ConstantOperator curDate() {
-        LocalDateTime startTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
-                .atZone(ZoneId.systemDefault()).toLocalDateTime();
+        ConnectContext connectContext = ConnectContext.get();
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+                .atZone(ZoneId.of(connectContext.getSessionVariable().getTimeZone())).toLocalDateTime();
         return ConstantOperator.createDate(startTime.truncatedTo(ChronoUnit.DAYS));
     }
 
