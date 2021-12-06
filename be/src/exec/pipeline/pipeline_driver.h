@@ -89,11 +89,17 @@ public:
     void update_last_chunks_moved(int64_t chunks_moved) {
         this->last_chunks_moved = chunks_moved;
         this->accumulated_chunk_moved += chunks_moved;
+        this->schedule_effective_times += (chunks_moved > 0) ? 1 : 0;
     }
     void increment_schedule_times() { this->schedule_times += 1; }
 
+    int64_t get_schedule_times() { return schedule_times; }
+
+    int64_t get_schedule_effective_times() { return schedule_effective_times; }
+
 private:
     int64_t schedule_times{0};
+    int64_t schedule_effective_times{0};
     int64_t last_time_spent{0};
     int64_t last_chunks_moved{0};
     int64_t accumulated_time_spent{0};
@@ -267,6 +273,10 @@ private:
     RuntimeProfile::Counter* _pending_timer = nullptr;
     RuntimeProfile::Counter* _precondition_block_timer = nullptr;
     RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
+
+    RuntimeProfile::Counter* _schedule_counter = nullptr;
+    RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
+
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
     MonotonicStopWatch* _precondition_block_timer_sw = nullptr;

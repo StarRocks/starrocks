@@ -19,6 +19,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverPreconditionBlockTime", "DriverPendingTime");
     _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
 
+    _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
+    _schedule_effective_counter = ADD_COUNTER(_runtime_profile, "ScheduleEffectiveCounter", TUnit::UNIT);
+
     DCHECK(_state == DriverState::NOT_READY);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
@@ -241,6 +244,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     // Calculate total time before report profile
     _total_timer->update(_total_timer_sw->elapsed_time());
+
+    _schedule_counter->set(driver_acct().get_schedule_times());
+    _schedule_effective_counter->set(driver_acct().get_schedule_effective_times());
 
     // last root driver cancel the all drivers' execution and notify FE the
     // fragment's completion but do not unregister the FragmentContext because
