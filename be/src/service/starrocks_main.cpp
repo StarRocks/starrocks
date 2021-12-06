@@ -24,7 +24,6 @@
 #include <unistd.h>
 
 #include <boost/thread/thread.hpp>
-#include <boost/unordered_map.hpp>
 
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
