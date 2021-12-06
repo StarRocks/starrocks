@@ -21,6 +21,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
     _schedule_effective_counter = ADD_COUNTER(_runtime_profile, "ScheduleEffectiveCounter", TUnit::UNIT);
+    _schedule_rows_per_chunk = ADD_COUNTER(_runtime_profile, "ScheduleRowsPerChunk", TUnit::UNIT);
 
     DCHECK(_state == DriverState::NOT_READY);
     // fill OperatorWithDependency instances into _dependencies from _operators.
@@ -76,6 +77,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     SCOPED_TIMER(_active_timer);
     _state = DriverState::RUNNING;
     size_t total_chunks_moved = 0;
+    size_t total_rows_moved = 0;
     int64_t time_spent = 0;
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
@@ -131,6 +133,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                     COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
                     if (maybe_chunk.value() && maybe_chunk.value()->num_rows() > 0) {
                         size_t row_num = maybe_chunk.value()->num_rows();
+                        total_rows_moved += row_num;
                         {
                             SCOPED_TIMER(next_op->_push_timer);
                             status = next_op->push_chunk(runtime_state, maybe_chunk.value());
@@ -186,6 +189,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         if (num_chunk_moved == 0 || should_yield) {
             driver_acct().increment_schedule_times();
             driver_acct().update_last_chunks_moved(total_chunks_moved);
+            driver_acct().update_accumulated_rows_moved(total_rows_moved);
             driver_acct().update_last_time_spent(time_spent);
             if (is_precondition_block()) {
                 _state = DriverState::PRECONDITION_BLOCK;
@@ -247,6 +251,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     _schedule_counter->set(driver_acct().get_schedule_times());
     _schedule_effective_counter->set(driver_acct().get_schedule_effective_times());
+    _schedule_rows_per_chunk->set(driver_acct().get_rows_per_chunk());
 
     // last root driver cancel the all drivers' execution and notify FE the
     // fragment's completion but do not unregister the FragmentContext because

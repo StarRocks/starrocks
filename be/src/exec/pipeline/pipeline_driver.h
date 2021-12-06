@@ -91,11 +91,20 @@ public:
         this->accumulated_chunk_moved += chunks_moved;
         this->schedule_effective_times += (chunks_moved > 0) ? 1 : 0;
     }
+    void update_accumulated_rows_moved(int64_t rows_moved) { this->accumulated_rows_moved += rows_moved; }
     void increment_schedule_times() { this->schedule_times += 1; }
 
     int64_t get_schedule_times() { return schedule_times; }
 
     int64_t get_schedule_effective_times() { return schedule_effective_times; }
+
+    int64_t get_rows_per_chunk() {
+        if (accumulated_chunk_moved > 0) {
+            return accumulated_rows_moved / accumulated_chunk_moved;
+        } else {
+            return 0;
+        }
+    }
 
 private:
     int64_t schedule_times{0};
@@ -104,6 +113,7 @@ private:
     int64_t last_chunks_moved{0};
     int64_t accumulated_time_spent{0};
     int64_t accumulated_chunk_moved{0};
+    int64_t accumulated_rows_moved{0};
 };
 
 // OperatorExecState is used to guarantee that some hooks of operator
@@ -276,6 +286,7 @@ private:
 
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
+    RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
 
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
