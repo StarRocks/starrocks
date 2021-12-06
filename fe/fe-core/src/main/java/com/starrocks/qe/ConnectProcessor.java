@@ -230,7 +230,6 @@ public class ConnectProcessor {
         StatementBase parsedStmt = null;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
-            ctx.resetTransactionStartTime();
             List<StatementBase> stmts = analyze(originStmt);
             for (int i = 0; i < stmts.size(); ++i) {
                 ctx.getState().reset();

@@ -79,7 +79,7 @@ public class ScalarOperatorEvaluatorTest {
 
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
-        ctx.resetTransactionStartTime();
+        ctx.setStartTime();
 
         Function fn = new Function(new FunctionName("utc_timestamp"), new Type[] {}, Type.DATETIME, false);
 

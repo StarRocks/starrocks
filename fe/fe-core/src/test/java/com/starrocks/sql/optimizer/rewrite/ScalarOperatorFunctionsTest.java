@@ -404,7 +404,7 @@ public class ScalarOperatorFunctionsTest {
     public void curDate() throws AnalysisException {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
-        ctx.resetTransactionStartTime();
+        ctx.setStartTime();
         assertEquals(FEFunctions.curDate().toLocalDateTime().truncatedTo(ChronoUnit.DAYS),
                 ScalarOperatorFunctions.curDate().getDate());
     }

@@ -244,8 +244,9 @@ public class ScalarOperatorFunctions {
 
     @FEFunction(name = "now", argTypes = {}, returnType = "DATETIME")
     public static ConstantOperator now() {
-        LocalDateTime transactionStartTime = ConnectContext.get().getTransactionStartTime();
-        return ConstantOperator.createDatetime(transactionStartTime);
+        LocalDateTime startTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                .atZone(ZoneId.systemDefault()).toLocalDateTime();
+        return ConstantOperator.createDatetime(startTime);
     }
 
     @FEFunction.List(list = {
@@ -253,15 +254,16 @@ public class ScalarOperatorFunctions {
             @FEFunction(name = "current_date", argTypes = {}, returnType = "DATE")
     })
     public static ConstantOperator curDate() {
-        LocalDateTime transactionStartTime = ConnectContext.get().getTransactionStartTime();
-        return ConstantOperator.createDate(transactionStartTime.truncatedTo(ChronoUnit.DAYS));
+        LocalDateTime startTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                .atZone(ZoneId.systemDefault()).toLocalDateTime();
+        return ConstantOperator.createDate(startTime.truncatedTo(ChronoUnit.DAYS));
     }
 
     @FEFunction(name = "utc_timestamp", argTypes = {}, returnType = "DATETIME")
     public static ConstantOperator utcTimestamp() {
-        LocalDateTime transactionStartTime = ConnectContext.get().getTransactionStartTime();
-        ZonedDateTime zonedDateTime = transactionStartTime.atZone(ZoneId.systemDefault());
-        return ConstantOperator.createDatetime(zonedDateTime.withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime());
+        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                .atZone(ZoneOffset.UTC).toLocalDateTime();
+        return ConstantOperator.createDatetime(utcStartTime);
     }
 
     /**
