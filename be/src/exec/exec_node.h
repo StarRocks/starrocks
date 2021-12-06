@@ -156,6 +156,8 @@ public:
     static void eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
                                vectorized::FilterPtr* filter_ptr = nullptr);
 
+    static void eval_filter_null_values(vectorized::Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
+
     Status init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state);
     void register_runtime_filter_descriptor(RuntimeState* state, vectorized::RuntimeFilterProbeDescriptor* rf_desc);
     void eval_join_runtime_filters(vectorized::Chunk* chunk);
