@@ -27,8 +27,8 @@
 
 namespace starrocks::vectorized {
 
-static std::vector<Slice> literal_0_slice_vector{Slice("0")};
-static std::vector<Slice> literal_1_slice_vector{Slice("1")};
+static auto literal_0_slice{Slice{"0"}};
+static auto literal_1_slice{Slice{"1"}};
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
@@ -609,7 +609,7 @@ Status JsonReader::_process_object(Chunk* chunk, const std::vector<SlotDescripto
         if (err) {
             if (col_name == "__op") {
                 // special treatment for __op column, fill default value '0' rather than null
-                column->append_strings(literal_0_slice_vector);
+                column->append_datum(literal_0_slice);
             } else {
                 column->append_nulls(1);
             }
@@ -730,9 +730,9 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, NullableCol
         }
 
         if (ok) {
-            column->append_strings(literal_1_slice_vector);
+            column->append_datum(literal_1_slice);
         } else {
-            column->append_strings(literal_0_slice_vector);
+            column->append_datum(literal_0_slice);
         }
         break;
     }
@@ -753,7 +753,7 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, NullableCol
         size_t buflen{};
         JsonFunctions::minify_json_to_string(value, buf, buflen);
 
-        column->append_strings(std::vector<Slice>{Slice{buf.get(), buflen}});
+        column->append_datum(Slice{buf.get(), buflen});
         break;
     }
 
@@ -904,7 +904,7 @@ void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value,
             return;
         }
 
-        column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
+        column->append_datum(Slice{sv.data(), sv.size()});
     }
 }
 
