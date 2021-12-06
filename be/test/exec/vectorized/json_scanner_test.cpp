@@ -350,8 +350,8 @@ TEST_F(JsonScannerTest, test_cast_type) {
     range.__set_path("./be/test/exec/test_data/json_scanner/test_cast_type.json");
     ranges.emplace_back(range);
 
-    auto scanner = create_json_scanner(
-            types, ranges, {"f_float", "f_bool", "f_int", "f_float_in_string", "f_int_in_string"});
+    auto scanner =
+            create_json_scanner(types, ranges, {"f_float", "f_bool", "f_int", "f_float_in_string", "f_int_in_string"});
 
     Status st;
     st = scanner->open();

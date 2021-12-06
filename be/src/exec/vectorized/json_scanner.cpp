@@ -707,7 +707,7 @@ Status JsonReader::_read_and_parse_json() {
 }
 
 // _construct_column constructs column based on no value.
-void JsonReader::_construct_column(simdjson::ondemand::value& value, NullableColumn *column,
+void JsonReader::_construct_column(simdjson::ondemand::value& value, NullableColumn* column,
                                    const TypeDescriptor& type_desc) {
     simdjson::ondemand::json_type tp;
     auto err = value.type().get(tp);
@@ -765,7 +765,7 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, NullableCol
 }
 
 void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value, NullableColumn* column,
-                                          const TypeDescriptor& type_desc) {
+                                               const TypeDescriptor& type_desc) {
     simdjson::ondemand::number_type tp;
 
     auto err = value.get_number_type().get(tp);
@@ -865,19 +865,19 @@ void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value,
         }
 
         case TYPE_INT: {
-            auto i32= static_cast<int32_t>(d);
+            auto i32 = static_cast<int32_t>(d);
             column->append_numbers(&i32, sizeof(i32));
             break;
         }
 
         case TYPE_SMALLINT: {
-            auto i16= static_cast<int16_t>(d);
+            auto i16 = static_cast<int16_t>(d);
             column->append_numbers(&i16, sizeof(i16));
             break;
         }
 
         case TYPE_TINYINT: {
-            auto i8= static_cast<int8_t>(d);
+            auto i8 = static_cast<int8_t>(d);
             column->append_numbers(&i8, sizeof(i8));
             break;
         }
@@ -909,7 +909,7 @@ void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value,
 }
 
 void JsonReader::_construct_column_with_string(simdjson::ondemand::value& value, NullableColumn* column,
-                                          const TypeDescriptor& type_desc) {
+                                               const TypeDescriptor& type_desc) {
     std::string_view sv;
     auto err = value.get_string().get(sv);
     if (UNLIKELY(err)) {
