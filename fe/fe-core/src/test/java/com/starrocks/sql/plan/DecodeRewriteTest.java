@@ -496,4 +496,17 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  cardinality: 1"));
 
     }
+
+    @Test
+    public void testHavingAggFunctionOnConstant() throws Exception {
+        String sql = "select S_ADDRESS from supplier GROUP BY S_ADDRESS HAVING (cast(count(null) as string)) IN (\"\")";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
+                "  |  group by: [10: S_ADDRESS, INT, false]\n" +
+                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(65533)) = ''"));
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  cardinality: 1"));
+    }
 }
