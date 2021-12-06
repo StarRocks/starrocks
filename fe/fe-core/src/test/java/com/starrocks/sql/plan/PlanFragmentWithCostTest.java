@@ -712,4 +712,36 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update serialize)\n" +
                 "  |  aggregate: sum[([3: t1c, INT, true]); args: INT; result: BIGINT;"));
     }
+
+    @Test
+    public void testNullArithmeticExpression() throws Exception {
+        // check constant operator with null
+        String sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL)/(CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        String plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) + (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) - (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+        // check variable operator with null
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY / null) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / S_NAME) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+    }
 }

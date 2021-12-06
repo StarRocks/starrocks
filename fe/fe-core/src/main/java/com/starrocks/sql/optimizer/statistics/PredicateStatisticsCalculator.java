@@ -161,9 +161,20 @@ public class PredicateStatisticsCalculator {
             // For CastOperator, we need use child as column statistics
             leftChild = getChildForCastOperator(leftChild);
             rightChild = getChildForCastOperator(rightChild);
-
+            // compute left and right column statistics
             ColumnStatistic leftColumnStatistic = getExpressionStatistic(leftChild);
             ColumnStatistic rightColumnStatistic = getExpressionStatistic(rightChild);
+            // do not use NaN to estimate predicate
+            if (leftColumnStatistic.hasNaNValue()) {
+                leftColumnStatistic =
+                        ColumnStatistic.buildFrom(leftColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
+                                .setMinValue(Double.NEGATIVE_INFINITY).build();
+            }
+            if (rightColumnStatistic.hasNaNValue()) {
+                rightColumnStatistic =
+                        rightColumnStatistic.buildFrom(rightColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
+                                .setMinValue(Double.NEGATIVE_INFINITY).build();
+            }
 
             if (leftChild.isVariable()) {
                 Optional<ColumnRefOperator> leftChildOpt;
@@ -171,8 +182,9 @@ public class PredicateStatisticsCalculator {
                 leftChildOpt = leftChild.isColumnRef() ? Optional.of((ColumnRefOperator) leftChild) : Optional.empty();
 
                 if (rightChild.isConstant()) {
-                    OptionalDouble constant = (rightColumnStatistic.isInfiniteRange()) ? OptionalDouble.empty() :
-                            OptionalDouble.of(rightColumnStatistic.getMaxValue());
+                    OptionalDouble constant =
+                            (rightColumnStatistic.isInfiniteRange()) ?
+                                    OptionalDouble.empty() : OptionalDouble.of(rightColumnStatistic.getMaxValue());
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
                                     leftColumnStatistic, predicate, constant, statistics);
