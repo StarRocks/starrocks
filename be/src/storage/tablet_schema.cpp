@@ -25,6 +25,7 @@
 #include <cctype>
 #include <vector>
 
+#include "runtime/exec_env.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/vectorized/type_utils.h"
 
@@ -392,6 +393,21 @@ bool TabletColumn::is_format_v2_column() const {
 /******************************************************************
  * TabletSchema
  ******************************************************************/
+
+std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb) {
+    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb),
+                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
+    mem_tracker->consume(schema->mem_usage());
+    return schema;
+}
+
+std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
+                                                   TabletSchemaMap* schema_map) {
+    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb, schema_map),
+                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
+    mem_tracker->consume(schema->mem_usage());
+    return schema;
+}
 
 TabletSchema::~TabletSchema() {
     if (_schema_map != nullptr) {

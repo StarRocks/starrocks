@@ -151,8 +151,19 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
 
     std::vector<MemTracker::SimpleItem> items;
 
+    // Metadata statistics memory statistics use the old memory framework,
+    // not in RootMemTrackerTree, so it needs to be added here
+    MemTracker* meta_mem_tracker = ExecEnv::GetInstance()->tablet_meta_mem_tracker();
+    MemTracker::SimpleItem meta_item{"tablet_meta",
+                                     "process",
+                                     2,
+                                     meta_mem_tracker->limit(),
+                                     meta_mem_tracker->consumption(),
+                                     meta_mem_tracker->peak_consumption()};
+
     if (start_mem_tracker != nullptr) {
         start_mem_tracker->list_mem_usage(&items, cur_level, upper_level);
+        items.emplace_back(meta_item);
 
         for (const auto& item : items) {
             std::string level_str = ItoaKMGT(item.level);
