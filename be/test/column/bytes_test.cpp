@@ -200,7 +200,7 @@ TEST(BytesTest, test_hook_calloc) {
         if (size == 0) {
             ASSERT_TRUE(ptr == nullptr);
         } else {
-            cfree(ptr);
+            free(ptr);
         }
         after = g_mem_usage;
         ASSERT_EQ(before, after);
