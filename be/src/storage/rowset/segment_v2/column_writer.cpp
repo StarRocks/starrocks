@@ -355,6 +355,16 @@ ScalarColumnWriter::ScalarColumnWriter(const ColumnWriterOptions& opts, std::uni
     DCHECK(wblock != nullptr);
 }
 
+ScalarColumnWriter::~ScalarColumnWriter() {
+    // delete all pages
+    Page* page = _pages.head;
+    while (page != nullptr) {
+        Page* next_page = page->next;
+        delete page;
+        page = next_page;
+    }
+}
+
 Status ScalarColumnWriter::init() {
     RETURN_IF_ERROR(get_block_compression_codec(_opts.meta->compression(), &_compress_codec));
 
@@ -452,6 +462,7 @@ Status ScalarColumnWriter::write_data() {
         Page* last_page = page;
         page = page->next;
         delete last_page;
+        _pages.head = page;
     }
     return Status::OK();
 }

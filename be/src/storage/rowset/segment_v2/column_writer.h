@@ -148,6 +148,8 @@ class ScalarColumnWriter final : public ColumnWriter {
 public:
     ScalarColumnWriter(const ColumnWriterOptions& opts, std::unique_ptr<Field> field, fs::WritableBlock* output_file);
 
+    ~ScalarColumnWriter() override;
+
     Status init() override;
 
     Status append(const vectorized::Column& column) override;
