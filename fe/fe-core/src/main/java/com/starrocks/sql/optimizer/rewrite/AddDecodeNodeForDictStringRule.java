@@ -432,8 +432,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap(aggOperator.getAggregations());
             for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggOperator.getAggregations().entrySet()) {
-                if ((kv.getValue().getFnName().equals(FunctionSet.COUNT) && !kv.getValue().getChildren().isEmpty())
-                        || kv.getValue().getFnName().equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
+
+                boolean canApplyDictDecodeOpt = (kv.getValue().getUsedColumns().cardinality() > 0) &&
+                        (kv.getValue().getFnName().equals(FunctionSet.COUNT) ||
+                                kv.getValue().getFnName().equals(FunctionSet.MULTI_DISTINCT_COUNT));
+                if (canApplyDictDecodeOpt) {
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
                     if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
                         Integer dictColumnId = context.stringColumnIdToDictColumnIds.get(columnId);
