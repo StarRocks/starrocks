@@ -23,7 +23,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
-        if (call.isAggregate() || notAllConstantRef(call.getChildren())) {
+        if (call.isAggregate() || notAllConstant(call.getChildren())) {
             return call;
         }
         return ScalarOperatorEvaluator.INSTANCE.evaluation(call);
@@ -36,7 +36,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createNull(Type.BOOLEAN);
         }
 
-        if (notAllConstantRef(predicate.getChildren())) {
+        if (notAllConstant(predicate.getChildren())) {
             return predicate;
         }
 
@@ -78,7 +78,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createBoolean(!predicate.isNotNull());
         }
 
-        if (notAllConstantRef(predicate.getChildren())) {
+        if (notAllConstant(predicate.getChildren())) {
             return predicate;
         }
 
@@ -107,7 +107,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createNull(operator.getType());
         }
 
-        if (notAllConstantRef(operator.getChildren())) {
+        if (notAllConstant(operator.getChildren())) {
             return operator;
         }
 
@@ -148,7 +148,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createNull(Type.BOOLEAN);
         }
 
-        if (notAllConstantRef(predicate.getChildren())) {
+        if (notAllConstant(predicate.getChildren())) {
             return predicate;
         }
 
@@ -191,7 +191,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         return predicate;
     }
 
-    private boolean notAllConstantRef(List<ScalarOperator> operators) {
+    private boolean notAllConstant(List<ScalarOperator> operators) {
         return !operators.stream().allMatch(ScalarOperator::isConstantRef);
     }
 
