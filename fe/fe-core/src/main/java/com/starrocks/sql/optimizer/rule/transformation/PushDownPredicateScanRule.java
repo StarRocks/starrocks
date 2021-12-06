@@ -32,7 +32,7 @@ public class PushDownPredicateScanRule extends TransformationRule {
     public static final PushDownPredicateScanRule ES_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
 
-    private ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
+    private final ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
 
     public PushDownPredicateScanRule(OperatorType type) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));
