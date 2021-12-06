@@ -701,31 +701,31 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testDateFunctionCardinality() throws Exception {
         String sql = "SELECT Month(P_PARTKEY) AS month FROM part GROUP BY month ORDER BY month DESC LIMIT 5";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("* month-->[1.0, 12.0, 0.0, 4.0, 12.0]"));
+        Assert.assertTrue(plan.contains("* month-->[1.0, 12.0, 0.0, 1.0, 12.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
 
         sql = "SELECT day(P_PARTKEY) AS day FROM part GROUP BY day ORDER BY day DESC LIMIT 5";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("day-->[1.0, 31.0, 0.0, 4.0, 31.0]"));
+        Assert.assertTrue(plan.contains("day-->[1.0, 31.0, 0.0, 1.0, 31.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
 
         sql = "SELECT hour(P_PARTKEY) AS hour FROM part GROUP BY hour ORDER BY hour DESC LIMIT 5";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains(" hour-->[0.0, 23.0, 0.0, 4.0, 24.0]"));
+        Assert.assertTrue(plan.contains(" hour-->[0.0, 23.0, 0.0, 1.0, 24.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
 
         sql = "SELECT minute(P_PARTKEY) AS minute FROM part GROUP BY minute ORDER BY minute DESC LIMIT 5";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("minute-->[0.0, 59.0, 0.0, 4.0, 60.0]"));
+        Assert.assertTrue(plan.contains("minute-->[0.0, 59.0, 0.0, 1.0, 60.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
 
         sql = "SELECT second(P_PARTKEY) AS second FROM part GROUP BY second ORDER BY second DESC LIMIT 5";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("* second-->[0.0, 59.0, 0.0, 4.0, 60.0]"));
+        Assert.assertTrue(plan.contains("* second-->[0.0, 59.0, 0.0, 1.0, 60.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
     }
