@@ -385,7 +385,6 @@ private:
     int _size_of_element;
     size_t _cur_index;
     bool _parsed;
-    PageCacheHandle _handle;
 };
 
 template <FieldType Type>

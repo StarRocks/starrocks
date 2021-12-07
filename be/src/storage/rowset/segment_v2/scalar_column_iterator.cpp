@@ -233,7 +233,6 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
     PageHandle handle;
     Slice page_body;
     PageFooterPB footer;
-
     RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer));
     RETURN_IF_ERROR(parse_page(&_page, std::move(handle), page_body, footer.data_page_footer(),
                                _reader->encoding_info(), iter.page(), iter.page_index()));

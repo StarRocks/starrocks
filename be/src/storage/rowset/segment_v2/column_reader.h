@@ -179,8 +179,6 @@ public:
     // May be called multiple times, subsequent calls will no op.
     Status ensure_index_loaded(ReaderType reader_type);
 
-    bool kept_in_memory() { return _opts.kept_in_memory; }
-
 private:
     struct private_type {
         private_type(int) {}

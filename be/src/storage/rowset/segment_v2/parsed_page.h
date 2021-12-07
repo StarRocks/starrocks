@@ -42,7 +42,6 @@ class DataPageFooterPB;
 class EncodingInfo;
 class PageHandle;
 class PagePointer;
-struct PageCacheOptions;
 
 class ParsedPage {
 public:

@@ -82,10 +82,6 @@ public:
 
     int64_t mem_usage() const { return sizeof(PageHandle) + _data.size; }
 
-    bool is_data_owner() { return _is_data_owner; }
-
-    void set_is_data_owner(bool is_data_owner) { _is_data_owner = is_data_owner; }
-
 private:
     // when this is true, it means this struct own data and _data is valid.
     // otherwise _cache_data is valid, and data is belong to cache.
