@@ -52,14 +52,14 @@ public:
                 // This dest_instance_id first occurs, so create other variable for this dest instance.
                 auto* closure = new CallBackClosure<PTransmitChunkResult, TUniqueId>(dest_instance_id);
                 closure->addFailedHandler([this, closure]() noexcept {
-                    closure->give_back();
+                    closure->unref();
                     _is_finishing = true;
                     --_num_in_flight_rpc;
                     LOG(WARNING) << " transmit chunk rpc failed";
                 });
                 closure->addSuccessHandler(
                         [this, closure](const TUniqueId& instance_id, const PTransmitChunkResult& result) noexcept {
-                            closure->give_back();
+                            closure->unref();
                             Status status(result.status());
                             if (!status.ok()) {
                                 _is_finishing = true;
@@ -155,7 +155,7 @@ private:
         for (;;) {
             auto& buffer = _buffers[instance_id.lo];
             auto* closure = _closures[instance_id.lo];
-            if (buffer.empty() || !closure->is_idle()) {
+            if (buffer.empty() || closure->is_in_flight()) {
                 return;
             }
 
@@ -184,7 +184,7 @@ private:
 
             ++_num_in_flight_rpc;
 
-            closure->borrow();
+            closure->ref();
             closure->cntl.Reset();
             closure->cntl.set_timeout_ms(_brpc_timeout_ms);
             closure->cntl.request_attachment().append(request.attachment);

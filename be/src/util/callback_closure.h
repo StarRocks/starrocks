@@ -37,18 +37,16 @@ public:
     CallBackClosure(const C& ctx) : _ctx(ctx) {}
     ~CallBackClosure() override = default;
 
-    bool is_idle() { return _is_idle; }
+    bool is_in_flight() { return _refs > 0; }
 
-    // brpc must be serial, so the closure is unsharable
-    // borrow should be invoked before brpc task submited
-    // and give_back should be invoked after brpc finished
-    void borrow() {
-        DCHECK(_is_idle);
-        _is_idle = false;
+    void ref() {
+        DCHECK_EQ(_refs, 0);
+        ++_refs;
     }
-    void give_back() {
-        DCHECK(!_is_idle);
-        _is_idle = true;
+
+    void unref() {
+        DCHECK_EQ(_refs, 1);
+        --_refs;
     }
 
     // Disallow copy and assignment.
@@ -79,7 +77,7 @@ public:
 
 private:
     const C _ctx;
-    std::atomic_bool _is_idle = true;
+    std::atomic<int> _refs = 0;
     std::function<void()> _failed_handler;
     std::function<void(const C&, const T&)> _success_handler;
 };
