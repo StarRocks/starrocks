@@ -68,7 +68,7 @@ ALTER DATABASE example_db SET DATA QUOTA 10T;
 3. 原子替换 table1 与 table2：
 
     ```SQL
-    ATER TABLE table1 SWAP WITH table2;
+    ALTER TABLE table1 SWAP WITH table2;
     ```
 
 这样就可以进行表的原子替换。
