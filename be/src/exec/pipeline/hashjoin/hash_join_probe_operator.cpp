@@ -37,6 +37,7 @@ void HashJoinProbeOperator::set_finishing(RuntimeState* state) {
 }
 
 void HashJoinProbeOperator::set_finished(RuntimeState* state) {
+    _hash_joiner->enter_eos_phase();
     _hash_joiner->set_finished();
 }
 

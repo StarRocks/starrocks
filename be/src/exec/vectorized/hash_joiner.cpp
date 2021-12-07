@@ -201,27 +201,7 @@ void HashJoiner::push_chunk(RuntimeState* state, ChunkPtr&& chunk) {
 
 StatusOr<ChunkPtr> HashJoiner::pull_chunk(RuntimeState* state) {
     DCHECK(_phase != HashJoinPhase::BUILD);
-
-    auto&& maybe_chunk = _pull_probe_output_chunk(state);
-    if (UNLIKELY(!maybe_chunk.ok())) {
-        return std::move(maybe_chunk);
-    }
-
-    ChunkPtr chunk = std::move(maybe_chunk.value());
-    if (!chunk || chunk->is_empty()) {
-        return std::move(chunk);
-    }
-
-    auto num_rows = chunk->num_rows();
-    _num_rows_returned += num_rows;
-    if (_reached_limit()) {
-        chunk->set_num_rows(num_rows - (_num_rows_returned - _limit));
-        _num_rows_returned = _limit;
-        _phase = HashJoinPhase::EOS;
-        // _ht is useless in this point, so deallocate its memory.
-        _ht.close();
-    }
-    return std::move(chunk);
+    return _pull_probe_output_chunk(state);
 }
 
 StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
@@ -244,15 +224,13 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 
     if (_phase == HashJoinPhase::POST_PROBE) {
         if (!_need_post_probe()) {
-            _phase = HashJoinPhase::EOS;
-            _ht.close();
+            enter_eos_phase();
             return chunk;
         }
 
         RETURN_IF_ERROR(_ht.probe_remain(&chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
-            _phase = HashJoinPhase::EOS;
-            _ht.close();
+            enter_eos_phase();
         }
 
         _filter_post_probe_output_chunk(chunk);

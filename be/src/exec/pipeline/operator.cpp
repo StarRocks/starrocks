@@ -72,6 +72,10 @@ RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() {
     return _factory->get_runtime_bloom_filters();
 }
 
+const std::vector<SlotId>& Operator::filter_null_value_columns() const {
+    return _factory->get_filter_null_value_columns();
+}
+
 void Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk) {
     if (UNLIKELY(!_conjuncts_and_in_filters_is_cached)) {
         _cached_conjuncts_and_in_filters.insert(_cached_conjuncts_and_in_filters.end(), conjuncts.begin(),
@@ -100,10 +104,13 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
     if (chunk == nullptr || chunk->is_empty()) {
         return;
     }
+
     if (auto* bloom_filters = runtime_bloom_filters()) {
         _init_rf_counters(true);
         bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
     }
+
+    ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
 }
 
 void Operator::_init_rf_counters(bool init_bloom) {

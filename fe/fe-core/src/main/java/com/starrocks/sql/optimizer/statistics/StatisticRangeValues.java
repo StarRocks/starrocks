@@ -83,7 +83,7 @@ public class StatisticRangeValues {
         // lengthOfIntersect of char/varchar is infinite
         if (isInfinite(lengthOfIntersect)) {
             if (isFinite(this.distinctValues) && isFinite(other.distinctValues)) {
-                return min(other.distinctValues / this.distinctValues, 1);
+                return min(other.distinctValues / max(1, this.distinctValues), 1);
             }
             return StatisticsEstimateCoefficient.OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT;
         }

@@ -12,6 +12,7 @@
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
@@ -22,6 +23,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks::vectorized {
 
 HashJoinNode::HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -401,6 +403,11 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     context->add_pipeline(rhs_operators);
 
     lhs_operators.emplace_back(std::move(probe_op));
+
+    if (limit() != -1) {
+        lhs_operators.emplace_back(
+                std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
 
     return lhs_operators;
 }
