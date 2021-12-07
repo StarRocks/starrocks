@@ -51,6 +51,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.optimizer.OperatorStrings;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -368,30 +369,9 @@ public class UtFrameUtils {
                 }
             }
 
-            com.starrocks.sql.analyzer.Analyzer analyzer =
-                    new com.starrocks.sql.analyzer.Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            Relation relation = analyzer.analyze(statementBase);
-
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext).transform(relation);
-
-            Optimizer optimizer = new Optimizer();
-            OptExpression optimizedPlan = optimizer.optimize(
-                    connectContext,
-                    logicalPlan.getRoot(),
-                    new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
-
-            PlannerContext plannerContext =
-                    new PlannerContext(null, null, connectContext.getSessionVariable().toThrift(), null);
-            ExecPlan execPlan = new PlanFragmentBuilder()
-                    .createPhysicalPlan(optimizedPlan, plannerContext, connectContext,
-                            logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
-            execPlan.setPlanCount(optimizedPlan.getPlanCount());
-
+            ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
             OperatorStrings operatorPrinter = new OperatorStrings();
-            return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
+            return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returing we have to restore session varibale.
             connectContext.setSessionVariable(oldSessionVariable);
