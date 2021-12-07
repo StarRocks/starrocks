@@ -2,6 +2,7 @@
 
 #include "storage/rowset/segment_v2/dictcode_column_iterator.h"
 
+#include "column/column_helper.h"
 #include "storage/rowset/segment_v2/scalar_column_iterator.h"
 
 namespace starrocks::segment_v2 {
@@ -68,6 +69,14 @@ auto GlobalDictCodeColumnIterator::_get_local_dict_col_container(Column* column)
         dict_column = down_cast<LowCardDictColumn*>(column);
     }
     return dict_column->get_data();
+}
+
+void GlobalDictCodeColumnIterator::_acquire_null_data(Column* global_dict_column, Column* local_dict_column) {
+    if (_opts.is_nullable) {
+        auto dst_column = down_cast<vectorized::NullableColumn*>(global_dict_column);
+        auto src_column = down_cast<vectorized::NullableColumn*>(local_dict_column);
+        dst_column->null_column_data() = std::move(src_column->null_column_data());
+    }
 }
 
 } // namespace starrocks::segment_v2
