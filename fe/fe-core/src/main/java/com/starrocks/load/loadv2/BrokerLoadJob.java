@@ -199,7 +199,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // Generate loading task and init the plan of task
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
-                        strictMode, transactionId, this, timezone, timeoutSecond, partialUpdate);
+                        strictMode, transactionId, this, timezone, timeoutSecond, createTimestamp, partialUpdate);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));
