@@ -76,6 +76,7 @@ public class LoadingTaskPlanner {
     private final long timeoutS;    // timeout of load job, in second
     private final boolean partialUpdate;
     private final int parallelInstanceNum;
+    private final long startTime;
 
     // Something useful
     // ConnectContext here is just a dummy object to avoid some NPE problem, like ctx.getDatabase()
@@ -90,7 +91,8 @@ public class LoadingTaskPlanner {
 
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
                               BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
-                              boolean strictMode, String timezone, long timeoutS, boolean partialUpdate) {
+                              boolean strictMode, String timezone, long timeoutS,
+                              long startTime, boolean partialUpdate) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -102,7 +104,7 @@ public class LoadingTaskPlanner {
         this.timeoutS = timeoutS;
         this.partialUpdate = partialUpdate;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
-
+        this.startTime = startTime;
         this.analyzer.setUDFAllowed(false);
     }
 
@@ -170,6 +172,10 @@ public class LoadingTaskPlanner {
             }
         }
         Collections.reverse(fragments);
+    }
+
+    public long getStartTime() {
+        return startTime;
     }
 
     public DescriptorTable getDescTable() {

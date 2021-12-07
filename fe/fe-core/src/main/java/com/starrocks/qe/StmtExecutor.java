@@ -1240,6 +1240,7 @@ public class StmtExecutor {
 
     private void handleExportStmt(UUID queryId) throws Exception {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
+        exportStmt.setExportStartTime(context.getStartTime());
         context.getCatalog().getExportMgr().addExportJob(queryId, exportStmt);
     }
 
