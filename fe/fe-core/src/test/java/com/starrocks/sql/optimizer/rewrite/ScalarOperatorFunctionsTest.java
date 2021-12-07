@@ -12,6 +12,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.FEFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
@@ -401,6 +402,9 @@ public class ScalarOperatorFunctionsTest {
 
     @Test
     public void curDate() throws AnalysisException {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
         assertEquals(FEFunctions.curDate().toLocalDateTime().truncatedTo(ChronoUnit.DAYS),
                 ScalarOperatorFunctions.curDate().getDate());
     }
