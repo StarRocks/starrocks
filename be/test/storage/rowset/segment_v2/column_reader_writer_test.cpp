@@ -66,7 +66,8 @@ protected:
     void TearDown() override {}
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
-    void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0") {
+    void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0",
+                            const std::string null_ratio = "0") {
         config::set_config("null_encoding", null_encoding);
 
         using Type = typename TypeTraits<type>::CppType;
@@ -78,8 +79,8 @@ protected:
         auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
         ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
 
-        const std::string fname =
-                strings::Substitute("$0/test-$1-$2-$3-$4.data", TEST_DIR, type, encoding, version, adaptive);
+        const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5-$6.data", TEST_DIR, type, encoding,
+                                                      version, adaptive, null_encoding, null_ratio);
         // write data
         {
             std::unique_ptr<fs::WritableBlock> wblock;
@@ -499,19 +500,19 @@ protected:
     template <FieldType type>
     void test_numeric_types() {
         auto col = numeric_data<type>(1);
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col);
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
+        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "1");
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "1");
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "1");
 
         col = numeric_data<type>(4);
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col);
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
+        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "4");
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "4");
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "4");
 
         col = numeric_data<type>(10000);
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col);
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
+        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "10000");
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "10000");
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "10000");
     }
 
     MemPool _pool;
@@ -530,38 +531,38 @@ TEST_F(ColumnReaderWriterTest, test_double) {
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_date) {
     auto col = date_values(100);
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 1>(*col);
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col);
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "1");
+    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 1>(*col, "0", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "0", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "1", "100");
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_datetime) {
     auto col = datetime_values(100);
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 1>(*col);
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col);
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "1");
+    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 1>(*col, "0", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "0", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "1", "100");
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_binary) {
     auto c = low_cardinality_strings(10000);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1");
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "10000");
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "10000");
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "10000");
 
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "10000");
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "10000");
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "10000");
 
     c = high_cardinality_strings(100);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1");
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "100");
 
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "100");
 }
 
 // NOLINTNEXTLINE
