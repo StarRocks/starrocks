@@ -221,7 +221,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         this.id = Catalog.getCurrentCatalog().getNextId();
         this.dbId = dbId;
         this.label = label;
-        this.createTimestamp = ConnectContext.get().getStartTime();
+        if (ConnectContext.get() != null) {
+            this.createTimestamp = ConnectContext.get().getStartTime();
+        } else {
+            // only for test used
+            this.createTimestamp = System.currentTimeMillis();
+        }
     }
 
     protected void readLock() {
