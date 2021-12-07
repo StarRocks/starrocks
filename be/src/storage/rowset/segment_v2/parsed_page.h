@@ -123,7 +123,7 @@ protected:
 
 Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                   const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
-                  uint32_t page_index, PageCacheOptions* cache_opts);
+                  uint32_t page_index);
 
 } // namespace segment_v2
 } // namespace starrocks

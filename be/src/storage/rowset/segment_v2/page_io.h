@@ -55,13 +55,11 @@ struct PageReadOptions {
     bool verify_checksum = true;
     // whether to use page cache in read path
     bool use_page_cache = true;
-    // whether to save page in page cache
-    // at most time, it is equal to use_page_cache
-    // unless page is encoding by bitshuffle
-    bool fill_page_cache = true;
     // if true, use DURABLE CachePriority in page cache
     // currently used for in memory olap table
     bool kept_in_memory = false;
+    // page encoding type
+    EncodingTypePB encoding_type = UNKNOWN_ENCODING;
 
     void sanity_check() const {
         CHECK_NOTNULL(rblock);

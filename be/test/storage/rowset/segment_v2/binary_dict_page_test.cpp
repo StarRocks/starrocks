@@ -27,10 +27,12 @@
 #include <iostream>
 
 #include "common/logging.h"
+#include "gen_cpp/segment_v2.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/segment_v2/binary_plain_page.h"
+#include "storage/rowset/segment_v2/data_decoder.h"
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
 #include "storage/types.h"
@@ -75,8 +77,18 @@ public:
         ASSERT_EQ(slices.size(), dict_page_decoder->count());
 
         // decode
+        Slice encoded_data = s.slice();
+        PageFooterPB footer;
+        footer.set_type(DATA_PAGE);
+        DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
+        data_page_footer->set_nullmap_size(0);
+        std::unique_ptr<char[]> page = nullptr;
+
+        Status st = DataDecoder::decode_page(&footer, 0, DICT_ENCODING, &page, encoded_data);
+        ASSERT_TRUE(st.ok());
+
         PageDecoderOptions decoder_options;
-        BinaryDictPageDecoder<OLAP_FIELD_TYPE_VARCHAR> page_decoder(s.slice(), decoder_options);
+        BinaryDictPageDecoder<OLAP_FIELD_TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
         page_decoder.set_dict_decoder(dict_page_decoder.get());
 
         status = page_decoder.init();
@@ -168,8 +180,18 @@ public:
             ASSERT_TRUE(status.ok());
 
             // decode
+            Slice encoded_data = results[slice_index].slice();
+            PageFooterPB footer;
+            footer.set_type(DATA_PAGE);
+            DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
+            data_page_footer->set_nullmap_size(0);
+            std::unique_ptr<char[]> page = nullptr;
+
+            Status st = DataDecoder::decode_page(&footer, 0, DICT_ENCODING, &page, encoded_data);
+            ASSERT_TRUE(st.ok());
+
             PageDecoderOptions decoder_options;
-            BinaryDictPageDecoder<OLAP_FIELD_TYPE_VARCHAR> page_decoder(results[slice_index].slice(), decoder_options);
+            BinaryDictPageDecoder<OLAP_FIELD_TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
             status = page_decoder.init();
             page_decoder.set_dict_decoder(dict_page_decoder.get());
             ASSERT_TRUE(status.ok());

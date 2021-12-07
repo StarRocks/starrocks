@@ -204,8 +204,8 @@ Status ScalarColumnIterator::_load_dict_page() {
     // read dictionary page
     Slice dict_data;
     PageFooterPB dict_footer;
-    RETURN_IF_ERROR(_reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data,
-                                       &dict_footer, _opts.use_page_cache));
+    RETURN_IF_ERROR(
+            _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
     if (_reader->column_type() == OLAP_FIELD_TYPE_CHAR) {
@@ -233,24 +233,10 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
     PageHandle handle;
     Slice page_body;
     PageFooterPB footer;
-    // if page is encoding by bitshuffle, data page will be pushed into page cache after decode
-    // set fill_page_cache as fales to prevent cache undecoded data page
-    bool fill_page_cache =
-            _opts.use_page_cache && (_reader->encoding_info()->encoding() != EncodingTypePB::DICT_ENCODING &&
-                                     _reader->encoding_info()->encoding() != EncodingTypePB::BIT_SHUFFLE);
-    RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer, fill_page_cache));
 
-    PageCacheOptions opts;
-    opts.rblock = _opts.rblock;
-    opts.fill_page_cache =
-            _opts.use_page_cache && (_reader->encoding_info()->encoding() == EncodingTypePB::DICT_ENCODING ||
-                                     _reader->encoding_info()->encoding() == EncodingTypePB::BIT_SHUFFLE);
-    opts.kept_in_memory = _reader->kept_in_memory();
-    opts.page_pointer = iter.page();
-    opts.nullmap_size = footer.data_page_footer().nullmap_size();
-
+    RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer));
     RETURN_IF_ERROR(parse_page(&_page, std::move(handle), page_body, footer.data_page_footer(),
-                               _reader->encoding_info(), iter.page(), iter.page_index(), &opts));
+                               _reader->encoding_info(), iter.page(), iter.page_index()));
 
     // dictionary page is read when the first data page that uses it is read,
     // this is to optimize the memory usage: when there is no query on one column, we could

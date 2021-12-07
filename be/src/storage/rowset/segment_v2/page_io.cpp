@@ -33,6 +33,7 @@
 #include "storage/rowset/segment_v2/binary_dict_page.h"
 #include "storage/rowset/segment_v2/bitshuffle_page.h"
 #include "storage/rowset/segment_v2/bitshuffle_wrapper.h"
+#include "storage/rowset/segment_v2/data_decoder.h"
 #include "util/block_compression.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
@@ -198,8 +199,10 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         opts.stats->uncompressed_bytes_read += body_size;
     }
 
+    RETURN_IF_ERROR(DataDecoder::decode_page(footer, footer_size + 4, opts.encoding_type, &page, page_slice));
+
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
-    if (opts.fill_page_cache) {
+    if (opts.use_page_cache) {
         // insert this page into cache and return the cache handle
         cache->insert(cache_key, page_slice, &cache_handle, opts.kept_in_memory);
         *handle = PageHandle(std::move(cache_handle));

@@ -35,15 +35,6 @@ class Column;
 namespace starrocks {
 namespace segment_v2 {
 
-struct PageCacheOptions {
-    fs::ReadableBlock* rblock = nullptr;
-    PagePointer page_pointer;
-    size_t nullmap_size = 0;
-    size_t footer_size = 0;
-    bool fill_page_cache = false;
-    bool kept_in_memory = false;
-};
-
 // PageDecoder is used to decode page.
 class PageDecoder {
 public:
@@ -124,8 +115,6 @@ public:
     }
 
     virtual const PageDecoder* dict_page_decoder() const { return nullptr; }
-
-    virtual Status fill_page_cache(PageCacheOptions* opts) { return Status::OK(); }
 
 private:
     PageDecoder(const PageDecoder&) = delete;

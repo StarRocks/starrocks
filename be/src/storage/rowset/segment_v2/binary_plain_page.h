@@ -274,23 +274,6 @@ public:
 
     uint32_t dict_size() { return _num_elems; }
 
-    Status fill_page_cache(PageCacheOptions* opts) override {
-        DCHECK(_parsed);
-        if (!opts->fill_page_cache || !_options.page_handle->is_data_owner()) {
-            return Status::OK();
-        }
-        auto cache = StoragePageCache::instance();
-        PageCacheHandle cache_handle;
-        StoragePageCache::CacheKey cache_key(opts->rblock->path(), opts->page_pointer.offset);
-        Slice page_slice = _options.page_handle->data();
-        cache->insert(cache_key, page_slice, &cache_handle, opts->kept_in_memory);
-
-        // memory now managed by cache handle
-        _options.page_handle->set_is_data_owner(false);
-        *(_options.page_handle) = PageHandle(std::move(cache_handle));
-        return Status::OK();
-    }
-
 private:
     // Return the offset within '_data' where the string value with index 'idx' can be found.
     uint32_t offset(int idx) const {

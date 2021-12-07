@@ -66,8 +66,7 @@ protected:
     void TearDown() override {}
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
-    void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0",
-                            const std::string null_ratio = "0") {
+    void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0") {
         config::set_config("null_encoding", null_encoding);
 
         using Type = typename TypeTraits<type>::CppType;
@@ -79,8 +78,8 @@ protected:
         auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
         ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
 
-        const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5-$6.data", TEST_DIR, type, encoding,
-                                                      version, adaptive, null_encoding, null_ratio);
+        const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4.data", TEST_DIR, type, encoding,
+                                                      version, adaptive);
         // write data
         {
             std::unique_ptr<fs::WritableBlock> wblock;
@@ -155,41 +154,46 @@ protected:
             iter_opts.use_page_cache = true;
             st = iter->init(iter_opts);
             ASSERT_TRUE(st.ok());
-            // sequence read
-            {
-                st = iter->seek_to_first();
-                ASSERT_TRUE(st.ok()) << st.to_string();
 
-                vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
-                // will do direct copy to column
-                size_t rows_read = src.size();
-                dst->reserve(rows_read);
-                st = iter->next_batch(&rows_read, dst.get());
-                ASSERT_TRUE(st.ok());
-                ASSERT_EQ(src.size(), rows_read);
-                ASSERT_EQ(dst->size(), rows_read);
+            // first read get data from disk
+            // second read get data from page cache
+            for (int i = 0; i < 2; ++i) {
+                // sequence read
+                {
+                    st = iter->seek_to_first();
+                    ASSERT_TRUE(st.ok()) << st.to_string();
 
-                for (size_t i = 0; i < rows_read; i++) {
-                    ASSERT_EQ(0, type_info->cmp(src.get(i), dst->get(i)))
-                            << " row " << i << ": " << datum_to_string(type_info.get(), src.get(i)) << " vs "
-                            << datum_to_string(type_info.get(), dst->get(i));
-                }
-            }
-
-            {
-                for (int rowid = 0; rowid < num_rows; rowid += 4025) {
-                    st = iter->seek_to_ordinal(rowid);
-                    ASSERT_TRUE(st.ok());
-
-                    size_t rows_read = 1024;
                     vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
-
+                    // will do direct copy to column
+                    size_t rows_read = src.size();
+                    dst->reserve(rows_read);
                     st = iter->next_batch(&rows_read, dst.get());
                     ASSERT_TRUE(st.ok());
-                    for (int i = 0; i < rows_read; ++i) {
-                        ASSERT_EQ(0, type_info->cmp(src.get(rowid + i), dst->get(i)))
-                                << " row " << rowid + i << ": " << datum_to_string(type_info.get(), src.get(rowid + i))
-                                << " vs " << datum_to_string(type_info.get(), dst->get(i));
+                    ASSERT_EQ(src.size(), rows_read);
+                    ASSERT_EQ(dst->size(), rows_read);
+
+                    for (size_t i = 0; i < rows_read; i++) {
+                        ASSERT_EQ(0, type_info->cmp(src.get(i), dst->get(i)))
+                                << " row " << i << ": " << datum_to_string(type_info.get(), src.get(i)) << " vs "
+                                << datum_to_string(type_info.get(), dst->get(i));
+                    }
+                }
+
+                {
+                    for (int rowid = 0; rowid < num_rows; rowid += 4025) {
+                        st = iter->seek_to_ordinal(rowid);
+                        ASSERT_TRUE(st.ok());
+
+                        size_t rows_read = 1024;
+                        vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
+
+                        st = iter->next_batch(&rows_read, dst.get());
+                        ASSERT_TRUE(st.ok());
+                        for (int i = 0; i < rows_read; ++i) {
+                            ASSERT_EQ(0, type_info->cmp(src.get(rowid + i), dst->get(i)))
+                                    << " row " << rowid + i << ": " << datum_to_string(type_info.get(), src.get(rowid + i))
+                                    << " vs " << datum_to_string(type_info.get(), dst->get(i));
+                        }
                     }
                 }
             }
@@ -494,28 +498,19 @@ protected:
     template <FieldType type>
     void test_numeric_types() {
         auto col = numeric_data<type>(1);
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "1");
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "1");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "1");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "1");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "1");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "1");
+        test_nullable_data<type, BIT_SHUFFLE, 1>(*col);
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
 
         col = numeric_data<type>(4);
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "4");
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "4");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "4");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "4");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "4");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "4");
+        test_nullable_data<type, BIT_SHUFFLE, 1>(*col);
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
 
         col = numeric_data<type>(10000);
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "10000");
-        test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "10000");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "10000");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "0", "10000");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "10000");
-        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "10000");
+        test_nullable_data<type, BIT_SHUFFLE, 1>(*col);
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
     }
 
     MemPool _pool;
@@ -534,56 +529,39 @@ TEST_F(ColumnReaderWriterTest, test_double) {
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_date) {
     auto col = date_values(100);
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "1", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "1", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 1>(*col);
+    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col);
+    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "1");
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_datetime) {
     auto col = datetime_values(100);
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "1", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "1", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 1>(*col);
+    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col);
+    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "1");
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_binary) {
     auto c = low_cardinality_strings(10000);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "10000");
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1");
 
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "10000");
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
+
 
     c = high_cardinality_strings(100);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1");
 
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "100");
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
 }
 
 // NOLINTNEXTLINE

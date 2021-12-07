@@ -26,8 +26,10 @@
 #include <memory>
 
 #include "column/datum_convert.h"
+#include "gen_cpp/segment_v2.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "storage/rowset/segment_v2/data_decoder.h"
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
@@ -35,6 +37,7 @@
 #include "util/logging.h"
 
 using starrocks::segment_v2::PageBuilderOptions;
+using starrocks::segment_v2::DataDecoder;
 
 namespace starrocks {
 
@@ -77,6 +80,16 @@ public:
 
         Slice encoded_data = s.slice();
         encoded_data.remove_prefix(ReserveHead);
+
+        starrocks::segment_v2::PageFooterPB footer;
+        footer.set_type(starrocks::segment_v2::DATA_PAGE);
+        starrocks::segment_v2::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
+        data_page_footer->set_nullmap_size(0);
+        std::unique_ptr<char[]> page = nullptr;
+
+        Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, encoded_data);
+        ASSERT_TRUE(st.ok());
+
         segment_v2::PageDecoderOptions decoder_options;
         PageDecoderType page_decoder(encoded_data, decoder_options);
         Status status = page_decoder.init();
@@ -132,7 +145,16 @@ public:
         OwnedSlice s = page_builder.finish()->build();
 
         Slice encoded_data = s.slice();
+        std::unique_ptr<char[]> page = nullptr;
         {
+            starrocks::segment_v2::PageFooterPB footer;
+            footer.set_type(starrocks::segment_v2::DATA_PAGE);
+            starrocks::segment_v2::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
+            data_page_footer->set_nullmap_size(0);
+
+            Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, encoded_data);
+            ASSERT_TRUE(st.ok());
+
             // read whole the page
             segment_v2::PageDecoderOptions decoder_options;
             PageDecoderType page_decoder(encoded_data, decoder_options);
@@ -190,8 +212,18 @@ public:
         size = page_builder.add(reinterpret_cast<const uint8_t*>(src), size);
         OwnedSlice s = page_builder.finish()->build();
 
+        Slice encoded_data = s.slice();
+        starrocks::segment_v2::PageFooterPB footer;
+        footer.set_type(starrocks::segment_v2::DATA_PAGE);
+        starrocks::segment_v2::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
+        data_page_footer->set_nullmap_size(0);
+        std::unique_ptr<char[]> page = nullptr;
+
+        Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, encoded_data);
+        ASSERT_TRUE(st.ok());
+
         segment_v2::PageDecoderOptions decoder_options;
-        PageDecoderType page_decoder(s.slice(), decoder_options);
+        PageDecoderType page_decoder(encoded_data, decoder_options);
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, page_decoder.current_index());
