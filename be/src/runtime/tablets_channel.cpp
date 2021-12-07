@@ -190,6 +190,7 @@ Status TabletsChannel::add_chunk(const PTabletWriterAddChunkRequest& params) {
             std::lock_guard<std::mutex> l(_tablet_locks[tablet_id & k_shard_size]);
             auto st = it->second->write(&chunk, row_indexes.data(), from, size);
             if (!st.ok()) {
+                (void)it->second->cancel();
                 return st;
             }
         }
