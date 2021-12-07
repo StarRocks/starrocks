@@ -31,7 +31,7 @@ void ExchangeSourceOperator::set_finishing(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     std::unique_ptr<vectorized::Chunk> chunk = std::make_unique<vectorized::Chunk>();
-    RETURN_IF_ERROR(_stream_recvr->get_chunk_pipeline(&chunk));
+    RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk));
     eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
 }
