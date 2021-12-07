@@ -53,33 +53,28 @@ public:
                 auto* closure = new CallBackClosure<PTransmitChunkResult, TUniqueId>(dest_instance_id);
                 closure->addFailedHandler([this, closure]() noexcept {
                     closure->give_back();
-                    {
-                        std::lock_guard<std::mutex> l(_mutex);
-                        _is_finishing = true;
-                    }
+                    _is_finishing = true;
+                    --_num_in_flight_rpc;
                     LOG(WARNING) << " transmit chunk rpc failed";
-                    _num_in_flight_rpc.fetch_sub(1, std::memory_order_release);
                 });
                 closure->addSuccessHandler(
                         [this, closure](const TUniqueId& instance_id, const PTransmitChunkResult& result) noexcept {
                             closure->give_back();
                             Status status(result.status());
                             if (!status.ok()) {
-                                {
-                                    std::lock_guard<std::mutex> l(_mutex);
-                                    _is_finishing = true;
-                                }
+                                _is_finishing = true;
                                 LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
                             } else {
-                                std::lock_guard<std::mutex> l(_mutex);
+                                std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
                                 _try_to_send_rpc(instance_id);
                             }
-                            _num_in_flight_rpc.fetch_sub(1, std::memory_order_release);
+                            --_num_in_flight_rpc;
                         });
                 _closures[dest_instance_id.lo] = closure;
 
                 _request_seqs[dest_instance_id.lo] = 0;
                 _buffers[dest_instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
+                _mutexes[dest_instance_id.lo] = std::make_unique<std::mutex>();
 
                 PUniqueId finst_id;
                 finst_id.set_hi(dest_instance_id.hi);
@@ -112,14 +107,17 @@ public:
     }
 
     void add_request(const TransmitChunkInfo& request) {
-        std::lock_guard<std::mutex> l(_mutex);
         DCHECK(_num_remaining_eos > 0);
         if (_is_finishing) {
             request.params->release_finst_id();
             return;
         }
-        _buffers[request.fragment_instance_id.lo].push(request);
-        _try_to_send_rpc(request.fragment_instance_id);
+        {
+            auto& instance_id = request.fragment_instance_id;
+            std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
+            _buffers[instance_id.lo].push(request);
+            _try_to_send_rpc(instance_id);
+        }
     }
 
     bool is_full() const {
@@ -136,21 +134,20 @@ public:
             return false;
         }
 
-        // Here is the guarantee that
-        // 1. No new brpc process will be triggered after finishing stage
-        // Therefore, we just wait for bprc process to be finished
-        return _num_in_flight_rpc.load(std::memory_order_acquire) == 0;
+        return _num_sending_rpc == 0 && _num_in_flight_rpc == 0;
     }
 
     void decrease_running_sinkers() {
         if (--_num_remaining_sinkers == 0) {
-            std::lock_guard<std::mutex> l(_mutex);
             _is_finishing = true;
         }
     }
 
 private:
     void _try_to_send_rpc(const TUniqueId& instance_id) {
+        DeferOp defer([this]() { --_num_sending_rpc; });
+        ++_num_sending_rpc;
+
         if (_is_finishing) {
             return;
         }
@@ -185,11 +182,12 @@ private:
             request.params->set_allocated_finst_id(&_instance_id2finst_id[instance_id.lo]);
             request.params->set_sequence(_request_seqs[instance_id.lo]++);
 
+            ++_num_in_flight_rpc;
+
             closure->borrow();
             closure->cntl.Reset();
             closure->cntl.set_timeout_ms(_brpc_timeout_ms);
             closure->cntl.request_attachment().append(request.attachment);
-            _num_in_flight_rpc.fetch_add(1, std::memory_order_release);
             request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
 
             request.params->release_finst_id();
@@ -200,8 +198,6 @@ private:
     MemTracker* _mem_tracker = nullptr;
     const int32_t _brpc_timeout_ms;
 
-    std::mutex _mutex;
-
     // Taking into account of efficiency, all the following maps
     // use int64_t as key, which is the field type of TUniqueId::lo
     // because TUniqueId::hi is exactly the same in one query
@@ -210,21 +206,27 @@ private:
     phmap::flat_hash_map<int64_t, int64_t> _request_seqs;
     std::atomic<int32_t> _num_in_flight_rpc = 0;
     std::atomic<int32_t> _num_remaining_sinkers;
-    int32_t _num_remaining_eos = 0;
+    std::atomic<int32_t> _num_remaining_eos = 0;
 
     // The request needs the reference to the allocated finst id,
     // so cache finst id for each dest fragment instance.
     phmap::flat_hash_map<int64_t, PUniqueId> _instance_id2finst_id;
     phmap::flat_hash_map<int64_t, CallBackClosure<PTransmitChunkResult, TUniqueId>*> _closures;
     phmap::flat_hash_map<int64_t, std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>> _buffers;
+    phmap::flat_hash_map<int64_t, std::unique_ptr<std::mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.
     // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.
-    // Modification of this field must under _mutex even it is atomic type because:
-    // 1. atomic: make sure that all threads without _mutex can see the modification immediately
-    // 2. _mutex: guarantee that no rpc will be triggered if SinkBuffer entered finishing stage
+    // Unfortunately, _is_finishing itself cannot guarantee that no brpc process will trigger if entering finishing stage,
+    // considering the following situations(events order by time)
+    //      time1(thread A): _try_to_send_rpc check _is_finishing which returns false
+    //      time2(thread B): set _is_finishing to true
+    //      time3(thread A): _try_to_send_rpc trigger brpc process
+    // So _num_sending_rpc is introduced to solve this problem by providing extra information
+    // of how many threads are calling _try_to_send_rpc
     std::atomic<bool> _is_finishing = false;
+    std::atomic<int32_t> _num_sending_rpc = 0;
 
 }; // namespace starrocks::pipeline
 
