@@ -466,20 +466,6 @@ public class DecodeRewriteTest extends PlanTestBase{
     }
 
     @Test
-    public void testCallFunctionOnConstant() throws Exception {
-        String sql = "select hex(10), s_address from supplier";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:Decode\n" +
-                "  |  <dict id 10> : <string id 3>\n" +
-                "  |  use vectorized: true\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 9> : hex(10)\n" +
-                "  |  <slot 10> : 10: S_ADDRESS\n" +
-                "  |  use vectorized: true"));
-    }
-
-    @Test
     public void testAssignWrongNullableProperty() throws Exception {
         String sql = "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier UNION SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier;";
         String plan = getCostExplain(sql);
@@ -508,5 +494,25 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  cardinality: 1"));
+    }
+
+    @Test
+    public void testDecodeWithLimit() throws Exception {
+        String sql = "select count(*), S_ADDRESS from supplier group by S_ADDRESS limit 10";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  limit: 10"));
+    }
+
+    @Test
+    public void testNoDecode() throws Exception {
+        String sql = "select *, to_bitmap(S_SUPPKEY) from supplier limit 1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
+        sql = "select hex(10), s_address from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
     }
 }
