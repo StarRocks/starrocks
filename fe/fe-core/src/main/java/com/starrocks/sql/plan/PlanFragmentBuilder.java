@@ -420,6 +420,7 @@ public class PlanFragmentBuilder {
                     inputFragment.getPlanRoot(),
                     node.getDictToStrings(), projectMap);
             decodeNode.computeStatistics(optExpression.getStatistics());
+            decodeNode.setLimit(node.getLimit());
 
             inputFragment.setPlanRoot(decodeNode);
             return inputFragment;
