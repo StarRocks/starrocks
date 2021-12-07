@@ -4894,6 +4894,24 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testEmptyNodeWithJoin() throws Exception {
+        // check no exception
+        String sql = "SELECT\n" +
+                "        subq_0.c3, ref_2.id_datetime        \n" +
+                "FROM (\n" +
+                "        SELECT\n" +
+                "                ref_0.id_date AS c3\n" +
+                "        FROM\n" +
+                "                test_all_type AS ref_0 WHERE FALSE) AS subq_0\n" +
+                "        INNER JOIN test_all_type AS ref_1 ON (subq_0.c3 = ref_1.id_date)\n" +
+                "        INNER JOIN test_all_type AS ref_2 ON (subq_0.c3 = ref_2.id_datetime)\n" +
+                "WHERE\n" +
+                "        ref_2.t1a >= ref_1.t1a";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
+    
+    @Test
     public void testSemiReorder() throws Exception {
         String sql = "select 0 from t0,t1 left semi join t2 on v1 = v7";
         String plan = getFragmentPlan(sql);
