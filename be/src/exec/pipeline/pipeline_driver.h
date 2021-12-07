@@ -106,6 +106,8 @@ public:
         }
     }
 
+    int64_t get_accumulated_chunk_moved() { return accumulated_chunk_moved; }
+
 private:
     int64_t schedule_times{0};
     int64_t schedule_effective_times{0};
@@ -287,6 +289,7 @@ private:
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
     RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
+    RuntimeProfile::Counter* _schedule_accumulated_chunk_moved = nullptr;
 
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
