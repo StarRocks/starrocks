@@ -228,14 +228,23 @@ public:
     bool is_precondition_block() { return dependencies_block() || local_rf_block() || global_rf_block(); }
 
     bool is_not_blocked() {
-        if (_state == DriverState::PRECONDITION_BLOCK) {
-            return !is_precondition_block();
-        } else if (_state == DriverState::OUTPUT_FULL) {
-            return sink_operator()->need_input() || sink_operator()->is_finished();
-        } else if (_state == DriverState::INPUT_EMPTY) {
-            return source_operator()->has_output() || source_operator()->is_finished();
+        // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
+        if (sink_operator()->is_finished()) {
+            return true;
         }
-        return true;
+
+        // PRECONDITION_BLOCK
+        if (is_precondition_block()) {
+            return false;
+        }
+
+        // OUTPUT_FULL
+        if (!sink_operator()->need_input()) {
+            return false;
+        }
+
+        // INPUT_EMPTY
+        return source_operator()->is_finished() || source_operator()->has_output();
     }
 
     bool is_root() const { return _is_root; }
