@@ -22,7 +22,7 @@ HLL_CARDINALITY(hll)
 HLL_HASH(column_name)
 生成HLL列类型，用于insert或导入的时候，导入的使用见相关说明
 
-EMPTY_HLL()
+HLL_EMPTY()
 生成空HLL列，用于insert或导入的时候补充默认值，导入的使用见相关说明
 
 ## example
