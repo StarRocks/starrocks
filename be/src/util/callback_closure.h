@@ -39,15 +39,13 @@ public:
 
     bool is_idle() { return _is_idle; }
 
-    // Closure is unsharable, this method should be
-    // invoked before brpc task submited
+    // brpc must be serial, so the closure is unsharable
+    // borrow should be invoked before brpc task submited
+    // and give_back should be invoked after brpc finished
     void borrow() {
         DCHECK(_is_idle);
         _is_idle = false;
     }
-
-    // Closure is unsharable, this method should be
-    // invoked after brpc finished
     void give_back() {
         DCHECK(!_is_idle);
         _is_idle = true;
