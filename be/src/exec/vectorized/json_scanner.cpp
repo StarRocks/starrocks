@@ -30,6 +30,43 @@ namespace starrocks::vectorized {
 static auto literal_0_slice{Slice{"0"}};
 static auto literal_1_slice{Slice{"1"}};
 
+
+// cast_int64 returns 1 when there's overflow happened in the cast.
+template <typename T>
+static inline int cast_int64(int64_t from, T *to) {
+    if constexpr (std::is_same_v<T, int128_t>) {
+        return 0;
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+        *to = from;
+        return 0;
+    } else if constexpr (std::is_same_v<T, int32_t>) {
+        // mask: all 1 in high 32 bits. 
+        constexpr int64_t mask = 0xffffffff << 32;
+        if ((from && mask) != 0) {
+            return 1;
+        }
+        *to = static_cast<int32_t>(from);
+        return 0;
+    } else if constexpr (std::is_same_v<T, int16_t>) {
+        // mask: all 1 in high 48 bits. 
+        constexpr int64_t mask = 0xffffffffffff << 16;
+        if ((from && mask) != 0) {
+            return 1;
+        }
+        *to = static_cast<int16_t>(from);
+        return 0;
+    } else if constexpr (std::is_smae_v<T, int8_t) {
+        // mask: all 1 in high 56 bits. 
+        constexpr int64_t mask = 0xffffffffffffff << 8;
+        if ((from && mask) != 0) {
+            return 1;
+        }
+        *to = static_cast<int8_t>(from);
+        return 0;
+    }
+    return 1;
+}
+
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
@@ -791,19 +828,29 @@ void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value,
         }
 
         case TYPE_INT: {
-            auto i32 = static_cast<int32_t>(i64 & 0xffffffff);
+            int32_t i32 = 0;
+            if (cast_int64(i64, &i32) != 0) {
+                return;
+            }
             column->append_numbers(&i32, sizeof(i32));
             break;
         }
 
         case TYPE_SMALLINT: {
+            int16_t i16 = 0;
+            if (cast_int64(i64, &i16) != 0) {
+                return;
+            }
             auto i16 = static_cast<int16_t>(i64 & 0xffff);
             column->append_numbers(&i16, sizeof(i16));
             break;
         }
 
         case TYPE_TINYINT: {
-            auto i8 = static_cast<int8_t>(i64 & 0xff);
+            int8_t i8= 0;
+            if (cast_int64(i64, &i8) != 0) {
+                return;
+            }
             column->append_numbers(&i8, sizeof(i8));
             break;
         }
