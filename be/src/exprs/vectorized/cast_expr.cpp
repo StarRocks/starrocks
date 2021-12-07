@@ -14,6 +14,7 @@
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "storage/hll.h"
 #include "util/date_func.h"
 
 namespace starrocks {
@@ -134,6 +135,28 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
     return builder.build(column->is_constant());
 }
 
+template <>
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(ColumnPtr& column) {
+    ColumnBuilder<TYPE_HLL> builder;
+    ColumnViewer<TYPE_VARCHAR> viewer(column);
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto value = viewer.value(row);
+        if (!HyperLogLog::is_valid(value)) {
+            builder.append_null();
+        } else {
+            HyperLogLog hll;
+            hll.deserialize(value);
+            builder.append(&hll);
+        }
+    }
+
+    return builder.build(column->is_constant());
+}
 // all int(tinyint, smallint, int, bigint, largeint) cast implements
 DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
     return value;
@@ -1004,6 +1027,10 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
     if (from_type == TYPE_NULL) {
         // NULL TO OTHER TYPE, direct return
         from_type = to_type;
+    }
+
+    if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
+        return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL>(node);
     }
 
     if (to_type == TYPE_VARCHAR) {
