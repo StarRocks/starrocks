@@ -4803,4 +4803,19 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PREDICATES: array_length(2: c1) >= 2, array_length(2: c1) <= 3"));
     }
+
+    @Test
+    public void testSemiReorder() throws Exception {
+        String sql = "select 0 from t0,t1 left semi join t2 on v1 = v7";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:10: expr\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  8:Project\n" +
+                "  |  <slot 10> : 0\n" +
+                "  |  \n"));
+    }
 }
