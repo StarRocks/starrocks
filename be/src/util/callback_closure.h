@@ -38,15 +38,19 @@ public:
     ~CallBackClosure() override = default;
 
     bool is_idle() { return _is_idle; }
+
+    // Closure is unsharable, this method should be
+    // invoked before brpc task submited
     void borrow() {
-        bool expected = true;
-        [[maybe_unused]] auto res = _is_idle.compare_exchange_strong(expected, false);
-        DCHECK(res);
+        DCHECK(_is_idle);
+        _is_idle = false;
     }
+
+    // Closure is unsharable, this method should be
+    // invoked after brpc finished
     void give_back() {
-        bool expected = false;
-        [[maybe_unused]] auto res = _is_idle.compare_exchange_strong(expected, true);
-        DCHECK(res);
+        DCHECK(!_is_idle);
+        _is_idle = true;
     }
 
     // Disallow copy and assignment.
