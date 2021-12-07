@@ -22,8 +22,6 @@
 #ifndef STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_MGR_H
 #define STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_MGR_H
 
-#include <boost/unordered_map.hpp>
-#include <boost/unordered_set.hpp>
 #include <list>
 #include <mutex>
 #include <set>
@@ -101,7 +99,7 @@ private:
     // create_recvr().
     // we don't want to create a map<pair<TUniqueId, PlanNodeId>, DataStreamRecvr*>,
     // because that requires a bunch of copying of ids for lookup
-    typedef boost::unordered_multimap<uint32_t, std::shared_ptr<DataStreamRecvr> > StreamMap;
+    typedef std::unordered_multimap<uint32_t, std::shared_ptr<DataStreamRecvr> > StreamMap;
     StreamMap _receiver_map;
 
     // less-than ordering for pair<TUniqueId, PlanNodeId>

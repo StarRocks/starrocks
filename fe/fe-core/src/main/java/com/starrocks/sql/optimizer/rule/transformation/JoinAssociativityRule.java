@@ -120,9 +120,18 @@ public class JoinAssociativityRule extends TransformationRule {
         }
 
         LogicalJoinOperator.Builder topJoinBuilder = new LogicalJoinOperator.Builder();
+
+        // If left child join contains predicate, it's means the predicate must can't push down to child, it's
+        // will use columns which from all children, so we should add the predicate to new top join
+        ScalarOperator topJoinPredicate = parentJoin.getPredicate();
+        if (leftChildJoin.getPredicate() != null) {
+            topJoinPredicate = Utils.compoundAnd(topJoinPredicate, leftChildJoin.getPredicate());
+        }
+
         LogicalJoinOperator topJoinOperator = topJoinBuilder.withOperator(parentJoin)
                 .setJoinType(JoinOperator.INNER_JOIN)
                 .setOnPredicate(Utils.compoundAnd(newParentConjuncts))
+                .setPredicate(topJoinPredicate)
                 .build();
 
         ColumnRefSet parentJoinRequiredColumns = parentJoin.getOutputColumns(new ExpressionContext(input));
