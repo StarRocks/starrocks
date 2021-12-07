@@ -137,7 +137,14 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
         this->_blocked_driver_poller->add_blocked_driver(driver);
     } else {
         driver->dispatch_operators();
-        this->_driver_queue->put_back(driver);
+
+        // Try to add the driver to poller first.
+        if (!driver->source_operator()->is_finished() && !driver->source_operator()->has_output()) {
+            driver->set_driver_state(DriverState::INPUT_EMPTY);
+            this->_blocked_driver_poller->add_blocked_driver(driver);
+        } else {
+            this->_driver_queue->put_back(driver);
+        }
     }
 }
 
