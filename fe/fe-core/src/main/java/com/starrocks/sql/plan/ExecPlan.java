@@ -86,6 +86,10 @@ public class ExecPlan {
         return cteProduceFragments;
     }
 
+    public OptExpression getPhysicalPlan() {
+        return physicalPlan;
+    }
+
     public String getExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
         if (level == null) {
