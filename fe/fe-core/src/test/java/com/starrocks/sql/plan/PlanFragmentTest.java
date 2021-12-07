@@ -4892,4 +4892,19 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("9:HASH JOIN\n" +
                 "  |    |  join op: INNER JOIN (PARTITIONED)"));
     }
+
+    @Test
+    public void testSemiReorder() throws Exception {
+        String sql = "select 0 from t0,t1 left semi join t2 on v1 = v7";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:10: expr\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  8:Project\n" +
+                "  |  <slot 10> : 0\n"));
+    }
 }
