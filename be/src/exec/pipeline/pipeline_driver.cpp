@@ -249,9 +249,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     // Calculate total time before report profile
     _total_timer->update(_total_timer_sw->elapsed_time());
 
-    _schedule_counter->set(driver_acct().get_schedule_times());
-    _schedule_effective_counter->set(driver_acct().get_schedule_effective_times());
-    _schedule_rows_per_chunk->set(driver_acct().get_rows_per_chunk());
+    COUNTER_UPDATE(_schedule_counter, driver_acct().get_schedule_times());
+    COUNTER_UPDATE(_schedule_effective_counter, driver_acct().get_schedule_effective_times());
+    COUNTER_UPDATE(_schedule_rows_per_chunk, driver_acct().get_rows_per_chunk());
 
     // last root driver cancel the all drivers' execution and notify FE the
     // fragment's completion but do not unregister the FragmentContext because
