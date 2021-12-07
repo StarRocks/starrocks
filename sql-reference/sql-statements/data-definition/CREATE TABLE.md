@@ -397,7 +397,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     UNIQUE KEY(k1, k2)
     DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
     PROPERTIES(
-        "storage_type"="column"，
+        "storage_type"="column",
         "storage_medium" = "SSD",
         "storage_cooldown_time" = "2015-06-04 00:00:00"
     );
@@ -417,7 +417,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     PRIMARY KEY(k1, k2)
     DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
     PROPERTIES(
-        "storage_type"="column"，
+        "storage_type"="column",
         "storage_medium" = "SSD",
         "storage_cooldown_time" = "2015-06-04 00:00:00"
     );
