@@ -9,10 +9,15 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.rule.RuleSet;
+import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -124,6 +129,18 @@ public class ReplayFromDumpTest {
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(TExplainLevel.COSTS));
+    }
+
+    private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
+                                                        TExplainLevel level)
+            throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
+        if (sessionVariable != null) {
+            queryDumpInfo.setSessionVariable(sessionVariable);
+        }
+        return new Pair<>(queryDumpInfo,
+                UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
+                        getExplainString(level));
     }
 
     @Test
@@ -251,5 +268,30 @@ public class ReplayFromDumpTest {
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |       cardinality: 335"));
+    }
+
+    @Test
+    public void testCrossReorder() throws Exception {
+        RuleSet mockRule = new RuleSet() {
+            @Override
+            public void addJoinTransformationRules() {
+                this.getTransformRules().clear();
+                this.getTransformRules().add(JoinAssociativityRule.getInstance());
+            }
+        };
+
+        new MockUp<OptimizerContext>() {
+            @Mock
+            public RuleSet getRuleSet() {
+                return mockRule;
+            }
+        };
+
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("  15:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: (CAST(2: v2 AS DOUBLE) = CAST(8: v2 AS DOUBLE)) OR (3: v3 = 8: v2), " +
+                "CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1'\n"));
     }
 }

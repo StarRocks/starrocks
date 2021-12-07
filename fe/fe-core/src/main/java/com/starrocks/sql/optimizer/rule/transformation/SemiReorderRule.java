@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -55,6 +56,8 @@ public class SemiReorderRule extends TransformationRule {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
 
+        Preconditions.checkState(topJoin.getPredicate() == null);
+
         LogicalJoinOperator newTopJoin = new LogicalJoinOperator.Builder().withOperator(leftChildJoin)
                 .setProjection(topJoin.getProjection())
                 .build();
@@ -84,6 +87,5 @@ public class SemiReorderRule extends TransformationRule {
                         OptExpression.create(newSemiJoin,
                                 Lists.newArrayList(input.inputAt(0).inputAt(0), input.inputAt(1))),
                         input.inputAt(0).inputAt(1))));
-
     }
 }
