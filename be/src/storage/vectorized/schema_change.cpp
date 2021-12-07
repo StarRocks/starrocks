@@ -1261,7 +1261,6 @@ Status SchemaChangeHandler::_parse_request(
         }
 
         // to handle new added column
-        //if (new_column_schema.is_allow_null || new_column_schema.has_default_value) {
         {
             column_mapping->ref_column = -1;
 
@@ -1277,14 +1276,6 @@ Status SchemaChangeHandler::_parse_request(
                       << "column=" << column_name << ", default_value=" << new_column.default_value();
             continue;
         }
-
-        column_mapping->ref_column = -1;
-        if (!_init_column_mapping(column_mapping, new_column, "").ok()) {
-            return Status::InternalError("init column mapping failed");
-        }
-        LOG(INFO) << "A new schema delta is converted while dropping column. "
-                  << "Dropped column will be assigned as '0' for the older schema. "
-                  << "column=" << column_name;
     }
 
     // Check if re-aggregation is needed.
