@@ -22,6 +22,7 @@ public class LimitImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
         return Lists.newArrayList(OptExpression
-                .create(new PhysicalLimitOperator(limit.getOffset(), limit.getLimit()), input.getInputs()));
+                .create(new PhysicalLimitOperator(limit.getOffset(), limit.getLimit(), limit.getProjection()),
+                        input.getInputs()));
     }
 }

@@ -2,11 +2,9 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import avro.shaded.com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -54,26 +52,8 @@ public class PruneScanColumnRule extends TransformationRule {
         outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
 
         if (outputColumns.size() == 0) {
-            List<ColumnRefOperator> columnRefOperatorList =
-                    new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
-
-            int smallestIndex = -1;
-            int smallestColumnLength = Integer.MAX_VALUE;
-            for (int index = 0; index < columnRefOperatorList.size(); ++index) {
-                if (smallestIndex == -1) {
-                    smallestIndex = index;
-                }
-                Type columnType = columnRefOperatorList.get(index).getType();
-                if (columnType.isScalarType()) {
-                    int columnLength = columnType.getSlotSize();
-                    if (columnLength < smallestColumnLength) {
-                        smallestIndex = index;
-                        smallestColumnLength = columnLength;
-                    }
-                }
-            }
-            Preconditions.checkArgument(smallestIndex != -1);
-            outputColumns.add(columnRefOperatorList.get(smallestIndex));
+            outputColumns.add(Utils.findSmallestColumnRef(
+                    new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet())));
         }
 
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {

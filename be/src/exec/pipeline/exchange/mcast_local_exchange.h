@@ -67,9 +67,10 @@ private:
 // ===== source op =====
 class MultiCastLocalExchangeSourceOperator final : public SourceOperator {
 public:
-    MultiCastLocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t mcast_consumer_index,
+    MultiCastLocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                         int32_t mcast_consumer_index,
                                          std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : SourceOperator(factory, id, "mcast_local_exchange_source", -1),
+            : SourceOperator(factory, id, "mcast_local_exchange_source", plan_node_id),
               _mcast_consumer_index(mcast_consumer_index),
               _exchanger(exchanger) {}
 
@@ -91,14 +92,15 @@ private:
 
 class MultiCastLocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    MultiCastLocalExchangeSourceOperatorFactory(int32_t id, int32_t mcast_consumer_index,
+    MultiCastLocalExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, int32_t mcast_consumer_index,
                                                 std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : SourceOperatorFactory(id, "mcast_local_exchange_source", -1),
+            : SourceOperatorFactory(id, "mcast_local_exchange_source", plan_node_id),
               _mcast_consumer_index(mcast_consumer_index),
               _exchanger(exchanger) {}
     ~MultiCastLocalExchangeSourceOperatorFactory() override = default;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<MultiCastLocalExchangeSourceOperator>(this, _id, _mcast_consumer_index, _exchanger);
+        return std::make_shared<MultiCastLocalExchangeSourceOperator>(this, _id, _plan_node_id, _mcast_consumer_index,
+                                                                      _exchanger);
     }
 
 private:
@@ -110,9 +112,10 @@ private:
 
 class MultiCastLocalExchangeSinkOperator final : public Operator {
 public:
-    MultiCastLocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, const int32_t driver_sequence,
+    MultiCastLocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                       const int32_t driver_sequence,
                                        std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : Operator(factory, id, "mcast_local_exchange_sink", -1),
+            : Operator(factory, id, "mcast_local_exchange_sink", plan_node_id),
               _driver_sequence(driver_sequence),
               _exchanger(exchanger) {}
 
@@ -140,13 +143,15 @@ private:
 
 class MultiCastLocalExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
-    MultiCastLocalExchangeSinkOperatorFactory(int32_t id, std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : OperatorFactory(id, "mcast_local_exchange_sink", -1), _exchanger(exchanger) {}
+    MultiCastLocalExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
+                                              std::shared_ptr<MultiCastLocalExchanger> exchanger)
+            : OperatorFactory(id, "mcast_local_exchange_sink", plan_node_id), _exchanger(exchanger) {}
 
     ~MultiCastLocalExchangeSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<MultiCastLocalExchangeSinkOperator>(this, _id, driver_sequence, _exchanger);
+        return std::make_shared<MultiCastLocalExchangeSinkOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                                    _exchanger);
     }
 
 private:

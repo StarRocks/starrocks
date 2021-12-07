@@ -187,8 +187,6 @@ private:
                                        const std::string& value);
 
 private:
-    RowsetReaderContext _reader_context;
-
     DISALLOW_COPY_AND_ASSIGN(SchemaChangeHandler);
 };
 

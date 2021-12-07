@@ -89,15 +89,33 @@ public:
     void update_last_chunks_moved(int64_t chunks_moved) {
         this->last_chunks_moved = chunks_moved;
         this->accumulated_chunk_moved += chunks_moved;
+        this->schedule_effective_times += (chunks_moved > 0) ? 1 : 0;
     }
+    void update_accumulated_rows_moved(int64_t rows_moved) { this->accumulated_rows_moved += rows_moved; }
     void increment_schedule_times() { this->schedule_times += 1; }
+
+    int64_t get_schedule_times() { return schedule_times; }
+
+    int64_t get_schedule_effective_times() { return schedule_effective_times; }
+
+    int64_t get_rows_per_chunk() {
+        if (accumulated_chunk_moved > 0) {
+            return accumulated_rows_moved / accumulated_chunk_moved;
+        } else {
+            return 0;
+        }
+    }
+
+    int64_t get_accumulated_chunk_moved() { return accumulated_chunk_moved; }
 
 private:
     int64_t schedule_times{0};
+    int64_t schedule_effective_times{0};
     int64_t last_time_spent{0};
     int64_t last_chunks_moved{0};
     int64_t accumulated_time_spent{0};
     int64_t accumulated_chunk_moved{0};
+    int64_t accumulated_rows_moved{0};
 };
 
 // OperatorExecState is used to guarantee that some hooks of operator
@@ -210,14 +228,23 @@ public:
     bool is_precondition_block() { return dependencies_block() || local_rf_block() || global_rf_block(); }
 
     bool is_not_blocked() {
-        if (_state == DriverState::PRECONDITION_BLOCK) {
-            return !is_precondition_block();
-        } else if (_state == DriverState::OUTPUT_FULL) {
-            return sink_operator()->need_input() || sink_operator()->is_finished();
-        } else if (_state == DriverState::INPUT_EMPTY) {
-            return source_operator()->has_output() || source_operator()->is_finished();
+        // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
+        if (sink_operator()->is_finished()) {
+            return true;
         }
-        return true;
+
+        // PRECONDITION_BLOCK
+        if (is_precondition_block()) {
+            return false;
+        }
+
+        // OUTPUT_FULL
+        if (!sink_operator()->need_input()) {
+            return false;
+        }
+
+        // INPUT_EMPTY
+        return source_operator()->is_finished() || source_operator()->has_output();
     }
 
     bool is_root() const { return _is_root; }
@@ -267,6 +294,12 @@ private:
     RuntimeProfile::Counter* _pending_timer = nullptr;
     RuntimeProfile::Counter* _precondition_block_timer = nullptr;
     RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
+
+    RuntimeProfile::Counter* _schedule_counter = nullptr;
+    RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
+    RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
+    RuntimeProfile::Counter* _schedule_accumulated_chunk_moved = nullptr;
+
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
     MonotonicStopWatch* _precondition_block_timer_sw = nullptr;

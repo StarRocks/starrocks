@@ -6,6 +6,8 @@
 #include <runtime/descriptors.h>
 #include <runtime/runtime_state.h>
 
+#include <cstdint>
+
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -205,9 +207,16 @@ struct JoinKeyEqual<Slice> {
 
 class JoinHashMapHelper {
 public:
+    // maxinum bucket size
+    const static uint32_t MAX_BUCKET_SIZE = 1 << 31;
+
     static uint32_t calc_bucket_size(uint32_t size) {
-        size = size + (size - 1) / 7;
-        return phmap::priv::NormalizeCapacity(size) + 1;
+        size_t expect_bucket_size = static_cast<size_t>(size) + (size - 1) / 7;
+        // Limit the maximum hash table bucket size.
+        if (expect_bucket_size >= MAX_BUCKET_SIZE) {
+            return MAX_BUCKET_SIZE;
+        }
+        return phmap::priv::NormalizeCapacity(expect_bucket_size) + 1;
     }
 
     template <typename CppType>

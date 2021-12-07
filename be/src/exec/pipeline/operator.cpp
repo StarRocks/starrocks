@@ -10,11 +10,23 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
+
+const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
+const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
+
 Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id)
         : _factory(factory), _id(id), _name(name), _plan_node_id(plan_node_id) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
-    _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("$0 (id=$1)", upper_name, _plan_node_id));
+    std::string profile_name;
+    if (plan_node_id >= 0) {
+        profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
+    } else if (plan_node_id > Operator::s_pseudo_plan_node_id_upper_bound) {
+        profile_name = strings::Substitute("$0", upper_name, _plan_node_id);
+    } else {
+        profile_name = strings::Substitute("$0 (pseudo_plan_node_id=$1)", upper_name, _plan_node_id);
+    }
+    _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
     _mem_tracker = std::make_unique<MemTracker>(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr);
 }
@@ -60,6 +72,10 @@ RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() {
     return _factory->get_runtime_bloom_filters();
 }
 
+const std::vector<SlotId>& Operator::filter_null_value_columns() const {
+    return _factory->get_filter_null_value_columns();
+}
+
 void Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk) {
     if (UNLIKELY(!_conjuncts_and_in_filters_is_cached)) {
         _cached_conjuncts_and_in_filters.insert(_cached_conjuncts_and_in_filters.end(), conjuncts.begin(),
@@ -88,10 +104,13 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
     if (chunk == nullptr || chunk->is_empty()) {
         return;
     }
+
     if (auto* bloom_filters = runtime_bloom_filters()) {
         _init_rf_counters(true);
         bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
     }
+
+    ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
 }
 
 void Operator::_init_rf_counters(bool init_bloom) {

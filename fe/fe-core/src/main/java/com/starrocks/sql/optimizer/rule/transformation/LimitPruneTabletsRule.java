@@ -56,13 +56,12 @@ public class LimitPruneTabletsRule extends TransformationRule {
             }
             Partition partition = olapTable.getPartition(partitionId);
             long version = partition.getVisibleVersion();
-            long versionHash = partition.getVisibleVersionHash();
             MaterializedIndex index = partition.getIndex(olapScanOperator.getSelectedIndexId());
 
             for (Tablet tablet : index.getTablets()) {
                 long tabletRowCount = 0L;
                 for (Replica replica : tablet.getReplicas()) {
-                    if (replica.checkVersionCatchUp(version, versionHash, false)
+                    if (replica.checkVersionCatchUp(version, false)
                             && replica.getRowCount() > tabletRowCount) {
                         tabletRowCount = replica.getRowCount();
                         break;

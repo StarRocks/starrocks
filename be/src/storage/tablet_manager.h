@@ -52,7 +52,7 @@ class DataDir;
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
+    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -136,6 +136,8 @@ public:
         std::shared_lock l(_shutdown_tablets_lock);
         return _shutdown_tablets.size();
     }
+
+    MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
 
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;

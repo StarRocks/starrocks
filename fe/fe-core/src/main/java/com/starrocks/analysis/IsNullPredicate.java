@@ -110,6 +110,11 @@ public class IsNullPredicate extends Predicate {
         return getChild(0).toSql() + (isNotNull ? " IS NOT NULL" : " IS NULL");
     }
 
+    @Override
+    public String toDigestImpl() {
+        return getChild(0).toDigest() + (isNotNull ? " is not null" : " is null");
+    }
+
     public boolean isSlotRefChildren() {
         return (children.get(0) instanceof SlotRef);
     }
@@ -129,7 +134,6 @@ public class IsNullPredicate extends Predicate {
 
         // determine selectivity
         selectivity = 0.1;
-        // LOG.debug(toSql() + " selectivity: " + Double.toString(selectivity));
     }
 
     @Override

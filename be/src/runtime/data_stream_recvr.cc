@@ -69,8 +69,12 @@ public:
     // must acquire data from the returned batch before the next call to get_batch().
     Status get_chunk(vectorized::Chunk** chunk);
 
+    // Same as get_chunk, but this version will not wait if there is non buffer chunks
+    Status get_chunk_for_pipeline(vectorized::Chunk** chunk);
+
     // check if data has come, work with try_get_chunk.
     bool has_chunk();
+
     // Probe for chunks, because _chunk_queue maybe empty when data hasn't come yet.
     // So compute thread should do other works.
     bool try_get_chunk(vectorized::Chunk** chunk);
@@ -111,6 +115,8 @@ private:
         // the callback is closed- >run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
     };
+
+    Status _do_get_chunk(vectorized::Chunk** chunk);
 
     // _add_chunks_internal is called by add_chunks and add_chunks_for_pipeline
     Status _add_chunks_internal(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
@@ -201,12 +207,20 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
         _data_arrival_cv.wait(l);
     }
 
+    return _do_get_chunk(chunk);
+}
+
+Status DataStreamRecvr::SenderQueue::get_chunk_for_pipeline(vectorized::Chunk** chunk) {
+    std::unique_lock<std::mutex> l(_lock);
+    return _do_get_chunk(chunk);
+}
+
+Status DataStreamRecvr::SenderQueue::_do_get_chunk(vectorized::Chunk** chunk) {
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled SenderQueue::get_chunk");
     }
 
     if (_chunk_queue.empty()) {
-        DCHECK_EQ(_num_remaining_senders, 0);
         return Status::OK();
     }
 
@@ -619,6 +633,15 @@ Status DataStreamRecvr::get_chunk(std::unique_ptr<vectorized::Chunk>* chunk) {
     DCHECK_EQ(_sender_queues.size(), 1);
     vectorized::Chunk* tmp_chunk = nullptr;
     Status status = _sender_queues[0]->get_chunk(&tmp_chunk);
+    chunk->reset(tmp_chunk);
+    return status;
+}
+
+Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk) {
+    DCHECK(!_is_merging);
+    DCHECK_EQ(_sender_queues.size(), 1);
+    vectorized::Chunk* tmp_chunk = nullptr;
+    Status status = _sender_queues[0]->get_chunk_for_pipeline(&tmp_chunk);
     chunk->reset(tmp_chunk);
     return status;
 }

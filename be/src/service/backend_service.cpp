@@ -104,7 +104,6 @@ void BackendService::transmit_data(TTransmitDataResult& return_val, const TTrans
     VLOG_ROW << "transmit_data(): instance_id=" << params.dest_fragment_instance_id
              << " node_id=" << params.dest_node_id << " #rows=" << params.row_batch.num_rows
              << " eos=" << (params.eos ? "true" : "false");
-    // VLOG_ROW << "transmit_data params: " << apache::thrift::ThriftDebugString(params).c_str();
 
     if (params.__isset.packet_seq) {
         return_val.__set_packet_seq(params.packet_seq);

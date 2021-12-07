@@ -35,8 +35,6 @@
 #include "runtime/exec_env.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/reader.h"
-#include "storage/row_cursor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
@@ -49,8 +47,12 @@
 
 namespace starrocks {
 
-TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir) {
-    return std::make_shared<Tablet>(tablet_meta, data_dir);
+TabletSharedPtr Tablet::create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
+                                                DataDir* data_dir) {
+    auto tablet =
+            std::shared_ptr<Tablet>(new Tablet(tablet_meta, data_dir), DeleterWithMemTracker<Tablet>(mem_tracker));
+    mem_tracker->consume(tablet->mem_usage());
+    return tablet;
 }
 
 Tablet::Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
@@ -115,7 +117,7 @@ void Tablet::save_meta() {
     CHECK(st.ok()) << "fail to save tablet_meta: " << st;
 }
 
-Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+Status Tablet::revise_tablet_meta(MemTracker* mem_tracker, const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                                   const std::vector<Version>& versions_to_delete) {
     LOG(INFO) << "begin to clone data to tablet. tablet=" << full_name()
               << ", rowsets_to_clone=" << rowsets_to_clone.size()
@@ -128,7 +130,8 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     Status st;
     do {
         // load new local tablet_meta to operate on
-        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta());
+        auto new_tablet_meta = TabletMeta::create(mem_tracker);
+
         generate_tablet_meta_copy_unlocked(new_tablet_meta);
         // Segment store the pointer of TabletSchema, so don't release the TabletSchema of old TabletMeta
         // Shared the pointer of TabletSchema to the new TabletMeta
@@ -194,9 +197,6 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
 }
 
 Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     CHECK(!_updates) << "updatable tablet should not call add_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
@@ -235,9 +235,6 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
 }
 
 void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     CHECK(!_updates) << "updatable tablet should not call modify_rowsets";
     // the compaction process allow to compact the single version, eg: version[4-4].
     // this kind of "single version compaction" has same "input version" and "output version".
@@ -327,9 +324,6 @@ RowsetSharedPtr Tablet::_rowset_with_largest_size() {
 
 // add inc rowset should not persist tablet meta, because it will be persisted when publish txn.
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     CHECK(!_updates) << "updatable tablet should not call add_inc_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
@@ -549,42 +543,6 @@ Status Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Version>& 
             LOG(WARNING) << "fail to find Rowset for version. tablet=" << full_name() << ", version='" << version;
             return Status::NotFound("no rowset of specific version");
         }
-    }
-    return Status::OK();
-}
-
-Status Tablet::capture_rs_readers(const Version& spec_version, std::vector<RowsetReaderSharedPtr>* rs_readers) const {
-    CHECK(!_updates) << "updatable tablet should not call capture_rs_readers";
-    std::vector<Version> version_path;
-    RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
-    RETURN_IF_ERROR(capture_rs_readers(version_path, rs_readers));
-    return Status::OK();
-}
-
-Status Tablet::capture_rs_readers(const std::vector<Version>& version_path,
-                                  std::vector<RowsetReaderSharedPtr>* rs_readers) const {
-    CHECK(!_updates) << "updatable tablet should not call capture_rs_readers";
-    DCHECK(rs_readers != nullptr && rs_readers->empty());
-    for (auto version : version_path) {
-        auto it = _rs_version_map.find(version);
-        if (it == _rs_version_map.end()) {
-            VLOG(3) << "fail to find Rowset in rs_version for version. tablet=" << full_name() << ", version='"
-                    << version.first << "-" << version.second;
-
-            it = _stale_rs_version_map.find(version);
-            if (it == _stale_rs_version_map.end()) {
-                LOG(WARNING) << "fail to find Rowset in stale_rs_version for version. tablet=" << full_name()
-                             << ", version='" << version.first << "-" << version.second;
-                return Status::NotFound("no rowset of specific version");
-            }
-        }
-        RowsetReaderSharedPtr rs_reader;
-        auto res = it->second->create_reader(&rs_reader);
-        if (res != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to create reader for rowset:" << it->second->rowset_id();
-            return Status::InternalError("fail to create rowset reader");
-        }
-        rs_readers->push_back(std::move(rs_reader));
     }
     return Status::OK();
 }

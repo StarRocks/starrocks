@@ -854,7 +854,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 result = -1;
                 replica.getBackendId();
                 result = 10001;
-                replica.checkVersionCatchUp(anyLong, anyLong, anyBoolean);
+                replica.checkVersionCatchUp(anyLong, anyBoolean);
                 result = true;
             }
         };
@@ -862,5 +862,37 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("     tabletList=10213\n" +
                 "     cardinality=1"));
+    }
+
+    @Test
+    public void testNullArithmeticExpression() throws Exception {
+        // check constant operator with null
+        String sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL)/(CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        String plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) + (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) - (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+        // check variable operator with null
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY / null) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / S_NAME) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
     }
 }

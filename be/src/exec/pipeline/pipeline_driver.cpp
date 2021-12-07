@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "exec/pipeline/source_operator.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -17,6 +18,11 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _pending_timer = ADD_TIMER(_runtime_profile, "DriverPendingTime");
     _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverPreconditionBlockTime", "DriverPendingTime");
     _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
+
+    _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
+    _schedule_effective_counter = ADD_COUNTER(_runtime_profile, "ScheduleEffectiveCounter", TUnit::UNIT);
+    _schedule_rows_per_chunk = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedRowsPerChunk", TUnit::UNIT);
+    _schedule_accumulated_chunk_moved = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedChunkMoved", TUnit::UNIT);
 
     DCHECK(_state == DriverState::NOT_READY);
     // fill OperatorWithDependency instances into _dependencies from _operators.
@@ -69,10 +75,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 }
 
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
-    // VLOG_ROW << "[Driver] enter process: " << this->to_readable_string();
     SCOPED_TIMER(_active_timer);
     _state = DriverState::RUNNING;
     size_t total_chunks_moved = 0;
+    size_t total_rows_moved = 0;
     int64_t time_spent = 0;
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
@@ -128,8 +134,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                     COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
                     if (maybe_chunk.value() && maybe_chunk.value()->num_rows() > 0) {
                         size_t row_num = maybe_chunk.value()->num_rows();
-                        //VLOG_ROW << "[Driver] Transfer chunk: num_rows=" << row_num << ", "
-                        //         << this->to_readable_string();
+                        total_rows_moved += row_num;
                         {
                             SCOPED_TIMER(next_op->_push_timer);
                             status = next_op->push_chunk(runtime_state, maybe_chunk.value());
@@ -185,6 +190,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         if (num_chunk_moved == 0 || should_yield) {
             driver_acct().increment_schedule_times();
             driver_acct().update_last_chunks_moved(total_chunks_moved);
+            driver_acct().update_accumulated_rows_moved(total_rows_moved);
             driver_acct().update_last_time_spent(time_spent);
             if (is_precondition_block()) {
                 _state = DriverState::PRECONDITION_BLOCK;
@@ -244,6 +250,10 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     // Calculate total time before report profile
     _total_timer->update(_total_timer_sw->elapsed_time());
 
+    COUNTER_UPDATE(_schedule_counter, driver_acct().get_schedule_times());
+    COUNTER_UPDATE(_schedule_effective_counter, driver_acct().get_schedule_effective_times());
+    COUNTER_UPDATE(_schedule_rows_per_chunk, driver_acct().get_rows_per_chunk());
+    COUNTER_UPDATE(_schedule_accumulated_chunk_moved, driver_acct().get_accumulated_chunk_moved());
     // last root driver cancel the all drivers' execution and notify FE the
     // fragment's completion but do not unregister the FragmentContext because
     // some non-root drivers maybe has pending io io tasks hold the reference to
@@ -261,7 +271,6 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     if (_fragment_ctx->count_down_drivers()) {
         auto status = _fragment_ctx->final_status();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
-        // VLOG_ROW << "[Driver] Last driver finished: final_status=" << status.to_string();
         _query_ctx->count_down_fragments();
     }
 }

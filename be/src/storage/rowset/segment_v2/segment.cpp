@@ -37,14 +37,11 @@
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/default_value_column_iterator.h"
-#include "storage/rowset/segment_v2/empty_segment_iterator.h"
 #include "storage/rowset/segment_v2/page_io.h"
-#include "storage/rowset/segment_v2/segment_iterator.h"
 #include "storage/rowset/segment_v2/segment_writer.h" // k_segment_magic_length
 #include "storage/rowset/vectorized/segment_chunk_iterator_adapter.h"
 #include "storage/rowset/vectorized/segment_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
-#include "storage/rowset/vectorized/segment_v2_iterator_adapter.h"
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/type_utils.h"
 #include "util/crc32c.h"
@@ -64,11 +61,14 @@ namespace starrocks::segment_v2 {
 
 using strings::Substitute;
 
-StatusOr<std::shared_ptr<Segment>> Segment::open(fs::BlockManager* blk_mgr, const std::string& filename,
-                                                 uint32_t segment_id, const TabletSchema* tablet_schema,
-                                                 size_t* footer_length_hint) {
-    auto segment = std::make_shared<Segment>(private_type(0), blk_mgr, filename, segment_id, tablet_schema);
-    RETURN_IF_ERROR(segment->_open(footer_length_hint));
+StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
+                                                 const std::string& filename, uint32_t segment_id,
+                                                 const TabletSchema* tablet_schema, size_t* footer_length_hint) {
+    auto segment = std::shared_ptr<Segment>(new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema),
+                                            DeleterWithMemTracker<Segment>(mem_tracker));
+    mem_tracker->consume(segment->mem_usage());
+
+    RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint));
     return std::move(segment);
 }
 
@@ -76,61 +76,14 @@ Segment::Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fna
                  const TabletSchema* tablet_schema)
         : _block_mgr(blk_mgr), _fname(std::move(fname)), _tablet_schema(tablet_schema), _segment_id(segment_id) {}
 
-Segment::~Segment() = default;
-
-Status Segment::_open(size_t* footer_length_hint) {
+Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint) {
     SegmentFooterPB footer;
     RETURN_IF_ERROR(_parse_footer(footer_length_hint, &footer));
-    RETURN_IF_ERROR(_create_column_readers(&footer));
+    RETURN_IF_ERROR(_create_column_readers(mem_tracker, &footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
     _prepare_adapter_info();
     return Status::OK();
-}
-
-Status Segment::_new_iterator(const Schema& schema, const StorageReadOptions& read_options,
-                              std::unique_ptr<RowwiseIterator>* iter) {
-    DCHECK_NOTNULL(read_options.stats);
-    // trying to prune the current segment by segment-level zone map
-    if (read_options.conditions != nullptr) {
-        for (const auto& column_condition : read_options.conditions->columns()) {
-            int32_t column_id = column_condition.first;
-            if (_column_readers[column_id] == nullptr || !_column_readers[column_id]->has_zone_map()) {
-                continue;
-            }
-            if (!_column_readers[column_id]->match_condition(column_condition.second)) {
-                // any condition not satisfied, return.
-                *iter = std::make_unique<EmptySegmentIterator>(schema);
-                return Status::OK();
-            }
-        }
-    }
-    RETURN_IF_ERROR(_load_index());
-    *iter = std::make_unique<SegmentIterator>(this->shared_from_this(), schema);
-    iter->get()->init(read_options);
-    return Status::OK();
-}
-
-Status Segment::new_iterator(const Schema& schema, const StorageReadOptions& read_options,
-                             std::unique_ptr<RowwiseIterator>* output) {
-    DCHECK_NOTNULL(read_options.stats);
-
-    // If input schema is not match the actual meta, must convert the read_options according
-    // to the actual format. And create an AdaptSegmentIterator to wrap
-    if (_needs_block_adapter) {
-        std::unique_ptr<vectorized::SegmentV2IteratorAdapter> adapter(
-                new vectorized::SegmentV2IteratorAdapter(*_tablet_schema, *_column_storage_types, schema));
-
-        RETURN_IF_ERROR(adapter->init(read_options));
-
-        std::unique_ptr<RowwiseIterator> iter;
-        RETURN_IF_ERROR(_new_iterator(adapter->in_schema(), adapter->in_read_options(), &iter));
-        adapter->set_iterator(std::move(iter));
-        *output = std::move(adapter);
-        return Status::OK();
-    } else {
-        return _new_iterator(schema, read_options, output);
-    }
 }
 
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::Schema& schema,
@@ -252,8 +205,8 @@ Status Segment::_parse_footer(size_t* footer_length_hint, SegmentFooterPB* foote
     return Status::OK();
 }
 
-Status Segment::_load_index() {
-    return _load_index_once.call([this] {
+Status Segment::_load_index(MemTracker* mem_tracker) {
+    return _load_index_once.call([this, mem_tracker] {
         // read and parse short key index page
         std::unique_ptr<fs::ReadableBlock> rblock;
         RETURN_IF_ERROR(_block_mgr->open_block(_fname, &rblock));
@@ -270,17 +223,20 @@ Status Segment::_load_index() {
         PageFooterPB footer;
         RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
 
+        mem_tracker->consume(_sk_index_handle.mem_usage());
+
         DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
         DCHECK(footer.has_short_key_page_footer());
 
         _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
-        RETURN_IF_ERROR(_sk_index_decoder->parse(body, footer.short_key_page_footer()));
+        Status st = _sk_index_decoder->parse(body, footer.short_key_page_footer());
+        mem_tracker->consume(_sk_index_decoder->mem_usage());
 
-        return Status::OK();
+        return st;
     });
 }
 
-Status Segment::_create_column_readers(SegmentFooterPB* footer) {
+Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
     for (uint32_t ordinal = 0; ordinal < footer->columns().size(); ++ordinal) {
         const auto& column_pb = footer->columns(ordinal);
@@ -299,7 +255,7 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
         opts.block_mgr = _block_mgr;
         opts.storage_format_version = footer->version();
         opts.kept_in_memory = _tablet_schema->is_in_memory();
-        auto res = ColumnReader::create(opts, footer->mutable_columns(iter->second), _fname);
+        auto res = ColumnReader::create(mem_tracker, opts, footer->mutable_columns(iter->second), _fname);
         if (!res.ok()) {
             return res.status();
         }

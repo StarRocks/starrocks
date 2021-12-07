@@ -289,10 +289,6 @@ public class Util {
         return Math.abs((int) adler32.getValue());
     }
 
-    public static long generateVersionHash() {
-        return Math.abs(new Random().nextLong());
-    }
-
     public static int generateSchemaHash() {
         return Math.abs(new Random().nextInt());
     }

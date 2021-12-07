@@ -105,7 +105,7 @@ private:
             _final_chunk.reset();
         }
 
-        Status seek_columns(ordinal_t pos) {
+        Status seek_columns(segment_v2::ordinal_t pos) {
             for (auto iter : _column_iterators) {
                 RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
             }
@@ -209,7 +209,7 @@ private:
     std::shared_ptr<Segment> _segment;
     vectorized::SegmentReadOptions _opts;
     std::vector<ColumnIterator*> _column_iterators;
-    std::vector<ColumnDecoder> _column_decoders;
+    std::vector<segment_v2::ColumnDecoder> _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
@@ -259,7 +259,6 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
-
           _predicate_columns(_opts.predicates.size()) {}
 
 Status SegmentIterator::_init() {
@@ -396,7 +395,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         return Status::OK();
     }
     DCHECK_EQ(0, _scan_range.span_size());
-    RETURN_IF_ERROR(_segment->_load_index());
+    RETURN_IF_ERROR(_segment->_load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -716,7 +715,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
 void SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
-        const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
+        const segment_v2::ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
         for (ColumnIterator* iter : to->_column_iterators) {
             iter->seek_to_ordinal(ordinal);
         }

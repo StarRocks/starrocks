@@ -87,4 +87,31 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), cteId, cteOutputColumnRefMap);
     }
+
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalCTEConsumeOperator, LogicalCTEConsumeOperator.Builder> {
+        private String cteId;
+
+        private Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
+
+        @Override
+        public LogicalCTEConsumeOperator build() {
+            return new LogicalCTEConsumeOperator(this);
+        }
+
+        @Override
+        public LogicalCTEConsumeOperator.Builder withOperator(LogicalCTEConsumeOperator operator) {
+            super.withOperator(operator);
+            this.cteId = operator.cteId;
+            this.cteOutputColumnRefMap = operator.cteOutputColumnRefMap;
+            return this;
+        }
+    }
+
+    private LogicalCTEConsumeOperator(LogicalCTEConsumeOperator.Builder builder) {
+        super(OperatorType.LOGICAL_CTE_CONSUME, builder.getLimit(), builder.getPredicate(), builder.getProjection());
+        this.cteId = builder.cteId;
+        this.cteOutputColumnRefMap = builder.cteOutputColumnRefMap;
+    }
 }

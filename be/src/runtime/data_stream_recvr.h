@@ -74,6 +74,7 @@ public:
     ~DataStreamRecvr();
 
     Status get_chunk(std::unique_ptr<vectorized::Chunk>* chunk);
+    Status get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk);
 
     // Deregister from DataStreamMgr instance, which shares ownership of this instance.
     void close();

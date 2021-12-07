@@ -42,8 +42,10 @@ namespace starrocks::vectorized {
     M(phase2_slice)                   \
     M(phase2_slice_two_level)         \
     M(phase2_int32_two_level)         \
+    M(phase1_slice_fx4)               \
     M(phase1_slice_fx8)               \
     M(phase1_slice_fx16)              \
+    M(phase2_slice_fx4)               \
     M(phase2_slice_fx8)               \
     M(phase2_slice_fx16)
 
@@ -128,8 +130,10 @@ namespace starrocks::vectorized {
     M(phase2_null_string)        \
     M(phase2_slice_two_level)    \
     M(phase2_int32_two_level)    \
+    M(phase1_slice_fx4)          \
     M(phase1_slice_fx8)          \
     M(phase1_slice_fx16)         \
+    M(phase2_slice_fx4)          \
     M(phase2_slice_fx8)          \
     M(phase2_slice_fx16)
 
@@ -200,6 +204,8 @@ using Int32TwoLevelAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_
 
 // fixed slice key type.
 template <PhmapSeed seed>
+using SerializedKeyFixedSize4AggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize4SliceAggHashMap<seed>>;
+template <PhmapSeed seed>
 using SerializedKeyFixedSize8AggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize8SliceAggHashMap<seed>>;
 template <PhmapSeed seed>
 using SerializedKeyFixedSize16AggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize16SliceAggHashMap<seed>>;
@@ -246,6 +252,7 @@ struct HashMapVariant {
         phase1_slice_two_level,
         phase1_int32_two_level,
 
+        phase1_slice_fx4,
         phase1_slice_fx8,
         phase1_slice_fx16,
 
@@ -277,6 +284,7 @@ struct HashMapVariant {
         phase2_slice_two_level,
         phase2_int32_two_level,
 
+        phase2_slice_fx4,
         phase2_slice_fx8,
         phase2_slice_fx16,
     };
@@ -314,6 +322,7 @@ struct HashMapVariant {
     std::unique_ptr<SerializedKeyTwoLevelAggHashMap<PhmapSeed1>> phase1_slice_two_level;
     std::unique_ptr<Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>> phase1_int32_two_level;
 
+    std::unique_ptr<SerializedKeyFixedSize4AggHashMap<PhmapSeed1>> phase1_slice_fx4;
     std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed1>> phase1_slice_fx8;
     std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed1>> phase1_slice_fx16;
 
@@ -349,6 +358,7 @@ struct HashMapVariant {
     std::unique_ptr<SerializedKeyTwoLevelAggHashMap<PhmapSeed2>> phase2_slice_two_level;
     std::unique_ptr<Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed2>> phase2_int32_two_level;
 
+    std::unique_ptr<SerializedKeyFixedSize4AggHashMap<PhmapSeed2>> phase2_slice_fx4;
     std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed2>> phase2_slice_fx8;
     std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed2>> phase2_slice_fx16;
 
@@ -469,6 +479,9 @@ using Int32TwoLevelAggHashSetOfOneNumberKey = AggHashSetOfOneNumberKey<TYPE_INT,
 
 // For fixed slice type.
 template <PhmapSeed seed>
+using SerializedKeyAggHashSetFixedSize4 = AggHashSetOfSerializedKeyFixedSize<FixedSize4SliceAggHashSet<seed>>;
+
+template <PhmapSeed seed>
 using SerializedKeyAggHashSetFixedSize8 = AggHashSetOfSerializedKeyFixedSize<FixedSize8SliceAggHashSet<seed>>;
 
 template <PhmapSeed seed>
@@ -539,8 +552,10 @@ struct HashSetVariant {
         phase2_slice_two_level,
         phase2_int32_two_level,
 
+        phase1_slice_fx4,
         phase1_slice_fx8,
         phase1_slice_fx16,
+        phase2_slice_fx4,
         phase2_slice_fx8,
         phase2_slice_fx16,
     };
@@ -614,8 +629,10 @@ struct HashSetVariant {
     std::unique_ptr<SerializedTwoLevelKeyAggHashSet<PhmapSeed2>> phase2_slice_two_level;
     std::unique_ptr<Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed2>> phase2_int32_two_level;
 
+    std::unique_ptr<SerializedKeyAggHashSetFixedSize4<PhmapSeed1>> phase1_slice_fx4;
     std::unique_ptr<SerializedKeyAggHashSetFixedSize8<PhmapSeed1>> phase1_slice_fx8;
     std::unique_ptr<SerializedKeyAggHashSetFixedSize16<PhmapSeed1>> phase1_slice_fx16;
+    std::unique_ptr<SerializedKeyAggHashSetFixedSize4<PhmapSeed2>> phase2_slice_fx4;
     std::unique_ptr<SerializedKeyAggHashSetFixedSize8<PhmapSeed2>> phase2_slice_fx8;
     std::unique_ptr<SerializedKeyAggHashSetFixedSize16<PhmapSeed2>> phase2_slice_fx16;
 
