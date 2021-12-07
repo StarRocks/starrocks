@@ -4,6 +4,8 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -18,6 +20,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import mockit.Expectations;
 import org.junit.Test;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.junit.Assert.assertEquals;
@@ -128,6 +131,12 @@ public class FoldConstantsRuleTest {
 
         CastOperator cast6 = new CastOperator(Type.BIGINT, ConstantOperator.createDate(LocalDateTime.now()));
         assertEquals(cast6, rule.apply(cast6, null));
+
+        CastOperator cast7 = new CastOperator(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 1, 1)
+                , ConstantOperator.createDecimal(BigDecimal.valueOf(0.00008),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 6, 6))
+        );
+        assertEquals("0.0", rule.apply(cast7, null).toString());
     }
 
     @Test
