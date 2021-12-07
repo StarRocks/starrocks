@@ -98,12 +98,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -122,7 +122,7 @@ import java.util.stream.Collectors;
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
 
-    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private static final String localIP = FrontendOptions.getLocalHostAddress();
 
@@ -211,13 +211,15 @@ public class Coordinator {
         this.descTable = analyzer.getDescTbl().toThrift();
         this.returnedAllResults = false;
         this.queryOptions = context.getSessionVariable().toThrift();
-        this.queryGlobals.setNow_string(DATE_FORMAT.format(new Date()));
-        this.queryGlobals.setTimestamp_ms(new Date().getTime());
+        long startTime = context.getStartTime();
         if (context.getSessionVariable().getTimeZone().equals("CST")) {
             this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
         } else {
             this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
         }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
@@ -241,13 +243,15 @@ public class Coordinator {
         this.descTable = descTable;
         this.returnedAllResults = false;
         this.queryOptions = context.getSessionVariable().toThrift();
-        this.queryGlobals.setNow_string(DATE_FORMAT.format(new Date()));
-        this.queryGlobals.setTimestamp_ms(new Date().getTime());
+        long startTime = context.getStartTime();
         if (context.getSessionVariable().getTimeZone().equals("CST")) {
             this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
         } else {
             this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
         }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
@@ -262,8 +266,8 @@ public class Coordinator {
     }
 
     // Used for broker load task/export task coordinator
-    public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable,
-                       List<PlanFragment> fragments, List<ScanNode> scanNodes, String cluster, String timezone) {
+    public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
+                       List<ScanNode> scanNodes, String cluster, String timezone, long startTime) {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
@@ -271,8 +275,9 @@ public class Coordinator {
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.queryOptions = new TQueryOptions();
-        this.queryGlobals.setNow_string(DATE_FORMAT.format(new Date()));
-        this.queryGlobals.setTimestamp_ms(new Date().getTime());
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);
         this.tResourceInfo = new TResourceInfo("", "");
         this.needReport = true;

@@ -113,7 +113,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // @Deprecated
     // protected boolean deleteFlag = false;
 
-    protected long createTimestamp = System.currentTimeMillis();
+    protected long createTimestamp = -1;
     protected long loadStartTimestamp = -1;
     protected long finishTimestamp = -1;
 
@@ -198,7 +198,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             details.put("FileNumber", fileNum);
             details.put("FileSize", totalFileSizeB);
             details.put("TaskNumber", counterTbl.rowMap().size());
-            details.put("TaskNumber", counterTbl.rowMap().size());
             details.put("Unfinished backends", getPrintableMap(unfinishedBackendIds));
             details.put("All backends", getPrintableMap(allBackendIds));
             Gson gson = new Gson();
@@ -222,6 +221,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         this.id = Catalog.getCurrentCatalog().getNextId();
         this.dbId = dbId;
         this.label = label;
+        if (ConnectContext.get() != null) {
+            this.createTimestamp = ConnectContext.get().getStartTime();
+        } else {
+            // only for test used
+            this.createTimestamp = System.currentTimeMillis();
+        }
     }
 
     protected void readLock() {
