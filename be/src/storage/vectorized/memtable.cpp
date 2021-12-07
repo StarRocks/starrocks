@@ -160,6 +160,9 @@ Status MemTable::finalize() {
             if (_keys_type == PRIMARY_KEYS &&
                 PrimaryKeyEncoder::encode_exceed_limit(_vectorized_schema, *_result_chunk.get(), 0,
                                                        _result_chunk->num_rows(), kPrimaryKeyLimitSize)) {
+                _aggregator.reset();
+                _aggregator_memory_usage = 0;
+                _aggregator_bytes_usage = 0;
                 return Status::Cancelled("primary key size exceed the limit.");
             }
             if (_has_op_slot) {
