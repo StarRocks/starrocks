@@ -4850,6 +4850,12 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: baseall\n" +
                 "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
                 "     partitions=0/1"));
+
+        sql = "select 0 from baseall inner join t0 on v1 = k1 group by (v2 + k2),k1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Group columns isn't bound table baseall"));
     }
 
     @Test
