@@ -609,7 +609,7 @@ Status JsonReader::_process_object(Chunk* chunk, const std::vector<SlotDescripto
         if (err) {
             if (col_name == "__op") {
                 // special treatment for __op column, fill default value '0' rather than null
-                column->append_datum(literal_0_slice);
+                _construct_string_column(column, literal_0_slice);
             } else {
                 column->append_nulls(1);
             }
@@ -730,9 +730,9 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, NullableCol
         }
 
         if (ok) {
-            column->append_datum(literal_1_slice);
+            _construct_string_column(column, literal_1_slice);
         } else {
-            column->append_datum(literal_0_slice);
+            _construct_string_column(column, literal_0_slice);
         }
         break;
     }
@@ -753,7 +753,7 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, NullableCol
         size_t buflen{};
         JsonFunctions::minify_json_to_string(value, buf, buflen);
 
-        column->append_datum(Slice{buf.get(), buflen});
+        _construct_string_column(column, Slice{buf.get(), buflen});
         break;
     }
 
@@ -824,7 +824,8 @@ void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value,
 
         case TYPE_VARCHAR: {
             auto f = fmt::format_int(i64);
-            column->append_datum(Slice{f.data(), f.size()});
+
+            _construct_string_column(column, Slice{f.data(), f.size()});
             break;
         }
 
@@ -885,7 +886,7 @@ void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value,
         case TYPE_VARCHAR: {
             std::ostringstream oss;
             oss << d;
-            column->append_datum(Slice{oss.str()});
+            _construct_string_column(column, Slice{oss.str()});
             break;
         }
 
@@ -904,7 +905,7 @@ void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value,
             return;
         }
 
-        column->append_datum(Slice{sv.data(), sv.size()});
+        _construct_string_column(column, Slice{sv.data(), sv.size()});
     }
 }
 
@@ -919,7 +920,7 @@ void JsonReader::_construct_column_with_string(simdjson::ondemand::value& value,
 
     switch (type_desc.type) {
     case TYPE_VARCHAR: {
-        column->append_datum(Slice{sv.data(), sv.length()});
+        _construct_string_column(column, Slice{sv.data(), sv.size()});
         break;
     }
 
@@ -1005,6 +1006,14 @@ void JsonReader::_construct_column_with_string(simdjson::ondemand::value& value,
         break;
     }
     }
+}
+
+void JsonReader::_construct_string_column(NullableColumn* column, const Slice& s) {
+    auto &data_column = column->data_column();
+    auto &null_column = column->null_column();
+
+    down_cast<BinaryColumn*>(column)->append(s);
+    null_column->append(0);
 }
 
 } // namespace starrocks::vectorized
