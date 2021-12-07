@@ -46,7 +46,7 @@
 |rpc_port|9020|FE 上的 thrift server 端口|
 |query_port|9030|FE 上的 mysql server 端口|
 |mysql_service_nio_enabled|false|FE 连接服务的nio是否开启|
-|mysql_service_io_threads_num|false|FE 连接服务线程数|
+|mysql_service_io_threads_num|4|FE 连接服务线程数|
 |auth_token|空字符串|Token是否自动开启|
 |tablet_create_timeout_second|1|建表超时时长|
 |max_create_table_timeout_second|60|建表最大超时时间|
