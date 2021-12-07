@@ -78,8 +78,8 @@ protected:
         auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
         ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
 
-        const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4.data", TEST_DIR, type, encoding,
-                                                      version, adaptive);
+        const std::string fname =
+                strings::Substitute("$0/test-$1-$2-$3-$4.data", TEST_DIR, type, encoding, version, adaptive);
         // write data
         {
             std::unique_ptr<fs::WritableBlock> wblock;
@@ -191,8 +191,9 @@ protected:
                         ASSERT_TRUE(st.ok());
                         for (int i = 0; i < rows_read; ++i) {
                             ASSERT_EQ(0, type_info->cmp(src.get(rowid + i), dst->get(i)))
-                                    << " row " << rowid + i << ": " << datum_to_string(type_info.get(), src.get(rowid + i))
-                                    << " vs " << datum_to_string(type_info.get(), dst->get(i));
+                                    << " row " << rowid + i << ": "
+                                    << datum_to_string(type_info.get(), src.get(rowid + i)) << " vs "
+                                    << datum_to_string(type_info.get(), dst->get(i));
                         }
                     }
                 }
@@ -552,7 +553,6 @@ TEST_F(ColumnReaderWriterTest, test_binary) {
     test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c);
     test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c);
     test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
-
 
     c = high_cardinality_strings(100);
     test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c);

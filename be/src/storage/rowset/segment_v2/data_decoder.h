@@ -128,7 +128,7 @@ public:
         memcpy(decompressed_body.data + decompressed_body.size,
                page_slice.data + header_size + (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE),
                null_size + footer_size);
-        //delete[] page_slice.data;
+
         *page = std::move(decompressed_page);
         page_slice = Slice(page->get(), header_size + data_size + null_size + footer_size);
 
