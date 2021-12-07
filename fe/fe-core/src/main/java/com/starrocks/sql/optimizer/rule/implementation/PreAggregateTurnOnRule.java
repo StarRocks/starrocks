@@ -323,12 +323,12 @@ public class PreAggregateTurnOnRule {
             List<ScalarOperator> rightGroupOperator = Lists.newArrayList();
 
             context.groupings.forEach(g -> {
-                if (leftOutputColumns.contains(g.getUsedColumns())) {
+                if (g.getUsedColumns().isIntersect(leftOutputColumns)) {
                     leftGroupOperator.add(g);
                 }
             });
             context.groupings.forEach(g -> {
-                if (rightOutputColumns.contains(g.getUsedColumns())) {
+                if (g.getUsedColumns().isIntersect(rightOutputColumns)) {
                     rightGroupOperator.add(g);
                 }
             });
