@@ -305,6 +305,16 @@ DEFINE_UNARY_FN_WITH_IMPL(yearImpl, v) {
 
 DEFINE_TIME_UNARY_FN(year, TYPE_DATETIME, TYPE_INT);
 
+// year
+// return type: INT16
+DEFINE_UNARY_FN_WITH_IMPL(yearV2Impl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    return y;
+}
+
+DEFINE_TIME_UNARY_FN(yearV2, TYPE_DATETIME, TYPE_SMALLINT);
+
 // quarter
 DEFINE_UNARY_FN_WITH_IMPL(quarterImpl, v) {
     int y, m, d;
@@ -321,6 +331,15 @@ DEFINE_UNARY_FN_WITH_IMPL(monthImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(month, TYPE_DATETIME, TYPE_INT);
 
+// month
+// return type: INT8
+DEFINE_UNARY_FN_WITH_IMPL(monthV2Impl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    return m;
+}
+DEFINE_TIME_UNARY_FN(monthV2, TYPE_DATETIME, TYPE_TINYINT);
+
 // day
 DEFINE_UNARY_FN_WITH_IMPL(dayImpl, v) {
     int y, m, d;
@@ -328,6 +347,15 @@ DEFINE_UNARY_FN_WITH_IMPL(dayImpl, v) {
     return d;
 }
 DEFINE_TIME_UNARY_FN(day, TYPE_DATETIME, TYPE_INT);
+
+// day
+// return type: INT8
+DEFINE_UNARY_FN_WITH_IMPL(dayV2Impl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    return d;
+}
+DEFINE_TIME_UNARY_FN(dayV2, TYPE_DATETIME, TYPE_TINYINT);
 
 // hour of the day
 DEFINE_UNARY_FN_WITH_IMPL(hourImpl, v) {
@@ -337,6 +365,14 @@ DEFINE_UNARY_FN_WITH_IMPL(hourImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(hour, TYPE_DATETIME, TYPE_INT);
 
+// hour of the day
+DEFINE_UNARY_FN_WITH_IMPL(hourV2Impl, v) {
+    int hour1, mintue1, second1, usec1;
+    v.to_time(&hour1, &mintue1, &second1, &usec1);
+    return hour1;
+}
+DEFINE_TIME_UNARY_FN(hourV2, TYPE_DATETIME, TYPE_TINYINT);
+
 // minute of the hour
 DEFINE_UNARY_FN_WITH_IMPL(minuteImpl, v) {
     int hour1, mintue1, second1, usec1;
@@ -345,6 +381,14 @@ DEFINE_UNARY_FN_WITH_IMPL(minuteImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(minute, TYPE_DATETIME, TYPE_INT);
 
+// minute of the hour
+DEFINE_UNARY_FN_WITH_IMPL(minuteV2Impl, v) {
+    int hour1, mintue1, second1, usec1;
+    v.to_time(&hour1, &mintue1, &second1, &usec1);
+    return mintue1;
+}
+DEFINE_TIME_UNARY_FN(minuteV2, TYPE_DATETIME, TYPE_TINYINT);
+
 // second of the minute
 DEFINE_UNARY_FN_WITH_IMPL(secondImpl, v) {
     int hour1, mintue1, second1, usec1;
@@ -352,6 +396,14 @@ DEFINE_UNARY_FN_WITH_IMPL(secondImpl, v) {
     return second1;
 }
 DEFINE_TIME_UNARY_FN(second, TYPE_DATETIME, TYPE_INT);
+
+// second of the minute
+DEFINE_UNARY_FN_WITH_IMPL(secondV2Impl, v) {
+    int hour1, mintue1, second1, usec1;
+    v.to_time(&hour1, &mintue1, &second1, &usec1);
+    return second1;
+}
+DEFINE_TIME_UNARY_FN(secondV2, TYPE_DATETIME, TYPE_TINYINT);
 
 // day_of_week
 DEFINE_UNARY_FN_WITH_IMPL(day_of_weekImpl, v) {

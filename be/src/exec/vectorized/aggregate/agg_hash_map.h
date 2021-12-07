@@ -41,6 +41,8 @@ using SliceAggHashMap = phmap::flat_hash_map<Slice, AggDataPtr, SliceHashWithSee
 // ==================
 // one level fixed size slice hash map
 template <PhmapSeed seed>
+using FixedSize4SliceAggHashMap = phmap::flat_hash_map<SliceKey4, AggDataPtr, FixedSizeSliceKeyHash<SliceKey4, seed>>;
+template <PhmapSeed seed>
 using FixedSize8SliceAggHashMap = phmap::flat_hash_map<SliceKey8, AggDataPtr, FixedSizeSliceKeyHash<SliceKey8, seed>>;
 template <PhmapSeed seed>
 using FixedSize16SliceAggHashMap =

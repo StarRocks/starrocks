@@ -87,9 +87,9 @@ public:
     using FieldSet = std::unordered_set<const WrapperField*, FieldHash, FieldEqual>;
     FieldSet operand_set;
     // valid when op is OP_IN or OP_NOT_IN, represents the minimum value of in elements
-    WrapperField* min_value_filed{nullptr};
+    WrapperField* min_value_field{nullptr};
     // valid when op is OP_IN or OP_NOT_IN, represents the maximum value of in elements
-    WrapperField* max_value_filed{nullptr};
+    WrapperField* max_value_field{nullptr};
 };
 
 class CondColumn {

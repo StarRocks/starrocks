@@ -50,8 +50,6 @@ public class DeleteInfo implements Writable {
     private String partitionName;
     @SerializedName(value = "partitionVersion")
     private long partitionVersion;
-    @SerializedName(value = "partitionVersionHash")
-    private long partitionVersionHash;
     private List<ReplicaPersistInfo> replicaInfos;
 
     @SerializedName(value = "deleteConditions")
@@ -65,14 +63,13 @@ public class DeleteInfo implements Writable {
     }
 
     public DeleteInfo(long dbId, long tableId, String tableName, long partitionId, String partitionName,
-                      long partitionVersion, long partitionVersionHash, List<String> deleteConditions) {
+                      long partitionVersion, List<String> deleteConditions) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.tableName = tableName;
         this.partitionId = partitionId;
         this.partitionName = partitionName;
         this.partitionVersion = partitionVersion;
-        this.partitionVersionHash = partitionVersionHash;
         this.replicaInfos = new ArrayList<ReplicaPersistInfo>();
         this.deleteConditions = deleteConditions;
 
@@ -104,10 +101,6 @@ public class DeleteInfo implements Writable {
         return partitionVersion;
     }
 
-    public long getPartitionVersionHash() {
-        return partitionVersionHash;
-    }
-
     public List<ReplicaPersistInfo> getReplicaPersistInfos() {
         return this.replicaInfos;
     }
@@ -128,9 +121,8 @@ public class DeleteInfo implements Writable {
         return createTimeMs;
     }
 
-    public void updatePartitionVersionInfo(long newVersion, long newVersionHash) {
+    public void updatePartitionVersionInfo(long newVersion) {
         this.partitionVersion = newVersion;
-        this.partitionVersionHash = newVersionHash;
     }
 
     @Override
@@ -139,7 +131,7 @@ public class DeleteInfo implements Writable {
         out.writeLong(tableId);
         out.writeLong(partitionId);
         out.writeLong(partitionVersion);
-        out.writeLong(partitionVersionHash);
+        out.writeLong(0); // write a version_hash for compatibility
         out.writeInt(replicaInfos.size());
         for (ReplicaPersistInfo info : replicaInfos) {
             info.write(out);
@@ -164,7 +156,7 @@ public class DeleteInfo implements Writable {
         tableId = in.readLong();
         partitionId = in.readLong();
         partitionVersion = in.readLong();
-        partitionVersionHash = in.readLong();
+        in.readLong(); // read a version_hash for compatibility
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             ReplicaPersistInfo info = ReplicaPersistInfo.read(in);

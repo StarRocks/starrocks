@@ -395,7 +395,6 @@ public class BackupJob extends AbstractJob {
                 // snapshot partitions
                 for (Partition partition : partitions) {
                     long visibleVersion = partition.getVisibleVersion();
-                    long visibleVersionHash = partition.getVisibleVersionHash();
                     List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.VISIBLE);
                     for (MaterializedIndex index : indexes) {
                         int schemaHash = tbl.getSchemaHashByIndexId(index.getId());
@@ -411,15 +410,15 @@ public class BackupJob extends AbstractJob {
                             SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), tablet.getId(),
                                     jobId, dbId, tbl.getId(), partition.getId(),
                                     index.getId(), tablet.getId(),
-                                    visibleVersion, visibleVersionHash,
+                                    visibleVersion,
                                     schemaHash, timeoutMs, false /* not restore task */);
                             batchTask.addTask(task);
                             unfinishedTaskIds.put(tablet.getId(), replica.getBackendId());
                         }
                     }
 
-                    LOG.info("snapshot for partition {}, version: {}, version hash: {}",
-                            partition.getId(), visibleVersion, visibleVersionHash);
+                    LOG.info("snapshot for partition {}, version: {}",
+                            partition.getId(), visibleVersion);
                 }
             }
 

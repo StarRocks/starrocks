@@ -1309,7 +1309,6 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     tablet.getHealthStatusWithPriority(infoService,
                             db.getClusterName(),
                             partition.getVisibleVersion(),
-                            partition.getVisibleVersionHash(),
                             replicaNum,
                             aliveBeIds);
 

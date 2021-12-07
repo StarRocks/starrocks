@@ -555,8 +555,8 @@ public class DiskAndTabletLoadReBalancerTest {
                            long dbId, long tableId, long partitionId, long indexId, long tabletId, long replicaId,
                            long beId, long dataSize, long pathHash) {
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 1111, medium);
-        Replica replica = new Replica(replicaId, beId, 1L, 1L, 1111,
-                dataSize, 1000, ReplicaState.NORMAL, -1, -1, 1, 1);
+        Replica replica = new Replica(replicaId, beId, 1L, 1111,
+                dataSize, 1000, ReplicaState.NORMAL, -1, 1);
         invertedIndex.addTablet(tabletId, tabletMeta);
         replica.setPathHash(pathHash);
         invertedIndex.addReplica(tabletId, replica);

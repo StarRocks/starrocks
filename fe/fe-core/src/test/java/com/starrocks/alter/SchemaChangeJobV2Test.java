@@ -214,7 +214,7 @@ public class SchemaChangeJobV2Test {
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
             for (Replica shadowReplica : shadowTablet.getReplicas()) {
                 shadowReplica
-                        .updateVersionInfo(testPartition.getVisibleVersion(), testPartition.getVisibleVersionHash(),
+                        .updateRowCount(testPartition.getVisibleVersion(),
                                 shadowReplica.getDataSize(), shadowReplica.getRowCount());
             }
         }
@@ -298,7 +298,7 @@ public class SchemaChangeJobV2Test {
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
             for (Replica shadowReplica : shadowTablet.getReplicas()) {
                 shadowReplica
-                        .updateVersionInfo(testPartition.getVisibleVersion(), testPartition.getVisibleVersionHash(),
+                        .updateRowCount(testPartition.getVisibleVersion(),
                                 shadowReplica.getDataSize(), shadowReplica.getRowCount());
             }
         }

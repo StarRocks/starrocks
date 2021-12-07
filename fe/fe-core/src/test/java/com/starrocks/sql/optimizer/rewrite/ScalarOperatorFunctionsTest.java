@@ -366,20 +366,20 @@ public class ScalarOperatorFunctionsTest {
         ConstantOperator date = ConstantOperator.createDatetime(LocalDateTime.of(2000, 10, 21, 12, 0));
         ConstantOperator result = ScalarOperatorFunctions.year(date);
 
-        assertEquals(Type.INT, result.getType());
-        assertEquals(2000, result.getInt());
+        assertEquals(Type.SMALLINT, result.getType());
+        assertEquals(2000, result.getSmallint());
     }
 
     @Test
     public void month() throws AnalysisException {
         assertEquals(FEFunctions.month(L_DT_20150323_092355).getLongValue(),
-                ScalarOperatorFunctions.month(O_DT_20150323_092355).getInt());
+                ScalarOperatorFunctions.month(O_DT_20150323_092355).getTinyInt());
     }
 
     @Test
     public void day() throws AnalysisException {
         assertEquals(FEFunctions.day(L_DT_20150323_092355).getLongValue(),
-                ScalarOperatorFunctions.day(O_DT_20150323_092355).getInt());
+                ScalarOperatorFunctions.day(O_DT_20150323_092355).getTinyInt());
     }
 
     @Test

@@ -254,19 +254,27 @@ vectorized_functions = [
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
 
     # 50xxx: timestamp functions
+    [50009, 'year', 'SMALLINT', ['DATETIME'], 'TimeFunctions::yearV2'],
     [50010, 'year', 'INT', ['DATETIME'], 'TimeFunctions::year'],
+    [50019, 'month', 'TINYINT', ['DATETIME'], 'TimeFunctions::monthV2'],
     [50020, 'month', 'INT', ['DATETIME'], 'TimeFunctions::month'],
     [50030, 'quarter', 'INT', ['DATETIME'], 'TimeFunctions::quarter'],
     [50040, 'dayofweek', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week'],
     [50050, 'to_date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50051, 'date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
+
+    [50058, 'day', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
+    [50059, 'dayofmonth', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
     [50060, 'dayofmonth', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50061, 'day', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50062, 'dayofyear', 'INT', ['DATETIME'], 'TimeFunctions::day_of_year'],
     [50063, 'weekofyear', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year'],
 
+    [50069, 'hour', 'TINYINT', ['DATETIME'], 'TimeFunctions::hourV2'],
     [50070, 'hour', 'INT', ['DATETIME'], 'TimeFunctions::hour'],
+    [50079, 'minute', 'TINYINT', ['DATETIME'], 'TimeFunctions::minuteV2'],
     [50080, 'minute', 'INT', ['DATETIME'], 'TimeFunctions::minute'],
+    [50089, 'second', 'TINYINT', ['DATETIME'], 'TimeFunctions::secondV2'],
     [50090, 'second', 'INT', ['DATETIME'], 'TimeFunctions::second'],
 
     [50110, 'years_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_add'],

@@ -418,6 +418,16 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode"));
+
+        sql = "select * from t0 join test_all_type on NOT 69 IS NOT NULL where true";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:EMPTYSET"));
     }
 
     @Test
@@ -498,6 +508,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testWindowLimitPushdown() throws Exception {
         String sql = "select lag(v1, 1,1) OVER () from t0 limit 1";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\n" +
                 "  |  limit: 1"));
     }
@@ -3416,12 +3427,12 @@ public class PlanFragmentTest extends PlanTestBase {
         Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
         OlapTable tbl = (OlapTable) db.getTable("jointest");
         for (Partition partition : tbl.getPartitions()) {
-            partition.updateVisibleVersionAndVersionHash(2, 0);
+            partition.updateVisibleVersion(2);
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 mIndex.setRowCount(10000);
                 for (Tablet tablet : mIndex.getTablets()) {
                     for (Replica replica : tablet.getReplicas()) {
-                        replica.updateVersionInfo(2, 0, 200000, 10000);
+                        replica.updateRowCount(2, 200000, 10000);
                     }
                 }
             }
@@ -4778,6 +4789,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (PARTITIONED)"));
         Assert.assertTrue(plan.contains("9:HASH JOIN\n" +
                 "  |    |  join op: INNER JOIN (PARTITIONED)"));
+    }
+
+    @Test
+    public void testArrayFunctionFilter() throws Exception {
+        String sql = "select * from test_array where array_length(c1) between 2 and 3;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: array_length(2: c1) >= 2, array_length(2: c1) <= 3"));
     }
 
     @Test

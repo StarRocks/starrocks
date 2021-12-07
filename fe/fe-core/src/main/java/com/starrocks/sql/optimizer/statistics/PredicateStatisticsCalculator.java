@@ -155,15 +155,27 @@ public class PredicateStatisticsCalculator {
             ScalarOperator leftChild = predicate.getChild(0);
             ScalarOperator rightChild = predicate.getChild(1);
             Preconditions.checkState(!(leftChild.isConstantRef() && rightChild.isConstantRef()),
-                    "ConstantRef-cmp-ConstantRef not supported here, should be eliminated earlier");
+                    "ConstantRef-cmp-ConstantRef not supported here, should be eliminated earlier: " +
+                            predicate.toString());
             Preconditions.checkState(!(leftChild.isConstant() && rightChild.isVariable()),
-                    "Constant-cmp-Column not supported here, should be deal earlier");
+                    "Constant-cmp-Column not supported here, should be deal earlier: " + predicate.toString());
             // For CastOperator, we need use child as column statistics
             leftChild = getChildForCastOperator(leftChild);
             rightChild = getChildForCastOperator(rightChild);
-
+            // compute left and right column statistics
             ColumnStatistic leftColumnStatistic = getExpressionStatistic(leftChild);
             ColumnStatistic rightColumnStatistic = getExpressionStatistic(rightChild);
+            // do not use NaN to estimate predicate
+            if (leftColumnStatistic.hasNaNValue()) {
+                leftColumnStatistic =
+                        ColumnStatistic.buildFrom(leftColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
+                                .setMinValue(Double.NEGATIVE_INFINITY).build();
+            }
+            if (rightColumnStatistic.hasNaNValue()) {
+                rightColumnStatistic =
+                        rightColumnStatistic.buildFrom(rightColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
+                                .setMinValue(Double.NEGATIVE_INFINITY).build();
+            }
 
             if (leftChild.isVariable()) {
                 Optional<ColumnRefOperator> leftChildOpt;
@@ -171,8 +183,9 @@ public class PredicateStatisticsCalculator {
                 leftChildOpt = leftChild.isColumnRef() ? Optional.of((ColumnRefOperator) leftChild) : Optional.empty();
 
                 if (rightChild.isConstant()) {
-                    OptionalDouble constant = (rightColumnStatistic.isInfiniteRange()) ? OptionalDouble.empty() :
-                            OptionalDouble.of(rightColumnStatistic.getMaxValue());
+                    OptionalDouble constant =
+                            (rightColumnStatistic.isInfiniteRange()) ?
+                                    OptionalDouble.empty() : OptionalDouble.of(rightColumnStatistic.getMaxValue());
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
                                     leftColumnStatistic, predicate, constant, statistics);
