@@ -72,6 +72,16 @@ auto GlobalDictCodeColumnIterator::_get_local_dict_col_container(Column* column)
 }
 
 void GlobalDictCodeColumnIterator::_acquire_null_data(Column* global_dict_column, Column* local_dict_column) {
+#ifndef NDEBUG
+    // if global_dict_column was no-nullable but local_dict_column was nullable
+    // local_dict_column shouldn't has null
+    if (_opts.is_nullable && !global_dict_column->is_nullable()) {
+        auto src_column = down_cast<vectorized::NullableColumn*>(local_dict_column);
+        src_column->update_has_null();
+        DCHECK(!src_column->has_null());
+    }
+#endif
+
     // TODO: give the nullable property an accurate value
     // now _opts.is_nullable was always true
     if (_opts.is_nullable && global_dict_column->is_nullable()) {
@@ -79,15 +89,8 @@ void GlobalDictCodeColumnIterator::_acquire_null_data(Column* global_dict_column
         auto dst_column = down_cast<vectorized::NullableColumn*>(global_dict_column);
         auto src_column = down_cast<vectorized::NullableColumn*>(local_dict_column);
         dst_column->null_column_data() = std::move(src_column->null_column_data());
+        dst_column->set_has_null(src_column->has_null());
     }
-
-#ifndef NDEBUG
-    if (_opts.is_nullable && !global_dict_column->is_nullable()) {
-        auto src_column = down_cast<vectorized::NullableColumn*>(local_dict_column);
-        src_column->update_has_null();
-        DCHECK(!src_column->has_null());
-    }
-#endif
 }
 
 } // namespace starrocks::segment_v2
