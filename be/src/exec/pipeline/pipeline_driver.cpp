@@ -21,7 +21,8 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
     _schedule_effective_counter = ADD_COUNTER(_runtime_profile, "ScheduleEffectiveCounter", TUnit::UNIT);
-    _schedule_rows_per_chunk = ADD_COUNTER(_runtime_profile, "ScheduleRowsPerChunk", TUnit::UNIT);
+    _schedule_rows_per_chunk = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedRowsPerChunk", TUnit::UNIT);
+    _schedule_accumulated_chunk_moved = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedChunkMoved", TUnit::UNIT);
 
     DCHECK(_state == DriverState::NOT_READY);
     // fill OperatorWithDependency instances into _dependencies from _operators.
@@ -252,7 +253,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     COUNTER_UPDATE(_schedule_counter, driver_acct().get_schedule_times());
     COUNTER_UPDATE(_schedule_effective_counter, driver_acct().get_schedule_effective_times());
     COUNTER_UPDATE(_schedule_rows_per_chunk, driver_acct().get_rows_per_chunk());
-
+    COUNTER_UPDATE(_schedule_accumulated_chunk_moved, driver_acct().get_accumulated_chunk_moved());
     // last root driver cancel the all drivers' execution and notify FE the
     // fragment's completion but do not unregister the FragmentContext because
     // some non-root drivers maybe has pending io io tasks hold the reference to
