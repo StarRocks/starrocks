@@ -4850,6 +4850,12 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: baseall\n" +
                 "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
                 "     partitions=0/1"));
+
+        sql = "select 0 from baseall inner join t0 on v1 = k1 group by (v2 + k2),k1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Group columns isn't bound table baseall"));
     }
 
     @Test
@@ -4903,5 +4909,20 @@ public class PlanFragmentTest extends PlanTestBase {
                 "        ref_2.t1a >= ref_1.t1a";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
+    }
+    
+    @Test
+    public void testSemiReorder() throws Exception {
+        String sql = "select 0 from t0,t1 left semi join t2 on v1 = v7";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:10: expr\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  8:Project\n" +
+                "  |  <slot 10> : 0\n"));
     }
 }

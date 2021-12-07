@@ -48,6 +48,29 @@ public class Projection {
         return commonSubOperatorMap;
     }
 
+    // For sql: select *, to_bitmap(S_SUPPKEY) from table, we needn't apply global dict optimization
+    // This method differ from `couldApplyStringDict` method is for ColumnRefOperator, we return false.
+    public boolean needApplyStringDict(Set<Integer> childDictColumns) {
+        Preconditions.checkState(!childDictColumns.isEmpty());
+        ColumnRefSet dictSet = new ColumnRefSet();
+        for (Integer id : childDictColumns) {
+            dictSet.union(id);
+        }
+
+        for (ScalarOperator operator : columnRefMap.values()) {
+            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet)) {
+                return true;
+            }
+        }
+
+        for (ScalarOperator operator : commonSubOperatorMap.values()) {
+            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         Preconditions.checkState(!childDictColumns.isEmpty());
         ColumnRefSet dictSet = new ColumnRefSet();
