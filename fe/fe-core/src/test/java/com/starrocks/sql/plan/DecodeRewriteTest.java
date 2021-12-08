@@ -318,6 +318,29 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testDecodeNodeRewrite12() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select max(S_ADDRESS) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("Decode"));
+
+        sql = "select min(S_ADDRESS) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("Decode"));
+
+        sql = "select max(upper(S_ADDRESS)) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("Decode"));
+        Assert.assertTrue(plan.contains(" <function id 12>"));
+
+        sql = "select max(\"CONST\") from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+    }
+
+    @Test
     public void testScanFilter() throws Exception {
         String sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
         String plan = getFragmentPlan(sql);
