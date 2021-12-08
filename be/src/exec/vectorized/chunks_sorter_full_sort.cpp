@@ -245,11 +245,8 @@ Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) 
         return Status::InternalError("Full sort in single query instance only support at most 4294967295 rows");
     }
 
-    try {
-        _big_chunk->append(*chunk);
-    } catch (std::bad_alloc const&) {
-        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
-    }
+    _big_chunk->append(*chunk);
+
     DCHECK(!_big_chunk->has_const_column());
     return Status::OK();
 }
