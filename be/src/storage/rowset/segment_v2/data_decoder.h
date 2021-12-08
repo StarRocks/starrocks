@@ -76,17 +76,6 @@ public:
     }
 };
 
-class DefaultEncodingDecoder : public DataDecoder {
-public:
-    DefaultEncodingDecoder() = default;
-    ~DefaultEncodingDecoder() = default;
-
-    Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<char[]>* page, Slice& page_slice) override {
-        return Status::OK();
-    }
-};
-
 class BitShuffleDecoder : public DataDecoder {
 public:
     BitShuffleDecoder() = default;

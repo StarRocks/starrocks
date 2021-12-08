@@ -24,9 +24,6 @@ std::unique_ptr<DataDecoder> get_data_decoder(EncodingTypePB encoding) {
     case RLE: {
         return std::make_unique<RleDecoder>();
     }
-    case DEFAULT_ENCODING: {
-        return std::make_unique<DefaultEncodingDecoder>();
-    }
     default: {
         return nullptr;
     }
