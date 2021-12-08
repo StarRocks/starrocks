@@ -1735,7 +1735,6 @@ public class PlanFragmentBuilder {
             PlanNode root = inputFragment.getPlanRoot();
             if (root instanceof SortNode) {
                 SortNode sortNode = (SortNode) root;
-                sortNode.setIsAnalyticSort(true);
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
             }
 

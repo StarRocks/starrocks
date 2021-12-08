@@ -58,6 +58,9 @@ public class SortNode extends PlanNode {
     private long offset;
     // if true, the output of this node feeds an AnalyticNode
     private boolean isAnalyticSort;
+    // if SortNode(TopNNode in BE) is followed by AnalyticNode with partition_exprs, this partition_exprs is
+    // also added to TopNNode to hint that local shuffle operator is prepended to TopNNode in
+    // order to eliminate merging operation in pipeline execution engine.
     private List<Expr> analyticPartitionExprs = Collections.emptyList();
 
     // info_.sortTupleSlotExprs_ substituted with the outputSmap_ for materialized slots in init().

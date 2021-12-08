@@ -502,14 +502,6 @@ public class AnalyticPlanner {
                     windowGroup.physicalOutputTuple, windowGroup.logicalToPhysicalSmap,
                     partitionByEq, orderByEq, bufferedTupleDesc);
             node.init(analyzer);
-            // In old planner
-            // Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
-            // to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
-            if (newRoot instanceof SortNode) {
-                SortNode sortNode = (SortNode) newRoot;
-                sortNode.setIsAnalyticSort(true);
-                sortNode.setAnalyticPartitionExprs(node.getPartitionExprs());
-            }
             newRoot = node;
         }
 
