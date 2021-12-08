@@ -145,8 +145,8 @@ order by d_year, s_city, p_brand;
 #### 下载ssb-poc工具包并编译
 
 ~~~shell
-wget https://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/ssb-poc-0.9.2.zip
-unzip ssb-poc-0.9.2.zip
+wget https://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/ssb-poc-0.9.3.zip
+unzip ssb-poc-0.9.3.zip
 cd ssb-poc
 make && make install  
 ~~~
@@ -156,7 +156,13 @@ make && make install
 #### 生成数据
 
 ~~~shell
+# 生成100G数据脚本
+cd output
 bin/gen-ssb.sh 100 data_dir
+
+# 生成1T数据脚本
+cd output
+bin/gen-ssb.sh 1000 data_dir
 ~~~
 
 这里会在data\_dir目录下生成100GB规模的数据
@@ -183,7 +189,7 @@ bin/gen-ssb.sh 100 data_dir
 
     StarRocks的建表这里都采取的NOT NULL关键字，因为在SSB生成的标准数据集合中并没有空字段。
 
-针对我们三台BE的环境我们采取的建表方式如下：
+以下为建表语句，无需执行，可通过执行create_db_table脚本进行建表，建表语句中进行了默认分桶数配置。针对我们三台BE的环境我们采取的建表方式如下：
 
 ~~~sql
 CREATE TABLE IF NOT EXISTS `lineorder` (
@@ -209,10 +215,7 @@ DUPLICATE KEY(`lo_orderkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 96
 PROPERTIES (
-    "replication_num" = "1",
-    "colocate_with" = "group1",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT"
+    "replication_num" = "1"
 );
 
 
@@ -230,10 +233,7 @@ DUPLICATE KEY(`c_custkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12
 PROPERTIES (
-    "replication_num" = "1",
-    "colocate_with" = "groupa2",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT"
+    "replication_num" = "1"
 );
 
 
@@ -260,10 +260,7 @@ DUPLICATE KEY(`d_datekey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1
 PROPERTIES (
-    "replication_num" = "1",
-    "in_memory" = "false",
-    "colocate_with" = "groupa3",
-    "storage_format" = "DEFAULT"
+    "replication_num" = "1"
 );
 
  CREATE TABLE IF NOT EXISTS `supplier` (
@@ -279,10 +276,7 @@ DUPLICATE KEY(`s_suppkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12
 PROPERTIES (
-    "replication_num" = "1",
-    "colocate_with" = "groupa4",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT"
+    "replication_num" = "1"
 );
 
 CREATE TABLE IF NOT EXISTS `part` (
@@ -300,15 +294,63 @@ DUPLICATE KEY(`p_partkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12
 PROPERTIES (
-    "replication_num" = "1",
-    "colocate_with" = "groupa5",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT"
+    "replication_num" = "1"
 );
 
-CREATE TABLE IF NOT EXISTS `lineorder_flat` (
-  `LO_ORDERKEY` int(11) NOT NULL COMMENT "",
+# lineorder_flat表建表语句，测试数据量级是100G时
+CREATE TABLE `lineorder_flat` (
+  `lo_orderdate` date NOT NULL COMMENT "",
+  `lo_orderkey` int(11) NOT NULL COMMENT "",
+  `lo_linenumber` tinyint(4) NOT NULL COMMENT "",
+  `lo_custkey` int(11) NOT NULL COMMENT "",
+  `lo_partkey` int(11) NOT NULL COMMENT "",
+  `lo_suppkey` int(11) NOT NULL COMMENT "",
+  `lo_orderpriority` varchar(100) NOT NULL COMMENT "",
+  `lo_shippriority` tinyint(4) NOT NULL COMMENT "",
+  `lo_quantity` tinyint(4) NOT NULL COMMENT "",
+  `lo_extendedprice` int(11) NOT NULL COMMENT "",
+  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
+  `lo_discount` tinyint(4) NOT NULL COMMENT "",
+  `lo_revenue` int(11) NOT NULL COMMENT "",
+  `lo_supplycost` int(11) NOT NULL COMMENT "",
+  `lo_tax` tinyint(4) NOT NULL COMMENT "",
+  `lo_commitdate` date NOT NULL COMMENT "",
+  `lo_shipmode` varchar(100) NOT NULL COMMENT "",
+  `c_name` varchar(100) NOT NULL COMMENT "",
+  `c_address` varchar(100) NOT NULL COMMENT "",
+  `c_city` varchar(100) NOT NULL COMMENT "",
+  `c_nation` varchar(100) NOT NULL COMMENT "",
+  `c_region` varchar(100) NOT NULL COMMENT "",
+  `c_phone` varchar(100) NOT NULL COMMENT "",
+  `c_mktsegment` varchar(100) NOT NULL COMMENT "",
+  `s_region` varchar(100) NOT NULL COMMENT "",
+  `s_nation` varchar(100) NOT NULL COMMENT "",
+  `s_city` varchar(100) NOT NULL COMMENT "",
+  `s_name` varchar(100) NOT NULL COMMENT "",
+  `s_address` varchar(100) NOT NULL COMMENT "",
+  `s_phone` varchar(100) NOT NULL COMMENT "",
+  `p_name` varchar(100) NOT NULL COMMENT "",
+  `p_mfgr` varchar(100) NOT NULL COMMENT "",
+  `p_category` varchar(100) NOT NULL COMMENT "",
+  `p_brand` varchar(100) NOT NULL COMMENT "",
+  `p_color` varchar(100) NOT NULL COMMENT "",
+  `p_type` varchar(100) NOT NULL COMMENT "",
+  `p_size` tinyint(4) NOT NULL COMMENT "",
+  `p_container` varchar(100) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderdate`, `lo_orderkey`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`lo_orderdate`)
+(START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR))
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1"
+);
+
+# lineorder_flat表建表语句，测试数据量级是1T时
+CREATE TABLE `lineorder_flat` (
   `LO_ORDERDATE` date NOT NULL COMMENT "",
+  `LO_ORDERKEY` bigint(20) NOT NULL COMMENT "",
   `LO_LINENUMBER` tinyint(4) NOT NULL COMMENT "",
   `LO_CUSTKEY` int(11) NOT NULL COMMENT "",
   `LO_PARTKEY` int(11) NOT NULL COMMENT "",
@@ -346,14 +388,13 @@ CREATE TABLE IF NOT EXISTS `lineorder_flat` (
   `P_SIZE` tinyint(4) NOT NULL COMMENT "",
   `P_CONTAINER` varchar(100) NOT NULL COMMENT ""
 ) ENGINE=OLAP
-DUPLICATE KEY(`LO_ORDERKEY`)
+DUPLICATE KEY(`LO_ORDERDATE`, `LO_ORDERKEY`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 192
+PARTITION BY RANGE(`LO_ORDERDATE`)
+(START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR))
+DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 120
 PROPERTIES (
-    "replication_num" = "1",
-    "colocate_with" = "groupxx1",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT"
+"replication_num" = "1"
 );
 ~~~
 
@@ -372,13 +413,20 @@ http_port: 8030
 be_heartbeat_port: 9050
 broker_port: 8000
 
+# parallel_fragment_exec_instance_num 设置并行度，建议是每个集群节点逻辑核数的一半，以下以8为例
+parallel_num: 8
+
 ...
 ~~~
 
-执行建表脚本
+执行建表脚本。如需根据集群规模，节点配置等因素重新规划某个表的分桶数进行建表，可在执行脚本后将对应的表删除。然后通过执行更改后的上面的语句进行创建。
 
 ~~~shell
-bin/create_db_table.sh ddl_100
+# 测试100G数据
+ bin/create_db_table.sh ddl_100
+ 
+# 测试1T数据
+ bin/create_db_table.sh ddl_1000
 ~~~
 
 完成后我们创建了6张表：lineorder, supplier, dates, customer, part, lineorder\_flat
@@ -395,6 +443,13 @@ data\_dir是之前生成的数据目录
 
 ### 查询
 
+首先在客户端执行命令，修改并行度(类似clickhouse set max_threads = 8)
+
+~~~shell
+# 设置并行度，建议是每个集群节点逻辑核数的一半,以下以8为例
+set global parallel_fragment_exec_instance_num = 8;
+~~~
+
 测试ssb多表查询 (SQL 参见 share/ssb\_test/sql/ssb/)
 
 ~~~shell
@@ -404,6 +459,8 @@ bin/benchmark.sh -p -d ssb
 测试ssb宽表查询(SQL 参见 share/ssb\_test/sql/ssb-flat/)
 
 ~~~shell
+# 向宽表中插入数据
 bin/flat_insert.sh
+# 执行查询
 bin/benchmark.sh -p -d ssb-flat
 ~~~
