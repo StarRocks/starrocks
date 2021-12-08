@@ -110,6 +110,7 @@ public:
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
+    const bool& cancelled_ref() const { return _is_cancelled; }
 
     void set_fragment_root_id(PlanNodeId id) {
         DCHECK(_root_node_id == -1) << "Should not set this twice.";
