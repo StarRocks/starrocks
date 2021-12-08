@@ -62,6 +62,14 @@ public:
         }
     }
 
+    bool try_mem_consume(int64_t size) {
+        MemTracker* cur_tracker = mem_tracker();
+        if (cur_tracker != nullptr) {
+            return cur_tracker->try_consume(size);
+        }
+        return true;
+    }
+
     void mem_consume_without_cache(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         if (cur_tracker != nullptr && size != 0) {
