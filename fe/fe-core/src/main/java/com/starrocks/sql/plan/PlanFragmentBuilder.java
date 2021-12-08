@@ -1729,6 +1729,14 @@ public class PlanFragmentBuilder {
                 analyticEvalNode.getConjuncts()
                         .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
+            // In new planner
+            // Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
+            // to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
+            PlanNode root = inputFragment.getPlanRoot();
+            if (root instanceof SortNode) {
+                SortNode sortNode = (SortNode) root;
+                sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
+            }
 
             inputFragment.setPlanRoot(analyticEvalNode);
             return inputFragment;
