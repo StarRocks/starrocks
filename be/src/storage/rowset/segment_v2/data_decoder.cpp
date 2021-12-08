@@ -44,9 +44,8 @@ Status DataDecoder::decode_page(PageFooterPB* footer, uint32_t footer_size, Enco
     }
     case DATA_PAGE: {
         std::unique_ptr<DataDecoder> decoder = get_data_decoder(encoding);
-        // Unknown encoding type will return success directly
         if (!decoder) {
-            return Status::OK();
+            return Status::InternalError("Unknown encoding");
         }
         return decoder->decode_data_page(footer, footer_size, encoding, page, page_slice);
     }
