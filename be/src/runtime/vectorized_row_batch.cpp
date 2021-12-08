@@ -20,7 +20,6 @@
 #include <memory>
 
 #include "common/logging.h"
-#include "storage/row_block.h"
 
 namespace starrocks {
 
@@ -37,107 +36,6 @@ VectorizedRowBatch::VectorizedRowBatch(const TabletSchema* schema, const std::ve
     for (ColumnId column_id : cols) {
         _col_vectors[column_id] = new ColumnVector();
     }
-}
-
-void VectorizedRowBatch::dump_to_row_block(RowBlock* row_block) {
-    if (_selected_in_use) {
-        for (auto column_id : _cols) {
-            ColumnVector* col_vec = _col_vectors[column_id];
-
-            bool no_nulls = col_vec->no_nulls();
-            // pointer of this field's vector
-            char* vec_field_ptr = (char*)col_vec->col_data();
-            // pointer of this field in row block
-            char* row_field_ptr = row_block->_mem_buf + row_block->_field_offset_in_memory[column_id];
-            const TabletColumn& column = _schema->column(column_id);
-            size_t field_size = 0;
-            if (column.type() == OLAP_FIELD_TYPE_CHAR || column.type() == OLAP_FIELD_TYPE_VARCHAR ||
-                column.type() == OLAP_FIELD_TYPE_HLL || column.type() == OLAP_FIELD_TYPE_OBJECT ||
-                column.type() == OLAP_FIELD_TYPE_PERCENTILE) {
-                field_size = sizeof(Slice);
-            } else {
-                field_size = column.length();
-            }
-            if (no_nulls) {
-                for (int row = 0; row < _size; ++row) {
-                    char* vec_field = vec_field_ptr + _selected[row] * field_size;
-                    // Set not null
-                    *row_field_ptr = 0;
-                    memory_copy(row_field_ptr + 1, vec_field, field_size);
-
-                    // point to next row
-                    row_field_ptr += row_block->_mem_row_bytes;
-                }
-            } else {
-                bool* is_null = col_vec->is_null();
-                for (int row = 0; row < _size; ++row) {
-                    if (is_null[_selected[row]]) {
-                        *row_field_ptr = 1;
-                    } else {
-                        char* vec_field = vec_field_ptr + _selected[row] * field_size;
-                        // Set not null
-                        *row_field_ptr = 0;
-                        memory_copy(row_field_ptr + 1, vec_field, field_size);
-                    }
-                    row_field_ptr += row_block->_mem_row_bytes;
-                }
-            }
-        }
-    } else {
-        for (auto column_id : _cols) {
-            ColumnVector* col_vec = _col_vectors[column_id];
-
-            bool no_nulls = col_vec->no_nulls();
-
-            char* vec_field_ptr = (char*)col_vec->col_data();
-            char* row_field_ptr = row_block->_mem_buf + row_block->_field_offset_in_memory[column_id];
-
-            const TabletColumn& column = _schema->column(column_id);
-            size_t field_size = 0;
-            if (column.type() == OLAP_FIELD_TYPE_CHAR || column.type() == OLAP_FIELD_TYPE_VARCHAR ||
-                column.type() == OLAP_FIELD_TYPE_HLL || column.type() == OLAP_FIELD_TYPE_OBJECT ||
-                column.type() == OLAP_FIELD_TYPE_PERCENTILE) {
-                field_size = sizeof(Slice);
-            } else {
-                field_size = column.length();
-            }
-
-            if (no_nulls) {
-                for (int row = 0; row < _size; ++row) {
-                    char* vec_field = vec_field_ptr;
-                    // Set not null
-                    *row_field_ptr = 0;
-                    memory_copy(row_field_ptr + 1, vec_field, field_size);
-                    row_field_ptr += row_block->_mem_row_bytes;
-                    vec_field_ptr += field_size;
-                }
-            } else {
-                bool* is_null = col_vec->is_null();
-                for (int row = 0; row < _size; ++row) {
-                    if (is_null[row]) {
-                        *row_field_ptr = 1;
-                    } else {
-                        char* vec_field = vec_field_ptr;
-                        // Set not null
-                        *row_field_ptr = 0;
-                        memory_copy(row_field_ptr + 1, vec_field, field_size);
-                    }
-                    row_field_ptr += row_block->_mem_row_bytes;
-                    vec_field_ptr += field_size;
-                }
-            }
-        }
-    }
-
-    row_block->_pos = 0;
-    row_block->_limit = _size;
-    row_block->_info.row_num = _size;
-    row_block->_block_status = _block_status;
-
-    // exchange two memory pool to reduce chunk allocate in MemPool,
-    row_block->mem_pool()->exchange_data(_mem_pool.get());
-    // Clear to reuse already allocated chunk
-    _mem_pool->clear();
 }
 
 } // namespace starrocks

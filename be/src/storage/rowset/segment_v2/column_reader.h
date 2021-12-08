@@ -50,7 +50,6 @@ class BlockCompressionCodec;
 class ColumnBlock;
 class ColumnBlockView;
 class ColumnVectorBatch;
-class CondColumn;
 class MemTracker;
 class WrapperField;
 
@@ -70,7 +69,6 @@ class EncodingInfo;
 class PageDecoder;
 class PagePointer;
 class ParsedPage;
-class RowRanges;
 class ZoneMapIndexPB;
 class ZoneMapPB;
 
@@ -132,21 +130,6 @@ public:
     }
 
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
-
-    // Check if this column could match `cond' using segment zone map.
-    // Since segment zone map is stored in metadata, this function is fast without I/O.
-    // Return true if segment zone map is absent or `cond' could be satisfied, false otherwise.
-    bool match_condition(CondColumn* cond) const;
-
-    // get row ranges with zone map
-    // - cond_column is user's query predicate
-    // - delete_condition is a delete predicate of one version
-    Status get_row_ranges_by_zone_map(CondColumn* cond_column, CondColumn* delete_condition,
-                                      std::unordered_set<uint32_t>* delete_partial_filtered_pages,
-                                      RowRanges* row_ranges);
-
-    // get row ranges with bloom filter index
-    Status get_row_ranges_by_bloom_filter(CondColumn* cond_column, RowRanges* row_ranges);
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     FieldType column_type() const { return _column_type; }
@@ -221,19 +204,10 @@ private:
     Status _load_bitmap_index(bool use_page_cache, bool kept_in_memory);
     Status _load_bloom_filter_index(bool use_page_cache, bool kept_in_memory);
 
-    static bool _zone_map_match_condition(const ZoneMapPB& zone_map, WrapperField* min_value_container,
-                                          WrapperField* max_value_container, CondColumn* cond);
-
     static void _parse_zone_map(const ZoneMapPB& zone_map, WrapperField* min_value_container,
                                 WrapperField* max_value_container);
 
     Status _parse_zone_map(const ZoneMapPB& zm, vectorized::ZoneMapDetail* detail) const;
-
-    Status _get_filtered_pages(CondColumn* cond_column, CondColumn* delete_conditions,
-                               std::unordered_set<uint32_t>* delete_partial_filtered_pages,
-                               std::vector<uint32_t>* page_indexes);
-
-    Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, RowRanges* row_ranges);
 
     Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, vectorized::SparseRange* row_ranges);
 

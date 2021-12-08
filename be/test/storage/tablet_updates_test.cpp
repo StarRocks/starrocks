@@ -26,6 +26,7 @@
 #include "storage/vectorized/empty_iterator.h"
 #include "storage/vectorized/schema_change.h"
 #include "storage/vectorized/union_iterator.h"
+#include "storage/wrapper_field.h"
 #include "util/defer_op.h"
 #include "util/path_util.h"
 

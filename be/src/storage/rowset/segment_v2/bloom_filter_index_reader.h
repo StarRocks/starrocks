@@ -30,7 +30,6 @@
 #include "storage/column_block.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/indexed_column_reader.h"
-#include "storage/rowset/segment_v2/row_ranges.h"
 
 namespace starrocks {
 

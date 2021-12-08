@@ -26,12 +26,10 @@
 #include <string>
 
 #include "runtime/mem_pool.h"
-#include "storage/aggregate_func.h"
 #include "storage/decimal_type_info.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/row_cursor_cell.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/utils.h"
@@ -50,7 +48,6 @@ public:
             : _name(column.name()),
               _type_info(get_type_info(column)),
               _key_coder(get_key_coder(column.type())),
-              _agg_info(get_aggregate_info(column.aggregation(), column.type())),
               _index_size(column.index_length()),
               _length(column.length()),
               _is_nullable(column.is_nullable()) {
@@ -62,7 +59,6 @@ public:
             : _name(column.name()),
               _type_info(type_info),
               _key_coder(get_key_coder(column.type())),
-              _agg_info(get_aggregate_info(column.aggregation(), column.type())),
               _index_size(column.index_length()),
               _length(column.length()),
               _is_nullable(column.is_nullable()) {}
@@ -89,27 +85,6 @@ public:
     // This function allocate memory from pool, other than allocate_memory
     // reserve memory from continuous memory.
     virtual char* allocate_value(MemPool* pool) const { return (char*)pool->allocate(_type_info->size()); }
-
-    void agg_update(RowCursorCell* dest, const RowCursorCell& src, MemPool* mem_pool = nullptr) const {
-        _agg_info->update(dest, src, mem_pool);
-    }
-
-    void agg_finalize(RowCursorCell* dst, MemPool* mem_pool) const { _agg_info->finalize(dst, mem_pool); }
-
-    virtual void consume(RowCursorCell* dst, const char* src, bool src_null, MemPool* mem_pool,
-                         ObjectPool* agg_pool) const {
-        _agg_info->init(dst, src, src_null, mem_pool, agg_pool);
-    }
-
-    // todo(kks): Unify AggregateInfo::init method and Field::agg_init method
-
-    // This function will initialize destination with source.
-    // This functionn differs copy functionn in that if this field
-    // contain aggregate information, this functionn will initialize
-    // destination in aggregate format, and update with srouce content.
-    virtual void agg_init(RowCursorCell* dst, const RowCursorCell& src, MemPool* mem_pool, ObjectPool* agg_pool) const {
-        direct_copy(dst, src, mem_pool);
-    }
 
     virtual char* allocate_memory(char* cell_ptr, char* variable_ptr) const { return variable_ptr; }
 
@@ -249,7 +224,6 @@ public:
     uint32_t hash_code(const CellType& cell, uint32_t seed) const;
 
     FieldType type() const { return _type_info->type(); }
-    FieldAggregationMethod aggregation() const { return _agg_info->agg_method(); }
     const TypeInfoPtr& type_info() const { return _type_info; }
     bool is_nullable() const { return _is_nullable; }
 
@@ -307,7 +281,7 @@ public:
     virtual std::string debug_string() const {
         std::stringstream ss;
         ss << "(type=" << _type_info->type() << ",index_size=" << _index_size << ",is_nullable=" << _is_nullable
-           << ",aggregation=" << _agg_info->agg_method() << ",length=" << _length << ")";
+           << ",length=" << _length << ")";
         return ss.str();
     }
 
@@ -336,7 +310,6 @@ protected:
     std::string _name;
     TypeInfoPtr _type_info;
     const KeyCoder* _key_coder;
-    const AggregateInfo* _agg_info;
     uint16_t _index_size;
     uint32_t _length;
     bool _is_nullable;
@@ -428,22 +401,6 @@ public:
     explicit CharField() {}
     explicit CharField(const TabletColumn& column) : Field(column) {}
 
-    // the char field is especial, which need the _length info when consume raw data
-    void consume(RowCursorCell* dst, const char* src, bool src_null, MemPool* mem_pool,
-                 ObjectPool* agg_pool) const override {
-        dst->set_is_null(src_null);
-        if (src_null) {
-            return;
-        }
-
-        auto* value = reinterpret_cast<const StringValue*>(src);
-        auto* dest_slice = (Slice*)(dst->mutable_cell_ptr());
-        dest_slice->size = _length;
-        dest_slice->data = (char*)mem_pool->allocate(dest_slice->size);
-        memcpy(dest_slice->data, value->ptr, value->len);
-        memset(dest_slice->data + value->len, 0, dest_slice->size - value->len);
-    }
-
     size_t get_variable_len() const override { return _length; }
 
     char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
@@ -505,12 +462,6 @@ public:
     explicit BitmapAggField() {}
     explicit BitmapAggField(const TabletColumn& column) : Field(column) {}
 
-    // bitmap storage data always not null
-    void agg_init(RowCursorCell* dst, const RowCursorCell& src, MemPool* mem_pool,
-                  ObjectPool* agg_pool) const override {
-        _agg_info->init(dst, (const char*)src.cell_ptr(), src.is_null(), mem_pool, agg_pool);
-    }
-
     char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
         auto slice = (Slice*)cell_ptr;
         slice->data = nullptr;
@@ -529,12 +480,6 @@ public:
     explicit HllAggField() {}
     explicit HllAggField(const TabletColumn& column) : Field(column) {}
 
-    // Hll storage data always not null
-    void agg_init(RowCursorCell* dst, const RowCursorCell& src, MemPool* mem_pool,
-                  ObjectPool* agg_pool) const override {
-        _agg_info->init(dst, (const char*)src.cell_ptr(), false, mem_pool, agg_pool);
-    }
-
     char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
         auto slice = (Slice*)cell_ptr;
         slice->data = nullptr;
@@ -552,12 +497,6 @@ class PercentileAggField : public Field {
 public:
     PercentileAggField() {}
     explicit PercentileAggField(const TabletColumn& column) : Field(column) {}
-
-    // Hll storage data always not null
-    void agg_init(RowCursorCell* dst, const RowCursorCell& src, MemPool* mem_pool,
-                  ObjectPool* agg_pool) const override {
-        _agg_info->init(dst, (const char*)src.cell_ptr(), false, mem_pool, agg_pool);
-    }
 
     char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
         auto slice = (Slice*)cell_ptr;

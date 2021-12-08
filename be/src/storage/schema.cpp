@@ -21,7 +21,6 @@
 
 #include "storage/schema.h"
 
-#include "storage/row_block2.h"
 #include "util/scoped_cleanup.h"
 
 namespace starrocks {

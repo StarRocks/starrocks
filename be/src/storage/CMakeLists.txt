@@ -29,7 +29,6 @@ add_subdirectory(rowset)
 add_subdirectory(fs)
 
 add_library(Storage STATIC
-    aggregate_func.cpp
     base_tablet.cpp
     comparison_predicate.cpp
     decimal12.cpp
@@ -41,7 +40,6 @@ add_library(Storage STATIC
     lru_cache.cpp
     memtable_flush_executor.cpp
     null_predicate.cpp
-    olap_cond.cpp
     kv_store.cpp
     olap_server.cpp
     options.cpp
@@ -51,9 +49,6 @@ add_library(Storage STATIC
     protobuf_file.cpp
     rowset_update_state.cpp
     update_compaction_state.cpp
-    row_block.cpp
-    row_block2.cpp
-    row_cursor.cpp
     version_graph.cpp
     schema.cpp
     storage_engine.cpp
