@@ -27,7 +27,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.ImportColumnDesc;
@@ -67,6 +66,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.FilePatternVersion;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -228,7 +228,6 @@ public class SparkLoadPendingTask extends LoadTask {
 
     private List<EtlIndex> createEtlIndexes(OlapTable table) throws LoadException {
         List<EtlIndex> etlIndexes = Lists.newArrayList();
-        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
 
         for (Map.Entry<Long, List<Column>> entry : table.getIndexIdToSchema().entrySet()) {
             long indexId = entry.getKey();
@@ -237,7 +236,7 @@ public class SparkLoadPendingTask extends LoadTask {
             // columns
             List<EtlColumn> etlColumns = Lists.newArrayList();
             for (Column column : entry.getValue()) {
-                etlColumns.add(createEtlColumn(column, defaultValueResolver));
+                etlColumns.add(createEtlColumn(column));
             }
 
             // check distribution type
@@ -277,7 +276,7 @@ public class SparkLoadPendingTask extends LoadTask {
         return etlIndexes;
     }
 
-    private EtlColumn createEtlColumn(Column column, DefaultValueResolver defaultValueResolver) {
+    private EtlColumn createEtlColumn(Column column) {
         // column name
         String name = column.getName();
         // column type
@@ -296,10 +295,15 @@ public class SparkLoadPendingTask extends LoadTask {
 
         // default value
         String defaultValue = null;
-        if (DefaultValueResolver.hasDefaultValue(column)) {
-            defaultValue = defaultValueResolver.getCalculatedDefaultValue(column);
+        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.VARY) {
+            throw new SemanticException("Column " + column.getName() + " has unsupported default value:" +
+                    column.getDefaultExpr().getExpr());
         }
-        if (column.isAllowNull() && !DefaultValueResolver.hasDefaultValue(column)) {
+        if (defaultValueType == Column.DefaultValueType.CONST) {
+            defaultValue = column.getCalculatedDefaultValue();
+        }
+        if (column.isAllowNull() && defaultValueType == Column.DefaultValueType.NONE) {
             defaultValue = "\\N";
         }
 

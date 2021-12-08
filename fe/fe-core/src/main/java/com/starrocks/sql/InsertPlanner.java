@@ -6,7 +6,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.DefaultValueExpr;
-import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -63,11 +62,10 @@ public class InsertPlanner {
     public ExecPlan plan(Relation relation, ConnectContext session) {
         InsertRelation insertRelation = (InsertRelation) relation;
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
-        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (insertRelation.getQueryRelation() instanceof ValuesRelation) {
-            castLiteralToTargetColumnsType(insertRelation, defaultValueResolver);
+            castLiteralToTargetColumnsType(insertRelation);
         }
 
         //2. Build Logical plan
@@ -76,12 +74,10 @@ public class InsertPlanner {
                 new RelationTransformer(columnRefFactory, session).transform(insertRelation.getQueryRelation());
 
         //3. Fill in the default value and NULL
-        OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertRelation, outputColumns,
-                defaultValueResolver);
+        OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertRelation, outputColumns);
 
         //4. Fill in the shadow column
-        optExprBuilder = fillShadowColumns(columnRefFactory, insertRelation, outputColumns, optExprBuilder, session,
-                defaultValueResolver);
+        optExprBuilder = fillShadowColumns(columnRefFactory, insertRelation, outputColumns, optExprBuilder, session);
 
         //5. Cast output columns type to target type
         optExprBuilder =
@@ -144,7 +140,7 @@ public class InsertPlanner {
         return execPlan;
     }
 
-    void castLiteralToTargetColumnsType(InsertRelation insertRelation, DefaultValueResolver defaultValueResolver) {
+    void castLiteralToTargetColumnsType(InsertRelation insertRelation) {
         Preconditions.checkState(insertRelation.getQueryRelation() instanceof ValuesRelation, "must values");
         List<Column> fullSchema = insertRelation.getTargetTable().getFullSchema();
         ValuesRelation values = (ValuesRelation) insertRelation.getQueryRelation();
@@ -154,8 +150,7 @@ public class InsertPlanner {
             if (insertRelation.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
-                        row.set(columnIdx, new StringLiteral(
-                                defaultValueResolver.getCalculatedDefaultValue(targetColumn)));
+                        row.set(columnIdx, new StringLiteral(targetColumn.getCalculatedDefaultValue()));
                     }
                     row.set(columnIdx, TypeManager.addCastExpr(row.get(columnIdx), targetColumn.getType()));
                 }
@@ -165,8 +160,7 @@ public class InsertPlanner {
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (row.get(idx) instanceof DefaultValueExpr) {
-                            row.set(idx, new StringLiteral(
-                                    defaultValueResolver.getCalculatedDefaultValue(targetColumn)));
+                            row.set(idx, new StringLiteral(targetColumn.getCalculatedDefaultValue()));
                         }
                         row.set(idx, TypeManager.addCastExpr(row.get(idx), targetColumn.getType()));
                     }
@@ -177,8 +171,7 @@ public class InsertPlanner {
     }
 
     OptExprBuilder fillDefaultValue(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
-                                    InsertRelation insertRelation, List<ColumnRefOperator> outputColumns,
-                                    DefaultValueResolver defaultValueResolver) {
+                                    InsertRelation insertRelation, List<ColumnRefOperator> outputColumns) {
         List<Column> baseSchema = insertRelation.getTargetTable().getBaseSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
@@ -192,11 +185,17 @@ public class InsertPlanner {
                 int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx == -1) {
                     ScalarOperator scalarOperator;
-                    if (!DefaultValueResolver.hasDefaultValue(targetColumn)) {
+                    Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+                    if (defaultValueType == Column.DefaultValueType.NONE) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
+                    } else if (defaultValueType == Column.DefaultValueType.CONST)  {
+                        scalarOperator = ConstantOperator.createVarchar(targetColumn.getCalculatedDefaultValue());
+                    } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                        throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
+                                    + targetColumn.getDefaultExpr().getExpr());
+
                     } else {
-                        scalarOperator = ConstantOperator.createVarchar(
-                                defaultValueResolver.getCalculatedDefaultValue(targetColumn));
+                        throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
                     }
                     ColumnRefOperator col = columnRefFactory
                             .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
@@ -213,8 +212,7 @@ public class InsertPlanner {
     }
 
     OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertRelation insertRelation,
-                                     List<ColumnRefOperator> outputColumns, OptExprBuilder root, ConnectContext session,
-                                     DefaultValueResolver defaultValueResolver) {
+                                     List<ColumnRefOperator> outputColumns, OptExprBuilder root, ConnectContext session) {
         List<Column> fullSchema = insertRelation.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
@@ -270,11 +268,15 @@ public class InsertPlanner {
                         targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
                 outputColumns.add(columnRefOperator);
 
-                if (!DefaultValueResolver.hasDefaultValue(targetColumn)) {
+                Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NONE) {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
-                } else {
+                } else if (defaultValueType == Column.DefaultValueType.CONST) {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(
-                            defaultValueResolver.getCalculatedDefaultValue(targetColumn)));
+                            targetColumn.getCalculatedDefaultValue()));
+                } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                    throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
+                            + targetColumn.getDefaultExpr().getExpr());
                 }
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));

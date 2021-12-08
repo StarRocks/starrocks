@@ -26,22 +26,26 @@ import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TColumn;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -284,7 +288,7 @@ public class Column implements Writable {
         }
     }
 
-    public TColumn toThrift(DefaultValueResolver defaultValueResolver) {
+    public TColumn toThrift() {
         TColumn tColumn = new TColumn();
         tColumn.setColumn_name(this.name);
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
@@ -295,10 +299,6 @@ public class Column implements Writable {
         tColumn.setIs_key(this.isKey);
         tColumn.setIs_allow_null(this.isAllowNull);
         tColumn.setDefault_value(this.defaultValue);
-        if (null != this.defaultExpr) {
-            // the current default value are all computable
-            tColumn.setDefault_value(defaultValueResolver.getCalculatedDefaultValue(this));
-        }
         // The define expr does not need to be serialized here for now.
         // At present, only serialized(analyzed) define expr is directly used when creating a materialized view.
         // It will not be used here, but through another structure `TAlterMaterializedViewParam`.
@@ -419,6 +419,63 @@ public class Column implements Writable {
 
         return sb.toString();
     }
+
+
+    public enum DefaultValueType {
+        NONE,
+        CONST,
+        VARY
+    }
+
+    public DefaultValueType getDefaultValueType() {
+        if (defaultValue != null) {
+            return DefaultValueType.CONST;
+        } else if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                return DefaultValueType.CONST;
+            } else {
+                return DefaultValueType.VARY;
+            }
+        }
+        return DefaultValueType.NONE;
+    }
+
+
+
+    // if the column have a default value or default expr can be calculated like now(). return calculated value
+    // else for a batch of every row different like uuid(). return null
+    // consistency requires upper-level assurance
+    public String getCalculatedDefaultValue() {
+        if (defaultValue != null) {
+            return defaultValue;
+        }
+        if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+            // current transaction time
+            if (ConnectContext.get() != null) {
+                LocalDateTime startTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                return startTime.toString();
+            } else {
+                // should not run up here
+                return LocalDateTime.now().toString();
+            }
+        }
+        return null;
+    }
+
+    public String getMetaDefaultValue(List<String> extras) {
+        if (defaultValue != null) {
+            return defaultValue;
+        } else if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                extras.add("DEFAULT_GENERATED");
+                return "CURRENT_TIMESTAMP";
+            }
+        }
+        return FeConstants.null_string;
+    }
+
+
 
     public String toSqlWithoutAggregateTypeName() {
         StringBuilder sb = new StringBuilder();

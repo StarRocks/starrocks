@@ -21,7 +21,6 @@
 
 package com.starrocks.task;
 
-import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.catalog.Column;
 import com.starrocks.thrift.TAlterTabletReq;
 import com.starrocks.thrift.TColumn;
@@ -97,10 +96,9 @@ public class CreateRollupTask extends AgentTask {
         tSchema.setStorage_type(storageType);
         tSchema.setKeys_type(keysType);
 
-        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
         List<TColumn> tColumns = new ArrayList<TColumn>();
         for (Column column : rollupColumns) {
-            TColumn tColumn = column.toThrift(defaultValueResolver);
+            TColumn tColumn = column.toThrift();
             // is bloom filter column
             if (bfColumns != null && bfColumns.contains(column.getName())) {
                 tColumn.setIs_bloom_filter_column(true);

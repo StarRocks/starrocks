@@ -30,7 +30,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.starrocks.analysis.DefaultValueResolver;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
@@ -470,16 +469,16 @@ public class HiveTable extends Table {
         Set<String> partitionColumnNames = Sets.newHashSet();
         List<TColumn> tPartitionColumns = Lists.newArrayList();
         List<TColumn> tColumns = Lists.newArrayList();
-        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
+
         for (Column column : getPartitionColumns()) {
-            tPartitionColumns.add(column.toThrift(defaultValueResolver));
+            tPartitionColumns.add(column.toThrift());
             partitionColumnNames.add(column.getName());
         }
         for (Column column : getBaseSchema()) {
             if (partitionColumnNames.contains(column.getName())) {
                 continue;
             }
-            tColumns.add(column.toThrift(defaultValueResolver));
+            tColumns.add(column.toThrift());
         }
         tHdfsTable.setColumns(tColumns);
         if (!tPartitionColumns.isEmpty()) {

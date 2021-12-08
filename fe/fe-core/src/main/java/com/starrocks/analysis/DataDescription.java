@@ -527,9 +527,14 @@ public class DataDescription {
     private static void validateReplaceValue(List<String> args, Column column) throws AnalysisException {
         String replaceValue = null;
         if (args.size() == 1) {
-            replaceValue = DefaultValueResolver.build().getCalculatedDefaultValue(column);
-            if (replaceValue == null) {
+            Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+            if (defaultValueType == Column.DefaultValueType.NONE) {
                 throw new AnalysisException("Column " + column.getName() + " has no default value");
+            } else if (defaultValueType == Column.DefaultValueType.CONST) {
+                replaceValue = column.getCalculatedDefaultValue();
+            } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                throw new AnalysisException("Column " + column.getName() + " has unsupported default value:" +
+                        column.getDefaultExpr().getExpr());
             }
 
             args.add(replaceValue);

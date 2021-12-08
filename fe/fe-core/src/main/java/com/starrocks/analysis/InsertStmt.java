@@ -395,7 +395,8 @@ public class InsertStmt extends DdlStmt {
             if (mentionedCols.contains(col.getName())) {
                 continue;
             }
-            if (!DefaultValueResolver.hasDefaultValue(col) && !col.isAllowNull()) {
+            Column.DefaultValueType defaultValueType = col.getDefaultValueType();
+            if (defaultValueType == Column.DefaultValueType.NONE && !col.isAllowNull()) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_COL_NOT_MENTIONED, col.getName());
             }
         }
@@ -497,14 +498,13 @@ public class InsertStmt extends DdlStmt {
         checkColumnCoverage(mentionedColumns, targetTable.getBaseSchema());
 
         // handle VALUES() or SELECT constant list
-        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
         if (queryStmt instanceof SelectStmt && ((SelectStmt) queryStmt).getTableRefs().isEmpty()) {
             SelectStmt selectStmt = (SelectStmt) queryStmt;
             if (selectStmt.getValueList() != null) {
                 // INSERT INTO VALUES(...)
                 List<ArrayList<Expr>> rows = selectStmt.getValueList().getRows();
                 for (int rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
-                    analyzeRow(analyzer, targetColumns, rows, rowIdx, origColIdxsForExtendCols, defaultValueResolver);
+                    analyzeRow(analyzer, targetColumns, rows, rowIdx, origColIdxsForExtendCols);
                 }
 
                 // clear these 2 structures, rebuild them using VALUES exprs
@@ -519,7 +519,7 @@ public class InsertStmt extends DdlStmt {
                 // INSERT INTO SELECT 1,2,3 ...
                 List<ArrayList<Expr>> rows = Lists.newArrayList();
                 rows.add(selectStmt.getResultExprs());
-                analyzeRow(analyzer, targetColumns, rows, 0, origColIdxsForExtendCols, defaultValueResolver);
+                analyzeRow(analyzer, targetColumns, rows, 0, origColIdxsForExtendCols);
                 // rows may be changed in analyzeRow(), so rebuild the result exprs
                 selectStmt.getResultExprs().clear();
                 for (Expr expr : rows.get(0)) {
@@ -600,8 +600,7 @@ public class InsertStmt extends DdlStmt {
     }
 
     private void analyzeRow(Analyzer analyzer, List<Column> targetColumns, List<ArrayList<Expr>> rows,
-                            int rowIdx, List<Pair<Integer, Column>> origColIdxsForExtendCols,
-                            DefaultValueResolver defaultValueResolver) throws AnalysisException {
+                            int rowIdx, List<Pair<Integer, Column>> origColIdxsForExtendCols) throws AnalysisException {
         // 1. check number of fields if equal with first row
         // targetColumns contains some shadow columns, which is added by system,
         // so we should minus this
@@ -647,11 +646,17 @@ public class InsertStmt extends DdlStmt {
             }
 
             if (expr instanceof DefaultValueExpr) {
-                if (!DefaultValueResolver.hasDefaultValue(targetColumns.get(i))) {
+                Column column = targetColumns.get(i);
+                Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NONE) {
                     throw new AnalysisException(
-                            "Column has no default value, column=" + targetColumns.get(i).getName());
+                            "Column has no default value, column=" + column.getName());
+                } else if (defaultValueType == Column.DefaultValueType.CONST) {
+                    expr = new StringLiteral(column.getCalculatedDefaultValue());
+                } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                    throw new AnalysisException("unsupported default value=" +
+                            column.getDefaultExpr().getExpr() + ", column=" + column.getName());
                 }
-                expr = new StringLiteral(defaultValueResolver.getCalculatedDefaultValue(targetColumns.get(i)));
             }
 
             expr.analyze(analyzer);
@@ -737,13 +742,13 @@ public class InsertStmt extends DdlStmt {
             selectList.set(i, expr);
             exprByName.put(col.getName(), expr);
         }
-        DefaultValueResolver defaultValueResolver = new DefaultValueResolver();
         // reorder resultExprs in table column order
         for (Column col : targetTable.getFullSchema()) {
             if (exprByName.containsKey(col.getName())) {
                 resultExprs.add(exprByName.get(col.getName()));
             } else {
-                if (!DefaultValueResolver.hasDefaultValue(col)) {
+                Column.DefaultValueType defaultValueType = col.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NONE) {
                     /*
                     The import stmt has been filtered in function checkColumnCoverage when
                         the default value of column is null and column is not nullable.
@@ -751,9 +756,12 @@ public class InsertStmt extends DdlStmt {
                      */
                     Preconditions.checkState(col.isAllowNull());
                     resultExprs.add(NullLiteral.create(col.getType()));
-                } else {
+                } else if (defaultValueType == Column.DefaultValueType.CONST){
                     resultExprs.add(checkTypeCompatibility(col,
-                            new StringLiteral(defaultValueResolver.getCalculatedDefaultValue(col))));
+                            new StringLiteral(col.getCalculatedDefaultValue())));
+                } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                    throw new AnalysisException("Column " + col.getName() + " has unsupported default value:" +
+                            col.getDefaultExpr().getExpr());
                 }
             }
         }
