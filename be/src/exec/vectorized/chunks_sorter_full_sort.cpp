@@ -176,9 +176,9 @@ private:
         };
 
         if (is_asc_order) {
-            pdqsort(state, sort_items.begin(), sort_items.end(), less_fn);
+            pdqsort(state->cancelled_ref(), sort_items.begin(), sort_items.end(), less_fn);
         } else {
-            pdqsort(state, sort_items.begin(), sort_items.end(), greater_fn);
+            pdqsort(state->cancelled_ref(), sort_items.begin(), sort_items.end(), greater_fn);
         }
         RETURN_IF_CANCELLED(state);
         for (size_t i = 0; i < row_num; ++i) {
