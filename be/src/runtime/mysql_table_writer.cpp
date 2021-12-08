@@ -21,6 +21,20 @@
 
 #include <mariadb/mysql.h>
 
+#include <memory>
+#include <string_view>
+#include <type_traits>
+#include <variant>
+
+#include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "fmt/compile.h"
+#include "fmt/core.h"
+#include "storage/null_predicate.h"
+#include "util/radix_sort.h"
+#include "util/slice.h"
+
 #define __StarRocksMysql MYSQL
 #include <sstream>
 
@@ -39,8 +53,8 @@ std::string MysqlConnInfo::debug_string() const {
     return ss.str();
 }
 
-MysqlTableWriter::MysqlTableWriter(const std::vector<ExprContext*>& output_expr_ctxs)
-        : _output_expr_ctxs(output_expr_ctxs) {}
+MysqlTableWriter::MysqlTableWriter(const std::vector<ExprContext*>& output_expr_ctxs, int batch_size)
+        : _output_expr_ctxs(output_expr_ctxs), _batch_size(batch_size) {}
 
 MysqlTableWriter::~MysqlTableWriter() {
     if (_mysql_conn) {
@@ -49,6 +63,7 @@ MysqlTableWriter::~MysqlTableWriter() {
 }
 
 Status MysqlTableWriter::open(const MysqlConnInfo& conn_info, const std::string& tbl) {
+    // Init for mysql connecter
     _mysql_conn = mysql_init(nullptr);
     if (_mysql_conn == nullptr) {
         return Status::InternalError("Call mysql_init failed.");
@@ -59,141 +74,152 @@ Status MysqlTableWriter::open(const MysqlConnInfo& conn_info, const std::string&
                                     nullptr, // unix socket
                                     0);      // flags
     if (res == nullptr) {
-        std::stringstream ss;
-        ss << "mysql_real_connect failed because " << mysql_error(_mysql_conn);
-        return Status::InternalError(ss.str());
+        return Status::InternalError(fmt::format("mysql_real_connect failed because {}", mysql_error(_mysql_conn)));
     }
 
     // set character
     if (mysql_set_character_set(_mysql_conn, "utf8")) {
-        std::stringstream ss;
-        ss << "mysql_set_character_set failed because " << mysql_error(_mysql_conn);
-        return Status::InternalError(ss.str());
+        return Status::InternalError(
+                fmt::format("mysql_set_character_set failed because {}", mysql_error(_mysql_conn)));
     }
 
     _mysql_tbl = tbl;
+    // Init FormatConverter
+    _viewers.reserve(_output_expr_ctxs.size());
 
     return Status::OK();
 }
 
-Status MysqlTableWriter::insert_row(TupleRow* row) {
-    std::stringstream ss;
+Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
+    _viewers.clear();
+    DCHECK_EQ(columns.size(), _output_expr_ctxs.size());
 
-    // Construct Insert statement of mysql
-    ss << "INSERT INTO `" << _mysql_tbl << "` VALUES (";
-    int num_columns = _output_expr_ctxs.size();
-    for (int i = 0; i < num_columns; ++i) {
-        if (i != 0) {
-            ss << ", ";
-        }
-        void* item = _output_expr_ctxs[i]->get_value(row);
-        if (item == nullptr) {
-            ss << "NULL";
-            continue;
-        }
-        switch (_output_expr_ctxs[i]->root()->type().type) {
-        case TYPE_BOOLEAN:
-        case TYPE_TINYINT:
-            ss << (int)*static_cast<int8_t*>(item);
-            break;
-        case TYPE_SMALLINT:
-            ss << *static_cast<int16_t*>(item);
-            break;
-        case TYPE_INT:
-            ss << *static_cast<int32_t*>(item);
-            break;
-        case TYPE_BIGINT:
-            ss << *static_cast<int64_t*>(item);
-            break;
-        case TYPE_FLOAT:
-            ss << *static_cast<float*>(item);
-            break;
-        case TYPE_DOUBLE:
-            ss << *static_cast<double*>(item);
-            break;
-        case TYPE_DATE:
-        case TYPE_DATETIME: {
-            char buf[64];
-            const DateTimeValue* time_val = (const DateTimeValue*)(item);
-            time_val->to_string(buf);
-            ss << "\'" << buf << "\'";
-            break;
-        }
-        case TYPE_VARCHAR:
-        case TYPE_CHAR: {
-            const StringValue* string_val = (const StringValue*)(item);
+    int num_cols = columns.size();
 
-            if (string_val->ptr == nullptr) {
-                if (string_val->len == 0) {
-                    ss << "\'\'";
-                } else {
-                    ss << "NULL";
-                }
-            } else {
-                char* buf = new char[2 * string_val->len + 1];
-                mysql_real_escape_string(_mysql_conn, buf, string_val->ptr, string_val->len);
-                ss << "\'" << buf << "\'";
-                delete[] buf;
-            }
-            break;
-        }
-        case TYPE_DECIMAL: {
-            const DecimalValue* decimal_val = reinterpret_cast<const DecimalValue*>(item);
-            std::string decimal_str;
-            int output_scale = _output_expr_ctxs[i]->root()->output_scale();
-
-            if (output_scale > 0 && output_scale <= 30) {
-                decimal_str = decimal_val->to_string(output_scale);
-            } else {
-                decimal_str = decimal_val->to_string();
-            }
-            ss << decimal_str;
-            break;
-        }
-        case TYPE_DECIMALV2: {
-            const DecimalV2Value decimal_val(reinterpret_cast<const PackedInt128*>(item)->value);
-            std::string decimal_str;
-            int output_scale = _output_expr_ctxs[i]->root()->output_scale();
-
-            if (output_scale > 0 && output_scale <= 30) {
-                decimal_str = decimal_val.to_string(output_scale);
-            } else {
-                decimal_str = decimal_val.to_string();
-            }
-            ss << decimal_str;
-            break;
+    for (int i = 0; i < num_cols; ++i) {
+        auto* ctx = _output_expr_ctxs[i];
+        const auto& type = ctx->root()->type();
+        if (!is_scalar_primitive_type(type.type)) {
+            return Status::InternalError(fmt::format("unsupport type in mysql sink:{}", type.type));
         }
 
-        default: {
-            std::stringstream err_ss;
-            err_ss << "can't convert this type to mysql type. type = " << _output_expr_ctxs[i]->root()->type();
-            return Status::InternalError(err_ss.str());
-        }
-        }
+        switch (type.type) {
+#define M(NAME)                                                                           \
+    case PrimitiveType::NAME: {                                                           \
+        _viewers.emplace_back(vectorized::ColumnViewer<PrimitiveType::NAME>(columns[i])); \
+        break;                                                                            \
     }
-    ss << ")";
+            APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
+            APPLY_FOR_ALL_NULL_TYPE(M)
+#undef M
+        case PrimitiveType::TYPE_TIME: {
+            columns[i] = vectorized::ColumnHelper::convert_time_column_from_double_to_str(columns[i]);
+            _viewers.emplace_back(vectorized::ColumnViewer<TYPE_VARCHAR>(columns[i]));
+            break;
+        }
 
-    // Insert this to MySQL server
-    std::string insert_stmt = ss.str();
-    LOG(INFO) << insert_stmt;
-    if (mysql_real_query(_mysql_conn, insert_stmt.c_str(), insert_stmt.length())) {
-        std::stringstream err_ss;
-        err_ss << "Insert to mysql server(" << mysql_get_host_info(_mysql_conn)
-               << ") failed, because: " << mysql_error(_mysql_conn);
-        return Status::InternalError(err_ss.str());
+        default:
+            return Status::InternalError(fmt::format("unsupport type in mysql sink:{}", type.type));
+        }
     }
 
     return Status::OK();
 }
 
-Status MysqlTableWriter::append(RowBatch* batch) {
-    if (batch == nullptr || batch->num_rows() == 0) {
+Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* sql) {
+    _stmt_buffer.clear();
+    int num_cols = _viewers.size();
+    fmt::format_to(_stmt_buffer, "INSERT INTO {} VALUES ", _mysql_tbl);
+
+    for (int i = from; i < to; ++i) {
+        if (i != from) {
+            _stmt_buffer.push_back(',');
+        }
+        _stmt_buffer.push_back('(');
+        for (size_t col = 0; col < num_cols; col++) {
+            std::visit(
+                    [&](auto&& viewer) {
+                        using ViewerType = decay_t<decltype(viewer)>;
+                        constexpr PrimitiveType type = ViewerType::TYPE;
+
+                        if (viewer.is_null(i)) {
+                            fmt::format_to(_stmt_buffer, "NULL");
+                            return;
+                        }
+
+                        if constexpr (type == TYPE_DECIMALV2) {
+                            fmt::format_to(_stmt_buffer, "{}", viewer.value(i).to_string());
+                        } else if constexpr (pt_is_decimal<type>) {
+                            const auto& data_type = _output_expr_ctxs[col]->root()->type();
+                            using CppType = vectorized::RunTimeCppType<type>;
+                            fmt::format_to(_stmt_buffer, "{}",
+                                           DecimalV3Cast::to_string<CppType>(viewer.value(i), data_type.precision,
+                                                                             data_type.scale));
+                        } else if constexpr (pt_is_date<type>) {
+                            int y, m, d;
+                            viewer.value(i).to_date(&y, &m, &d);
+                            fmt::format_to(_stmt_buffer, "'{}'", vectorized::date::to_string(y, m, d));
+                        } else if constexpr (pt_is_datetime<type>) {
+                            fmt::format_to(_stmt_buffer, "'{}'", viewer.value(i).to_string());
+                        } else if constexpr (pt_is_binary<type>) {
+                            auto slice = viewer.value(i);
+                            _escape_buffer.resize(slice.size * 2 + 1);
+
+                            int sz = mysql_real_escape_string(_mysql_conn, _escape_buffer.data(), slice.data,
+                                                              slice.size);
+                            _stmt_buffer.push_back('"');
+                            _stmt_buffer.append(_escape_buffer.data(), _escape_buffer.data() + sz);
+                            _stmt_buffer.push_back('"');
+                        } else if constexpr (type == TYPE_TINYINT || type == TYPE_BOOLEAN) {
+                            fmt::format_to(_stmt_buffer, "{}", (int32_t)viewer.value(i));
+                        } else {
+                            fmt::format_to(_stmt_buffer, "{}", viewer.value(i));
+                        }
+                    },
+                    _viewers[col]);
+
+            if (col != num_cols - 1) {
+                _stmt_buffer.push_back(',');
+            }
+        }
+        _stmt_buffer.push_back(')');
+    }
+
+    *sql = std::string_view(_stmt_buffer.data(), _stmt_buffer.size());
+    return Status::OK();
+}
+
+Status MysqlTableWriter::append(vectorized::Chunk* chunk) {
+    if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();
     }
 
-    int num_rows = batch->num_rows();
-    for (int i = 0; i < num_rows; ++i) {
-        RETURN_IF_ERROR(insert_row(batch->get_row(i)));
+    // eval output expr
+    vectorized::Columns result_columns(_output_expr_ctxs.size());
+    for (int i = 0; i < _output_expr_ctxs.size(); ++i) {
+        result_columns[i] = _output_expr_ctxs[i]->evaluate(chunk);
+    }
+
+    RETURN_IF_ERROR(_build_viewers(result_columns));
+
+    int num_rows = chunk->num_rows();
+    int i = 0;
+    while (i + _batch_size < num_rows) {
+        std::string_view insert_stmt;
+        RETURN_IF_ERROR(_build_insert_sql(i, i + _batch_size, &insert_stmt));
+        if (mysql_real_query(_mysql_conn, insert_stmt.data(), insert_stmt.length())) {
+            return Status::InternalError(fmt::format("Insert to mysql server({}) failed, err:{}",
+                                                     mysql_get_host_info(_mysql_conn), mysql_error(_mysql_conn)));
+        }
+        i += _batch_size;
+    }
+
+    std::string_view insert_stmt;
+    RETURN_IF_ERROR(_build_insert_sql(i, num_rows, &insert_stmt));
+
+    if (mysql_real_query(_mysql_conn, insert_stmt.data(), insert_stmt.length())) {
+        return Status::InternalError(fmt::format("Insert to mysql server({}) failed, err:{}",
+                                                 mysql_get_host_info(_mysql_conn), mysql_error(_mysql_conn)));
     }
 
     return Status::OK();
