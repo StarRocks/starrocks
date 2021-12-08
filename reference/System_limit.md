@@ -15,4 +15,4 @@
 5. VARCHAR最长可为65533字节（由于前两个字节用于表示长度，因此比65535少两个字节）。
 6. StarRocks只支持UTF8编码，不支持GBK等编码。
 7. StarRocks不支持修改表中的列名。
-8. SQL 最大长度默认10000字节，可以通过fe.conf的 expr\_child\_limit 修改。
+8. 一个表达式孩子的最大个数默认为 10000，比如 in 条件的个数，可以通过 fe.conf 的 expr\_children\_limit 修改。
