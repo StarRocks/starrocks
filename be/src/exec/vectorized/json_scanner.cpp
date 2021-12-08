@@ -666,8 +666,6 @@ Status JsonReader::_read_and_parse_json() {
     if (err) {
         std::string err_msg = strings::Substitute("Failed to parse string to json. code=$0, error=$1", err,
                                                   simdjson::error_message(err));
-        _state->append_error_msg_to_file("", err_msg);
-        _counter->num_rows_filtered++;
         return Status::DataQualityError(err_msg.c_str());
     }
 
@@ -678,12 +676,14 @@ Status JsonReader::_read_and_parse_json() {
 }
 
 // _construct_column constructs column based on no value.
-void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column,
+Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column,
                                    const TypeDescriptor& type_desc) {
     simdjson::ondemand::json_type tp;
     auto err = value.type().get(tp);
     if (err) {
-        return;
+        std::string err_msg = strings::Substitute("Failed to determine the type of column value. code=$0, error=$1", err,
+                                                  simdjson::error_message(err));
+        return Status::DataQualityError(err_msg.c_str());
     }
 
     switch (tp) {
@@ -696,8 +696,9 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
         bool ok;
         auto err = value.get_bool().get(ok);
         if (UNLIKELY(err)) {
-            column->append_nulls(1);
-            break;
+            std::string err_msg = strings::Substitute("Failed to parse the column value as bool. code=$0, error=$1",
+                                                      err, simdjson::error_message(err));
+            return Status::DataQualityError(err_msg.c_str());
         }
 
         if (ok) {
@@ -725,11 +726,6 @@ void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* col
         JsonFunctions::minify_json_to_string(value, buf, buflen);
 
         _construct_string_column(column, Slice{buf.get(), buflen});
-        break;
-    }
-
-    default: {
-        column->append_nulls(1);
         break;
     }
     }

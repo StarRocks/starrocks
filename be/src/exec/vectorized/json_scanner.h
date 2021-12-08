@@ -93,7 +93,8 @@ private:
     Status _filter_row_with_jsonroot(simdjson::ondemand::object* row);
 
 
-    void _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc);
+    Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc);
+
     void _construct_column_with_number(simdjson::ondemand::value& value, Column* column,
                                        const TypeDescriptor& type_desc);
     void _construct_column_with_string(simdjson::ondemand::value& value, Column* column,
