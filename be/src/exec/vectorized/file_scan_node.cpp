@@ -19,7 +19,6 @@
 #include "exprs/expr.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"

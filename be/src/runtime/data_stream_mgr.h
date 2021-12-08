@@ -45,7 +45,6 @@ namespace starrocks {
 
 class DescriptorTbl;
 class DataStreamRecvr;
-class RowBatch;
 class RuntimeState;
 class PRowBatch;
 class PUniqueId;

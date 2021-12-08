@@ -43,7 +43,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/row_batch.h"
 #include "util/arrow/utils.h"
 #include "util/types.h"
 
