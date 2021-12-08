@@ -28,7 +28,6 @@
 namespace starrocks {
 
 class Status;
-class RowBatch;
 class RuntimeState;
 
 // abstract class of the result writer
@@ -38,9 +37,6 @@ public:
     virtual ~ResultWriter() = default;
 
     virtual Status init(RuntimeState* state) = 0;
-
-    // convert and write one row batch
-    virtual Status append_row_batch(const RowBatch* batch) = 0;
 
     // convert one chunk to mysql result and
     // append this chunk to the result sink

@@ -7,7 +7,6 @@
 
 namespace starrocks {
 
-class RowBatch;
 class ExprContext;
 class MysqlRowBuffer;
 class BufferControlBlock;
@@ -23,8 +22,6 @@ public:
     ~StatisticResultWriter() override;
 
     Status init(RuntimeState* state) override;
-
-    Status append_row_batch(const RowBatch* batch) override;
 
     Status append_chunk(vectorized::Chunk* chunk) override;
 

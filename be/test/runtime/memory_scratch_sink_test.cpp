@@ -40,7 +40,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/thread_resource_mgr.h"
 #include "runtime/tuple_row.h"

@@ -30,7 +30,6 @@
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
 #include "util/types.h"
@@ -110,10 +109,6 @@ std::string FileResultWriter::_file_format_to_name() {
     default:
         return "unknown";
     }
-}
-
-Status FileResultWriter::append_row_batch(const RowBatch* batch) {
-    return Status::NotSupported("append_row_batch deprecated");
 }
 
 Status FileResultWriter::append_chunk(vectorized::Chunk* chunk) {
