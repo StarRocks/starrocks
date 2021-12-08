@@ -422,7 +422,7 @@ public class Column implements Writable {
 
 
     public enum DefaultValueType {
-        NONE,       // not default value
+        NONE,       // no default value
         CONST,      // const expr e.g. now() function
         VARY        // variable expr e.g. uuid() function
     }
@@ -444,7 +444,7 @@ public class Column implements Writable {
 
     // if the column have a default value or default expr can be calculated like now(). return calculated value
     // else for a batch of every row different like uuid(). return null
-    // consistency requires ConnectContext.get() != to assurance
+    // consistency requires ConnectContext.get() != null to assurance
     public String getCalculatedDefaultValue() {
         if (defaultValue != null) {
             return defaultValue;
