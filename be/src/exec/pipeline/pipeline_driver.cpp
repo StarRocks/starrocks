@@ -233,6 +233,13 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
         _mark_operator_finished(op, runtime_state);
     }
 }
+
+void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
+    for (auto& op : _operators) {
+        _mark_operator_cancelled(op, runtime_state);
+    }
+}
+
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
         _mark_operator_closed(op, runtime_state);
@@ -291,7 +298,7 @@ std::string PipelineDriver::to_readable_string() const {
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
     if (_fragment_ctx->is_canceled()) {
-        finish_operators(runtime_state);
+        cancel_operators(runtime_state);
         // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
         // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
         if (is_still_pending_finish()) {
@@ -299,8 +306,10 @@ bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
         } else {
             _state = _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
         }
+
         return true;
     }
+
     return false;
 }
 
@@ -329,8 +338,26 @@ void PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* stat
     op_state = OperatorStage::FINISHED;
 }
 
-void PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state) {
+void PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
     _mark_operator_finished(op, state);
+    auto& op_state = _operator_stages[op->get_id()];
+    if (op_state >= OperatorStage::CANCELLED) {
+        return;
+    }
+
+    VLOG_ROW << strings::Substitute("[Driver] cancelled operator [driver=$0] [operator=$1]", to_readable_string(),
+                                    op->get_name());
+    op->set_cancelled(state);
+    op_state = OperatorStage::CANCELLED;
+}
+
+void PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state) {
+    if (_fragment_ctx->is_canceled()) {
+        _mark_operator_cancelled(op, state);
+    } else {
+        _mark_operator_finished(op, state);
+    }
+
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CLOSED) {
         return;

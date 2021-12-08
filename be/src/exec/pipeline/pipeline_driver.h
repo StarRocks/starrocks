@@ -127,7 +127,8 @@ enum OperatorStage {
     PROCESSING = 3,
     FINISHING = 4,
     FINISHED = 5,
-    CLOSED = 6,
+    CANCELLED = 6,
+    CLOSED = 7,
 };
 
 class PipelineDriver {
@@ -182,6 +183,7 @@ public:
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
     void finish_operators(RuntimeState* runtime_state);
+    void cancel_operators(RuntimeState* runtime_state);
 
     Operator* sink_operator() { return _operators.back().get(); }
     bool is_finished() {
@@ -256,6 +258,7 @@ private:
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
     void _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
     void _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
+    void _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
     void _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 

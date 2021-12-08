@@ -52,7 +52,7 @@ public:
 
     void set_finishing(RuntimeState* state) override;
 
-    void set_finished(RuntimeState* state) override;
+    void set_cancelled(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
