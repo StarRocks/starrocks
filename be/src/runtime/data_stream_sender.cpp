@@ -385,7 +385,8 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
           _profile(nullptr),
           _serialize_batch_timer(nullptr),
           _bytes_sent_counter(nullptr),
-          _dest_node_id(sink.dest_node_id) {
+          _dest_node_id(sink.dest_node_id),
+          _destinations(destinations) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
            sink.output_partition.type == TPartitionType::HASH_PARTITIONED ||
@@ -532,6 +533,7 @@ DataStreamSender::~DataStreamSender() {
 }
 
 Status DataStreamSender::open(RuntimeState* state) {
+    // RETURN_IF_ERROR(DataSink::open(state));
     DCHECK(state != nullptr);
     RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     for (auto iter : _partition_infos) {
@@ -568,7 +570,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
         // Round-robin batches among channels. Wait for the current channel to finish its
         // rpc before overwriting its batch.
         // 1. Get request of that channel
-        Channel* channel = _channels[_current_channel_idx];
+        Channel* channel = _channels[_channel_indices[_current_channel_idx]];
         bool real_sent = false;
         RETURN_IF_ERROR(channel->send_one_chunk(chunk, false, &real_sent));
         if (real_sent) {
@@ -641,6 +643,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
 }
 
 Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
+    RETURN_IF_ERROR(DataSink::close(state, exec_status));
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
     // TODO: only close channels that didn't have any errors
     // make all channels close parallel

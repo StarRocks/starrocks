@@ -197,7 +197,7 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
-    public R visitPhysicalNoOp(OptExpression optExpression, C context) {
+    public R visitPhysicalNoCTE(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 

@@ -26,6 +26,8 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -50,6 +52,7 @@
 #include "runtime/thread_resource_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
@@ -61,6 +64,7 @@
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
+
 namespace starrocks {
 
 // Calculate the total memory limit of all load tasks on this BE
@@ -115,10 +119,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                                                    ? std::thread::hardware_concurrency()
                                                                    : config::pipeline_scan_thread_pool_thread_num,
                                                            config::pipeline_scan_thread_pool_queue_size);
-    _pipeline_exchange_sink_thread_pool = new PriorityThreadPool(
-            config::pipeline_exchange_thread_pool_thread_num <= 0 ? std::thread::hardware_concurrency()
-                                                                  : config::pipeline_exchange_thread_pool_thread_num,
-            config::pipeline_exchange_thread_pool_queue_size);
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool(config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
@@ -191,6 +191,8 @@ Status ExecEnv::init_mem_tracker() {
     std::stringstream ss;
     // --mem_limit="" means no memory limit
     bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, &is_percent);
+    // use 90% of mem_limit as the soft mem limit of BE
+    bytes_limit = bytes_limit * 0.9;
     if (bytes_limit <= 0) {
         ss << "Failed to parse mem limit from '" + config::mem_limit + "'.";
         return Status::InternalError(ss.str());
@@ -213,7 +215,8 @@ Status ExecEnv::init_mem_tracker() {
 
     int64_t load_mem_limit = calc_process_max_load_memory(_mem_tracker->limit());
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", _mem_tracker);
-    _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", _mem_tracker);
+    // Metadata statistics memory statistics do not use new mem statistics framework with hook
+    _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", nullptr);
 
     int64_t compaction_mem_limit = calc_compaction_max_load_memory(_mem_tracker->limit());
     _compaction_mem_tracker = new MemTracker(compaction_mem_limit, "compaction", _mem_tracker);
@@ -227,6 +230,7 @@ Status ExecEnv::init_mem_tracker() {
 
     ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
 
+    GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
 
@@ -323,10 +327,6 @@ void ExecEnv::_destroy() {
     if (_pipeline_scan_io_thread_pool) {
         delete _pipeline_scan_io_thread_pool;
         _pipeline_scan_io_thread_pool = nullptr;
-    }
-    if (_pipeline_exchange_sink_thread_pool) {
-        delete _pipeline_exchange_sink_thread_pool;
-        _pipeline_exchange_sink_thread_pool = nullptr;
     }
     if (_thread_pool) {
         delete _thread_pool;

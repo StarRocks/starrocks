@@ -39,7 +39,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.channels.SocketChannel;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -106,9 +105,7 @@ public class ConnectContext {
     // Command this connection is processing.
     protected volatile MysqlCommand command;
     // Timestamp in millisecond last command starts at
-    protected volatile long startTime;
-    // now time for each transaction
-    protected volatile LocalDateTime transactionStartTime;
+    protected volatile long startTime = System.currentTimeMillis();
     // Cache thread info for this connection.
     protected volatile ThreadInfo threadInfo;
 
@@ -293,14 +290,6 @@ public class ConnectContext {
     public void setStartTime() {
         startTime = System.currentTimeMillis();
         returnRows = 0;
-    }
-
-    public void resetTransactionTime() {
-        transactionStartTime = LocalDateTime.now();
-    }
-
-    public LocalDateTime getTransactionStartTime() {
-        return transactionStartTime;
     }
 
     public void updateReturnRows(int returnRows) {

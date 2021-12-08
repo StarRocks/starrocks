@@ -36,6 +36,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.task.MasterTask;
 import com.starrocks.task.MasterTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
@@ -159,6 +160,7 @@ public class LoadJobTest {
     @Test
     public void testProcessTimeoutWithLongTimeoutSecond() {
         LoadJob loadJob = new BrokerLoadJob();
+        Deencapsulation.setField(loadJob, "createTimestamp", System.currentTimeMillis());
         Deencapsulation.setField(loadJob, "timeoutSecond", 1000L);
 
         loadJob.processTimeout();

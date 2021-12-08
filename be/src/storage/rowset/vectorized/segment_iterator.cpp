@@ -105,7 +105,7 @@ private:
             _final_chunk.reset();
         }
 
-        Status seek_columns(ordinal_t pos) {
+        Status seek_columns(segment_v2::ordinal_t pos) {
             for (auto iter : _column_iterators) {
                 RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
             }
@@ -136,6 +136,11 @@ private:
         std::vector<bool> _is_dict_column;
         std::vector<ColumnIterator*> _column_iterators;
         ScanContext* _next{nullptr};
+
+        // index the column which only be used for filter
+        // thus its not need do dict_decode_code
+        std::vector<size_t> _skip_dict_decode_indexes;
+        std::vector<size_t> _read_index_map;
 
         std::shared_ptr<Chunk> _read_chunk;
         std::shared_ptr<Chunk> _dict_chunk;
@@ -183,6 +188,8 @@ private:
 
     Status _finish_late_materialization(ScanContext* ctx);
 
+    Status _build_final_chunk(ScanContext* ctx);
+
     void _switch_context(ScanContext* to);
 
     // `_check_low_cardinality_optimization` and `_init_column_iterators` must have been called
@@ -202,7 +209,7 @@ private:
     std::shared_ptr<Segment> _segment;
     vectorized::SegmentReadOptions _opts;
     std::vector<ColumnIterator*> _column_iterators;
-    std::vector<ColumnDecoder> _column_decoders;
+    std::vector<segment_v2::ColumnDecoder> _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
@@ -252,7 +259,6 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
-
           _predicate_columns(_opts.predicates.size()) {}
 
 Status SegmentIterator::_init() {
@@ -342,6 +348,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             iter_opts.use_page_cache = _opts.use_page_cache;
             iter_opts.rblock = _rblock.get();
             iter_opts.check_dict_encoding = check_dict_enc;
+            iter_opts.reader_type = _opts.reader_type;
             RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
 
             // we have a global dict map but column was not encode by dict
@@ -388,7 +395,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         return Status::OK();
     }
     DCHECK_EQ(0, _scan_range.span_size());
-    RETURN_IF_ERROR(_segment->_load_index());
+    RETURN_IF_ERROR(_segment->_load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -609,11 +616,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
 
-    const uint32_t chunk_capacity = _opts.chunk_size;
-    const int64_t prev_raw_read = _opts.stats->raw_rows_read;
-    const bool has_predicate = !_opts.predicates.empty();
     uint16_t chunk_start = 0;
-    bool need_switch_context = false;
+    const uint32_t chunk_capacity = _opts.chunk_size;
+    const bool has_predicate = !_opts.predicates.empty();
+    const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
 
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
@@ -640,7 +646,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     _opts.stats->block_load_ns += sw.elapsed_time();
 
-    int64_t total_read = _opts.stats->raw_rows_read - prev_raw_read;
+    int64_t total_read = _opts.stats->raw_rows_read - prev_raw_rows_read;
 
     if (UNLIKELY(raw_chunk_size == 0)) {
         // Return directly if chunk_start is zero, i.e, chunk is empty.
@@ -655,6 +661,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
 
+    _build_final_chunk(_context);
+    chunk = _context->_final_chunk.get();
+
+    bool need_switch_context = false;
     if (_context->_late_materialize) {
         chunk = _context->_final_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
@@ -705,7 +715,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
 void SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
-        const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
+        const segment_v2::ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
         for (ColumnIterator* iter : to->_column_iterators) {
             iter->seek_to_ordinal(ordinal);
         }
@@ -724,15 +734,8 @@ void SegmentIterator::_switch_context(ScanContext* to) {
         to->_dict_chunk = to->_read_chunk;
     }
 
-    if (to->_late_materialize) {
-        if (to->_final_chunk == nullptr) {
-            DCHECK_GT(this->encoded_schema().num_fields(), 0);
-            to->_final_chunk = ChunkHelper::new_chunk(this->encoded_schema(), _opts.chunk_size);
-        }
-    } else {
-        to->_final_chunk = to->_dict_chunk;
-    }
-
+    DCHECK_GT(this->output_schema().num_fields(), 0);
+    to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size);
     _context = to;
 }
 
@@ -885,12 +888,27 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     ctx->_dict_decode_schema.reserve(ctx_fields);
     ctx->_is_dict_column.reserve(ctx_fields);
     ctx->_column_iterators.reserve(ctx_fields);
+    ctx->_skip_dict_decode_indexes.reserve(ctx_fields);
+
+    // init skip dict_decode_code column indexes
+    std::set<ColumnId> delete_pred_columns;
+    _opts.delete_predicates.get_column_ids(&delete_pred_columns);
+    std::set<ColumnId> output_columns;
+    for (const auto& field : output_schema().fields()) {
+        output_columns.insert(field->id());
+    }
 
     for (size_t i = 0; i < early_materialize_fields; i++) {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         bool use_global_dict_code = _can_using_global_dict(f);
         bool use_dict_code = _can_using_dict_code(f);
+
+        if (delete_pred_columns.count(f->id()) || output_columns.count(f->id())) {
+            ctx->_skip_dict_decode_indexes.push_back(false);
+        } else {
+            ctx->_skip_dict_decode_indexes.push_back(true);
+        }
 
         if (use_dict_code || use_global_dict_code) {
             // create FixedLengthColumn<int64_t> for saving dict codewords.
@@ -911,6 +929,11 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ctx->_is_dict_column.emplace_back(true);
             ctx->_has_dict_column = true;
 
+            if (ctx->_skip_dict_decode_indexes[i]) {
+                ctx->_dict_decode_schema.append(f2);
+                continue;
+            }
+
             // When we use the global dictionary,
             // iterator return type is also int type
             if (use_global_dict_code) {
@@ -925,6 +948,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ctx->_dict_decode_schema.append(f);
         }
     }
+
+    size_t build_read_index_size = ctx->_read_schema.num_fields();
     if (late_materialization && predicate_count < _schema.num_fields()) {
         // ordinal column
         ColumnId cid = _schema.field(predicate_count)->id();
@@ -937,7 +962,25 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_column_iterators.emplace_back(iter);
         ctx->_is_dict_column.emplace_back(false);
         ctx->_late_materialize = true;
+        ctx->_skip_dict_decode_indexes.push_back(false);
     }
+
+    // build index map
+    DCHECK_LE(output_schema().num_fields(), _schema.num_fields());
+    // map _read_schema[cid, index] to output_schema[cid index]
+    // skip dict_decode column in _read_schema would not be mapping
+    std::unordered_map<ColumnId, size_t> read_indexes;
+    for (size_t i = 0; i < build_read_index_size; i++) {
+        if (!ctx->_skip_dict_decode_indexes[i]) {
+            read_indexes[ctx->_read_schema.field(i)->id()] = i;
+        }
+    }
+
+    ctx->_read_index_map.resize(read_indexes.size());
+    for (size_t i = 0; i < read_indexes.size(); i++) {
+        ctx->_read_index_map[i] = read_indexes[output_schema().field(i)->id()];
+    }
+
     return Status::OK();
 }
 
@@ -1004,7 +1047,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
     for (size_t i = 0; i < n; i++) {
         const FieldPtr& f = decode_schema.field(i);
         const ColumnId cid = f->id();
-        if (!ctx->_is_dict_column[i]) {
+        if (!ctx->_is_dict_column[i] || ctx->_skip_dict_decode_indexes[i]) {
             ctx->_dict_chunk->get_column_by_index(i)->swap_column(*ctx->_read_chunk->get_column_by_index(i));
         } else {
             ColumnPtr& dict_codes = ctx->_read_chunk->get_column_by_index(i);
@@ -1059,15 +1102,12 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     ColumnPtr rowid_column = ctx->_dict_chunk->get_column_by_index(m - 1);
     const auto* ordinals = down_cast<FixedLengthColumn<rowid_t>*>(rowid_column.get());
 
-    for (size_t i = 0; i < m - 1; i++) {
-        ctx->_final_chunk->get_column_by_index(i)->swap_column(*ctx->_dict_chunk->get_column_by_index(i));
-    }
-
     const size_t n = _schema.num_fields();
-    for (size_t i = m - 1; i < n; i++) {
+    const size_t start_pos = ctx->_read_index_map.size();
+    for (size_t i = m - 1, j = start_pos; i < n; i++, j++) {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
+        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(j);
         col->reserve(ordinals->size());
         col->resize(0);
 
@@ -1077,6 +1117,18 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     }
     ctx->_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     ctx->_final_chunk->check_or_die();
+
+    return Status::OK();
+}
+
+Status SegmentIterator::_build_final_chunk(ScanContext* ctx) {
+    // trim all use less columns
+    Columns& input_columns = ctx->_dict_chunk->columns();
+    for (size_t i = 0; i < ctx->_read_index_map.size(); i++) {
+        ctx->_final_chunk->get_column_by_index(i).swap(input_columns[ctx->_read_index_map[i]]);
+    }
+    bool may_has_del_row = ctx->_dict_chunk->delete_state() != DEL_NOT_SATISFIED;
+    ctx->_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     return Status::OK();
 }
 
@@ -1195,7 +1247,7 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
         ColumnIterator* column_iter = _column_iterators[cid];
         RETURN_IF_ERROR(column_iter->get_row_ranges_by_bloom_filter(preds, &_scan_range));
     }
-    _opts.stats->rows_bf_filtered += (prev_size - _scan_range.span_size());
+    _opts.stats->rows_bf_filtered += prev_size - _scan_range.span_size();
     return Status::OK();
 }
 

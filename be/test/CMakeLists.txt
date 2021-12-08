@@ -34,7 +34,7 @@ set(EXEC_FILES
         #./exec/vectorized/csv_scanner_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
-        #./exec/vectorized/json_scanner_test.cpp
+        ./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
@@ -115,7 +115,6 @@ set(EXEC_FILES
         ./storage/del_vector_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/fs/file_block_manager_test.cpp
-        ./storage/generic_iterators_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/in_list_predicate_test.cpp
@@ -205,8 +204,6 @@ set(EXEC_FILES
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
-        ./util/arrow/arrow_row_batch_test.cpp
-        ./util/arrow/arrow_row_block_test.cpp
         ./util/bitmap_test.cpp
         ./util/bitmap_value_test.cpp
         ./util/bit_stream_utils_test.cpp
@@ -251,6 +248,11 @@ set(EXEC_FILES
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
         )
+
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
 
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)

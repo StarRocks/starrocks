@@ -12,8 +12,9 @@ class ExprContext;
 namespace pipeline {
 class SelectOperator final : public Operator {
 public:
-    SelectOperator(int32_t id, int32_t plan_node_id, const std::vector<ExprContext*>& conjunct_ctxs)
-            : Operator(id, "select", plan_node_id), _conjunct_ctxs(conjunct_ctxs) {}
+    SelectOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                   const std::vector<ExprContext*>& conjunct_ctxs)
+            : Operator(factory, id, "select", plan_node_id), _conjunct_ctxs(conjunct_ctxs) {}
 
     ~SelectOperator() override = default;
     Status prepare(RuntimeState* state) override;
@@ -47,7 +48,7 @@ public:
     ~SelectOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<SelectOperator>(_id, _plan_node_id, _conjunct_ctxs);
+        return std::make_shared<SelectOperator>(this, _id, _plan_node_id, _conjunct_ctxs);
     }
 
     Status prepare(RuntimeState* state) override;

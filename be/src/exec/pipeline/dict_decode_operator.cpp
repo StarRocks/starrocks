@@ -50,8 +50,7 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
 Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, _row_desc));
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
 
     const auto& global_dict = state->get_query_global_dict_map();

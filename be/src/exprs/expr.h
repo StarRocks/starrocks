@@ -49,10 +49,6 @@ USING_STARROCKS_UDF;
 
 namespace starrocks {
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 class Expr;
 class ObjectPool;
 class RowDescriptor;
@@ -60,7 +56,6 @@ class RuntimeState;
 class TColumnValue;
 class TExpr;
 class TExprNode;
-class VectorizedRowBatch;
 class Literal;
 class UserFunctionCacheEntry;
 
@@ -75,20 +70,12 @@ using vectorized::ColumnPtr;
 // This is the superclass of all expr evaluation nodes.
 class Expr {
 public:
-    // todo: delete useless code
-    // typdef for vectorize compute functions.
-    typedef bool (*VectorComputeFn)(Expr*, VectorizedRowBatch*);
-
     // Empty virtual destructor
     virtual ~Expr();
 
     Expr(const Expr& expr);
 
     virtual Expr* clone(ObjectPool* pool) const = 0;
-
-    // Vectorize Evalute expr and return result column index.
-    // Result cached in batch and valid as long as batch.
-    bool evaluate(VectorizedRowBatch* batch);
 
     bool is_null_scalar_function(std::string& str) const {
         // name and function_name both are required
@@ -102,24 +89,6 @@ public:
             return false;
         }
     }
-    /// Virtual compute functions for each *Val type. Each Expr subclass should implement
-    /// the functions for the return type(s) it supports. For example, a boolean function
-    /// will only implement GetBooleanVal(). Some Exprs, like Literal, have many possible
-    /// return types and will implement multiple Get*Val() functions.
-    virtual BooleanVal get_boolean_val(ExprContext* context, TupleRow*);
-    virtual TinyIntVal get_tiny_int_val(ExprContext* context, TupleRow*);
-    virtual SmallIntVal get_small_int_val(ExprContext* context, TupleRow*);
-    virtual IntVal get_int_val(ExprContext* context, TupleRow*);
-    virtual BigIntVal get_big_int_val(ExprContext* context, TupleRow*);
-    virtual LargeIntVal get_large_int_val(ExprContext* context, TupleRow*);
-    virtual FloatVal get_float_val(ExprContext* context, TupleRow*);
-    virtual DoubleVal get_double_val(ExprContext* context, TupleRow*);
-    virtual StringVal get_string_val(ExprContext* context, TupleRow*);
-    // TODO(zc)
-    // virtual ArrayVal GetArrayVal(ExprContext* context, TupleRow*);
-    virtual DateTimeVal get_datetime_val(ExprContext* context, TupleRow*);
-    virtual DecimalVal get_decimal_val(ExprContext* context, TupleRow*);
-    virtual DecimalV2Val get_decimalv2_val(ExprContext* context, TupleRow*);
 
     // Get the number of digits after the decimal that should be displayed for this
     // value. Returns -1 if no scale has been specified (currently the scale is only set for
@@ -314,10 +283,6 @@ protected:
 
     ColumnPtr _constant_column;
 
-    // todo: delete useless code
-    // function to evaluate vectorize expr; typically set in prepare()
-    VectorComputeFn _vector_compute_fn;
-
     /// Simple debug string that provides no expr subclass-specific information
     std::string debug_string(const std::string& expr_name) const {
         std::stringstream out;
@@ -329,17 +294,6 @@ private:
     // Create a new vectorized expr
     static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr);
 };
-
-inline bool Expr::evaluate(VectorizedRowBatch* batch) {
-    DCHECK(_type.type != INVALID_TYPE);
-
-    if (_is_slotref) {
-        // return SlotRef::vector_compute_fn(this, batch);
-        return false;
-    } else {
-        return _vector_compute_fn(this, batch);
-    }
-}
 
 } // namespace starrocks
 

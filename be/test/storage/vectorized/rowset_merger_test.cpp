@@ -9,7 +9,6 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta.h"
-#include "storage/rowset/rowset_reader.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/vectorized/rowset_options.h"
@@ -28,9 +27,6 @@ public:
     ~TestRowsetWriter() = default;
 
     OLAPStatus init() override { return OLAP_SUCCESS; }
-
-    OLAPStatus add_row(const RowCursor& row) override { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
-    OLAPStatus add_row(const ContiguousRow& row) override { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
 
     OLAPStatus add_chunk(const vectorized::Chunk& chunk) override { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
 

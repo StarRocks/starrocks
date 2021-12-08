@@ -197,7 +197,8 @@ select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a
 [result]
 INNER JOIN (join-predicate [1: v1 = 6: cast] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
-    VALUES (1,2)
+    EXCHANGE SHUFFLE[6]
+        VALUES (1,2)
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:1: v1 | 2: v2 | 5: expr
@@ -205,34 +206,28 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-5:EXCHANGE
+6:EXCHANGE
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 05
+EXCHANGE ID: 06
 UNPARTITIONED
 
-4:Project
+5:Project
 |  <slot 1> : 1: v1
 |  <slot 2> : 2: v2
 |  <slot 5> : 5: expr
 |
-3:HASH JOIN
-|  join op: INNER JOIN (COLOCATE)
+4:HASH JOIN
+|  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
-|  colocate: true
+|  colocate: false, reason:
 |  equal join conjunct: 1: v1 = 6: cast
 |
-|----2:Project
-|    |  <slot 5> : 5: expr
-|    |  <slot 6> : CAST(4: expr AS BIGINT)
-|    |
-|    1:UNION
-|       constant exprs:
-|           1 | 2
+|----3:EXCHANGE
 |
 0:OlapScanNode
 TABLE: t0
@@ -244,6 +239,22 @@ tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=2.0
 numNodes=0
+
+PLAN FRAGMENT 2
+OUTPUT EXPRS:
+PARTITION: UNPARTITIONED
+
+STREAM DATA SINK
+EXCHANGE ID: 03
+BUCKET_SHFFULE_HASH_PARTITIONED: 6: cast
+
+2:Project
+|  <slot 5> : 5: expr
+|  <slot 6> : CAST(4: expr AS BIGINT)
+|
+1:UNION
+constant exprs:
+1 | 2
 [end]
 
 [sql]

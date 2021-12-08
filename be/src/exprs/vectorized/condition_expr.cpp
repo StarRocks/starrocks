@@ -14,6 +14,7 @@
 #include "runtime/primitive_type.h"
 #include "simd/selector.h"
 #include "util/dispatch.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 

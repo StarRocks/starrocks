@@ -61,6 +61,8 @@ public class LoadLoadingTask extends LoadTask {
     private final boolean strictMode;
     private final long txnId;
     private final String timezone;
+    private final long createTimestamp;
+    private final boolean partialUpdate;
     // timeout of load job, in seconds
     private final long timeoutS;
 
@@ -70,7 +72,7 @@ public class LoadLoadingTask extends LoadTask {
                            BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
                            long jobDeadlineMs, long execMemLimit, boolean strictMode,
                            long txnId, LoadTaskCallback callback, String timezone,
-                           long timeoutS) {
+                           long timeoutS, long createTimestamp, boolean partialUpdate) {
         super(callback, TaskType.LOADING);
         this.db = db;
         this.table = table;
@@ -84,12 +86,14 @@ public class LoadLoadingTask extends LoadTask {
         this.retryTime = 2; // 2 times is enough
         this.timezone = timezone;
         this.timeoutS = timeoutS;
+        this.createTimestamp = createTimestamp;
+        this.partialUpdate = partialUpdate;
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
         this.loadId = loadId;
         planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
-                strictMode, timezone, this.timeoutS);
+                strictMode, timezone, timeoutS, createTimestamp, partialUpdate);
         planner.plan(loadId, fileStatusList, fileNum);
     }
 
@@ -112,7 +116,8 @@ public class LoadLoadingTask extends LoadTask {
     private void executeOnce() throws Exception {
         // New one query id,
         Coordinator curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
-                planner.getFragments(), planner.getScanNodes(), db.getClusterName(), planner.getTimezone());
+                planner.getFragments(), planner.getScanNodes(), db.getClusterName(),
+                planner.getTimezone(), planner.getStartTime());
         curCoordinator.setQueryType(TQueryType.LOAD);
         curCoordinator.setExecMemoryLimit(execMemLimit);
         /*

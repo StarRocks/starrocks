@@ -348,6 +348,7 @@ public class StmtExecutor {
                     SqlBlackList.verifying(originSql);
                 }
 
+
                 int retryTime = Config.max_query_retry_time;
                 for (int i = 0; i < retryTime; i++) {
                     try {
@@ -1240,6 +1241,7 @@ public class StmtExecutor {
 
     private void handleExportStmt(UUID queryId) throws Exception {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
+        exportStmt.setExportStartTime(context.getStartTime());
         context.getCatalog().getExportMgr().addExportJob(queryId, exportStmt);
     }
 
@@ -1341,7 +1343,9 @@ public class StmtExecutor {
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);
             }
-            txnState.addTableIndexes((OlapTable) targetTable);
+            if (targetTable instanceof OlapTable) {
+                txnState.addTableIndexes((OlapTable) targetTable);
+            }
         }
 
         // Every time set no send flag and clean all data in buffer
@@ -1354,10 +1358,12 @@ public class StmtExecutor {
         int filteredRows = 0;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         try {
-            OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
-            dataSink.init(context.getExecutionId(), transactionId, database.getId(),
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-            dataSink.complete();
+            if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
+                OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+                dataSink.init(context.getExecutionId(), transactionId, database.getId(),
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                dataSink.complete();
+            }
 
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());

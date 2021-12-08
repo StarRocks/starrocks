@@ -19,15 +19,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_EXEC_ENV_H
-#define STARROCKS_BE_RUNTIME_EXEC_ENV_H
+#pragma once
 
 #include <atomic>
 #include <memory>
 
 #include "common/status.h"
-#include "exec/pipeline/pipeline_driver_dispatcher.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "storage/options.h"
 
 namespace starrocks {
@@ -65,6 +62,10 @@ class TFileBrokerServiceClient;
 template <class T>
 class ClientCache;
 class HeartbeatFlags;
+
+namespace pipeline {
+class DriverDispatcher;
+}
 
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
@@ -123,7 +124,6 @@ public:
     ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     PriorityThreadPool* pipeline_scan_io_thread_pool() { return _pipeline_scan_io_thread_pool; }
-    PriorityThreadPool* pipeline_exchange_sink_thread_pool() { return _pipeline_exchange_sink_thread_pool; }
     size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
     size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
     PriorityThreadPool* etl_thread_pool() { return _etl_thread_pool; }
@@ -202,7 +202,6 @@ private:
     ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;
     PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
-    PriorityThreadPool* _pipeline_exchange_sink_thread_pool = nullptr;
     std::atomic<size_t> _num_scan_operators;
     PriorityThreadPool* _etl_thread_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
@@ -242,5 +241,3 @@ inline ClientCache<TFileBrokerServiceClient>* ExecEnv::get_client_cache<TFileBro
 }
 
 } // namespace starrocks
-
-#endif

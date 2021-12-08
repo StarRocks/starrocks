@@ -10,8 +10,9 @@
 namespace starrocks::pipeline {
 class AggregateDistinctStreamingSourceOperator : public SourceOperator {
 public:
-    AggregateDistinctStreamingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_distinct_streaming_source", plan_node_id),
+    AggregateDistinctStreamingSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                             AggregatorPtr aggregator)
+            : SourceOperator(factory, id, "aggregate_distinct_streaming_source", plan_node_id),
               _aggregator(std::move(aggregator)) {
         _aggregator->ref();
     }
@@ -49,7 +50,7 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateDistinctStreamingSourceOperator>(
-                _id, _plan_node_id, _aggregator_factory->get_or_create(driver_sequence));
+                this, _id, _plan_node_id, _aggregator_factory->get_or_create(driver_sequence));
     }
 
 private:

@@ -53,6 +53,10 @@ public class OptExprBuilder {
         return inputs;
     }
 
+    public void addChild(OptExprBuilder builder) {
+        inputs.add(builder);
+    }
+
     public OptExprBuilder withNewRoot(Operator operator) {
         return new OptExprBuilder(operator, Collections.singletonList(this), expressionMapping);
     }

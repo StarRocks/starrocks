@@ -1028,8 +1028,6 @@ const TypeConverter* get_type_converter(FieldType from_type, FieldType to_type) 
 template <typename SrcType>
 class BitMapTypeConverter : public MaterializeTypeConverter {
 public:
-    ;
-
     BitMapTypeConverter() = default;
     ~BitMapTypeConverter() = default;
 
@@ -1043,8 +1041,7 @@ public:
                 dst_col->append_datum(dst_datum);
                 continue;
             }
-            uint64_t origin_value;
-            origin_value = src_datum.get<SrcType>();
+            uint64_t origin_value = src_datum.get<SrcType>();
             if (origin_value < 0) {
                 LOG(WARNING) << "The input which less than zero "
                              << " is not valid, to_bitmap only support bigint value from 0 to "
@@ -1104,8 +1101,7 @@ public:
                 dst_col->append_datum(dst_datum);
                 continue;
             }
-            double origin_value;
-            origin_value = src_datum.get<SrcType>();
+            double origin_value = src_datum.get<SrcType>();
             PercentileValue percentile;
             percentile.add(origin_value);
             dst_datum.set_percentile(&percentile);
@@ -2061,25 +2057,6 @@ Status RowConverter::init(const Schema& in_schema, const Schema& out_schema) {
     }
     return Status::OK();
 }
-
-template <typename RowType>
-void RowConverter::convert(RowCursor* dst, const RowType& src) const {
-    for (int i = 0; i < _converters.size(); ++i) {
-        auto cid = _cids[i];
-
-        auto src_cell = src.cell(cid);
-        auto dst_cell = dst->cell(cid);
-        bool is_null = src_cell.is_null();
-        dst_cell.set_is_null(is_null);
-        if (is_null) {
-            continue;
-        }
-        _converters[i]->convert(dst_cell.mutable_cell_ptr(), src_cell.cell_ptr());
-    }
-}
-
-template void RowConverter::convert<RowCursor>(RowCursor* dst, const RowCursor& src) const;
-template void RowConverter::convert<ContiguousRow>(RowCursor* dst, const ContiguousRow& src) const;
 
 void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const {
     int num_datums = src.size();

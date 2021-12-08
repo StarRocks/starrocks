@@ -51,8 +51,7 @@ WrapperField* WrapperField::create(const TabletColumn& column, uint32_t len) {
         variable_len = column.length();
     }
 
-    WrapperField* wrapper = new WrapperField(rep, variable_len, is_string_type);
-    return wrapper;
+    return new WrapperField(rep, variable_len, is_string_type);
 }
 
 WrapperField* WrapperField::create_by_type(const FieldType& type, int32_t var_length) {

@@ -504,7 +504,7 @@ public class OlapTable extends Table {
                     for (Long beId : beIds) {
                         long newReplicaId = catalog.getNextId();
                         Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
-                                partition.getVisibleVersion(), partition.getVisibleVersionHash(), schemaHash);
+                                partition.getVisibleVersion(), schemaHash);
                         newTablet.addReplica(replica, true /* is restore */);
                     }
                 }
@@ -615,7 +615,7 @@ public class OlapTable extends Table {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
         for (Column column : partitionColumns) {
-            partitionColumnNames.add(column.getName().toLowerCase());
+            partitionColumnNames.add(column.getName());
         }
         return partitionColumnNames;
     }
@@ -1321,7 +1321,6 @@ public class OlapTable extends Table {
         List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(clusterName, true);
         for (Partition partition : idToPartition.values()) {
             long visibleVersion = partition.getVisibleVersion();
-            long visibleVersionHash = partition.getVisibleVersionHash();
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : mIndex.getTablets()) {
@@ -1330,7 +1329,7 @@ public class OlapTable extends Table {
                     }
 
                     Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = tablet.getHealthStatusWithPriority(
-                            infoService, clusterName, visibleVersion, visibleVersionHash, replicationNum,
+                            infoService, clusterName, visibleVersion, replicationNum,
                             aliveBeIdsInCluster);
                     if (statusPair.first != TabletStatus.HEALTHY) {
                         LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",
@@ -1373,12 +1372,11 @@ public class OlapTable extends Table {
         long totalCount = 0;
         for (Partition partition : getPartitions()) {
             long version = partition.getVisibleVersion();
-            long versionHash = partition.getVisibleVersionHash();
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     long tabletRowCount = 0L;
                     for (Replica replica : tablet.getReplicas()) {
-                        if (replica.checkVersionCatchUp(version, versionHash, false)
+                        if (replica.checkVersionCatchUp(version, false)
                                 && replica.getRowCount() > tabletRowCount) {
                             tabletRowCount = replica.getRowCount();
                         }
@@ -1462,7 +1460,18 @@ public class OlapTable extends Table {
         tableProperty.buildInMemory();
     }
 
+    public void setStorageMedium(TStorageMedium storageMedium) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium.name());
+    }
+
     public boolean hasDelete() {
+        if (tableProperty == null) {
+            return false;
+        }
         return tableProperty.hasDelete();
     }
 

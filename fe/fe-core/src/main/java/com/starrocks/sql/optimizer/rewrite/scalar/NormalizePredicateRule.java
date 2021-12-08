@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.Utils;
@@ -40,7 +41,10 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
             return predicate;
         }
 
-        return predicate.commutative();
+        ScalarOperator result = predicate.commutative();
+        Preconditions.checkState(!(result.getChild(0).isConstant() && result.getChild(1).isVariable()),
+                "Normalized predicate error: " + result);
+        return result;
     }
 
     //

@@ -5,6 +5,8 @@
 #include <random>
 
 #include "column/nullable_column.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "runtime/date_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -26,11 +28,13 @@ OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFac
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
+        auto pseudo_plan_node_id = -200;
         auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
-        auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), mem_mgr);
+        auto local_exchange_source =
+                std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
         auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
-        auto local_exchange_sink =
-                std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), local_exchange);
+        auto local_exchange_sink = std::make_shared<LocalExchangeSinkOperatorFactory>(
+                next_operator_id(), pseudo_plan_node_id, local_exchange);
         // Add LocalExchangeSinkOperator to predecessor pipeline.
         pred_operators.emplace_back(std::move(local_exchange_sink));
         // predecessor pipeline comes to end.

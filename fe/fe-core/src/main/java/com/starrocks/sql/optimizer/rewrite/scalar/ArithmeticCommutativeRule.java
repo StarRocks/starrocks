@@ -48,17 +48,21 @@ public class ArithmeticCommutativeRule extends BottomUpScalarOperatorRewriteRule
 
         // Only handle expression like `Variable * Constant = Constant`
         CallOperator call = (CallOperator) predicate.getChild(0);
-        if (null == call.getFunction() || call.getFunction().getReturnType().isDecimalOfAnyVersion() ||
-                !LEFT_COMMUTATIVE_MAP.containsKey(call.getFunction().getFunctionName().toString())) {
+        if (call.getChildren().size() != 2 || null == call.getFunction() ||
+                call.getFunction().getReturnType().isDecimalOfAnyVersion()) {
             return predicate;
         }
 
         ScalarOperator s1 = call.getChild(0);
         ScalarOperator s2 = call.getChild(1);
         ScalarOperator result = predicate.getChild(1);
+        String functionName = call.getFunction().getFunctionName().toString();
 
         if (s1.isVariable() && s2.isConstant()) {
-            String fnName = LEFT_COMMUTATIVE_MAP.get(call.getFunction().getFunctionName().toString());
+            if (!LEFT_COMMUTATIVE_MAP.containsKey(functionName)) {
+                return predicate;
+            }
+            String fnName = LEFT_COMMUTATIVE_MAP.get(functionName);
             Function fn = findArithmeticFunction(call, fnName);
             CallOperator n = new CallOperator(fnName, fn.getReturnType(), Lists.newArrayList(result, s2), fn);
             // Negative numbers need to be swapped binary children
@@ -74,7 +78,10 @@ public class ArithmeticCommutativeRule extends BottomUpScalarOperatorRewriteRule
             }
             return new BinaryPredicateOperator(predicate.getBinaryType(), s1, n);
         } else if (s1.isConstant() && s2.isVariable()) {
-            String fnName = RIGHT_COMMUTATIVE_MAP.get(call.getFunction().getFunctionName().toString());
+            if (!RIGHT_COMMUTATIVE_MAP.containsKey(functionName)) {
+                return predicate;
+            }
+            String fnName = RIGHT_COMMUTATIVE_MAP.get(functionName);
             Function fn = findArithmeticFunction(call, fnName);
 
             if (fnName.equalsIgnoreCase(call.getFunction().getFunctionName().toString())) {

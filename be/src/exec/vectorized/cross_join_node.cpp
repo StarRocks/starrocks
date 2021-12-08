@@ -48,10 +48,6 @@ Status CrossJoinNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status CrossJoinNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
-}
-
 Status CrossJoinNode::_get_next_probe_chunk(RuntimeState* state) {
     while (true) {
         RETURN_IF_ERROR(child(0)->get_next(state, &_probe_chunk, &_eos));
@@ -250,14 +246,14 @@ void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, 
 
 /*
 First, build a large chunk to contain the right table.
-Then the right table is divided into two parts. 
+Then the right table is divided into two parts.
 The number of rows is a multiple of 4096 (big_Chunk) and small with less than 4096 rows(small_chunk).
 
 right table is about _number_of_build_rows rows.
 big_chunk's range is    [0 - _build_chunks_size)
 small_chunk's range is  [_build_chunks_size - _number_of_build_rows)
 
-For each chunk probe in the left table, probe_chunk, 
+For each chunk probe in the left table, probe_chunk,
 we need to make it iterate with the right table, as iteratoe big_chunk and small_chunk separately.
 
 Our way is
@@ -482,9 +478,13 @@ Status CrossJoinNode::_build(RuntimeState* state) {
                 // the complexity and time of cross-join chunks from left table with small chunks
                 // from right table.
                 size_t col_number = chunk->num_columns();
-                for (size_t col = 0; col < col_number; ++col) {
-                    _build_chunk->get_column_by_index(col)->append(*(chunk->get_column_by_index(col).get()), 0,
-                                                                   row_number);
+                try {
+                    for (size_t col = 0; col < col_number; ++col) {
+                        _build_chunk->get_column_by_index(col)->append(*(chunk->get_column_by_index(col).get()), 0,
+                                                                       row_number);
+                    }
+                } catch (std::bad_alloc const&) {
+                    return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
                 }
             }
         }
@@ -540,6 +540,8 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // step 0: construct pipeline end with cross join right operator.
     OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
 
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // communication with CrossJoinLeft through shared_datas.
     auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());
     auto cross_join_context = std::make_shared<pipeline::CrossJoinContext>(right_source->degree_of_parallelism());
@@ -547,6 +549,8 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // cross_join_right as sink operator
     auto right_factory =
             std::make_shared<CrossJoinRightSinkOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(right_factory.get(), context, rc_rf_probe_collector);
     right_ops.emplace_back(std::move(right_factory));
     context->add_pipeline(right_ops);
 
@@ -557,6 +561,8 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
             std::move(_conjunct_ctxs), std::move(cross_join_context));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     left_ops.emplace_back(std::move(left_factory));
 
     // return as the following pipeline

@@ -16,46 +16,47 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
+#include "util/debug_util.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks::vectorized {
 
-HashJoiner::HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id, TPlanNodeType::type node_type,
-                       int64_t limit, const std::vector<bool>& is_null_safes,
-                       const std::vector<ExprContext*>& build_expr_ctxs,
-                       const std::vector<ExprContext*>& probe_expr_ctxs,
-                       const std::vector<ExprContext*>& other_join_conjunct_ctxs,
-                       const std::vector<ExprContext*>& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
-                       const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor)
-        : _join_type(hash_join_node.join_op),
-          _limit(limit),
+HashJoiner::HashJoiner(const HashJoinerParam& param)
+        : _pool(param._pool),
+          _join_type(param._hash_join_node.join_op),
+          _limit(param._limit),
           _num_rows_returned(0),
-          _is_null_safes(is_null_safes),
-          _build_expr_ctxs(std::move(build_expr_ctxs)),
-          _probe_expr_ctxs(std::move(probe_expr_ctxs)),
-          _other_join_conjunct_ctxs(std::move(other_join_conjunct_ctxs)),
-          _conjunct_ctxs(std::move(conjunct_ctxs)),
-          _build_row_descriptor(build_row_descriptor),
-          _probe_row_descriptor(probe_row_descriptor),
-          _row_descriptor(row_descriptor) {
-    _is_push_down = hash_join_node.is_push_down;
-    if (_join_type == TJoinOp::LEFT_ANTI_JOIN && hash_join_node.is_rewritten_from_not_in) {
+          _is_null_safes(param._is_null_safes),
+          _build_expr_ctxs(std::move(param._build_expr_ctxs)),
+          _probe_expr_ctxs(std::move(param._probe_expr_ctxs)),
+          _other_join_conjunct_ctxs(std::move(param._other_join_conjunct_ctxs)),
+          _conjunct_ctxs(std::move(param._conjunct_ctxs)),
+          _build_row_descriptor(param._build_row_descriptor),
+          _probe_row_descriptor(param._probe_row_descriptor),
+          _row_descriptor(param._row_descriptor),
+          _build_node_type(param._build_node_type),
+          _probe_node_type(param._probe_node_type),
+          _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
+          _build_runtime_filters(param._build_runtime_filters) {
+    _is_push_down = param._hash_join_node.is_push_down;
+    if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
     }
 
     _build_runtime_filters_from_planner = false;
-    if (hash_join_node.__isset.build_runtime_filters_from_planner) {
-        _build_runtime_filters_from_planner = hash_join_node.build_runtime_filters_from_planner;
+    if (param._hash_join_node.__isset.build_runtime_filters_from_planner) {
+        _build_runtime_filters_from_planner = param._hash_join_node.build_runtime_filters_from_planner;
     }
 
-    std::string name = strings::Substitute("$0 (id=$1)", print_plan_node_type(node_type), node_id);
+    std::string name = strings::Substitute("$0 (id=$1)", print_plan_node_type(param._node_type), param._node_id);
     _runtime_profile.reset(new RuntimeProfile(std::move(name)));
-    _runtime_profile->set_metadata(node_id);
+    _runtime_profile->set_metadata(param._node_id);
 
-    if (hash_join_node.__isset.sql_join_predicates) {
-        _runtime_profile->add_info_string("JoinPredicates", hash_join_node.sql_join_predicates);
+    if (param._hash_join_node.__isset.sql_join_predicates) {
+        _runtime_profile->add_info_string("JoinPredicates", param._hash_join_node.sql_join_predicates);
     }
-    if (hash_join_node.__isset.sql_predicates) {
-        _runtime_profile->add_info_string("Predicates", hash_join_node.sql_predicates);
+    if (param._hash_join_node.__isset.sql_predicates) {
+        _runtime_profile->add_info_string("Predicates", param._hash_join_node.sql_predicates);
     }
 }
 
@@ -64,7 +65,7 @@ Status HashJoiner::prepare(RuntimeState* state) {
 
     _copy_right_table_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "1-CopyRightTableChunkTime", "BuildTime");
     _build_ht_timer = ADD_CHILD_TIMER(_runtime_profile, "2-BuildHashTableTime", "BuildTime");
-    _build_push_down_expr_timer = ADD_CHILD_TIMER(_runtime_profile, "3-BuildPushDownExprTime", "BuildTime");
+    _build_runtime_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "3-RuntimeFilterBuildTime", "BuildTime");
     _build_conjunct_evaluate_timer = ADD_CHILD_TIMER(_runtime_profile, "4-BuildConjunctEvaluateTime", "BuildTime");
 
     _probe_timer = ADD_TIMER(_runtime_profile, "ProbeTime");
@@ -81,7 +82,7 @@ Status HashJoiner::prepare(RuntimeState* state) {
     _probe_rows_counter = ADD_COUNTER(_runtime_profile, "ProbeRows", TUnit::UNIT);
     _build_rows_counter = ADD_COUNTER(_runtime_profile, "BuildRows", TUnit::UNIT);
     _build_buckets_counter = ADD_COUNTER(_runtime_profile, "BuildBuckets", TUnit::UNIT);
-    _push_down_expr_num = ADD_COUNTER(_runtime_profile, "PushDownExprNum", TUnit::UNIT);
+    _runtime_filter_num = ADD_COUNTER(_runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
     _avg_input_probe_chunk_size = ADD_COUNTER(_runtime_profile, "AvgInputProbeChunkSize", TUnit::UNIT);
     _avg_output_chunk_size = ADD_COUNTER(_runtime_profile, "AvgOutputChunkSize", TUnit::UNIT);
     _runtime_profile->add_info_string("JoinType", _get_join_type_str(_join_type));
@@ -137,6 +138,29 @@ Status HashJoiner::build_ht(RuntimeState* state) {
         _short_circuit_break();
         auto old_phase = HashJoinPhase::BUILD;
         // _phase may be set to HashJoinPhase::EOS because HashJoinProbeOperator finishes prematurely.
+        uint64_t runtime_join_filter_pushdown_limit = 1024000;
+        if (state->query_options().__isset.runtime_join_filter_pushdown_limit) {
+            runtime_join_filter_pushdown_limit = state->query_options().runtime_join_filter_pushdown_limit;
+        }
+
+        if (_is_push_down) {
+            if (_probe_node_type == TPlanNodeType::EXCHANGE_NODE && _build_node_type == TPlanNodeType::EXCHANGE_NODE) {
+                _is_push_down = false;
+            } else if (_ht.get_row_count() > runtime_join_filter_pushdown_limit) {
+                _is_push_down = false;
+            }
+
+            if (_is_push_down || _build_conjunct_ctxs_is_empty) {
+                // In filter could be used to fast compute segment row range in storage engine
+                RETURN_IF_ERROR(_create_runtime_in_filters(state));
+            }
+        }
+
+        // it's quite critical to put publish runtime filters before short-circuit of
+        // "inner-join with empty right table". because for global runtime filter
+        // merge node is waiting for all partitioned runtime filter, so even hash row count is zero
+        // we still have to build it.
+        RETURN_IF_ERROR(_create_runtime_bloom_filters(state, runtime_join_filter_pushdown_limit));
         _phase.compare_exchange_strong(old_phase, HashJoinPhase::PROBE);
     }
     return Status::OK();
@@ -177,27 +201,7 @@ void HashJoiner::push_chunk(RuntimeState* state, ChunkPtr&& chunk) {
 
 StatusOr<ChunkPtr> HashJoiner::pull_chunk(RuntimeState* state) {
     DCHECK(_phase != HashJoinPhase::BUILD);
-
-    auto&& maybe_chunk = _pull_probe_output_chunk(state);
-    if (UNLIKELY(!maybe_chunk.ok())) {
-        return std::move(maybe_chunk);
-    }
-
-    ChunkPtr chunk = std::move(maybe_chunk.value());
-    if (!chunk || chunk->is_empty()) {
-        return std::move(chunk);
-    }
-
-    auto num_rows = chunk->num_rows();
-    _num_rows_returned += num_rows;
-    if (_reached_limit()) {
-        chunk->set_num_rows(num_rows - (_num_rows_returned - _limit));
-        _num_rows_returned = _limit;
-        _phase = HashJoinPhase::EOS;
-        // _ht is useless in this point, so deallocate its memory.
-        _ht.close();
-    }
-    return std::move(chunk);
+    return _pull_probe_output_chunk(state);
 }
 
 StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
@@ -220,15 +224,13 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 
     if (_phase == HashJoinPhase::POST_PROBE) {
         if (!_need_post_probe()) {
-            _phase = HashJoinPhase::EOS;
-            _ht.close();
+            enter_eos_phase();
             return chunk;
         }
 
         RETURN_IF_ERROR(_ht.probe_remain(&chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
-            _phase = HashJoinPhase::EOS;
-            _ht.close();
+            enter_eos_phase();
         }
 
         _filter_post_probe_output_chunk(chunk);

@@ -21,34 +21,26 @@
 
 #include "storage/rowset/rowset_meta_manager.h"
 
-#include <boost/algorithm/string/trim.hpp>
-#include <fstream>
-#include <sstream>
 #include <string>
 #include <vector>
 
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
-#include "json2pb/json_to_pb.h"
-#include "json2pb/pb_to_json.h"
-#include "storage/olap_define.h"
-#include "storage/storage_engine.h"
 
 namespace starrocks {
 
 const std::string ROWSET_PREFIX = "rst_";
 
 bool RowsetMetaManager::check_rowset_meta(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id) {
-    std::string key = ROWSET_PREFIX + tablet_uid.to_string() + "_" + rowset_id.to_string();
+    std::string key = get_rowset_meta_key(tablet_uid, rowset_id);
     std::string value;
-    Status s = meta->get(META_COLUMN_FAMILY_INDEX, key, &value);
-    return s.ok();
+    return meta->get(META_COLUMN_FAMILY_INDEX, key, &value).ok();
 }
 
 Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id,
                                const RowsetMetaPB& rowset_meta_pb) {
-    std::string key = ROWSET_PREFIX + tablet_uid.to_string() + "_" + rowset_id.to_string();
+    std::string key = get_rowset_meta_key(tablet_uid, rowset_id);
     std::string value;
     bool ret = rowset_meta_pb.SerializeToString(&value);
     if (!ret) {
@@ -60,7 +52,7 @@ Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const
 }
 
 Status RowsetMetaManager::remove(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id) {
-    std::string key = ROWSET_PREFIX + tablet_uid.to_string() + "_" + rowset_id.to_string();
+    std::string key = get_rowset_meta_key(tablet_uid, rowset_id);
     return meta->remove(META_COLUMN_FAMILY_INDEX, key);
 }
 

@@ -3,6 +3,7 @@
 #include <mutex>
 #include <random>
 
+#include "exec/pipeline/pipeline.h"
 #include "pipeline_test_base.h"
 #include "util/thrift_util.h"
 
@@ -68,8 +69,9 @@ std::atomic<size_t> lifecycle_error_num;
 
 class TestOperator : public Operator {
 public:
-    TestOperator(int32_t id, const std::string& name, int32_t plan_node_id) : Operator(id, name, plan_node_id) {}
-    ~TestOperator() {
+    TestOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id)
+            : Operator(factory, id, name, plan_node_id) {}
+    ~TestOperator() override {
         if (!_is_prepared) {
             ++lifecycle_error_num;
         }
@@ -124,16 +126,16 @@ private:
 
 class TestSourceOperator : public SourceOperator {
 public:
-    TestSourceOperator(int32_t id, int32_t plan_node_id, size_t chunk_num, size_t chunk_size, CounterPtr counter,
-                       int32_t pending_finish_cnt)
-            : SourceOperator(id, "test_source", plan_node_id),
+    TestSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, size_t chunk_num, size_t chunk_size,
+                       CounterPtr counter, int32_t pending_finish_cnt)
+            : SourceOperator(factory, id, "test_source", plan_node_id),
               _counter(counter),
               _pending_finish_cnt(pending_finish_cnt) {
         for (size_t i = 0; i < chunk_num; ++i) {
             _chunks.push_back(PipelineTestBase::_create_and_fill_chunk(chunk_size));
         }
     }
-    ~TestSourceOperator() {
+    ~TestSourceOperator() override {
         if (!_is_prepared) {
             ++lifecycle_error_num;
         }
@@ -184,7 +186,7 @@ public:
 
     bool has_output() const override { return _index < _chunks.size(); }
     bool is_finished() const override { return !has_output(); }
-    bool pending_finish() { return --_pending_finish_cnt >= 0; }
+    bool pending_finish() const override { return --_pending_finish_cnt >= 0; }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -193,7 +195,7 @@ private:
     CounterPtr _counter;
     std::vector<vectorized::ChunkPtr> _chunks;
     size_t _index = 0;
-    std::atomic<int32_t> _pending_finish_cnt;
+    mutable std::atomic<int32_t> _pending_finish_cnt;
 
     bool _is_prepared = false;
     bool _is_finishing = false;
@@ -225,7 +227,7 @@ public:
     ~TestSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<TestSourceOperator>(_id, _plan_node_id, _chunk_num, _chunk_size, _counter,
+        return std::make_shared<TestSourceOperator>(this, _id, _plan_node_id, _chunk_num, _chunk_size, _counter,
                                                     _pending_finish_cnt);
     }
 
@@ -238,8 +240,8 @@ private:
 
 class TestNormalOperator : public TestOperator {
 public:
-    TestNormalOperator(int32_t id, int32_t plan_node_id, CounterPtr counter)
-            : TestOperator(id, "test_normal", plan_node_id), _counter(counter) {}
+    TestNormalOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, CounterPtr counter)
+            : TestOperator(factory, id, "test_normal", plan_node_id), _counter(counter) {}
     ~TestNormalOperator() override = default;
 
     bool need_input() const override { return true; }
@@ -280,7 +282,7 @@ public:
     ~TestNormalOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<TestNormalOperator>(_id, _plan_node_id, _counter);
+        return std::make_shared<TestNormalOperator>(this, _id, _plan_node_id, _counter);
     }
 
 private:
@@ -289,8 +291,8 @@ private:
 
 class TestSinkOperator : public TestOperator {
 public:
-    TestSinkOperator(int32_t id, int32_t plan_node_id, CounterPtr counter)
-            : TestOperator(id, "test_sink", plan_node_id), _counter(counter) {}
+    TestSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, CounterPtr counter)
+            : TestOperator(factory, id, "test_sink", plan_node_id), _counter(counter) {}
     ~TestSinkOperator() override = default;
 
     bool need_input() const override { return true; }
@@ -328,7 +330,7 @@ public:
     ~TestSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<TestSinkOperator>(_id, _plan_node_id, _counter);
+        return std::make_shared<TestSinkOperator>(this, _id, _plan_node_id, _counter);
     }
 
 private:

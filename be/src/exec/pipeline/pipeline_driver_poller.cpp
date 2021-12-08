@@ -29,6 +29,7 @@ void PipelineDriverPoller::run_internal() {
     this->_is_polling_thread_initialized.store(true, std::memory_order_release);
     typeof(this->_blocked_drivers) local_blocked_drivers;
     int spin_count = 0;
+    std::vector<DriverRawPtr> ready_drivers;
     while (!_is_shutdown.load(std::memory_order_acquire)) {
         {
             std::unique_lock<std::mutex> lock(this->_mutex);
@@ -47,12 +48,12 @@ void PipelineDriverPoller::run_internal() {
                 local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers);
             }
         }
-        size_t previous_num_blocked_drivers = local_blocked_drivers.size();
+
         auto driver_it = local_blocked_drivers.begin();
         while (driver_it != local_blocked_drivers.end()) {
             auto* driver = *driver_it;
 
-            if (driver->pending_finish() && !driver->source_operator()->pending_finish()) {
+            if (driver->pending_finish() && !driver->is_still_pending_finish()) {
                 // driver->pending_finish() return true means that when a driver's sink operator is finished,
                 // but its source operator still has pending io task that executed in io threads and has
                 // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
@@ -62,7 +63,7 @@ void PipelineDriverPoller::run_internal() {
                 driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
                                                                                : DriverState::FINISH);
                 remove_blocked_driver(local_blocked_drivers, driver_it);
-                _dispatch_queue->put_back(driver);
+                ready_drivers.emplace_back(driver);
             } else if (driver->is_finished()) {
                 remove_blocked_driver(local_blocked_drivers, driver_it);
             } else if (!driver->pending_finish() && driver->query_ctx()->is_expired()) {
@@ -73,40 +74,51 @@ void PipelineDriverPoller::run_internal() {
                 // If the fragment is expired when the source operator is already pending i/o task,
                 // The state of driver shouldn't be changed.
                 driver->finish_operators(driver->fragment_ctx()->runtime_state());
-                if (driver->source_operator()->pending_finish()) {
+                if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     ++driver_it;
                 } else {
                     driver->set_driver_state(DriverState::FINISH);
                     remove_blocked_driver(local_blocked_drivers, driver_it);
-                    _dispatch_queue->put_back(driver);
+                    ready_drivers.emplace_back(driver);
                 }
             } else if (!driver->pending_finish() && driver->fragment_ctx()->is_canceled()) {
                 // If the fragment is cancelled when the source operator is already pending i/o task,
                 // The state of driver shouldn't be changed.
                 driver->finish_operators(driver->fragment_ctx()->runtime_state());
-                if (driver->source_operator()->pending_finish()) {
+                if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     ++driver_it;
                 } else {
                     driver->set_driver_state(DriverState::CANCELED);
                     remove_blocked_driver(local_blocked_drivers, driver_it);
-                    _dispatch_queue->put_back(driver);
+                    ready_drivers.emplace_back(driver);
                 }
             } else if (driver->is_not_blocked()) {
+                if (driver->driver_state() == DriverState::PRECONDITION_BLOCK) {
+                    // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
+                    //  This writing method is a bit tricky, and when there is a better way, replace it
+                    auto runtime_state_ptr = driver->fragment_ctx()->runtime_state_ptr();
+                    driver->mark_precondition_ready(runtime_state_ptr.get());
+                    driver->_precondition_block_timer->update(driver->_precondition_block_timer_sw->elapsed_time());
+                }
                 driver->set_driver_state(DriverState::READY);
                 remove_blocked_driver(local_blocked_drivers, driver_it);
-                _dispatch_queue->put_back(driver);
+                ready_drivers.emplace_back(driver);
             } else {
                 ++driver_it;
             }
         }
-        size_t curr_num_blocked_drivers = local_blocked_drivers.size();
-        if (curr_num_blocked_drivers == previous_num_blocked_drivers) {
+
+        if (ready_drivers.empty()) {
             spin_count += 1;
         } else {
             spin_count = 0;
+
+            _dispatch_queue->put_back(ready_drivers);
+            ready_drivers.clear();
         }
+
         if (spin_count != 0 && spin_count % 64 == 0) {
 #ifdef __x86_64__
             _mm_pause();
@@ -125,6 +137,9 @@ void PipelineDriverPoller::run_internal() {
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(this->_mutex);
     driver->_pending_timer_sw->reset();
+    if (driver->driver_state() == DriverState::PRECONDITION_BLOCK) {
+        driver->_precondition_block_timer_sw->reset();
+    }
     this->_blocked_drivers.push_back(driver);
     this->_cond.notify_one();
 }

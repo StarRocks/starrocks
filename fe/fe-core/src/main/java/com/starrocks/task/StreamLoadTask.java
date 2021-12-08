@@ -72,6 +72,7 @@ public class StreamLoadTask {
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private int timeout = Config.stream_load_default_timeout_second;
     private long loadMemLimit = 0;
+    private boolean partialUpdate = false;
 
     public StreamLoadTask(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -163,6 +164,14 @@ public class StreamLoadTask {
         this.jsonRoot = jsonRoot;
     }
 
+    public boolean isPartialUpdate() {
+        return partialUpdate;
+    }
+
+    public void setPartialUpdate(boolean partialUpdate) {
+        this.partialUpdate = partialUpdate;
+    }
+
     public static StreamLoadTask fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
             throws UserException {
         StreamLoadTask streamLoadTask = new StreamLoadTask(request.getLoadId(), request.getTxnId(),
@@ -223,6 +232,9 @@ public class StreamLoadTask {
             }
             stripOuterArray = request.isStrip_outer_array();
         }
+        if (request.isSetPartial_update()) {
+            partialUpdate = request.isPartial_update();
+        }
     }
 
     public static StreamLoadTask fromRoutineLoadJob(RoutineLoadJob routineLoadJob) {
@@ -257,6 +269,7 @@ public class StreamLoadTask {
             jsonRoot = routineLoadJob.getJsonRoot();
         }
         stripOuterArray = routineLoadJob.isStripOuterArray();
+        partialUpdate = routineLoadJob.isPartialUpdate();
     }
 
     // used for stream load

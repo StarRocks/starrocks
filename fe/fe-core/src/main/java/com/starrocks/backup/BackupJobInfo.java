@@ -152,7 +152,6 @@ public class BackupJobInfo implements Writable {
         public String name;
         public long id;
         public long version;
-        public long versionHash;
         public Map<String, BackupIndexInfo> indexes = Maps.newHashMap();
 
         public BackupIndexInfo getIdx(String idxName) {
@@ -253,7 +252,6 @@ public class BackupJobInfo implements Writable {
                 partitionInfo.id = partition.getId();
                 partitionInfo.name = partition.getName();
                 partitionInfo.version = partition.getVisibleVersion();
-                partitionInfo.versionHash = partition.getVisibleVersionHash();
                 tableInfo.partitions.put(partitionInfo.name, partitionInfo);
                 // indexes
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
@@ -320,7 +318,6 @@ public class BackupJobInfo implements Writable {
          *                   },
          *                   "id": 10007
          *                   "version": 10
-         *                   "version_hash": 1273047329538
          *               },
          *           },
          *           "id": 10001
@@ -362,7 +359,6 @@ public class BackupJobInfo implements Writable {
                 JSONObject part = parts.getJSONObject(partName);
                 partInfo.id = part.getLong("id");
                 partInfo.version = part.getLong("version");
-                partInfo.versionHash = part.getLong("version_hash");
                 JSONObject indexes = part.getJSONObject("indexes");
                 String[] indexNames = JSONObject.getNames(indexes);
                 for (String idxName : indexNames) {
@@ -457,7 +453,6 @@ public class BackupJobInfo implements Writable {
                 if (verbose) {
                     part.put("id", partInfo.id);
                     part.put("version", partInfo.version);
-                    part.put("version_hash", partInfo.versionHash);
                     JSONObject indexes = new JSONObject();
                     part.put("indexes", indexes);
                     for (BackupIndexInfo idxInfo : partInfo.indexes.values()) {

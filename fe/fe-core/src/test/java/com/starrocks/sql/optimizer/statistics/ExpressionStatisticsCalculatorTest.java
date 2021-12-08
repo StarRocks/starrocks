@@ -5,7 +5,6 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -160,8 +159,8 @@ public class ExpressionStatisticsCalculatorTest {
         CaseWhenOperator caseWhenOperator =
                 new CaseWhenOperator(Type.VARCHAR, null, ConstantOperator.createChar("others", Type.VARCHAR),
                         ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
-        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(caseWhenOperator, new Statistics(100,
-                Maps.newHashMap()));
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator
+                .calculate(caseWhenOperator, Statistics.builder().setOutputRowCount(100).build());
         Assert.assertEquals(columnStatistic.getDistinctValuesCount(), 3, 0.001);
     }
 }

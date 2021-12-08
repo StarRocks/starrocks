@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 import com.google.common.base.Strings;
 import com.google.common.collect.Iterables;
@@ -1246,7 +1247,8 @@ public class SelectStmt extends QueryStmt {
         if (groupByClause == null && !selectList.isDistinct()
                 && !TreeNode.contains(resultExprs, Expr.isAggregatePredicate())
                 &&
-                (havingClauseAfterAnaylzed == null || !havingClauseAfterAnaylzed.contains(Expr.isAggregatePredicate()))
+                (havingClauseAfterAnaylzed == null || !havingClauseAfterAnaylzed.contains(
+                        Expr.isAggregatePredicate()))
                 && (sortInfo == null || !TreeNode.contains(sortInfo.getOrderingExprs(),
                 Expr.isAggregatePredicate()))) {
             // We're not computing aggregates but we still need to register the HAVING
@@ -1353,7 +1355,7 @@ public class SelectStmt extends QueryStmt {
         List<Expr> substitutedAggs =
                 Expr.substituteList(aggExprs, countAllMap, analyzer, false);
         aggExprs.clear();
-        TreeNode.collect(substitutedAggs, Expr.isAggregatePredicate(), aggExprs);
+        TreeNode.collect(substitutedAggs, Expr.isAggregatePredicate()::apply, aggExprs);
 
         // 3 create agg info
         createAggInfo(groupingExprs, aggExprs, analyzer);
@@ -1519,8 +1521,8 @@ public class SelectStmt extends QueryStmt {
             return scalarCountAllMap;
         }
 
-        com.google.common.base.Predicate<FunctionCallExpr> isNotDistinctPred =
-                new com.google.common.base.Predicate<FunctionCallExpr>() {
+        Predicate<FunctionCallExpr> isNotDistinctPred =
+                new Predicate<FunctionCallExpr>() {
                     public boolean apply(FunctionCallExpr expr) {
                         return !expr.isDistinct();
                     }
@@ -1530,8 +1532,8 @@ public class SelectStmt extends QueryStmt {
             return scalarCountAllMap;
         }
 
-        com.google.common.base.Predicate<FunctionCallExpr> isCountPred =
-                new com.google.common.base.Predicate<FunctionCallExpr>() {
+        Predicate<FunctionCallExpr> isCountPred =
+                new Predicate<FunctionCallExpr>() {
                     public boolean apply(FunctionCallExpr expr) {
                         return expr.getFnName().getFunction().equals(FunctionSet.COUNT);
                     }
@@ -1823,6 +1825,81 @@ public class SelectStmt extends QueryStmt {
         if (hasOutFileClause()) {
             strBuilder.append(outFileClause.toSql());
         }
+        return strBuilder.toString();
+    }
+
+
+    @Override
+    public String toDigest() {
+        StringBuilder strBuilder = new StringBuilder();
+        if (withClause_ != null) {
+            strBuilder.append(withClause_.toDigest());
+            strBuilder.append(" ");
+        }
+
+        // Select list
+        strBuilder.append("select ");
+        if (selectList.isDistinct()) {
+            strBuilder.append("distinct ");
+        }
+
+        if (originalExpr == null) {
+            originalExpr = Expr.cloneList(resultExprs);
+        }
+
+        if (resultExprs.isEmpty()) {
+            for (int i = 0; i < selectList.getItems().size(); ++i) {
+                if (i != 0) {
+                    strBuilder.append(", ");
+                }
+                strBuilder.append(selectList.getItems().get(i).toDigest());
+            }
+        } else {
+            for (int i = 0; i < originalExpr.size(); ++i) {
+                if (i != 0) {
+                    strBuilder.append(", ");
+                }
+                strBuilder.append(originalExpr.get(i).toDigest());
+                strBuilder.append(" as ").append(SqlUtils.getIdentSql(colLabels.get(i)));
+            }
+        }
+
+        // From clause
+        if (!fromClause_.isEmpty()) {
+            strBuilder.append(fromClause_.toDigest());
+        }
+
+        // Where clause
+        if (whereClause != null) {
+            strBuilder.append(" where ");
+            strBuilder.append(whereClause.toDigest());
+        }
+        // Group By clause
+        if (groupByClause != null) {
+            strBuilder.append(" group by ");
+            strBuilder.append(groupByClause.toSql());
+        }
+        // Having clause
+        if (havingClause != null) {
+            strBuilder.append(" having ");
+            strBuilder.append(havingClause.toDigest());
+        }
+        // Order By clause
+        if (orderByElements != null) {
+            strBuilder.append(" order by ");
+            for (int i = 0; i < orderByElements.size(); ++i) {
+                strBuilder.append(orderByElements.get(i).getExpr().toDigest());
+                if (sortInfo != null) {
+                    strBuilder.append((sortInfo.getIsAscOrder().get(i)) ? " asc" : " desc");
+                }
+                strBuilder.append((i + 1 != orderByElements.size()) ? ", " : "");
+            }
+        }
+        // Limit clause.
+        if (hasLimitClause()) {
+            strBuilder.append(limitElement.toDigest());
+        }
+
         return strBuilder.toString();
     }
 

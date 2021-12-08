@@ -7,15 +7,18 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 
 import java.util.Objects;
 
 public class PhysicalLimitOperator extends PhysicalOperator {
     private final long offset;
 
-    public PhysicalLimitOperator(long offset, long limit) {
+    public PhysicalLimitOperator(long offset, long limit, Projection projection) {
         super(OperatorType.PHYSICAL_LIMIT, GatherDistributionSpec.createGatherDistributionSpec(limit));
         this.offset = offset;
+        this.limit = limit;
+        this.projection = projection;
     }
 
     @Override

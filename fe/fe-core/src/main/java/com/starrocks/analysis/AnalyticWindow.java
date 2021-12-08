@@ -171,6 +171,17 @@ public class AnalyticWindow {
             return sb.toString();
         }
 
+        public String toDigest() {
+            StringBuilder sb = new StringBuilder();
+
+            if (expr != null) {
+                sb.append(expr.toDigest()).append(" ");
+            }
+
+            sb.append(type.toString());
+            return sb.toString();
+        }
+
         public TAnalyticWindowBoundary toThrift(Type windowType) {
             TAnalyticWindowBoundary result = new TAnalyticWindowBoundary(type.toThrift());
 
@@ -302,6 +313,20 @@ public class AnalyticWindow {
         } else {
             sb.append("BETWEEN ").append(leftBoundary_.toSql()).append(" AND ");
             sb.append(rightBoundary_.toSql());
+        }
+
+        return sb.toString();
+    }
+
+    public String toDigest() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(type_.toString().toLowerCase()).append(" ");
+
+        if (rightBoundary_ == null) {
+            sb.append(leftBoundary_.toDigest());
+        } else {
+            sb.append("between ").append(leftBoundary_.toDigest()).append(" and ");
+            sb.append(rightBoundary_.toDigest());
         }
 
         return sb.toString();

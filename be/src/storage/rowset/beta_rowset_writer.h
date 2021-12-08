@@ -40,52 +40,19 @@ class SegmentWriter;
 class BetaRowsetWriter : public RowsetWriter {
 public:
     explicit BetaRowsetWriter(const RowsetWriterContext& context);
-
-    ~BetaRowsetWriter() override;
+    ~BetaRowsetWriter() override = default;
 
     OLAPStatus init() override;
-
-    OLAPStatus add_row(const RowCursor& row) override { return _add_row(row); }
-
-    // For Memtable::flush()
-    OLAPStatus add_row(const ContiguousRow& row) override { return _add_row(row); }
-
-    OLAPStatus add_chunk(const vectorized::Chunk& chunk) override;
-
-    OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override;
-
-    OLAPStatus flush_chunk(const vectorized::Chunk& chunk) override;
-
-    OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
-
-    // add rowset by create hard link
-    OLAPStatus add_rowset(RowsetSharedPtr rowset) override;
-
-    OLAPStatus add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
-                                                   const SchemaMapping& schema_mapping) override;
-
-    OLAPStatus flush() override;
 
     RowsetSharedPtr build() override;
 
     Version version() override { return _context.version; }
-
     int64_t num_rows() override { return _num_rows_written; }
-
     int64_t total_data_size() override { return _total_data_size; }
-
     RowsetId rowset_id() override { return _context.rowset_id; }
 
-private:
-    template <typename RowType>
-    OLAPStatus _add_row(const RowType& row);
-
-    std::unique_ptr<segment_v2::SegmentWriter> _create_segment_writer();
-
-    OLAPStatus _flush_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* segment_writer);
-    Status _flush_src_rssids();
-
-    Status _final_merge();
+protected:
+    Status flush_src_rssids(uint32_t segment_id);
 
     RowsetWriterContext _context;
     std::shared_ptr<RowsetMeta> _rowset_meta;
@@ -94,7 +61,6 @@ private:
     int _num_segment;
     vector<bool> _segment_has_deletes;
     vector<std::string> _tmp_segment_files;
-    std::unique_ptr<segment_v2::SegmentWriter> _segment_writer;
     // mutex lock for vectorized add chunk and flush
     std::mutex _lock;
 
@@ -103,13 +69,67 @@ private:
     int64_t _total_row_size;
     int64_t _total_data_size;
     int64_t _total_index_size;
-    // TODO rowset's Zonemap
 
     // used for updatable tablet's compaction
     std::unique_ptr<vector<uint32_t>> _src_rssids;
 
     bool _is_pending = false;
     bool _already_built = false;
+};
+
+// Chunk contains all schema columns data.
+class HorizontalBetaRowsetWriter final : public BetaRowsetWriter {
+public:
+    explicit HorizontalBetaRowsetWriter(const RowsetWriterContext& context);
+    ~HorizontalBetaRowsetWriter() override;
+
+    OLAPStatus add_chunk(const vectorized::Chunk& chunk) override;
+    OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override;
+
+    OLAPStatus flush_chunk(const vectorized::Chunk& chunk) override;
+    OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
+
+    // add rowset by create hard link
+    OLAPStatus add_rowset(RowsetSharedPtr rowset) override;
+    OLAPStatus add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
+                                                   const SchemaMapping& schema_mapping) override;
+
+    OLAPStatus flush() override;
+
+    RowsetSharedPtr build() override;
+
+private:
+    std::unique_ptr<segment_v2::SegmentWriter> _create_segment_writer();
+
+    OLAPStatus _flush_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* segment_writer);
+
+    Status _final_merge();
+
+    std::unique_ptr<segment_v2::SegmentWriter> _segment_writer;
+};
+
+// Chunk contains partial columns data corresponding to column_indexes.
+class VerticalBetaRowsetWriter final : public BetaRowsetWriter {
+public:
+    explicit VerticalBetaRowsetWriter(const RowsetWriterContext& context);
+    ~VerticalBetaRowsetWriter() override;
+
+    OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                           bool is_key) override;
+    OLAPStatus add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                                      const std::vector<uint32_t>& rssid) override;
+
+    OLAPStatus flush_columns() override;
+    OLAPStatus final_flush() override;
+
+private:
+    std::unique_ptr<segment_v2::SegmentWriter> _create_segment_writer(const std::vector<uint32_t>& column_indexes,
+                                                                      bool is_key);
+
+    OLAPStatus _flush_columns(std::unique_ptr<segment_v2::SegmentWriter>* segment_writer);
+
+    std::vector<std::unique_ptr<segment_v2::SegmentWriter>> _segment_writers;
+    size_t _current_writer_index = 0;
 };
 
 } // namespace starrocks

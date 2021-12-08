@@ -36,9 +36,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -287,10 +289,6 @@ public class Util {
         return Math.abs((int) adler32.getValue());
     }
 
-    public static long generateVersionHash() {
-        return Math.abs(new Random().nextLong());
-    }
-
     public static int generateSchemaHash() {
         return Math.abs(new Random().nextInt());
     }
@@ -418,6 +416,22 @@ public class Util {
         conn.setConnectTimeout(connectTimeoutMs);
         conn.setReadTimeout(readTimeoutMs);
         return conn.getInputStream();
+    }
+
+    public static void validateMetastoreUris(String uris) {
+        URI[] parsedUris = Arrays.stream(uris.split(",")).map(URI::create).toArray(URI[]::new);
+        for (URI uri : parsedUris) {
+            if (Strings.isNullOrEmpty(uri.getScheme()) || !uri.getScheme().equals("thrift")) {
+                throw new IllegalArgumentException("Invalid scheme of URI in hive.metastore.uris: " + uri +
+                        " it should be thrift.");
+            }
+            if (Strings.isNullOrEmpty(uri.getHost())) {
+                throw new IllegalArgumentException("Invalid host of URI in hive.metastore.uris URI: " + uri);
+            }
+            if (uri.getPort() == -1) {
+                throw new IllegalArgumentException("Invalid port of URI in hive.metastore.uris URI: " + uri);
+            }
+        }
     }
 }
 

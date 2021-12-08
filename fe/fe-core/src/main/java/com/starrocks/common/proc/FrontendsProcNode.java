@@ -125,7 +125,12 @@ public class FrontendsProcNode implements ProcNodeInterface {
             } else {
                 info.add("NULL");
             }
-            info.add(fe.getFeVersion());
+
+            if (fe.getFeVersion() == null) {
+                info.add("NULL");
+            } else {
+                info.add(fe.getFeVersion());
+            }
 
             infos.add(info);
         }

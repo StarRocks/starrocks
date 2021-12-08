@@ -31,25 +31,30 @@
 namespace starrocks {
 
 // RefCountClosure with call back
-template <typename T>
+template <typename T, typename C = void>
 class CallBackClosure : public google::protobuf::Closure {
 public:
-    CallBackClosure() : _refs(0) {}
+    CallBackClosure(const C& ctx) : _ctx(ctx) {}
     ~CallBackClosure() override = default;
+
+    bool is_in_flight() { return _refs > 0; }
+
+    void ref() {
+        DCHECK_EQ(_refs, 0);
+        ++_refs;
+    }
+
+    void unref() {
+        DCHECK_EQ(_refs, 1);
+        --_refs;
+    }
 
     // Disallow copy and assignment.
     CallBackClosure(const CallBackClosure& other) = delete;
     CallBackClosure& operator=(const CallBackClosure& other) = delete;
 
-    void ref() { _refs.fetch_add(1); }
-
-    // If unref() returns true, this object should be delete
-    bool unref() { return _refs.fetch_sub(1) == 1; }
-
-    bool has_in_flight_rpc() { return _refs > 1; }
-
     void addFailedHandler(std::function<void()> fn) { _failed_handler = std::move(fn); }
-    void addSuccessHandler(std::function<void(const T&)> fn) { _success_handler = fn; }
+    void addSuccessHandler(std::function<void(const C&, const T&)> fn) { _success_handler = fn; }
 
     void Run() noexcept override {
         try {
@@ -58,10 +63,7 @@ public:
                              << ", error_text=" << cntl.ErrorText();
                 _failed_handler();
             } else {
-                _success_handler(result);
-            }
-            if (unref()) {
-                delete this;
+                _success_handler(_ctx, result);
             }
         } catch (const std::exception& exp) {
             LOG(FATAL) << "[ExchangeSinkOperator] Callback error: " << exp.what();
@@ -74,8 +76,9 @@ public:
     T result;
 
 private:
-    std::atomic<int> _refs;
+    const C _ctx;
+    std::atomic<int> _refs = 0;
     std::function<void()> _failed_handler;
-    std::function<void(const T&)> _success_handler;
+    std::function<void(const C&, const T&)> _success_handler;
 };
 } // namespace starrocks

@@ -19,16 +19,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_RUNTIME_PROFILE_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_RUNTIME_PROFILE_H
+#pragma once
 
 #include <sys/resource.h>
 #include <sys/time.h> // NOLINT
 
 #include <atomic>
-#include <boost/thread/thread.hpp>
 #include <functional>
 #include <iostream>
+#include <thread>
 #include <utility>
 
 #include "common/compiler_util.h"
@@ -258,6 +257,8 @@ public:
 
     RuntimeProfile* parent() const { return _parent; }
 
+    void reset_parent() { _parent = nullptr; }
+
     // Adds a child profile.  This is thread safe.
     // 'indent' indicates whether the child will be printed w/ extra indentation
     // relative to the parent.
@@ -273,6 +274,12 @@ public:
     //
     // [thread-safe]
     RuntimeProfile* create_child(const std::string& name, bool indent = true, bool prepend = false);
+
+    // Remove childs
+    void remove_childs();
+
+    // Reverse childs
+    void reverse_childs();
 
     // Sorts all children according to a custom comparator. Does not
     // invalidate pointers to profiles.
@@ -541,7 +548,7 @@ private:
         volatile bool _done{false};
 
         // Thread performing asynchronous updates.
-        std::unique_ptr<boost::thread> update_thread;
+        std::unique_ptr<std::thread> update_thread;
 
         // A map of the dst (rate) counter to the src counter and elapsed time.
         typedef std::map<Counter*, RateCounterInfo> RateCounterMap;
@@ -680,5 +687,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

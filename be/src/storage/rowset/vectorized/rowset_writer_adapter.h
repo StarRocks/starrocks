@@ -4,7 +4,6 @@
 
 #include <memory>
 
-#include "storage/row_cursor.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/vectorized/convert_helper.h"
 
@@ -23,10 +22,6 @@ public:
     ~RowsetWriterAdapter() override = default;
 
     OLAPStatus init() override;
-
-    OLAPStatus add_row(const RowCursor& row) override;
-
-    OLAPStatus add_row(const ContiguousRow& row) override;
 
     OLAPStatus add_chunk(const vectorized::Chunk& chunk) override;
 
@@ -58,15 +53,12 @@ public:
     RowsetId rowset_id() override { return _writer->rowset_id(); }
 
 private:
-    OLAPStatus _init_row_converter();
     OLAPStatus _init_chunk_converter();
 
     std::unique_ptr<TabletSchema> _in_schema;
     std::unique_ptr<TabletSchema> _out_schema;
     std::unique_ptr<RowsetWriter> _writer;
-    std::unique_ptr<RowConverter> _row_converter;
     std::unique_ptr<ChunkConverter> _chunk_converter;
-    std::unique_ptr<RowCursor> _row;
 
     OLAPStatus _status = OLAP_SUCCESS;
 };

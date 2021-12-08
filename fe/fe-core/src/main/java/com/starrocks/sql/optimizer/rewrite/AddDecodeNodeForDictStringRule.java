@@ -6,6 +6,7 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
@@ -51,6 +52,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
 
@@ -81,6 +83,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         boolean hasEncoded = false;
         final ColumnRefFactory columnRefFactory;
         final Map<Long, List<Integer>> tableIdToStringColumnIds;
+        final Set<Integer> allStringColumnIds;
         // For the low cardinality string columns that have applied global dict optimization
         Map<Integer, Integer> stringColumnIdToDictColumnIds;
         // The string functions have applied global dict optimization
@@ -98,6 +101,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             stringFunctions = Maps.newHashMap();
             globalDicts = Lists.newArrayList();
             disableDictOptimizeColumns = new ColumnRefSet();
+            allStringColumnIds = Sets.newHashSet();
+            for (List<Integer> ids : tableIdToStringColumnIds.values()) {
+                allStringColumnIds.addAll(ids);
+            }
         }
 
         public void clear() {
@@ -135,9 +142,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         private void visitProjectionBefore(OptExpression optExpression, DecodeContext context) {
             if (optExpression.getOp().getProjection() != null) {
-                context.needEncode = true;
                 Projection projection = optExpression.getOp().getProjection();
-                projection.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
+                context.needEncode = context.needEncode || projection.needApplyStringDict(context.allStringColumnIds);
+                if (context.needEncode) {
+                    projection.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
+                }
             }
         }
 
@@ -267,7 +276,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         newDictColumn = context.columnRefFactory.create(
                                 stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
                     }
-
                     if (newOutputColumns.contains(stringColumn)) {
                         newOutputColumns.remove(stringColumn);
                         newOutputColumns.add(newDictColumn);
@@ -432,8 +440,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap(aggOperator.getAggregations());
             for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggOperator.getAggregations().entrySet()) {
-                if ((kv.getValue().getFnName().equals(FunctionSet.COUNT) && !kv.getValue().getChildren().isEmpty())
-                        || kv.getValue().getFnName().equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
+
+                boolean canApplyDictDecodeOpt = (kv.getValue().getUsedColumns().cardinality() > 0) &&
+                        (kv.getValue().getFnName().equals(FunctionSet.COUNT) ||
+                                kv.getValue().getFnName().equals(FunctionSet.MULTI_DISTINCT_COUNT));
+                if (canApplyDictDecodeOpt) {
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
                     if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
                         Integer dictColumnId = context.stringColumnIdToDictColumnIds.get(columnId);
@@ -661,7 +672,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             }
         }
         PhysicalDecodeOperator decodeOperator = new PhysicalDecodeOperator(ImmutableMap.copyOf(dictToStrings),
-                context.stringFunctions);
+                Maps.newHashMap(context.stringFunctions));
+        decodeOperator.setLimit(childExpr.get(0).getOp().getLimit());
         OptExpression result = OptExpression.create(decodeOperator, childExpr);
         result.setStatistics(childExpr.get(0).getStatistics());
         result.setLogicalProperty(childExpr.get(0).getLogicalProperty());
@@ -680,7 +692,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Boolean visitCall(CallOperator call, Void context) {
-            if (call.getUsedColumns().cardinality() > 1) {
+            // Can not apply it on calling function on constant value such as `hex(10)`
+            if (call.getUsedColumns().cardinality() != 1) {
                 return false;
             }
             if (!call.getFunction().isCouldApplyDictOptimize()) {

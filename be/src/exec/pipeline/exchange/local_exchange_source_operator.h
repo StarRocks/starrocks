@@ -28,8 +28,9 @@ class LocalExchangeSourceOperator final : public SourceOperator {
     };
 
 public:
-    LocalExchangeSourceOperator(int32_t id, const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
-            : SourceOperator(id, "local_exchange_source", -1), _memory_manager(memory_manager) {}
+    LocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
+            : SourceOperator(factory, id, "local_exchange_source", plan_node_id), _memory_manager(memory_manager) {}
 
     Status add_chunk(vectorized::ChunkPtr chunk);
 
@@ -67,14 +68,16 @@ private:
 
 class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    LocalExchangeSourceOperatorFactory(int32_t id, std::shared_ptr<LocalExchangeMemoryManager> memory_manager)
-            : SourceOperatorFactory(id, "local_exchange_source", -1), _memory_manager(std::move(memory_manager)) {}
+    LocalExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id,
+                                       std::shared_ptr<LocalExchangeMemoryManager> memory_manager)
+            : SourceOperatorFactory(id, "local_exchange_source", plan_node_id),
+              _memory_manager(std::move(memory_manager)) {}
 
     ~LocalExchangeSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         std::shared_ptr<LocalExchangeSourceOperator> source =
-                std::make_shared<LocalExchangeSourceOperator>(_id, _memory_manager);
+                std::make_shared<LocalExchangeSourceOperator>(this, _id, _plan_node_id, _memory_manager);
         _sources.emplace_back(source.get());
         return source;
     }

@@ -7,6 +7,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +28,8 @@ public abstract class QueryRelation extends Relation {
      * The alias will also be recorded in columnOutputNames
      */
     private final List<String> columnOutputNames;
+
+    private final List<CTERelation> cteRelations = new ArrayList<>();
 
     public QueryRelation(List<Expr> outputExpr, Scope outputScope, List<String> columnOutputNames) {
         super(outputScope.getRelationFields());
@@ -58,6 +61,14 @@ public abstract class QueryRelation extends Relation {
 
     public Map<Expr, FieldId> getColumnReferences() {
         return Maps.newHashMap();
+    }
+
+    public void addCTERelation(CTERelation cteRelation) {
+        this.cteRelations.add(cteRelation);
+    }
+
+    public List<CTERelation> getCteRelations() {
+        return cteRelations;
     }
 
     public <R, C> R accept(RelationVisitor<R, C> visitor, C context) {

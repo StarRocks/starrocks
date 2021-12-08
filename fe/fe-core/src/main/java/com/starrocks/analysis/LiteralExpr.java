@@ -159,6 +159,11 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         return buffer;
     }
 
+    @Override
+    public String toDigestImpl() {
+        return " ? ";
+    }
+
     // Swaps the sign of numeric literals.
     // Throws for non-numeric literals.
     public void swapSign() throws NotImplementedException {
@@ -185,7 +190,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         if (!(obj instanceof LiteralExpr)) {
             return false;
         }
-        //TODO chenhao16, call super.equals()
+
         if ((obj instanceof StringLiteral && !(this instanceof StringLiteral))
                 || (this instanceof StringLiteral && !(obj instanceof StringLiteral))
                 || (obj instanceof DecimalLiteral && !(this instanceof DecimalLiteral))

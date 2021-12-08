@@ -20,6 +20,8 @@ namespace vectorized {
 
 class ColumnPredicate;
 
+static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
+
 // Params for TabletReader
 struct TabletReaderParams {
     TabletReaderParams();
@@ -51,6 +53,7 @@ struct TabletReaderParams {
     int chunk_size = 1024;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+    const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
 };
 
 } // namespace vectorized

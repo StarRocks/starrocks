@@ -29,6 +29,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPipelineProfileMode;
 import com.starrocks.thrift.TQueryOptions;
 import org.json.JSONObject;
 
@@ -113,13 +114,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_QUERY_EXPIRE_SECONDS = "pipeline_query_expire_seconds";
+    public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
 
     // disable join reorder
     public static final String DISABLE_JOIN_REORDER = "disable_join_reorder";
+
+    public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE = "enable_filter_unused_columns_in_scan_stage";
 
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
@@ -164,7 +167,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
-    public static final String ENABLE_FILTER_NULL_VALUES = "enable_filter_null_values";
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
@@ -307,10 +309,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
-    // a query that can not make any progress for more than pipelineQueryExpireSeconds
-    // (300s in default) will be canceled.
-    @VariableMgr.VarAttr(name = PIPELINE_QUERY_EXPIRE_SECONDS)
-    private int pipelineQueryExpireSeconds = 300;
+    @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
+    private String pipelineProfileMode = "brief";
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
@@ -340,6 +340,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
+    private boolean enableFilterUnusedColumnsInScanStage = false;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -405,9 +408,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
-
-    @VariableMgr.VarAttr(name = ENABLE_FILTER_NULL_VALUES)
-    private boolean enableFilterNullValues = false;
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
@@ -588,6 +588,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.disableJoinReorder = false;
     }
 
+    public boolean isAbleFilterUnusedColumnsInScanStage() {
+        return enableFilterUnusedColumnsInScanStage;
+    }
+
+    public void disableTrimOnlyFilteredColumnsInScanStage() {
+        this.enableFilterUnusedColumnsInScanStage = true;
+    }
+
+    public void enableTrimOnlyFilteredColumnsInScanStage() {
+        this.enableFilterUnusedColumnsInScanStage = false;
+    }
+
     public boolean isCboEnableDPJoinReorder() {
         return cboEnableDPJoinReorder;
     }
@@ -728,12 +740,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableColumnExprPredicate;
     }
 
-    public boolean getEnableFilterNullValues() {
-        return enableFilterNullValues;
-    }
 
+    /**
+     * check cbo_cte_reuse && enable_pipeline
+     */
     public boolean isCboCteReuse() {
-        return cboCteReuse;
+        return cboCteReuse && enablePipelineEngine;
     }
 
     public void setCboCteReuse(boolean cboCteReuse) {
@@ -779,7 +791,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setPipeline_dop(pipelineDop);
-        tResult.setPipeline_query_expire_seconds(pipelineQueryExpireSeconds);
+        if ("brief".equalsIgnoreCase(pipelineProfileMode)) {
+            tResult.setPipeline_profile_mode(TPipelineProfileMode.BRIEF);
+        } else {
+            tResult.setPipeline_profile_mode(TPipelineProfileMode.DETAIL);
+        }
         return tResult;
     }
 

@@ -1163,14 +1163,9 @@ public class SingleNodePlanner {
         // both sides (e.g. a = a). Such predicates have been generated from slot
         // equivalences and may incorrectly reject rows with nulls (IMPALA-1412/IMPALA-2643).
         // TODO(zc)
-        final Predicate<Expr> isIdentityPredicate = new Predicate<Expr>() {
-            @Override
-            public boolean apply(Expr expr) {
-                return com.starrocks.analysis.Predicate.isEquivalencePredicate(expr)
-                        && ((BinaryPredicate) expr).isInferred()
-                        && expr.getChild(0).equals(expr.getChild(1));
-            }
-        };
+        final Predicate<Expr> isIdentityPredicate = expr -> com.starrocks.analysis.Predicate.isEquivalencePredicate(expr)
+                && ((BinaryPredicate) expr).isInferred()
+                && expr.getChild(0).equals(expr.getChild(1));
         Iterables.removeIf(viewPredicates, isIdentityPredicate);
 
         // Migrate the conjuncts by marking the original ones as assigned, and

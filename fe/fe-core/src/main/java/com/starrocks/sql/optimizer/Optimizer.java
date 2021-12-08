@@ -16,6 +16,7 @@ import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinForceLimitRule;
+import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.task.CTEContext;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -63,11 +65,14 @@ public class Optimizer {
         Memo memo = new Memo();
         memo.init(logicOperatorTree);
 
-        context = new OptimizerContext(memo, columnRefFactory, connectContext.getSessionVariable(),
-                connectContext.getDumpInfo());
+        CTEContext cteContext = new CTEContext();
+        cteContext.init(logicOperatorTree);
+        context = new OptimizerContext(memo, columnRefFactory, connectContext, cteContext);
 
-        TaskContext rootTaskContext = new TaskContext(context,
-                requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
+        ColumnRefSet requiredColumnsFull = ((ColumnRefSet) requiredColumns.clone());
+        requiredColumnsFull.union(cteContext.getAllRequiredColumns());
+
+        TaskContext rootTaskContext = new TaskContext(context, requiredProperty, requiredColumnsFull, Double.MAX_VALUE);
         context.addTaskContext(rootTaskContext);
 
         // Note: root group of memo maybe change after rewrite,
@@ -102,6 +107,7 @@ public class Optimizer {
         memo.replaceRewriteExpression(memo.getRootGroup(), tree);
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+        ruleRewriteOnlyOnce(memo, rootTaskContext, LimitPruneTabletsRule.getInstance());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
@@ -124,6 +130,11 @@ public class Optimizer {
 
         // Phase 3: optimize based on memo and group
         tree = memo.getRootGroup().extractLogicalTree();
+
+        // reset cte context
+        cteContext = new CTEContext();
+        cteContext.init(tree);
+        context.setCteContext(cteContext);
 
         if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
             if (Utils.countInnerJoinNodeSize(tree) >

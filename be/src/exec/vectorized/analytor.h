@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <queue>
+
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"

@@ -104,8 +104,8 @@ Cond::~Cond() {
     for (const auto& it : operand_set) {
         delete it;
     }
-    min_value_filed = nullptr;
-    max_value_filed = nullptr;
+    min_value_field = nullptr;
+    max_value_field = nullptr;
 }
 
 OLAPStatus Cond::init(const TCondition& tcond, const TabletColumn& column) {
@@ -160,11 +160,11 @@ OLAPStatus Cond::init(const TCondition& tcond, const TabletColumn& column) {
                              << " op_type=" << op;
                 return res;
             }
-            if (min_value_filed == nullptr || f->cmp(min_value_filed) < 0) {
-                min_value_filed = f.get();
+            if (min_value_field == nullptr || f->cmp(min_value_field) < 0) {
+                min_value_field = f.get();
             }
-            if (max_value_filed == nullptr || f->cmp(max_value_filed) > 0) {
-                max_value_filed = f.get();
+            if (max_value_field == nullptr || f->cmp(max_value_field) > 0) {
+                max_value_field = f.get();
             }
             auto insert_result = operand_set.insert(f.get());
             if (!insert_result.second) {
@@ -200,13 +200,13 @@ bool Cond::eval(const RowCursorCell& cell) const {
     case OP_GE:
         return operand_field->field()->compare_cell(*operand_field, cell) <= 0;
     case OP_IN: {
-        WrapperField wrapperField(const_cast<Field*>(min_value_filed->field()), cell);
+        WrapperField wrapperField(const_cast<Field*>(min_value_field->field()), cell);
         auto ret = operand_set.find(&wrapperField) != operand_set.end();
         wrapperField.release_field();
         return ret;
     }
     case OP_NOT_IN: {
-        WrapperField wrapperField(const_cast<Field*>(min_value_filed->field()), cell);
+        WrapperField wrapperField(const_cast<Field*>(min_value_field->field()), cell);
         auto ret = operand_set.find(&wrapperField) == operand_set.end();
         wrapperField.release_field();
         return ret;
@@ -250,10 +250,10 @@ bool Cond::eval(const std::pair<WrapperField*, WrapperField*>& statistic) const 
         return operand_field->cmp(statistic.second) <= 0;
     }
     case OP_IN: {
-        return min_value_filed->cmp(statistic.second) <= 0 && max_value_filed->cmp(statistic.first) >= 0;
+        return min_value_field->cmp(statistic.second) <= 0 && max_value_field->cmp(statistic.first) >= 0;
     }
     case OP_NOT_IN: {
-        return min_value_filed->cmp(statistic.second) > 0 || max_value_filed->cmp(statistic.first) < 0;
+        return min_value_field->cmp(statistic.second) > 0 || max_value_field->cmp(statistic.first) < 0;
     }
     case OP_IS: {
         return operand_field->is_null() ? statistic.first->is_null() : !statistic.second->is_null();
@@ -354,7 +354,7 @@ int Cond::del_eval(const std::pair<WrapperField*, WrapperField*>& stat) const {
                 ret = DEL_NOT_SATISFIED;
             }
         } else {
-            if (min_value_filed->cmp(stat.second) <= 0 && max_value_filed->cmp(stat.first) >= 0) {
+            if (min_value_field->cmp(stat.second) <= 0 && max_value_field->cmp(stat.first) >= 0) {
                 ret = DEL_PARTIAL_SATISFIED;
             }
         }
@@ -368,7 +368,7 @@ int Cond::del_eval(const std::pair<WrapperField*, WrapperField*>& stat) const {
                 ret = DEL_NOT_SATISFIED;
             }
         } else {
-            if (min_value_filed->cmp(stat.second) > 0 || max_value_filed->cmp(stat.first) < 0) {
+            if (min_value_field->cmp(stat.second) > 0 || max_value_field->cmp(stat.first) < 0) {
                 ret = DEL_PARTIAL_SATISFIED;
             }
         }

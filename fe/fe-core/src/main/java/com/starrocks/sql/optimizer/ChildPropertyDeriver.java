@@ -24,6 +24,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
@@ -34,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -949,7 +953,16 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalValues(PhysicalValuesOperator node, ExpressionContext context) {
-        outputInputProps.add(OutputInputProperty.of(distributeRequirements()));
+        // Pass through the requirements to the child
+        if (getRequiredLocalDesc().isPresent()) {
+            return visitOperator(node, context);
+        }
+        // Can not support required property directly, this will generate plan fragment like:
+        //            join(colocate)
+        //            /            \
+        //         Es/Hive     Union/Empty
+        // This PlanFragment would use ColocatedBackendSelector which is not been allowed.
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
         return visitOperator(node, context);
     }
 
@@ -993,6 +1006,30 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         outputInputProps.add(OutputInputProperty
                 .of(createLimitGatherProperty(node.getLimit()), createLimitGatherProperty(node.getLimit())));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
+        outputInputProps.add(OutputInputProperty.of(requirements, PhysicalPropertySet.EMPTY, requirements));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
+        outputInputProps.add(OutputInputProperty.of(requirements, requirements));
         return visitOperator(node, context);
     }
 

@@ -8,25 +8,26 @@ namespace starrocks {
 namespace pipeline {
 class LimitOperator final : public Operator {
 public:
-    LimitOperator(int32_t id, int32_t plan_node_id, int64_t limit)
-            : Operator(id, "limit", plan_node_id), _limit(limit) {}
+    LimitOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, std::atomic<int64_t>& limit)
+            : Operator(factory, id, "limit", plan_node_id), _limit(limit) {}
 
     ~LimitOperator() override = default;
 
     bool has_output() const override { return _cur_chunk != nullptr; }
 
-    bool need_input() const override { return _limit != 0 && _cur_chunk == nullptr; }
+    bool need_input() const override { return !_is_finished && _limit != 0 && _cur_chunk == nullptr; }
 
-    bool is_finished() const override { return _limit == 0 && _cur_chunk == nullptr; }
+    bool is_finished() const override { return (_is_finished || _limit == 0) && _cur_chunk == nullptr; }
 
-    void set_finishing(RuntimeState* state) override { _limit = 0; }
+    void set_finishing(RuntimeState* state) override { _is_finished = true; }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    int64_t _limit = 0;
+    bool _is_finished = false;
+    std::atomic<int64_t>& _limit;
     vectorized::ChunkPtr _cur_chunk = nullptr;
 };
 
@@ -38,11 +39,11 @@ public:
     ~LimitOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LimitOperator>(_id, _plan_node_id, _limit);
+        return std::make_shared<LimitOperator>(this, _id, _plan_node_id, _limit);
     }
 
 private:
-    int64_t _limit = 0;
+    std::atomic<int64_t> _limit;
 };
 
 } // namespace pipeline

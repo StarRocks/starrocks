@@ -53,8 +53,6 @@ public abstract class SparkRDDAggregator<T> implements Serializable {
         return value;
     }
 
-    ;
-
     public static SparkRDDAggregator buildAggregator(EtlJobConfig.EtlColumn column) throws SparkDppException {
         String aggType = StringUtils.lowerCase(column.aggregationType);
         String columnType = StringUtils.lowerCase(column.columnType);

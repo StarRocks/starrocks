@@ -97,10 +97,11 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(const ColumnReaderOptions& opts, ColumnMetaPB* meta,
-                                                          const std::string& file_name);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(MemTracker* mem_tracker, const ColumnReaderOptions& opts,
+                                                          ColumnMetaPB* meta, const std::string& file_name);
 
-    ColumnReader(const private_type&, const ColumnReaderOptions& opts, const std::string& file_name);
+    ColumnReader(MemTracker* mem_tracker, const private_type&, const ColumnReaderOptions& opts,
+                 const std::string& file_name);
 
     ~ColumnReader();
 
@@ -154,6 +155,8 @@ public:
 
     size_t num_rows() const { return _num_rows; }
 
+    int32_t num_data_pages() { return _ordinal_index.reader ? _ordinal_index.reader->num_data_pages() : 0; }
+
     ///-----------------------------------
     /// vectorized APIs
     ///-----------------------------------
@@ -175,9 +178,7 @@ public:
 
     uint32_t version() const { return _opts.storage_format_version; }
 
-    // Read and load necessary column indexes into memory if it hasn't been loaded.
-    // May be called multiple times, subsequent calls will no op.
-    Status ensure_index_loaded(ReaderType reader_type);
+    Status load_ordinal_index_once();
 
 private:
     struct private_type {
@@ -211,6 +212,10 @@ private:
 
     Status _init(ColumnMetaPB* meta);
 
+    Status _load_zone_map_index_once();
+    Status _load_bitmap_index_once();
+    Status _load_bloom_filter_index_once();
+
     Status _load_zone_map_index(bool use_page_cache, bool kept_in_memory);
     Status _load_ordinal_index(bool use_page_cache, bool kept_in_memory);
     Status _load_bitmap_index(bool use_page_cache, bool kept_in_memory);
@@ -235,6 +240,8 @@ private:
     Status _zone_map_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
                             const vectorized::ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
+
+    MemTracker* _mem_tracker = nullptr;
 
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
@@ -264,8 +271,10 @@ private:
     // The ordinal index must be loaded before read operation.
     // zonemap, bitmap, bloomfilter is only necessary for query.
     // the other operations can not load these indices.
-    StarRocksCallOnce<Status> _load_ordinal_index_once;
-    StarRocksCallOnce<Status> _load_indices_once;
+    StarRocksCallOnce<Status> _ordinal_index_once;
+    StarRocksCallOnce<Status> _zonemap_index_once;
+    StarRocksCallOnce<Status> _bitmap_index_once;
+    StarRocksCallOnce<Status> _bloomfilter_index_once;
 
     std::bitset<16> _flags;
 };

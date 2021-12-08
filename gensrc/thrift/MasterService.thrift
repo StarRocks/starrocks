@@ -31,7 +31,7 @@ struct TTabletInfo {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TVersion version
-    4: required Types.TVersionHash version_hash
+    4: required Types.TVersionHash version_hash // Deprecated
     5: required Types.TCount row_count
     6: required Types.TSize data_size
     7: optional Types.TStorageMedium storage_medium
@@ -53,7 +53,7 @@ struct TFinishTaskRequest {
     6: optional list<TTabletInfo> finish_tablet_infos
     7: optional i64 tablet_checksum
     8: optional i64 request_version
-    9: optional i64 request_version_hash
+    9: optional i64 request_version_hash // Deprecated
     10: optional string snapshot_path
     11: optional list<Types.TTabletId> error_tablet_ids
     12: optional list<string> snapshot_files
