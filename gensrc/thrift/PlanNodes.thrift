@@ -522,6 +522,10 @@ struct TSortNode {
   20: optional bool has_outer_join_child
   // For profile attributes' printing: `Sort Keys`
   21: optional string sql_sort_keys
+  // For pipeline execution engine, interpolate local shuffle before PartitionSortOperator
+  // in order to eliminate time-consuming LocalMergeSortSourceOperator and parallelize
+  // AnalyticNode
+  22: optional list<Exprs.TExpr> analytic_partition_exprs
 }
 
 enum TAnalyticWindowType {
