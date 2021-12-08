@@ -107,7 +107,6 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
-        ./storage/comparison_predicate_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
@@ -115,10 +114,8 @@ set(EXEC_FILES
         ./storage/fs/file_block_manager_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
-        ./storage/in_list_predicate_test.cpp
         ./storage/key_coder_test.cpp
         ./storage/lru_cache_test.cpp
-        ./storage/null_predicate_test.cpp
         ./storage/kv_store_test.cpp
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
