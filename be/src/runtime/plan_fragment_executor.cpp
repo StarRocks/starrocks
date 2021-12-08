@@ -359,7 +359,11 @@ Status PlanFragmentExecutor::_get_next_internal_vectorized(vectorized::ChunkPtr*
     // If we set chunk to nullptr, means this fragment read done
     while (!_done) {
         SCOPED_TIMER(profile()->total_time_counter());
-        RETURN_IF_ERROR(_plan->get_next(_runtime_state, &_chunk, &_done));
+        try {
+            RETURN_IF_ERROR(_plan->get_next(_runtime_state, &_chunk, &_done));
+        } catch (std::bad_alloc const&) {
+            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+        }
         if (_done) {
             *chunk = nullptr;
             return Status::OK();
