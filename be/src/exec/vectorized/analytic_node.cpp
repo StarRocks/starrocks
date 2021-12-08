@@ -311,7 +311,7 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
     size_t chunk_size = child_chunk->num_rows();
     _analytor->update_input_rows(chunk_size);
 
-    {
+    try {
         for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
             for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
                 ColumnPtr column = _analytor->agg_expr_ctxs()[i][j]->evaluate(child_chunk.get());
@@ -335,6 +335,9 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
             ColumnPtr column = _analytor->order_ctxs()[i]->evaluate(child_chunk.get());
             _analytor->append_column(chunk_size, _analytor->order_columns()[i].get(), column);
         }
+        RETURN_IF_ERROR(state->check_mem_limit("AnalyticNode"));
+    } catch (std::bad_alloc const&) {
+        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
     }
 
     _analytor->input_chunks().emplace_back(std::move(child_chunk));
