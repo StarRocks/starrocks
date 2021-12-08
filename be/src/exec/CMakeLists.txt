@@ -148,6 +148,7 @@ set(EXEC_FILES
     pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
+    pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_dispatcher.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
@@ -166,6 +167,7 @@ set(EXEC_FILES
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
+    pipeline/analysis/analytor_factory.cpp
     pipeline/table_function_operator.cpp
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
