@@ -453,6 +453,8 @@ public class BackupJobInfo implements Writable {
                 if (verbose) {
                     part.put("id", partInfo.id);
                     part.put("version", partInfo.version);
+                    // write a version_hash for compatibility
+                    part.put("version_hash", 0);
                     JSONObject indexes = new JSONObject();
                     part.put("indexes", indexes);
                     for (BackupIndexInfo idxInfo : partInfo.indexes.values()) {
