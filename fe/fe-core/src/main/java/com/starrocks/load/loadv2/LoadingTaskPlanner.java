@@ -114,27 +114,21 @@ public class LoadingTaskPlanner {
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         List<Column> destColumns = Lists.newArrayList();
         boolean isPrimaryKey = table.getKeysType() == KeysType.PRIMARY_KEYS;
-        if (isPrimaryKey) {
-            if (partialUpdate) {
-                if (fileGroups.size() > 1) {
-                    throw new DdlException("partial update only support single filegroup.");
-                } else if (fileGroups.size() == 1) {
-                    if (fileGroups.get(0).isNegative()) {
-                        throw new DdlException("Primary key table does not support negative load");
-                    }
-                    destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList());
-                } else {
-                    throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
+        if (isPrimaryKey && partialUpdate) {
+            if (fileGroups.size() > 1) {
+                throw new DdlException("partial update only support single filegroup.");
+            } else if (fileGroups.size() == 1) {
+                if (fileGroups.get(0).isNegative()) {
+                    throw new DdlException("Primary key table does not support negative load");
                 }
+                destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList());
             } else {
-                destColumns = table.getFullSchema();
+                throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
+        } else if (!isPrimaryKey && partialUpdate) {
+            throw new DdlException("Only primary key table support partial update");
         } else {
-            if (partialUpdate) {
-                throw new DdlException("Only primary key table support partial update");
-            } else {
-                destColumns = table.getFullSchema();
-            }
+            destColumns = table.getFullSchema();
         }
         for (Column col : destColumns) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
