@@ -45,7 +45,6 @@
 #include "runtime/thread_resource_mgr.h"
 #include "runtime/tuple_row.h"
 #include "storage/options.h"
-#include "storage/row.h"
 #include "testutil/desc_tbl_builder.h"
 #include "util/blocking_queue.hpp"
 #include "util/logging.h"

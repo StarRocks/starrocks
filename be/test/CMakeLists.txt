@@ -45,7 +45,6 @@ set(EXEC_FILES
         ./exec/parquet/metadata_test.cpp
         ./exec/parquet/group_reader_test.cpp
         ./exec/parquet/file_reader_test.cpp
-        ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
         ./exprs/vectorized/arithmetic_operation_test.cpp
         ./exprs/vectorized/array_element_expr_test.cpp
@@ -108,7 +107,6 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
-        ./storage/aggregate_func_test.cpp
         ./storage/comparison_predicate_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
@@ -126,9 +124,6 @@ set(EXEC_FILES
         ./storage/page_cache_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
-        ./storage/row_block_test.cpp
-        ./storage/row_block_v2_test.cpp
-        ./storage/row_cursor_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
         ./storage/rowset/segment_v2/binary_dict_page_test.cpp
         ./storage/rowset/segment_v2/binary_plain_page_test.cpp
@@ -143,7 +138,6 @@ set(EXEC_FILES
         ./storage/rowset/segment_v2/ordinal_page_index_test.cpp
         ./storage/rowset/segment_v2/plain_page_test.cpp
         ./storage/rowset/segment_v2/rle_page_test.cpp
-        ./storage/rowset/segment_v2/row_ranges_test.cpp
         ./storage/rowset/segment_v2/segment_test.cpp
         ./storage/rowset/segment_v2/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp

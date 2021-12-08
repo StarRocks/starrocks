@@ -2,7 +2,6 @@
 
 #include "storage/rowset/vectorized/rowset_writer_adapter.h"
 
-#include "storage/row.h"
 #include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/uint24.h"

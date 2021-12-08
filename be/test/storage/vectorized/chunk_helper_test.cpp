@@ -10,7 +10,6 @@
 #include "column/schema.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
-#include "storage/row_block2.h"
 #include "storage/schema.h"
 #include "util/logging.h"
 
@@ -26,7 +25,6 @@ public:
     void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
     void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
     void check_column(Column* column, FieldType type, size_t row_size);
-    void write_block(RowBlockV2& block, size_t row_size);
 
 private:
     FieldType _type[9] = {OLAP_FIELD_TYPE_TINYINT, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_INT,
@@ -207,31 +205,6 @@ void ChunkHelperTest::check_column(Column* column, FieldType type, size_t row_si
     }
     default:
         break;
-    }
-}
-
-void ChunkHelperTest::write_block(RowBlockV2& block, size_t row_size) {
-    for (size_t i = 0; i < row_size; i++) {
-        RowBlockRow row = block.row(i);
-        for (size_t j = 0; j < 9; j++) {
-            row.set_is_null(j, false);
-        }
-
-        *(int8_t*)row.mutable_cell_ptr(0) = i;
-        *(int16_t*)row.mutable_cell_ptr(1) = i * 10;
-        *(int32_t*)row.mutable_cell_ptr(2) = i * 100;
-        *(int64_t*)row.mutable_cell_ptr(3) = i * 1000;
-        *(int128_t*)row.mutable_cell_ptr(4) = i * 10000;
-        *(float*)row.mutable_cell_ptr(5) = i * 100000;
-        *(double*)row.mutable_cell_ptr(6) = i * 1000000;
-
-        std::string* str1 = new std::string(std::to_string(i * 10000000));
-        Slice slice1(str1->data(), str1->size());
-        *(Slice*)row.mutable_cell_ptr(7) = slice1;
-
-        std::string* str2 = new std::string(std::to_string(i * 100000000));
-        Slice slice2(str2->data(), str2->size());
-        *(Slice*)row.mutable_cell_ptr(8) = slice2;
     }
 }
 

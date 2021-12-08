@@ -24,9 +24,7 @@
 #include <vector>
 
 #include "runtime/descriptors.h"
-#include "storage/aggregate_func.h"
 #include "storage/field.h"
-#include "storage/row_cursor_cell.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 

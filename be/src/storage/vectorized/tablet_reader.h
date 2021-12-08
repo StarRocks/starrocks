@@ -5,8 +5,6 @@
 #include <vector>
 
 #include "column/chunk.h"
-#include "storage/olap_cond.h"
-#include "storage/row_cursor.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/tablet.h"

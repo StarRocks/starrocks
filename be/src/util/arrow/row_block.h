@@ -38,7 +38,6 @@ class RecordBatch;
 
 namespace starrocks {
 
-class RowBlockV2;
 class Schema;
 
 // Convert StarRocks Schema to Arrow Schema.
@@ -46,9 +45,5 @@ Status convert_to_arrow_schema(const Schema& row_desc, std::shared_ptr<arrow::Sc
 
 // Convert Arrow Schema to StarRocks Schema.
 Status convert_to_starrocks_schema(const arrow::Schema& schema, std::shared_ptr<Schema>* result);
-
-// Convert an Arrow RecordBatch to a StarRocks RowBlockV2. Schema should match
-// with RecordBatch's schema.
-Status convert_to_row_block(const arrow::RecordBatch& batch, const Schema& schema, std::shared_ptr<RowBlockV2>* result);
 
 } // namespace starrocks
