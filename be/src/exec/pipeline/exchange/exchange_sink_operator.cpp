@@ -310,7 +310,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 }
 
 bool ExchangeSinkOperator::is_finished() const {
-    return _is_finished && _buffer->is_finishing();
+    return _is_finished;
 }
 
 bool ExchangeSinkOperator::need_input() const {
@@ -321,8 +321,8 @@ bool ExchangeSinkOperator::pending_finish() const {
     return !_buffer->is_finished();
 }
 
-void ExchangeSinkOperator::set_finished(RuntimeState* state) {
-    _buffer->decrease_running_sinkers();
+void ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
+    _buffer->cancel_one_sinker();
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {

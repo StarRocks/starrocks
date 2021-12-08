@@ -73,7 +73,7 @@ void PipelineDriverPoller::run_internal() {
                 //
                 // If the fragment is expired when the source operator is already pending i/o task,
                 // The state of driver shouldn't be changed.
-                driver->finish_operators(driver->fragment_ctx()->runtime_state());
+                driver->cancel_operators(driver->fragment_ctx()->runtime_state());
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     ++driver_it;
@@ -85,7 +85,7 @@ void PipelineDriverPoller::run_internal() {
             } else if (!driver->pending_finish() && driver->fragment_ctx()->is_canceled()) {
                 // If the fragment is cancelled when the source operator is already pending i/o task,
                 // The state of driver shouldn't be changed.
-                driver->finish_operators(driver->fragment_ctx()->runtime_state());
+                driver->cancel_operators(driver->fragment_ctx()->runtime_state());
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     ++driver_it;

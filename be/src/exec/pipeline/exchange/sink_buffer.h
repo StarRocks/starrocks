@@ -39,7 +39,7 @@ public:
     SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations, size_t num_sinkers)
             : _mem_tracker(state->instance_mem_tracker()),
               _brpc_timeout_ms(std::min(3600, state->query_options().query_timeout) * 1000),
-              _num_remaining_sinkers(num_sinkers) {
+              _num_uncancelled_sinkers(num_sinkers) {
         for (const auto& dest : destinations) {
             const auto& dest_instance_id = dest.fragment_instance_id;
 
@@ -127,8 +127,6 @@ public:
                            [](const auto& entry) { return entry.second.size() > config::pipeline_io_buffer_size; });
     }
 
-    bool is_finishing() const { return _is_finishing; }
-
     bool is_finished() const {
         if (!_is_finishing) {
             return false;
@@ -137,8 +135,10 @@ public:
         return _num_sending_rpc == 0 && _num_in_flight_rpc == 0;
     }
 
-    void decrease_running_sinkers() {
-        if (--_num_remaining_sinkers == 0) {
+    // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
+    // the rest chunk request and EOS request needn't be sent anymore.
+    void cancel_one_sinker() {
+        if (--_num_uncancelled_sinkers == 0) {
             _is_finishing = true;
         }
     }
@@ -205,7 +205,7 @@ private:
     phmap::flat_hash_map<int64_t, size_t> _num_sinkers;
     phmap::flat_hash_map<int64_t, int64_t> _request_seqs;
     std::atomic<int32_t> _num_in_flight_rpc = 0;
-    std::atomic<int32_t> _num_remaining_sinkers;
+    std::atomic<int32_t> _num_uncancelled_sinkers;
     std::atomic<int32_t> _num_remaining_eos = 0;
 
     // The request needs the reference to the allocated finst id,
