@@ -69,8 +69,9 @@ void GlobalDriverDispatcher::run() {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 
             if (fragment_ctx->is_canceled()) {
-                VLOG_ROW << "[Driver] Canceled: driver=" << driver
-                         << ", error=" << fragment_ctx->final_status().to_string();
+                LOG(WARNING) << "[Driver] Canceled, query_id=" << print_id(driver->query_ctx()->query_id())
+                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                             << ", error=" << fragment_ctx->final_status().to_string();
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
@@ -92,7 +93,9 @@ void GlobalDriverDispatcher::run() {
             this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
 
             if (!status.ok()) {
-                VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
+                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                             << ", error=" << status.status().to_string();
                 query_ctx->cancel(status.status());
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {

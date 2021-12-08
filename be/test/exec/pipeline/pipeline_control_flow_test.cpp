@@ -296,7 +296,7 @@ public:
     ~TestSinkOperator() override = default;
 
     bool need_input() const override { return true; }
-    bool has_output() const override { return _chunk != nullptr; }
+    bool has_output() const override { return false; }
     bool is_finished() const override { return _is_finished; }
     void set_finishing(RuntimeState* state) override {
         TestOperator::set_finishing(state);
@@ -309,12 +309,10 @@ public:
 private:
     CounterPtr _counter;
     bool _is_finished = false;
-    ChunkPtr _chunk = nullptr;
 };
 
 Status TestSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     _counter->process_push(chunk);
-    _chunk = chunk;
     return Status::OK();
 }
 
