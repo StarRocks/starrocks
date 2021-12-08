@@ -30,7 +30,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/primitive_type.h"
-#include "runtime/row_batch.h"
 #include "runtime/tuple_row.h"
 #include "util/date_func.h"
 #include "util/mysql_row_buffer.h"
@@ -217,49 +216,6 @@ Status MysqlResultWriter::_add_one_row(TupleRow* row) {
         }
     }
     return Status::OK();
-}
-
-Status MysqlResultWriter::append_row_batch(const RowBatch* batch) {
-    SCOPED_TIMER(_append_row_batch_timer);
-    if (nullptr == batch || 0 == batch->num_rows()) {
-        return Status::OK();
-    }
-
-    Status status;
-    // convert one batch
-    TFetchDataResult* result = new (std::nothrow) TFetchDataResult();
-    int num_rows = batch->num_rows();
-    result->result_batch.rows.resize(num_rows);
-
-    for (int i = 0; status.ok() && i < num_rows; ++i) {
-        TupleRow* row = batch->get_row(i);
-        status = _add_one_row(row);
-
-        if (status.ok()) {
-            _row_buffer->move_content(&result->result_batch.rows[i]);
-        } else {
-            LOG(WARNING) << "convert row to mysql result failed.";
-            break;
-        }
-    }
-
-    if (status.ok()) {
-        SCOPED_TIMER(_result_send_timer);
-        // push this batch to back
-        status = _sinker->add_batch(result);
-
-        if (status.ok()) {
-            result = nullptr;
-            _written_rows += num_rows;
-        } else {
-            LOG(WARNING) << "append result batch to sink failed.";
-        }
-    }
-
-    delete result;
-    result = nullptr;
-
-    return status;
 }
 
 Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {

@@ -46,7 +46,6 @@ set(RUNTIME_FILES
     result_sink.cpp
     result_buffer_mgr.cpp
     result_writer.cpp
-    row_batch.cpp
     runtime_state.cpp
     string_value.cpp
     thread_resource_mgr.cpp

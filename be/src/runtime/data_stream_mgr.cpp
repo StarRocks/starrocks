@@ -29,7 +29,6 @@
 #include "gen_cpp/types.pb.h" // PUniqueId
 #include "runtime/data_stream_recvr.h"
 #include "runtime/raw_value.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/starrocks_metrics.h"
 

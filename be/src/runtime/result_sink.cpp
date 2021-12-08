@@ -32,7 +32,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/result_buffer_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/vectorized/statistic_result_writer.h"
 #include "util/uid_util.h"

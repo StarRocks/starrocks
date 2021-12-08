@@ -38,7 +38,6 @@ namespace starrocks {
 
 class ExecNode;
 class RowDescriptor;
-class RowBatch;
 class DataSink;
 class DataStreamMgr;
 class RuntimeProfile;
@@ -105,13 +104,6 @@ public:
     // If this fragment has a sink, report_status_cb will have been called for the final
     // time when open() returns, and the status-reporting thread will have been stopped.
     Status open();
-
-    // Return results through 'batch'. Sets '*batch' to NULL if no more results.
-    // '*batch' is owned by PlanFragmentExecutor and must not be deleted.
-    // When *batch == NULL, get_next() should not be called anymore. Also, report_status_cb
-    // will have been called for the final time and the status-reporting thread
-    // will have been stopped.
-    Status get_next(RowBatch** batch);
 
     Status get_next(vectorized::ChunkPtr* chunk);
 

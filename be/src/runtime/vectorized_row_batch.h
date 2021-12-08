@@ -24,7 +24,6 @@
 
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
-#include "runtime/row_batch.h"
 #include "runtime/row_batch_interface.hpp"
 #include "runtime/tuple.h"
 #include "runtime/tuple_row.h"
