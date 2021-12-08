@@ -327,11 +327,6 @@ void HdfsOrcScanner::update_counter() {
 #endif
 }
 
-void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {
-    update_counter();
-    _reader.reset();
-}
-
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_scanner_params.fs,
                                                             _scanner_params.scan_ranges[0]->file_length, &_stats);

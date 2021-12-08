@@ -250,6 +250,11 @@ void HdfsParquetScanner::update_counter() {
 #endif
 }
 
+void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {
+    update_counter();
+    _reader.reset();
+}
+
 void HdfsFileReaderParam::set_columns_from_file(const std::unordered_set<std::string>& names) {
     for (auto& column : materialized_columns) {
         if (names.find(column.col_name) == names.end()) {
