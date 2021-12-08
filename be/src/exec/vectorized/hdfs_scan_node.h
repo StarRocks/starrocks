@@ -44,7 +44,7 @@ private:
     friend HdfsScanner;
     friend HdfsParquetScanner;
     friend HdfsOrcScanner;
-    constexpr static const int kMaxConcurrency = 50;
+    int kMaxConcurrency = config::doris_max_hdfs_scanner_num;;
 
     template <typename T>
     class Stack {
