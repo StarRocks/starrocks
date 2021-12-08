@@ -6,6 +6,11 @@ DECIMAL(P[,S])
 
 高精度定点数，P代表一共有多少个有效数字(precision)，S代表小数点后最多有多少数字(scale)
 
+1.19.0及以后版本对decimal类型的（P，S）有默认值设置，默认是decimal（10，0）
+
+例如：
+1.19.0版本可成功执行`select cast（‘12.35’ as decimal）;`1.19之前版本执行`select cast（‘12.35’ as decimal）;`或者`select cast（‘12.35’ as decimal（5））;`会提示failed，需明确指定p,s的值,如：`select cast（‘12.35’ as decimal（5，1）;`
+
 * Decimal V2
 
   P的范围是[1,27], S的范围[0, 9], 另外，P必须要大于等于S的取值。默认的S取值为0。
