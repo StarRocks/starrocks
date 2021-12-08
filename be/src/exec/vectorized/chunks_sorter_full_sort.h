@@ -2,12 +2,13 @@
 
 #pragma once
 
-#include "column/vectorized_fwd.h"
 #include "exec/vectorized/chunks_sorter.h"
-#include "exprs/expr_context.h"
-#include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
+class ExprContext;
+
+namespace vectorized {
+
 class ChunksSorterFullSort : public ChunksSorter {
 public:
     /**
@@ -27,18 +28,7 @@ public:
     void get_next(ChunkPtr* chunk, bool* eos) override;
     bool pull_chunk(ChunkPtr* chunk) override;
 
-    int64_t mem_usage() const override {
-        int64_t usage = 0;
-        if (_big_chunk != nullptr) {
-            usage += _big_chunk->memory_usage();
-        }
-        if (_sorted_segment != nullptr) {
-            usage += _sorted_segment->mem_usage();
-        }
-        usage += _sorted_permutation.capacity() * sizeof(Permutation);
-        usage += _selective_values.capacity() * sizeof(uint32_t);
-        return usage;
-    }
+    int64_t mem_usage() const override;
 
     friend class SortHelper;
 
@@ -46,8 +36,8 @@ private:
     Status _sort_chunks(RuntimeState* state);
     Status _build_sorting_data(RuntimeState* state);
 
-    void _sort_by_row_cmp();
-    void _sort_by_columns();
+    Status _sort_by_row_cmp(RuntimeState* state);
+    Status _sort_by_columns(RuntimeState* state);
 
     void _append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset, size_t count);
 
@@ -57,4 +47,5 @@ private:
     std::vector<uint32_t> _selective_values; // for appending selective values to sorted rows
 };
 
-} // namespace starrocks::vectorized
+} // namespace vectorized
+} // namespace starrocks

@@ -381,7 +381,7 @@ private:
         if (end_pos > perm->size()) {
             end_pos = perm->size();
         }
-        pdqsort(perm->begin() + offset, perm->begin() + end_pos, less_fn);
+        pdqsort(false, perm->begin() + offset, perm->begin() + end_pos, less_fn);
     }
 
     template <typename CppTypeName>
@@ -412,7 +412,7 @@ private:
             }
         };
 
-        pdqsort(sort_items.begin(), sort_items.end(), less_fn);
+        pdqsort(false, sort_items.begin(), sort_items.end(), less_fn);
 
         // output permutation
         for (size_t i = 0; i < row_num; ++i) {
@@ -438,7 +438,7 @@ private:
             }
         };
 
-        pdqsort(sort_items.begin(), sort_items.end(), less_fn);
+        pdqsort(false, sort_items.begin(), sort_items.end(), less_fn);
 
         for (size_t i = 0; i < row_num; ++i) {
             (*perm)[i + offset].index_in_chunk = sort_items[i].index_in_chunk;
@@ -463,7 +463,7 @@ private:
         if (end_pos > perm->size()) {
             end_pos = perm->size();
         }
-        pdqsort(perm->begin() + offset, perm->begin() + end_pos, less_fn);
+        pdqsort(false, perm->begin() + offset, perm->begin() + end_pos, less_fn);
     }
 };
 
@@ -542,7 +542,7 @@ void MemTable::_sort_chunk_by_columns() {
 }
 
 void MemTable::_sort_chunk_by_rows() {
-    pdqsort(_permutations.begin(), _permutations.end(),
+    pdqsort(false, _permutations.begin(), _permutations.end(),
             [this](const MemTable::PermutationItem& l, const MemTable::PermutationItem& r) {
                 size_t col_number = _tablet_schema->num_key_columns();
                 int compare_result = 0;
