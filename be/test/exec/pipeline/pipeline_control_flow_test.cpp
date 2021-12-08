@@ -555,6 +555,7 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_full_chunk) {
     size_t original_chunk_size = config::vector_chunk_size;
     config::vector_chunk_size = 16;
     size_t chunk_size = config::vector_chunk_size;
+    DeferOp op([=]() { config::vector_chunk_size = original_chunk_size; });
 
     for (size_t i = 1; i <= max_degree_of_parallelism; ++i) {
         CounterPtr sourceCounter = std::make_shared<Counter>();
@@ -585,7 +586,5 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_full_chunk) {
         ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num * i, 0);
         ASSERT_EQ(lifecycle_error_num, 0);
     }
-
-    config::vector_chunk_size = original_chunk_size;
 }
 } // namespace starrocks::pipeline
