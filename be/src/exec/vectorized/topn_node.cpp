@@ -147,7 +147,6 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     bool eos = false;
     _chunks_sorter->setup_runtime(runtime_profile(), "ChunksSorter");
     do {
-        RETURN_IF_ERROR(state->check_mem_limit("Sort"));
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;
         timer.stop();
@@ -158,10 +157,20 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         timer.start();
         if (chunk != nullptr && chunk->num_rows() > 0) {
             ChunkPtr materialize_chunk = _materialize_chunk_before_sort(chunk.get());
-            RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk));
+            try {
+                RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk));
+                RETURN_IF_ERROR(state->check_mem_limit("Sort"));
+            } catch (std::bad_alloc const&) {
+                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+            }
         }
     } while (!eos);
-    RETURN_IF_ERROR(_chunks_sorter->done(state));
+    try {
+        RETURN_IF_ERROR(_chunks_sorter->done(state));
+        RETURN_IF_ERROR(state->check_mem_limit("Sort"));
+    } catch (std::bad_alloc const&) {
+        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+    }
     return Status::OK();
 }
 

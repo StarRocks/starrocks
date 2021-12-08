@@ -624,7 +624,7 @@ public:
         } else {
             slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
             if (UNLIKELY(slice.data == nullptr)) {
-                return Status::InternalError("Mem usage has exceed the limit of BE");
+                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
             }
             memcpy(slice.data, source.data(), slice.size);
         }

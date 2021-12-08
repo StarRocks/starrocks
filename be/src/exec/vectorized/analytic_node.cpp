@@ -339,6 +339,7 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
             ColumnPtr column = _analytor->order_ctxs()[i]->evaluate(child_chunk.get());
             _analytor->append_column(chunk_size, _analytor->order_columns()[i].get(), column);
         }
+        RETURN_IF_ERROR(state->check_mem_limit("AnalyticNode"));
     } catch (std::bad_alloc const&) {
         return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
     }
