@@ -272,7 +272,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             childPlan.add(optExprBuilder);
         }
 
-        Scope outputScope = setOperationRelation.getRelations().get(0).getOutputScope();
+        Scope outputScope = setOperationRelation.getRelations().get(0).getScope();
         ExpressionMapping expressionMapping = new ExpressionMapping(outputScope, outputColumns);
 
         LogicalOperator setOperator;

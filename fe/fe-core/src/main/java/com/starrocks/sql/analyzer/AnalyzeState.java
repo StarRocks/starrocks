@@ -66,14 +66,16 @@ public class AnalyzeState {
     }
 
     public QuerySpecification build() {
-        return new QuerySpecification(
+        QuerySpecification querySpecification = new QuerySpecification(
                 outputExpressions, columnOutputNames, isDistinct,
-                outputScope, orderScope, orderSourceExpressions,
+                orderScope, orderSourceExpressions,
                 relation, predicate, limit,
                 groupBy, aggregate, groupingSetsList, groupingFunctionCallExprs,
                 orderBy, having,
                 outputAnalytic, orderByAnalytic,
                 columnReferences);
+        querySpecification.setScope(new Scope(RelationId.of(querySpecification), outputScope.getRelationFields()));
+        return querySpecification;
     }
 
     public void setOrderScope(Scope orderScope) {

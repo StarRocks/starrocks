@@ -17,8 +17,7 @@ public class Scope {
     private Scope parent;
     private final RelationId relationId;
     private final RelationFields relationFields;
-
-    private Map<String, CTERelation> cteQueries = Maps.newLinkedHashMap();
+    private final Map<String, CTERelation> cteQueries = Maps.newLinkedHashMap();
 
     public Scope(RelationId relationId, RelationFields relation) {
         this.relationId = relationId;
