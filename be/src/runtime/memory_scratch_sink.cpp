@@ -33,7 +33,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/tuple_row.h"
 #include "util/arrow/row_batch.h"
