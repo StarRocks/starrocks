@@ -95,11 +95,15 @@ private:
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc);
 
-    void _construct_column_with_number(simdjson::ondemand::value& value, Column* column,
-                                       const TypeDescriptor& type_desc);
-    void _construct_column_with_string(simdjson::ondemand::value& value, Column* column,
-                                       const TypeDescriptor& type_desc);
-    void _construct_string_column(Column *column, const Slice& s);
+    Status _construct_column_with_numeric_value(simdjson::ondemand::value& value, Column* column,
+                                              const TypeDescriptor& type_desc);
+    Status _construct_column_with_string_value(simdjson::ondemand::value& value, Column* column,
+                                             const TypeDescriptor& type_desc);
+
+    void _construct_string_column(Column *col, const Slice& s);
+
+    template <typename T>
+    void _construct_numeric_column(Column* col, const T& val);
 
     // Reorder column to accelerate simdjson iteration.
     void _reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdjson::ondemand::object& obj);

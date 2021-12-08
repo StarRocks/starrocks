@@ -12,6 +12,7 @@
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "env/env.h"
 #include "exec/broker_reader.h"
 #include "exprs/vectorized/cast_expr.h"
@@ -689,7 +690,7 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
     switch (tp) {
     case simdjson::ondemand::json_type::null: {
         column->append_nulls(1);
-        break;
+        return Status::OK();
     }
 
     case simdjson::ondemand::json_type::boolean: {
@@ -706,17 +707,15 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
         } else {
             _construct_string_column(column, literal_0_slice);
         }
-        break;
+        return Status::OK();
     }
 
     case simdjson::ondemand::json_type::number: {
-        _construct_column_with_number(value, column, type_desc);
-        break;
+        return _construct_column_with_numeric_value(value, column, type_desc);
     }
 
     case simdjson::ondemand::json_type::string: {
-        _construct_column_with_string(value, column, type_desc);
-        break;
+        return _construct_column_with_string_value(value, column, type_desc);
     }
 
     case simdjson::ondemand::json_type::object:
@@ -726,270 +725,304 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
         JsonFunctions::minify_json_to_string(value, buf, buflen);
 
         _construct_string_column(column, Slice{buf.get(), buflen});
-        break;
+        return Status::OK();
     }
+
     }
+    return Status::OK();
 }
 
-void JsonReader::_construct_column_with_number(simdjson::ondemand::value& value, Column* column,
+Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::value& value, Column* column,
                                                const TypeDescriptor& type_desc) {
     simdjson::ondemand::number_type tp;
 
     auto err = value.get_number_type().get(tp);
     if (UNLIKELY(err)) {
-        column->append_nulls(1);
-        return;
+        std::string err_msg = strings::Substitute("Failed to determine the numeric column value type. code=$0, error=$1", err,
+                                                  simdjson::error_message(err));
+        return Status::DataQualityError(err_msg.c_str());
     }
 
     if (tp == simdjson::ondemand::number_type::signed_integer) {
+
         int64_t i64 = 0;
         err = value.get_int64().get(i64);
         if (UNLIKELY(err)) {
-            column->append_nulls(1);
-            return;
+            std::string err_msg =
+                    strings::Substitute("Failed to parse the numeric column value as int64. code=$0, error=$1", err,
+                                        simdjson::error_message(err));
+            return Status::DataQualityError(err_msg.c_str());
         }
 
         switch (type_desc.type) {
         // Treat LARGEINT as BIGINT.
         case TYPE_LARGEINT:
         case TYPE_BIGINT: {
-            column->append_numbers(&i64, sizeof(i64));
-            break;
+            _construct_numeric_column(column, i64);
+            return Status::OK();
         }
 
         case TYPE_INT: {
             int32_t i32 = 0;
             if (cast_int64(i64, &i32) != 0) {
-                return;
+                std::string err_msg = strings::Substitute("Overflow in cast the integer value as INT. value=$0",  i64);
+                return Status::DataQualityError(err_msg.c_str());
+
             }
-            column->append_numbers(&i32, sizeof(i32));
-            break;
+            _construct_numeric_column(column, i32);
+            return Status::OK();
         }
 
         case TYPE_SMALLINT: {
             int16_t i16 = 0;
             if (cast_int64(i64, &i16) != 0) {
-                return;
+                std::string err_msg = strings::Substitute("Overflow in cast the integer value as SMALLINT. value=$0", i64);
+                return Status::DataQualityError(err_msg.c_str());
             }
-            column->append_numbers(&i16, sizeof(i16));
-            break;
+            _construct_numeric_column(column, i16);
+            return Status::OK();
         }
 
         case TYPE_TINYINT: {
             int8_t i8 = 0;
             if (cast_int64(i64, &i8) != 0) {
-                return;
+                std::string err_msg = strings::Substitute("Overflow in cast the integer value as TINYINT. value=$0", i64);
+                return Status::DataQualityError(err_msg.c_str());
             }
-            column->append_numbers(&i8, sizeof(i8));
-            break;
+            _construct_numeric_column(column, i8);
+            return Status::OK();
         }
 
         // Float column, integer value.
         case TYPE_FLOAT: {
             auto f = static_cast<float>(i64);
-            column->append_numbers(&f, sizeof(f));
-            break;
+            _construct_numeric_column(column, f);
+            return Status::OK();
         }
 
         // Double column, integer value.
         case TYPE_DOUBLE: {
             auto d = static_cast<double>(i64);
-            column->append_numbers(&d, sizeof(d));
-            break;
+            _construct_numeric_column(column, d);
+            return Status::OK();
         }
 
         case TYPE_VARCHAR: {
             auto f = fmt::format_int(i64);
 
             _construct_string_column(column, Slice{f.data(), f.size()});
-            break;
+            return Status::OK();
         }
 
         default: {
-            column->append_nulls(1);
-            return;
+            std::string err_msg = strings::Substitute("Unable to cast the integer value. value=$0", i64);
+            return Status::DataQualityError(err_msg.c_str());
         }
+
         }
 
     } else if (tp == simdjson::ondemand::number_type::floating_point_number) {
         double d = 0;
         err = value.get_double().get(d);
         if (UNLIKELY(err)) {
-            column->append_nulls(1);
-            return;
+            std::string err_msg =
+                    strings::Substitute("Failed to parse the numeric column value as double. code=$0, error=$1", err,
+                                        simdjson::error_message(err));
+            return Status::DataQualityError(err_msg.c_str());
         }
 
         switch (type_desc.type) {
         // Double column, float value.
         case TYPE_DOUBLE: {
-            column->append_numbers(&d, sizeof(d));
-            break;
+            _construct_numeric_column(column, d);
+            return Status::OK();
         }
 
         // Float column, float value.
         case TYPE_FLOAT: {
             auto f = static_cast<float>(d);
-            column->append_numbers(&f, sizeof(f));
-            break;
+            _construct_numeric_column(column, f);
+            return Status::OK();
         }
 
-        // Treat LARGEINT as BIGINT.
         case TYPE_LARGEINT:
-        case TYPE_BIGINT: {
-            auto i64 = static_cast<int64_t>(d);
-            column->append_numbers(&i64, sizeof(i64));
-            break;
-        }
-
-        case TYPE_INT: {
-            auto i32 = static_cast<int32_t>(d);
-            column->append_numbers(&i32, sizeof(i32));
-            break;
-        }
-
-        case TYPE_SMALLINT: {
-            auto i16 = static_cast<int16_t>(d);
-            column->append_numbers(&i16, sizeof(i16));
-            break;
-        }
-
+        case TYPE_BIGINT: 
+        case TYPE_INT: 
+        case TYPE_SMALLINT:
         case TYPE_TINYINT: {
-            auto i8 = static_cast<int8_t>(d);
-            column->append_numbers(&i8, sizeof(i8));
-            break;
+            std::string err_msg = strings::Substitute(
+                    "Unable to construct integer column with floating value. value=$0", d);
+            return Status::DataQualityError(err_msg.c_str());
         }
 
         case TYPE_VARCHAR: {
             std::ostringstream oss;
             oss << d;
             _construct_string_column(column, Slice{oss.str()});
-            break;
+            return Status::OK();
         }
 
         default: {
-            column->append_nulls(1);
-            return;
+            std::string err_msg = strings::Substitute("Unable to cast the floating value. value=$0", d);
+            return Status::DataQualityError(err_msg.c_str());
         }
+
         }
 
     } else {
-        // Float, double, integer out of range [9223372036854775808,18446744073709551616).
         std::string_view sv;
-        err = simdjson::to_json_string(value).get(sv);
-        if (UNLIKELY(err)) {
-            column->append_nulls(1);
-            return;
-        }
-
-        _construct_string_column(column, Slice{sv.data(), sv.size()});
+        simdjson::to_json_string(value).get(sv);
+        std::string err_msg =
+                strings::Substitute("unsupported value type. value=$0", std::string(sv.data(), sv.size()));
+        return Status::DataQualityError(err_msg.c_str());
     }
 }
 
-void JsonReader::_construct_column_with_string(simdjson::ondemand::value& value, Column* column,
+Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value& value, Column* column,
                                                const TypeDescriptor& type_desc) {
     std::string_view sv;
     auto err = value.get_string().get(sv);
     if (UNLIKELY(err)) {
-        column->append_nulls(1);
-        return;
+        std::string err_msg =
+                strings::Substitute("Failed to parse the string column value. code=$0, error=$1", err,
+                                    simdjson::error_message(err));
+        return Status::DataQualityError(err_msg.c_str());
     }
 
     switch (type_desc.type) {
     case TYPE_VARCHAR: {
         _construct_string_column(column, Slice{sv.data(), sv.size()});
-        break;
+        return Status::OK();
     }
 
     case TYPE_LARGEINT: {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-        auto i128 = StringParser::string_to_int<__int128>(sv.data(), sv.length(), &parse_result);
+        auto i128 = StringParser::string_to_int<int128_t>(sv.data(), sv.length(), &parse_result);
         if (parse_result == StringParser::PARSE_SUCCESS) {
-            column->append_numbers(&i128, sizeof(i128));
+            _construct_numeric_column(column, i128);
         } else {
-            column->append_nulls(1);
+            std::string err_msg = strings::Substitute("Unable to cast string value to LARGEINT. value=$0",
+                                                      std::string(sv.data(), sv.size()));
+            return Status::DataQualityError(err_msg.c_str());
         }
-        break;
+        return Status::OK();
     }
 
     case TYPE_BIGINT: {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         auto i64 = StringParser::string_to_int<int64_t>(sv.data(), sv.length(), &parse_result);
         if (parse_result == StringParser::PARSE_SUCCESS) {
-            column->append_numbers(&i64, sizeof(i64));
+            _construct_numeric_column(column, i64);
         } else {
-            column->append_nulls(1);
+            std::string err_msg = strings::Substitute("Unable to cast string value to BIGINT. value=$0",
+                                                      std::string(sv.data(), sv.size()));
+            return Status::DataQualityError(err_msg.c_str());
         }
-        break;
+        return Status::OK();
     }
 
     case TYPE_INT: {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         auto i32 = StringParser::string_to_int<int32_t>(sv.data(), sv.length(), &parse_result);
         if (parse_result == StringParser::PARSE_SUCCESS) {
-            column->append_numbers(&i32, sizeof(i32));
+            _construct_numeric_column(column, i32);
         } else {
-            column->append_nulls(1);
+            std::string err_msg = strings::Substitute("Unable to cast string value to INT. value=$0",
+                                                      std::string(sv.data(), sv.size()));
+            return Status::DataQualityError(err_msg.c_str());
         }
-        break;
+        return Status::OK();
     }
 
     case TYPE_SMALLINT: {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         auto i16 = StringParser::string_to_int<int16_t>(sv.data(), sv.length(), &parse_result);
         if (parse_result == StringParser::PARSE_SUCCESS) {
-            column->append_numbers(&i16, sizeof(i16));
+            _construct_numeric_column(column, i16);
         } else {
-            column->append_nulls(1);
+            std::string err_msg = strings::Substitute("Unable to cast string value to SMALLINT. value=$0",
+                                                      std::string(sv.data(), sv.size()));
+            return Status::DataQualityError(err_msg.c_str());
         }
-        break;
+        return Status::OK();
     }
 
     case TYPE_TINYINT: {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         auto i8 = StringParser::string_to_int<int16_t>(sv.data(), sv.length(), &parse_result);
         if (parse_result == StringParser::PARSE_SUCCESS) {
-            column->append_numbers(&i8, sizeof(i8));
+            _construct_numeric_column(column, i8);
         } else {
-            column->append_nulls(1);
+            std::string err_msg = strings::Substitute("Unable to cast string value to TINYINT. value=$0",
+                                                      std::string(sv.data(), sv.size()));
+            return Status::DataQualityError(err_msg.c_str());
         }
-        break;
+        return Status::OK();
     }
 
     case TYPE_FLOAT: {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         auto f = StringParser::string_to_float<float>(sv.data(), sv.length(), &parse_result);
         if (parse_result == StringParser::PARSE_SUCCESS) {
-            column->append_numbers(&f, sizeof(f));
+            _construct_numeric_column(column, f);
         } else {
-            column->append_nulls(1);
+            std::string err_msg = strings::Substitute("Unable to cast string value to FLOAT. value=$0",
+                                                      std::string(sv.data(), sv.size()));
+            return Status::DataQualityError(err_msg.c_str());
         }
-        break;
+        return Status::OK();
     }
 
     case TYPE_DOUBLE: {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         auto d = StringParser::string_to_float<double>(sv.data(), sv.length(), &parse_result);
         if (parse_result == StringParser::PARSE_SUCCESS) {
-            column->append_numbers(&d, sizeof(d));
+            _construct_numeric_column(column, d);
         } else {
-            column->append_nulls(1);
+            std::string err_msg = strings::Substitute("Unable to cast string value to DOUBLE. value=$0",
+                                                      std::string(sv.data(), sv.size()));
+            return Status::DataQualityError(err_msg.c_str());
         }
-        break;
+        return Status::OK();
     }
 
     default: {
-        column->append_nulls(1);
-        break;
+        std::string err_msg =
+                strings::Substitute("unsupported value type. value=$0", std::string(sv.data(), sv.size()));
+        return Status::DataQualityError(err_msg.c_str());
     }
     }
 }
 
-void JsonReader::_construct_string_column(Column* column, const Slice& s) {
-    auto* ncolumn = down_cast<NullableColumn*>(column);
-    auto &data_column = ncolumn->data_column();
-    auto &null_column = ncolumn->null_column();
+void JsonReader::_construct_string_column(Column* col, const Slice& s) {
+    auto column = down_cast<NullableColumn*>(col);
+    auto &data_column = column->data_column();
+    auto &null_column = column->null_column();
 
     down_cast<BinaryColumn*>(data_column.get())->append(s);
+    null_column->append(0);
+}
+
+// Explicit template Instantiation.
+template void JsonReader::_construct_numeric_column(Column* col, const int128_t& val);
+template void JsonReader::_construct_numeric_column(Column* col, const int64_t& val);
+template void JsonReader::_construct_numeric_column(Column* col, const int32_t& val);
+template void JsonReader::_construct_numeric_column(Column* col, const int16_t& val);
+template void JsonReader::_construct_numeric_column(Column* col, const int8_t& val);
+template void JsonReader::_construct_numeric_column(Column* col, const double& val);
+template void JsonReader::_construct_numeric_column(Column* col, const float& val);
+
+template <typename T>
+void JsonReader::_construct_numeric_column(Column* col, const T& val) {
+
+    auto nullable_column = down_cast<NullableColumn*>(col);
+    auto& data_column = nullable_column->data_column();
+    auto& null_column = nullable_column->null_column();
+
+    auto fixed_length_column = down_cast<FixedLengthColumn<T>*>(data_column.get());
+
+    fixed_length_column->append_numbers(&val, sizeof(val));
+
     null_column->append(0);
 }
 
