@@ -217,17 +217,6 @@ public:
         return _scalar_column_writer->append(data, null_flags, count, has_null);
     };
 
-    Status append(const RowCursorCell& cell) override {
-        if (!_is_speculated) {
-            _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
-            _is_speculated = true;
-        }
-        static const int128_t s_default_value = 0;
-        uint8_t is_null = cell.is_null();
-        auto* p = !is_null ? (const uint8_t*)cell.cell_ptr() : (const uint8_t*)&s_default_value;
-        return append(p, &is_null, 1, is_null);
-    }
-
     // Speculate char/varchar encoding and reset encoding
     void speculate_column_and_set_encoding(const vectorized::Column& column);
 

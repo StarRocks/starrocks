@@ -29,13 +29,11 @@
 #include "runtime/tuple.h"
 #include "runtime/tuple_row.h"
 #include "storage/field.h"
-#include "storage/row_cursor.h"
 #include "util/mem_util.hpp"
 
 namespace starrocks {
 
 class VectorizedRowBatch;
-class RowBlock;
 
 class ColumnVector {
 public:
@@ -104,9 +102,6 @@ public:
     void set_limit(uint16_t limit) { _limit = limit; }
     void set_block_status(uint8_t status) { _block_status = status; }
     uint8_t block_status() const { return _block_status; }
-
-    // Dump this vector batch to RowBlock;
-    void dump_to_row_block(RowBlock* row_block);
 
 private:
     const TabletSchema* _schema;

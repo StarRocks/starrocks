@@ -36,8 +36,6 @@
 #include "storage/fs/file_block_manager.h"
 #include "storage/in_list_predicate.h"
 #include "storage/olap_common.h"
-#include "storage/row_block2.h"
-#include "storage/row_cursor.h"
 #include "storage/rowset/segment_v2/column_iterator.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/segment_writer.h"

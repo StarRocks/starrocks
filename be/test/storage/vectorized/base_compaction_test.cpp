@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
-#include "storage/row_cursor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"

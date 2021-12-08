@@ -10,6 +10,7 @@
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
 #include "util/int96.h"
+#include "util/percentile_value.h"
 #include "util/slice.h"
 
 namespace starrocks {
