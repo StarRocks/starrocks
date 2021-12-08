@@ -641,7 +641,7 @@ public class Load {
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
                             throw new UserException("Column(" + columnName + ") has unsupported default value:"
                                     + column.getDefaultExpr().getExpr());
-                        } else {
+                        } else if (defaultValueType == Column.DefaultValueType.NONE) {
                             if (column.isAllowNull()) {
                                 exprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {
@@ -664,7 +664,7 @@ public class Load {
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
                             throw new UserException("Column(" + columnName + ") has unsupported default value:"
                                     + column.getDefaultExpr().getExpr());
-                        } else {
+                        } else if (defaultValueType == Column.DefaultValueType.NONE) {
                             if (column.isAllowNull()) {
                                 innerIfExprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {

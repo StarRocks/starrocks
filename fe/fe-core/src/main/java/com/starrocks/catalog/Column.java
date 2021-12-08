@@ -117,7 +117,7 @@ public class Column implements Writable {
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-                  ColumnDef.DefaultValueDef defaultValue, String comment) {
+                  ColumnDef.DefaultValueDef defaultValueDef, String comment) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -134,13 +134,13 @@ public class Column implements Writable {
         this.isAggregationTypeImplicit = false;
         this.isKey = isKey;
         this.isAllowNull = isAllowNull;
-        if (defaultValue != null) {
-            if (defaultValue.expr instanceof StringLiteral) {
-                this.defaultValue = ((StringLiteral) defaultValue.expr).getValue();
-            } else if (defaultValue.expr instanceof NullLiteral) {
+        if (defaultValueDef != null) {
+            if (defaultValueDef.expr instanceof StringLiteral) {
+                this.defaultValue = ((StringLiteral) defaultValueDef.expr).getValue();
+            } else if (defaultValueDef.expr instanceof NullLiteral) {
                 this.defaultExpr = null;
             } else {
-                this.defaultExpr = new DefaultExpr(defaultValue.expr.toSql());
+                this.defaultExpr = new DefaultExpr(defaultValueDef.expr.toSql());
             }
         }
         this.comment = comment;
@@ -422,9 +422,9 @@ public class Column implements Writable {
 
 
     public enum DefaultValueType {
-        NONE,
-        CONST,
-        VARY
+        NONE,       // not default value
+        CONST,      // const expr e.g. now() function
+        VARY        // variable expr e.g. uuid() function
     }
 
     public DefaultValueType getDefaultValueType() {
@@ -444,7 +444,7 @@ public class Column implements Writable {
 
     // if the column have a default value or default expr can be calculated like now(). return calculated value
     // else for a batch of every row different like uuid(). return null
-    // consistency requires upper-level assurance
+    // consistency requires ConnectContext.get() != to assurance
     public String getCalculatedDefaultValue() {
         if (defaultValue != null) {
             return defaultValue;

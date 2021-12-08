@@ -469,7 +469,6 @@ public class HiveTable extends Table {
         Set<String> partitionColumnNames = Sets.newHashSet();
         List<TColumn> tPartitionColumns = Lists.newArrayList();
         List<TColumn> tColumns = Lists.newArrayList();
-
         for (Column column : getPartitionColumns()) {
             tPartitionColumns.add(column.toThrift());
             partitionColumnNames.add(column.getName());
