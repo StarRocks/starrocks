@@ -297,6 +297,9 @@ private:
 
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
+
+    // Use to statistic noneffective times when all operators mostly have been done, just waiting for state transfer.
+    RuntimeProfile::Counter* _schedule_noneffective_pending_counter = nullptr;
     RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
     RuntimeProfile::Counter* _schedule_accumulated_chunk_moved = nullptr;
 
