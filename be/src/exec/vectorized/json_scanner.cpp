@@ -348,10 +348,10 @@ Status JsonReader::close() {
  *      value2     30
  */
 Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
-    //std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
     simdjson::ondemand::object row;
     auto st = Status::OK();
 
+    std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
     for(int32_t n = 0; n < rows_to_read; n++) {
         st = _next_row();
         if (!st.ok()) {
@@ -372,14 +372,14 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
             return st;
         }
 
-/*
-        if (n == 0) {
+        if (n == 0 && _scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
+            // Try to reorder the column according to the column order of first json row.
+            // It is much faster when we access the json field as the json key order.
             _reorder_column(&reordered_slot_descs, row);
             row.reset();
         }
-        */
 
-        st = _construct_row(&row, chunk, slot_descs);
+        st = _construct_row(&row, chunk, reordered_slot_descs);
         if (!st.ok()) {
             chunk->set_num_rows(n);
             _counter->num_rows_filtered++;
@@ -543,7 +543,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                 continue;
             }
 
-            _construct_column(val, column.get(), slot_desc->type());
+            RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc->type()));
         }
         return Status::OK();
     } else {
@@ -567,7 +567,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
                 column->append_nulls(1);
             } else {
-                _construct_column(val, column, slot_descs[i]->type());
+                RETURN_IF_ERROR(_construct_column(val, column, slot_descs[i]->type()));
             }
         }
         return Status::OK();
