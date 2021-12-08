@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -29,20 +30,17 @@ public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule
     private static class ReuseVisitor extends OptExpressionVisitor<Void, TaskContext> {
         @Override
         public Void visit(OptExpression opt, TaskContext context) {
-            opt.getInputs().forEach(o -> process(o, context));
-            return null;
-        }
-
-        public Void process(OptExpression opt, TaskContext context) {
             if (opt.getOp().getProjection() != null) {
-                rewriteProject(opt, context);
+                opt.getOp().setProjection(rewriteProject(opt, context));
             }
 
-            opt.getOp().accept(this, opt, context);
+            for (OptExpression input : opt.getInputs()) {
+                input.getOp().accept(this, input, context);
+            }
             return null;
         }
 
-        void rewriteProject(OptExpression input, TaskContext context) {
+        Projection rewriteProject(OptExpression input, TaskContext context) {
             Projection projection = input.getOp().getProjection();
 
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
@@ -59,7 +57,7 @@ public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule
 
             if (commonSubOperators.isEmpty()) {
                 // no rewrite
-                return;
+                return projection;
             }
 
             boolean hasRewritted = false;
@@ -78,23 +76,23 @@ public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule
              * common sub operators firstly in BE
              */
             if (hasRewritted) {
-                Map<ColumnRefOperator, ScalarOperator> newMap = Maps.newHashMap();
+                Map<ColumnRefOperator, ScalarOperator> newMap =
+                        Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : columnRefMap.entrySet()) {
                     newMap.put(kv.getKey(), ScalarOperatorsReuse.
                             rewriteOperatorWithCommonOperator(kv.getValue(), commonSubOperators));
                 }
 
-                Map<ColumnRefOperator, ScalarOperator> newCommonMap = Maps.newHashMap();
+                Map<ColumnRefOperator, ScalarOperator> newCommonMap =
+                        Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
                 for (Map.Entry<ScalarOperator, ColumnRefOperator> kv : commonSubOperators.entrySet()) {
                     Preconditions.checkState(!newMap.containsKey(kv.getValue()));
                     newCommonMap.put(kv.getValue(), kv.getKey());
                 }
 
-                projection.getColumnRefMap().clear();
-                projection.getColumnRefMap().putAll(newMap);
-                projection.getCommonSubOperatorMap().clear();
-                projection.getCommonSubOperatorMap().putAll(newCommonMap);
+                return new Projection(newMap, newCommonMap);
             }
+            return projection;
         }
     }
 }
