@@ -173,8 +173,10 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
 
     if (start_mem_tracker != nullptr) {
         start_mem_tracker->list_mem_usage(&items, cur_level, upper_level);
-        items.emplace_back(meta_item);
-        items.emplace_back(update_item);
+        if (start_mem_tracker == ExecEnv::GetInstance()->process_mem_tracker()) {
+            items.emplace_back(meta_item);
+            items.emplace_back(update_item);
+        }
 
         for (const auto& item : items) {
             std::string level_str = ItoaKMGT(item.level);
