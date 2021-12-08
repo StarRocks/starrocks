@@ -27,7 +27,6 @@
 #include "gen_cpp/segment_v2.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dicts.h"
-#include "storage/row_cursor_cell.h"
 #include "storage/rowset/segment_v2/binary_dict_page.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/page_pointer.h" // for PagePointer
@@ -94,13 +93,6 @@ public:
     virtual ~ColumnWriter() = default;
 
     virtual Status init() = 0;
-
-    virtual Status append(const RowCursorCell& cell) {
-        static const int128_t s_default_value = 0;
-        uint8_t is_null = cell.is_null();
-        auto* p = !is_null ? (const uint8_t*)cell.cell_ptr() : (const uint8_t*)&s_default_value;
-        return append(p, &is_null, 1, is_null);
-    }
 
     virtual Status append(const vectorized::Column& column) = 0;
 
