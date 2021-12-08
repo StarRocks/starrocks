@@ -348,7 +348,6 @@ public class StmtExecutor {
                     SqlBlackList.verifying(originSql);
                 }
 
-
                 int retryTime = Config.max_query_retry_time;
                 for (int i = 0; i < retryTime; i++) {
                     try {
@@ -381,8 +380,9 @@ public class StmtExecutor {
                                     execPlan.getDescTbl().toThrift(),
                                     execPlan.getColNames(), execPlan.getOutputExprs(), explainStringBuilder.toString());
                         } else {
-                            TExplainLevel level = parsedStmt.getExplainLevel().equals(StatementBase.ExplainLevel.VERBOSE)
-                                    ? TExplainLevel.VERBOSE : TExplainLevel.NORMAL;
+                            TExplainLevel level =
+                                    parsedStmt.getExplainLevel().equals(StatementBase.ExplainLevel.VERBOSE)
+                                            ? TExplainLevel.VERBOSE : TExplainLevel.NORMAL;
                             String explainString = planner.getExplainString(planner.getFragments(), level);
                             handleQueryStmt(planner.getFragments(), planner.getScanNodes(),
                                     analyzer.getDescTbl().toThrift(),
@@ -1319,14 +1319,15 @@ public class StmtExecutor {
         long transactionId = -1;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-            transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(externalTable.getSourceTableDbId(),
-                    Lists.newArrayList(externalTable.getSourceTableId()), label,
-                    externalTable.getSourceTableHost(),
-                    externalTable.getSourceTablePort(),
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                            FrontendOptions.getLocalHostAddress()),
-                    sourceType,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+            transactionId =
+                    Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(externalTable.getSourceTableDbId(),
+                            Lists.newArrayList(externalTable.getSourceTableId()), label,
+                            externalTable.getSourceTableHost(),
+                            externalTable.getSourceTablePort(),
+                            new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                                    FrontendOptions.getLocalHostAddress()),
+                            sourceType,
+                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
         } else {
             transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
@@ -1476,7 +1477,7 @@ public class StmtExecutor {
 
             // if not using old load usage pattern, error will be returned directly to user
             StringBuilder sb = new StringBuilder(t.getMessage());
-            if (!Strings.isNullOrEmpty(coord.getTrackingUrl())) {
+            if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
                 sb.append(". url: ").append(coord.getTrackingUrl());
             }
             context.getState().setError(sb.toString());
