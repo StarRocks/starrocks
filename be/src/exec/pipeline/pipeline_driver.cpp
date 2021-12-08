@@ -194,17 +194,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             driver_acct().update_last_time_spent(time_spent);
             if (is_precondition_block()) {
                 _state = DriverState::PRECONDITION_BLOCK;
-                return DriverState::PRECONDITION_BLOCK;
             } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
                 _state = DriverState::OUTPUT_FULL;
-                return DriverState::OUTPUT_FULL;
-            }
-            if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+            } else if (!source_operator()->is_finished() && !source_operator()->has_output()) {
                 _state = DriverState::INPUT_EMPTY;
-                return DriverState::INPUT_EMPTY;
+            } else {
+                _state = DriverState::READY;
             }
-            _state = DriverState::READY;
-            return DriverState::READY;
+            return _state;
         }
     }
 }
