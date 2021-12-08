@@ -87,10 +87,19 @@ public class JoinAssociativityRule extends TransformationRule {
             return Collections.emptyList();
         }
 
+        ScalarOperator topJoinPredicate = parentJoin.getPredicate();
+        if (leftChildJoin.getPredicate() != null) {
+            topJoinPredicate = Utils.compoundAnd(topJoinPredicate, leftChildJoin.getPredicate());
+        }
+
         // compute right child join output columns
         // right child join output columns not only contains the parent join output, but also contains the parent conjuncts used columns
         ColumnRefSet outputColumns = new ColumnRefSet(parentJoin.getPruneOutputColumns());
         newParentConjuncts.forEach(conjunct -> outputColumns.union(conjunct.getUsedColumns()));
+        if (topJoinPredicate != null) {
+            outputColumns.union(topJoinPredicate.getUsedColumns());
+        }
+
         List<ColumnRefOperator> newRightOutputColumns =
                 newRightChildColumns.getStream().filter(outputColumns::contains).
                         mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
@@ -104,6 +113,7 @@ public class JoinAssociativityRule extends TransformationRule {
                 new LogicalJoinOperator(JoinOperator.INNER_JOIN, Utils.compoundAnd(newParentConjuncts),
                         parentJoin.getLimit(), "");
         topJoinOperator.setPruneOutputColumns(parentJoin.getPruneOutputColumns());
+        topJoinOperator.setPredicate(topJoinPredicate);
         OptExpression topJoin = OptExpression.create(
                 topJoinOperator,
                 leftChild1,
