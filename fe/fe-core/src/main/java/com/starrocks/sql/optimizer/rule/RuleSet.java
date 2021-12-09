@@ -127,7 +127,6 @@ public class RuleSet {
             new FilterImplementationRule(),
             new TableFunctionImplementationRule(),
             new LimitImplementationRule(),
-            //            new CTEAnchorToNoCTEImplementationRule(),
             new CTEAnchorImplementationRule(),
             new CTEConsumerImplementationRule(),
             new CTEProduceImplementationRule()
