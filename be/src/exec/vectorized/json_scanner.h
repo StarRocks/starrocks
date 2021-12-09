@@ -66,8 +66,8 @@ private:
 // return other error Status if encounter other errors.
 class JsonReader {
 public:
-    JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner,
-               std::shared_ptr<SequentialFile> file);
+    JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner, std::shared_ptr<SequentialFile> file,
+               bool strict_mode);
     ~JsonReader();
 
     Status read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
@@ -81,11 +81,11 @@ private:
     Status _next_row();
 
     // get_row returns row pointed by iterator.
-    Status _get_row(simdjson::ondemand::object* row);
+    Status _get_row(simdjson::ondemand::object* row, bool *empty);
 
     Status _get_row_from_array(simdjson::ondemand::object* row);
 
-    Status _get_row_from_document_stream(simdjson::ondemand::object* row);
+    Status _get_row_from_document_stream(simdjson::ondemand::object* row, bool *empty);
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                           const std::vector<SlotDescriptor*>& slot_descs);
@@ -93,6 +93,8 @@ private:
     Status _filter_row_with_jsonroot(simdjson::ondemand::object* row);
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const SlotDescriptor *desc);
+
+    Status _construct_column_with_boolean_value(simdjson::ondemand::value& value, Column* column, const SlotDescriptor *desc);
 
     Status _construct_column_with_numeric_value(simdjson::ondemand::value& value, Column* column, const SlotDescriptor* desc);
 
@@ -111,6 +113,7 @@ private:
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
     JsonScanner* _scanner = nullptr;
+    bool _strict_mode = false;
 
     std::shared_ptr<SequentialFile> _file;
     int _next_line;

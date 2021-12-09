@@ -162,40 +162,6 @@ void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector
     _get_parsed_paths(paths, parsed_paths);
 }
 
-Status JsonFunctions::minify_json_to_string(simdjson::ondemand::value &val, std::unique_ptr<char[]>& buf,
-                                            size_t& buflen) {
-    std::string_view sv;
-    auto err = simdjson::to_json_string(val).get(sv);
-    if (err) {
-        return Status::InvalidArgument(strings::Substitute("Invalid json : $0", simdjson::error_message(err)));
-    }
-
-    buf.reset(new char[sv.size()]);
-    err = simdjson::minify(sv.data(), sv.size(), buf.get(), buflen);
-    if (err) {
-        return Status::InvalidArgument(strings::Substitute("Invalid json : $0", simdjson::error_message(err)));
-    }
-    return Status::OK();
-}
-
-std::string JsonFunctions::minify_json_to_string(simdjson::ondemand::object& obj) {
-    std::string_view sv;
-    auto err = simdjson::to_json_string(obj).get(sv);
-    if (err) {
-        return "";
-    }
-
-    std::unique_ptr<char[]> buf;
-    buf.reset(new char[sv.size()]);
-    size_t buflen = 0;
-
-    err = simdjson::minify(sv.data(), sv.size(), buf.get(), buflen);
-    if (err) {
-        return "";
-    }
-    return std::string{buf.get(), buflen};
-}
-
 JsonFunctionType JsonTypeTraits<TYPE_INT>::JsonType = JSON_FUN_INT;
 JsonFunctionType JsonTypeTraits<TYPE_DOUBLE>::JsonType = JSON_FUN_DOUBLE;
 JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;

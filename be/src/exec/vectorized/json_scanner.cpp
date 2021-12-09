@@ -56,6 +56,18 @@ static inline int cast_int64(int64_t from, T* to) {
     return 1;
 }
 
+// trim_quotes trims the first/last quote from the std::string_view.
+static void trim_quotes(std::string_view &sv) {
+    // Trim left.
+    if (sv.empty()) return;
+
+    if (sv[0] == '\"') sv.remove_prefix(1);
+
+    if (sv.empty()) return;
+
+    if (sv[sv.size() - 1] == '\"') sv.remove_suffix(1);
+}
+
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
@@ -147,6 +159,7 @@ Status JsonScanner::_construct_json_types() {
             break;
         }
 
+        // Treat these types as what they are.
         case TYPE_FLOAT:
         case TYPE_DOUBLE:
         case TYPE_BIGINT:
@@ -269,7 +282,7 @@ Status JsonScanner::_open_next_reader() {
         LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
         return st;
     }
-    _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file);
+    _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode);
     _next_range++;
     return Status::OK();
 }
@@ -294,14 +307,15 @@ ChunkPtr JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chu
 }
 
 JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::ScannerCounter* counter,
-                       JsonScanner* scanner, std::shared_ptr<SequentialFile> file)
+                       JsonScanner* scanner, std::shared_ptr<SequentialFile> file, bool strict_mode)
         : _state(state),
           _counter(counter),
           _scanner(scanner),
           _file(std::move(file)),
           _next_line(0),
           _total_lines(0),
-          _closed(false) {
+          _closed(false),
+          _strict_mode(strict_mode) {
 #if BE_TEST
     raw::RawVector<char> buf(_buf_size);
     std::swap(buf, _buf);
@@ -363,12 +377,18 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
             return st;
         }
 
-        st = _get_row(&row);
+        bool empty = false;
+        st = _get_row(&row, &empty);
         if (!st.ok()) {
             chunk->set_num_rows(n);
             _counter->num_rows_filtered++;
             _state->append_error_msg_to_file("", st.to_string());
             return st;
+        }
+
+        if (empty) {
+            // Empty row.
+            continue;
         }
 
         if (n == 0 && _scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
@@ -383,7 +403,9 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
             chunk->set_num_rows(n);
             _counter->num_rows_filtered++;
             row.reset();
-            _state->append_error_msg_to_file(JsonFunctions::minify_json_to_string(row), st.to_string());
+            std::string_view sv;
+            (void)!row.raw_json().get(sv);
+            _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
             return st;
         }
     }
@@ -393,7 +415,8 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 Status JsonReader::_next_row() {
     // Try to forward array iterator.
     if (!_array_is_empty) {
-        if (++_array_begin != _array_end) {
+        // _array_begin == array_end is always true in empty array.
+        if (_array_begin != _array_end && ++_array_begin != _array_end) {
             return Status::OK();
         }
         _array_is_empty = true;
@@ -412,13 +435,13 @@ Status JsonReader::_next_row() {
     return Status::OK();
 }
 
-Status JsonReader::_get_row(simdjson::ondemand::object* row) {
+Status JsonReader::_get_row(simdjson::ondemand::object* row, bool* empty) {
     if (!_array_is_empty) {
         // There's left object(s) in the array.
         return _get_row_from_array(row);
     } else if (!_stream_is_empty) {
         // There's left object(s) in the document_stream.
-        return _get_row_from_document_stream(row);
+        return _get_row_from_document_stream(row, empty);
     }
     return Status::EndOfFile("EOF of reading file");
 }
@@ -447,7 +470,7 @@ Status JsonReader::_get_row_from_array(simdjson::ondemand::object* row) {
     return Status::OK();
 }
 
-Status JsonReader::_get_row_from_document_stream(simdjson::ondemand::object* row) {
+Status JsonReader::_get_row_from_document_stream(simdjson::ondemand::object* row, bool *empty) {
     simdjson::ondemand::document_reference doc;
     auto err = (*_doc_stream_itr).get(doc);
     if (err) {
@@ -468,12 +491,30 @@ Status JsonReader::_get_row_from_document_stream(simdjson::ondemand::object* row
 
     switch (tp) {
     case simdjson::ondemand::json_type::array: {
+        if (!_scanner->_strip_outer_array) {
+            std::string err_msg("JSON data is an array, strip_outer_array must be set true");
+            _state->append_error_msg_to_file("", err_msg);
+            _counter->num_rows_filtered++;
+            return Status::DataQualityError(err_msg.c_str());
+        }
+
         simdjson::ondemand::array arr;
         err = doc.get_array().get(arr);
         if (err) {
             std::string err_msg = strings::Substitute("Failed to parse json as array. code=$0, error=$1", err,
                                                       simdjson::error_message(err));
             return Status::DataQualityError(err_msg.c_str());
+        }
+
+        err = arr.is_empty().get(*empty);
+        if (err) {
+            std::string err_msg = strings::Substitute("Failed to parse json as array. code=$0, error=$1", err,
+                                                      simdjson::error_message(err));
+            return Status::DataQualityError(err_msg.c_str());
+        }
+
+        if (*empty) {
+            return Status::OK();
         }
 
         err = arr.begin().get(_array_begin);
@@ -497,6 +538,13 @@ Status JsonReader::_get_row_from_document_stream(simdjson::ondemand::object* row
     }
 
     case simdjson::ondemand::json_type::object: {
+        if (_scanner->_strip_outer_array) {
+            std::string err_msg("JSON data is an object, strip_outer_array must be set false");
+            _state->append_error_msg_to_file("", err_msg);
+            _counter->num_rows_filtered++;
+            return Status::DataQualityError(err_msg.c_str());
+        }
+
         err = doc.get_object().get(*row);
         if (err) {
             std::string err_msg = strings::Substitute("Failed to decode json as object. code=$0, error=$1", err,
@@ -579,6 +627,9 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdj
     // Build slot_desc_dict.
     std::unordered_map<std::string, SlotDescriptor*> slot_desc_dict;
     for (const auto& desc : *slot_descs) {
+        if (desc == nullptr) {
+            continue;
+        }
         slot_desc_dict.emplace(desc->col_name(), desc);
     }
 
@@ -684,46 +735,64 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
         return Status::DataQualityError(err_msg.c_str());
     }
 
-    switch (tp) {
-    case simdjson::ondemand::json_type::null: {
-        column->append_nulls(1);
-        return Status::OK();
-    }
+    auto desc_type = desc->type().type;
 
-    case simdjson::ondemand::json_type::boolean: {
-        bool ok;
-        auto err = value.get_bool().get(ok);
-        if (UNLIKELY(err)) {
-            std::string err_msg = strings::Substitute("Failed to parse the column value as bool. code=$0, error=$1",
-                                                      err, simdjson::error_message(err));
+    if (desc_type == TYPE_FLOAT || desc_type == TYPE_DOUBLE || desc_type == TYPE_BIGINT || desc_type == TYPE_INT ||
+        desc_type == TYPE_SMALLINT || desc_type == TYPE_TINYINT) {
+        // Treat those types as what they are.
+
+        switch (tp) {
+        case simdjson::ondemand::json_type::null: {
+            column->append_nulls(1);
+            return Status::OK();
+        }
+
+        case simdjson::ondemand::json_type::number: {
+            return _construct_column_with_numeric_value(value, column, desc);
+        }
+
+        case simdjson::ondemand::json_type::string: {
+            return _construct_column_with_string_value(value, column, desc);
+        }
+
+        default: {
+            std::string err_msg = strings::Substitute("Unable to cast the column value. column=$0", desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
-
-        if (ok) {
-            _construct_string_column(column, literal_1_slice);
-        } else {
-            _construct_string_column(column, literal_0_slice);
         }
-        return Status::OK();
-    }
 
-    case simdjson::ondemand::json_type::number: {
-        return _construct_column_with_numeric_value(value, column, desc);
-    }
+    } else {
+        // Treat other types as VARCHAR.
+        switch (tp) {
+        case simdjson::ondemand::json_type::null: {
+            column->append_nulls(1);
+            return Status::OK();
+        }
 
-    case simdjson::ondemand::json_type::string: {
-        return _construct_column_with_string_value(value, column, desc);
-    }
+        case simdjson::ondemand::json_type::boolean: {
+            bool ok;
+            auto err = value.get_bool().get(ok);
+            if (UNLIKELY(err)) {
+                std::string err_msg = strings::Substitute("Failed to parse the column value as bool. code=$0, error=$1",
+                                                          err, simdjson::error_message(err));
+                return Status::DataQualityError(err_msg.c_str());
+            }
 
-    case simdjson::ondemand::json_type::object:
-    case simdjson::ondemand::json_type::array: {
-        std::unique_ptr<char[]> buf;
-        size_t buflen{};
-        JsonFunctions::minify_json_to_string(value, buf, buflen);
+            if (ok) {
+                _construct_string_column(column, literal_1_slice);
+            } else {
+                _construct_string_column(column, literal_0_slice);
+            }
+            return Status::OK();
+        }
 
-        _construct_string_column(column, Slice{buf.get(), buflen});
-        return Status::OK();
-    }
+        default: {
+            auto sv = value.raw_json_token();
+            trim_quotes(sv);
+            _construct_string_column(column, Slice{sv.data(), sv.size()});
+            return Status::OK();
+        }
+        }
     }
     return Status::OK();
 }
@@ -752,8 +821,6 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         }
 
         switch (type_desc.type) {
-        // Treat LARGEINT as BIGINT.
-        case TYPE_LARGEINT:
         case TYPE_BIGINT: {
             _construct_numeric_column(column, i64);
             return Status::OK();
@@ -762,7 +829,8 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         case TYPE_INT: {
             int32_t i32 = 0;
             if (cast_int64(i64, &i32) != 0) {
-                std::string err_msg = strings::Substitute("Overflow in cast the integer value as INT. value=$0, column=$1", i64, desc->col_name());
+                std::string err_msg = strings::Substitute(
+                        "Overflow in cast the integer value as INT. value=$0, column=$1", i64, desc->col_name());
                 return Status::DataQualityError(err_msg.c_str());
             }
             _construct_numeric_column(column, i32);
@@ -805,14 +873,6 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
             return Status::OK();
         }
 
-        case TYPE_VARCHAR: {
-        case TYPE_CHAR:
-            auto f = fmt::format_int(i64);
-
-            _construct_string_column(column, Slice{f.data(), f.size()});
-            return Status::OK();
-        }
-
         default: {
             std::string err_msg =
                     strings::Substitute("Unable to cast the integer value. value=$0, column=$1", i64, desc->col_name());
@@ -844,21 +904,27 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
             return Status::OK();
         }
 
-        case TYPE_LARGEINT:
-        case TYPE_BIGINT:
-        case TYPE_INT:
-        case TYPE_SMALLINT:
-        case TYPE_TINYINT: {
-            std::string err_msg = strings::Substitute(
-                    "Unable to construct integer column with floating value. value=$0, column=$1", d, desc->col_name());
-            return Status::DataQualityError(err_msg.c_str());
+        case TYPE_BIGINT: {
+            auto i64 = static_cast<int64_t>(d);
+            _construct_numeric_column(column, i64);
+            return Status::OK();
         }
 
-        case TYPE_VARCHAR:
-        case TYPE_CHAR: {
-            std::ostringstream oss;
-            oss << d;
-            _construct_string_column(column, Slice{oss.str()});
+        case TYPE_INT: {
+            auto i32 = static_cast<int32_t>(d);
+            _construct_numeric_column(column, i32);
+            return Status::OK();
+        }
+
+        case TYPE_SMALLINT: {
+            auto i16 = static_cast<int16_t>(d);
+            _construct_numeric_column(column, i16);
+            return Status::OK();
+        }
+
+        case TYPE_TINYINT: {
+            auto i8 = static_cast<int8_t>(d);
+            _construct_numeric_column(column, i8);
             return Status::OK();
         }
 
@@ -870,8 +936,7 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         }
 
     } else {
-        std::string_view sv;
-        (void)!simdjson::to_json_string(value).get(sv);
+        auto sv = value.raw_json_token();
         std::string err_msg = strings::Substitute("unsupported value type. value=$0, column=$1",
                                                   std::string(sv.data(), sv.size()), desc->col_name());
         return Status::DataQualityError(err_msg.c_str());
@@ -891,32 +956,6 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
     const TypeDescriptor& type_desc = desc->type();
 
     switch (type_desc.type) {
-    case TYPE_VARCHAR:
-    case TYPE_CHAR: {
-        _construct_string_column(column, Slice{sv.data(), sv.size()});
-        return Status::OK();
-    }
-
-    case TYPE_LARGEINT: {
-        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-        auto i128 = StringParser::string_to_int<int128_t>(sv.data(), sv.length(), &parse_result);
-        if (parse_result == StringParser::PARSE_SUCCESS) {
-            _construct_numeric_column(column, i128);
-        } else {
-            // Attemp to parse the string as float.
-            auto d = StringParser::string_to_float<double>(sv.data(), sv.length(), &parse_result);
-            if (parse_result == StringParser::PARSE_SUCCESS) {
-                i128 = static_cast<int128_t>(d);
-                _construct_numeric_column(column, i128);
-            }
-
-            std::string err_msg = strings::Substitute("Unable to cast string value to LARGEINT. value=$0, column=$1",
-                                                      std::string(sv.data(), sv.size()), desc->col_name());
-            return Status::DataQualityError(err_msg.c_str());
-        }
-        return Status::OK();
-    }
-
     case TYPE_BIGINT: {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         auto i64 = StringParser::string_to_int<int64_t>(sv.data(), sv.length(), &parse_result);
