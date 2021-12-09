@@ -3,14 +3,18 @@ package com.starrocks.sql.plan;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -149,7 +153,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
-
     public static String getInsertExecPlan(String originStmt) throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
         SqlScanner input =
@@ -201,7 +204,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     numNodes=0\n" +
                 "     limit: 5\n" +
                 "     use vectorized: true"));
-
 
         sql = "insert into test_all_type select * from test_all_type";
         planFragment = getInsertExecPlan(sql);
@@ -500,7 +502,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testJoinOnExpression() throws Exception {
-        String sql = "SELECT COUNT(*)  FROM lineitem JOIN [shuffle] orders ON l_orderkey = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
+        String sql =
+                "SELECT COUNT(*)  FROM lineitem JOIN [shuffle] orders ON l_orderkey = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
@@ -511,9 +514,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
                 "     cardinality: 600000000"));
-        sql = "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
+        sql =
+                "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
+        Assert.assertTrue(
+                plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
                         "  |  cardinality: 600000000"));
     }
 
@@ -762,7 +767,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testLocalAggregationUponJoin() throws Exception {
         // check that local aggregation is set colocate which upon join with colocate table
-        String sql = "select tbl5.c2,sum(tbl5.c3) from db1.tbl5 join[broadcast] db1.tbl4 on tbl5.c2 = tbl4.c2 group by tbl5.c2;";
+        String sql =
+                "select tbl5.c2,sum(tbl5.c3) from db1.tbl5 join[broadcast] db1.tbl4 on tbl5.c2 = tbl4.c2 group by tbl5.c2;";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         ExecPlan execPlan = pair.second;
         Assert.assertTrue(execPlan.getFragments().get(1).getPlanRoot() instanceof AggregationNode);
@@ -810,24 +816,55 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE"));
 
-        sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', 'others')) a from orders group by 1";
+        sql =
+                "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', 'others')) a from orders group by 1";
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE"));
 
-        sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
+        sql =
+                "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0] ESTIMATE"));
     }
 
     @Test
     public void testPartitionColumnColumnStatistics() throws Exception {
-        String sql = "select l_shipdate, count(1) from lineitem_partition where l_shipdate = '1992-01-01' group by l_shipdate";
+        String sql =
+                "select l_shipdate, count(1) from lineitem_partition where l_shipdate = '1992-01-01' group by l_shipdate";
         String plan = getCostExplain(sql);
         // check L_SHIPDATE is not unknown
-        Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
+        Assert.assertTrue(
+                plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
 
         sql = "select count(1) from lineitem_partition where l_shipdate = '1992-01-01'";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
+        Assert.assertTrue(
+                plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
+    }
+
+    @Test
+    public void testCastDatePredicate() throws Exception {
+        String sql = "select L_PARTKEY from lineitem where year(L_PARTKEY) = 1998";
+
+        OlapTable lineitem = (OlapTable) connectContext.getCatalog().getDb("default_cluster:test").getTable("lineitem");
+
+        MockTpchStatisticStorage mock = new MockTpchStatisticStorage(100);
+        connectContext.getCatalog().setStatisticStorage(mock);
+
+        new Expectations(mock) {
+            {
+                mock.getColumnStatistic(lineitem, "L_PARTKEY");
+                result = new ColumnStatistic(19921212, 19980202, 0, 8, 20000);
+            }
+        };
+
+        String plan = getCostExplain(sql);
+
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("     cardinality: 85714286\n" +
+                "     column statistics: \n" +
+                "     * L_PARTKEY-->[1.9921212E7, 1.9980202E7, 0.0, 8.0, 20000.0] ESTIMATE"));
+
+        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(100));
     }
 }
