@@ -943,7 +943,7 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
 
     case TYPE_TINYINT: {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-        auto i8 = StringParser::string_to_int<int16_t>(sv.data(), sv.length(), &parse_result);
+        auto i8 = StringParser::string_to_int<int8_t>(sv.data(), sv.length(), &parse_result);
         if (parse_result == StringParser::PARSE_SUCCESS) {
             _construct_numeric_column(column, i8);
         } else {
