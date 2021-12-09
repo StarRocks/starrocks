@@ -9,8 +9,8 @@ public class SubqueryRelation extends Relation {
         this.name = name;
         this.query = query;
         // The order by is meaningless in subquery
-        if (this.query instanceof QuerySpecification && !((QuerySpecification) this.query).hasLimit()) {
-            QuerySpecification qs = (QuerySpecification) this.query;
+        if (this.query instanceof SelectRelation && !((SelectRelation) this.query).hasLimit()) {
+            SelectRelation qs = (SelectRelation) this.query;
             qs.clearOrder();
         }
     }

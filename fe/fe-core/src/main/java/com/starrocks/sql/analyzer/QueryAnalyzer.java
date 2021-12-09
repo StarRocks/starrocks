@@ -55,9 +55,9 @@ import com.starrocks.sql.analyzer.relation.ExceptRelation;
 import com.starrocks.sql.analyzer.relation.IntersectRelation;
 import com.starrocks.sql.analyzer.relation.JoinRelation;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.analyzer.relation.RelationVisitor;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.analyzer.relation.SetOperationRelation;
 import com.starrocks.sql.analyzer.relation.SubqueryRelation;
 import com.starrocks.sql.analyzer.relation.TableFunctionRelation;
@@ -175,7 +175,7 @@ public class QueryAnalyzer {
         return queryRelation;
     }
 
-    public QuerySpecification transformSelectStmt(SelectStmt stmt, Scope parent) {
+    public SelectRelation transformSelectStmt(SelectStmt stmt, Scope parent) {
         AnalyzeState analyzeState = new AnalyzeState();
         Scope sourceScope = analyzeFrom(stmt, analyzeState, parent);
         sourceScope.setParent(parent);

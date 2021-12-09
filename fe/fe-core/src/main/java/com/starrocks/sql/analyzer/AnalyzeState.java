@@ -6,8 +6,8 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 
 import java.util.HashMap;
 import java.util.List;
@@ -65,8 +65,8 @@ public class AnalyzeState {
         return columnReferences;
     }
 
-    public QuerySpecification build() {
-        QuerySpecification querySpecification = new QuerySpecification(
+    public SelectRelation build() {
+        SelectRelation selectRelation = new SelectRelation(
                 outputExpressions, columnOutputNames, isDistinct,
                 orderScope, orderSourceExpressions,
                 relation, predicate, limit,
@@ -74,8 +74,8 @@ public class AnalyzeState {
                 orderBy, having,
                 outputAnalytic, orderByAnalytic,
                 columnReferences);
-        querySpecification.setScope(new Scope(RelationId.of(querySpecification), outputScope.getRelationFields()));
-        return querySpecification;
+        selectRelation.setScope(new Scope(RelationId.of(selectRelation), outputScope.getRelationFields()));
+        return selectRelation;
     }
 
     public void setOrderScope(Scope orderScope) {
