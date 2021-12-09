@@ -19,7 +19,6 @@ public class InsertRelation extends Relation {
     public InsertRelation(QueryRelation queryRelation,
                           Database database, Table targetTable, List<Long> targetPartitionIds,
                           List<Column> targetColumn, List<String> targetColumnNames) {
-        super(null);
         this.queryRelation = queryRelation;
         this.database = database;
         this.targetTable = targetTable;

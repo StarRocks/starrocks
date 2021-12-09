@@ -31,9 +31,9 @@ import com.starrocks.sql.analyzer.relation.ExceptRelation;
 import com.starrocks.sql.analyzer.relation.IntersectRelation;
 import com.starrocks.sql.analyzer.relation.JoinRelation;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.analyzer.relation.RelationVisitor;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.analyzer.relation.SetOperationRelation;
 import com.starrocks.sql.analyzer.relation.SubqueryRelation;
 import com.starrocks.sql.analyzer.relation.TableFunctionRelation;
@@ -117,12 +117,12 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
 
     public LogicalPlan transform(Relation relation) {
         // Set limit if user set sql_select_limit.
-        if (relation instanceof QuerySpecification) {
-            QuerySpecification querySpecification = (QuerySpecification) relation;
+        if (relation instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) relation;
             long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
-            if (!querySpecification.hasLimit() &&
+            if (!selectRelation.hasLimit() &&
                     selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-                querySpecification.setLimit(new LimitElement(selectLimit));
+                selectRelation.setLimit(new LimitElement(selectLimit));
             }
         }
 
@@ -200,7 +200,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
     }
 
     @Override
-    public OptExprBuilder visitQuerySpecification(QuerySpecification node, ExpressionMapping context) {
+    public OptExprBuilder visitSelect(SelectRelation node, ExpressionMapping context) {
         LogicalPlan logicalPlan = new QueryTransformer(columnRefFactory, session, outer).plan(node, cteContext);
 
         outputColumn = logicalPlan.getOutputColumn();
@@ -272,7 +272,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             childPlan.add(optExprBuilder);
         }
 
-        Scope outputScope = setOperationRelation.getRelations().get(0).getOutputScope();
+        Scope outputScope = setOperationRelation.getRelations().get(0).getScope();
         ExpressionMapping expressionMapping = new ExpressionMapping(outputScope, outputColumns);
 
         LogicalOperator setOperator;
