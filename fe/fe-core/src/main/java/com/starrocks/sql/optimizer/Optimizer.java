@@ -24,7 +24,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
-import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorReuseRule;
 import com.starrocks.sql.optimizer.task.CTEContext;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -109,7 +109,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteOnlyOnce(memo, rootTaskContext, LimitPruneTabletsRule.getInstance());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
-        ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
+        //ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
@@ -168,6 +168,7 @@ public class Optimizer {
         }
         tryOpenPreAggregate(result);
         // Rewrite Exchange on top of Sort to Final Sort
+        result = new ScalarOperatorReuseRule().rewrite(result, rootTaskContext);
         result = new ExchangeSortToMergeRule().rewrite(result);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         return result;
