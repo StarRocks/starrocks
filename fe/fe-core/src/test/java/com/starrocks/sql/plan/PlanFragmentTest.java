@@ -19,12 +19,17 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.RuleSet;
+import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -4939,5 +4944,48 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  8:Project\n" +
                 "  |  <slot 10> : 0\n"));
+    }
+
+    @Test
+    public void testJoinReorderWithExpressions() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "SELECT t2.*\n" +
+                "FROM t2, (\n" +
+                "    SELECT *\n" +
+                "    FROM t1 \n" +
+                "    WHERE false) subt1 \n" +
+                "    LEFT OUTER JOIN (\n" +
+                "        SELECT *\n" +
+                "        FROM t3 \n" +
+                "        WHERE CAST(t3.v1 AS BOOLEAN) BETWEEN (t3.v2) AND (t3.v2) ) subt3 \n" +
+                "    ON subt1.v4 = subt3.v1 AND subt1.v4 >= subt3.v1 AND subt1.v5 > subt3.v1 AND subt1.v5 = subt3.v1 \n" +
+                "WHERE (subt1.v5 BETWEEN subt1.v5 AND CAST(subt1.v5 AS DECIMAL64)) = subt3.v2;";
+
+        RuleSet mockRule = new RuleSet() {
+            @Override
+            public void addJoinTransformationRules() {
+                this.getTransformRules().clear();
+                this.getTransformRules().add(JoinAssociativityRule.getInstance());
+            }
+        };
+
+        new MockUp<OptimizerContext>() {
+            @Mock
+            public RuleSet getRuleSet() {
+                return mockRule;
+            }
+        };
+
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 1> : 1: v7\n" +
+                "  |  <slot 2> : 2: v8\n" +
+                "  |  <slot 3> : 3: v9\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 5> : 5: v5\n" +
+                "  |  <slot 10> : CAST((11: cast >= 11: cast) AND (11: cast <= CAST(CAST(5: v5 AS DECIMAL64(18,18)) AS DECIMAL128(37,18))) AS BIGINT)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 11> : CAST(5: v5 AS DECIMAL128(37,18))"));
+        Config.enable_decimal_v3 = false;
     }
 }
