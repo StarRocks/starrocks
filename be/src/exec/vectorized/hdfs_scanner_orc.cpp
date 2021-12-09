@@ -230,6 +230,9 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
         // create chunk
         orc::StringDictionary* dict = it->second;
+        if (dict->dictionaryOffset.size() > config::vector_chunk_size) {
+            continue;
+        }
         vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
         // always assume there is a possibility of null value in ORC column.
         // and we evaluate with null always.
