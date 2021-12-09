@@ -7,6 +7,7 @@
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exprs/slot_ref.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
@@ -120,11 +121,22 @@ public:
         _expr_mkt_sgmt = std::make_unique<SlotRef>(TypeDescriptor(TYPE_VARCHAR), 0, 3); // refer to mkt_sgmt
         _expr_constant = std::make_unique<SlotRef>(TypeDescriptor(TYPE_SMALLINT), 0,
                                                    4); // refer to constant value
+        _runtime_state = _create_runtime_state();
     }
 
     void TearDown() override {}
 
 protected:
+    std::shared_ptr<RuntimeState> _create_runtime_state() {
+        TUniqueId fragment_id;
+        TQueryOptions query_options;
+        TQueryGlobals query_globals;
+        auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
+        runtime_state->init_instance_mem_tracker();
+        return runtime_state;
+    }
+
+    std::shared_ptr<RuntimeState> _runtime_state;
     ChunkPtr _chunk_1, _chunk_2, _chunk_3;
     std::unique_ptr<SlotRef> _expr_cust_key, _expr_nation, _expr_region, _expr_mkt_sgmt, _expr_constant;
 };
@@ -138,6 +150,7 @@ void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
 
 // NOLINTNEXTLINE
 TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
+    auto runtime_state = _create_runtime_state();
     std::vector<bool> is_asc, is_null_first;
     is_asc.push_back(false); // region
     is_asc.push_back(true);  // cust_key
@@ -149,10 +162,10 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
 
     ChunksSorterFullSort sorter(&sort_exprs, &is_asc, &is_null_first, 2);
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-    sorter.update(nullptr, _chunk_1);
-    sorter.update(nullptr, _chunk_2);
-    sorter.update(nullptr, _chunk_3);
-    sorter.done(nullptr);
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
     bool eos = false;
     ChunkPtr page_1, page_2;
@@ -189,10 +202,10 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
 
     ChunksSorterFullSort sorter(&sort_exprs, &is_asc, &is_null_first, 2);
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-    sorter.update(nullptr, _chunk_1);
-    sorter.update(nullptr, _chunk_2);
-    sorter.update(nullptr, _chunk_3);
-    sorter.done(nullptr);
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
     bool eos = false;
     ChunkPtr page_1, page_2;
@@ -232,10 +245,10 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
 
     ChunksSorterFullSort sorter(&sort_exprs, &is_asc, &is_null_first, 2);
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-    sorter.update(nullptr, _chunk_1);
-    sorter.update(nullptr, _chunk_2);
-    sorter.update(nullptr, _chunk_3);
-    sorter.done(nullptr);
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
     bool eos = false;
     ChunkPtr page_1, page_2;
@@ -276,10 +289,10 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
 
     ChunksSorterFullSort sorter(&sort_exprs, &is_asc, &is_null_first, 2);
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-    sorter.update(nullptr, _chunk_1);
-    sorter.update(nullptr, _chunk_2);
-    sorter.update(nullptr, _chunk_3);
-    sorter.done(nullptr);
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
     bool eos = false;
     ChunkPtr page_1, page_2;
@@ -319,10 +332,10 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
 
     ChunksSorterTopn sorter(&sort_exprs, &is_asc, &is_null_first, 2, 7, 2);
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-    sorter.update(nullptr, _chunk_1);
-    sorter.update(nullptr, _chunk_2);
-    sorter.update(nullptr, _chunk_3);
-    sorter.done(nullptr);
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
     bool eos = false;
     ChunkPtr page_1, page_2;
@@ -361,10 +374,10 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
 
     ChunksSorterTopn sorter(&sort_exprs, &is_asc, &is_null_first, 7, 7, 2);
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-    sorter.update(nullptr, _chunk_1);
-    sorter.update(nullptr, _chunk_2);
-    sorter.update(nullptr, _chunk_3);
-    sorter.done(nullptr);
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
     bool eos = false;
     ChunkPtr page_1, page_2;
@@ -386,10 +399,10 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
 
     // part sort with large offset
     ChunksSorterTopn sorter2(&sort_exprs, &is_asc, &is_null_first, 100, 2, 2);
-    sorter2.update(nullptr, _chunk_1);
-    sorter2.update(nullptr, _chunk_2);
-    sorter2.update(nullptr, _chunk_3);
-    sorter2.done(nullptr);
+    sorter2.update(_runtime_state.get(), _chunk_1);
+    sorter2.update(_runtime_state.get(), _chunk_2);
+    sorter2.update(_runtime_state.get(), _chunk_3);
+    sorter2.done(_runtime_state.get());
     eos = false;
     page_1->reset();
     sorter2.get_next(&page_1, &eos);
@@ -418,10 +431,10 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
         chunk_1->get_column_by_index(i)->append(*(_chunk_1->get_column_by_index(i)), 0, 1);
         chunk_2->get_column_by_index(i)->append(*(_chunk_2->get_column_by_index(i)), 0, 1);
     }
-    full_sorter.update(nullptr, chunk_1);
-    full_sorter.update(nullptr, chunk_2);
-    full_sorter.update(nullptr, _chunk_3);
-    full_sorter.done(nullptr);
+    full_sorter.update(_runtime_state.get(), chunk_1);
+    full_sorter.update(_runtime_state.get(), chunk_2);
+    full_sorter.update(_runtime_state.get(), _chunk_3);
+    full_sorter.done(_runtime_state.get());
 
     bool eos = false;
     ChunkPtr page_1, page_2;

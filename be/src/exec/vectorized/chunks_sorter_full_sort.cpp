@@ -16,13 +16,14 @@ class SortHelper {
 public:
     // Sort on type-known column, and the column has no NULL value in sorting range.
     template <PrimitiveType PT, bool stable>
-    static void sort_on_not_null_column(Column* column, bool is_asc_order, Permutation& perm) {
-        sort_on_not_null_column_within_range<PT, stable>(column, is_asc_order, perm, 0, perm.size());
+    static Status sort_on_not_null_column(RuntimeState* state, Column* column, bool is_asc_order, Permutation& perm) {
+        return sort_on_not_null_column_within_range<PT, stable>(state, column, is_asc_order, perm, 0, perm.size());
     }
 
     // Sort on type-known column, and the column may have NULL values in the sorting range.
     template <PrimitiveType PT, bool stable>
-    static void sort_on_nullable_column(Column* column, bool is_asc_order, bool is_null_first, Permutation& perm) {
+    static Status sort_on_nullable_column(RuntimeState* state, Column* column, bool is_asc_order, bool is_null_first,
+                                          Permutation& perm) {
         auto* nullable_col = down_cast<NullableColumn*>(column);
 
         auto null_first_fn = [&nullable_col](const PermutationItem& item) -> bool {
@@ -42,7 +43,7 @@ public:
             if (data_offset < perm.size()) {
                 data_count = perm.size() - data_offset;
             } else {
-                return;
+                return Status::OK();
             }
         } else {
             // put all NULLs at the end of the permutation.
@@ -50,12 +51,13 @@ public:
             data_count = end_of_not_null - perm.begin();
         }
         // sort non-null values
-        sort_on_not_null_column_within_range<PT, stable>(nullable_col->mutable_data_column(), is_asc_order, perm,
-                                                         data_offset, data_count);
+        return sort_on_not_null_column_within_range<PT, stable>(state, nullable_col->mutable_data_column(),
+                                                                is_asc_order, perm, data_offset, data_count);
     }
 
     // Sort on column that with unknown data type.
-    static void sort_on_other_column(Column* column, int sort_order_flag, int null_first_flag, Permutation& perm) {
+    static Status sort_on_other_column(RuntimeState* state, Column* column, int sort_order_flag, int null_first_flag,
+                                       Permutation& perm) {
         // decides whether element l precedes element r.
         auto cmp_fn = [&column, &sort_order_flag, &null_first_flag](const PermutationItem& l,
                                                                     const PermutationItem& r) -> bool {
@@ -67,27 +69,28 @@ public:
                 return cmp < 0;
             }
         };
-        pdqsort(perm.begin(), perm.end(), cmp_fn);
+        pdqsort(state->cancelled_ref(), perm.begin(), perm.end(), cmp_fn);
+        RETURN_IF_CANCELLED(state);
+        return Status::OK();
     }
 
 private:
     // Sort on type-known column, and the column has no NULL value in sorting range.
     template <PrimitiveType PT, bool stable>
-    static void sort_on_not_null_column_within_range(Column* column, bool is_asc_order, Permutation& perm,
-                                                     size_t offset, size_t count = 0) {
+    static Status sort_on_not_null_column_within_range(RuntimeState* state, Column* column, bool is_asc_order,
+                                                       Permutation& perm, size_t offset, size_t count = 0) {
         using ColumnTypeName = typename RunTimeTypeTraits<PT>::ColumnType;
         using CppTypeName = typename RunTimeTypeTraits<PT>::CppType;
 
         // for numeric column: integers, floats, date, datetime, decimals
         if constexpr (pt_is_fixedlength<PT>) {
-            sort_on_not_null_fixed_size_column<CppTypeName, stable>(column, is_asc_order, perm, offset, count);
-            return;
+            return sort_on_not_null_fixed_size_column<CppTypeName, stable>(state, column, is_asc_order, perm, offset,
+                                                                           count);
         }
 
         // for binary column
         if constexpr (pt_is_binary<PT>) {
-            sort_on_not_null_binary_column<stable>(column, is_asc_order, perm, offset, count);
-            return;
+            return sort_on_not_null_binary_column<stable>(state, column, is_asc_order, perm, offset, count);
         }
 
         // for other columns
@@ -119,10 +122,12 @@ private:
             end_pos = perm.size();
         }
         if (is_asc_order) {
-            pdqsort(perm.begin() + offset, perm.begin() + end_pos, less_fn);
+            pdqsort(state->cancelled_ref(), perm.begin() + offset, perm.begin() + end_pos, less_fn);
         } else {
-            pdqsort(perm.begin() + offset, perm.begin() + end_pos, greater_fn);
+            pdqsort(state->cancelled_ref(), perm.begin() + offset, perm.begin() + end_pos, greater_fn);
         }
+        RETURN_IF_CANCELLED(state);
+        return Status::OK();
     }
 
     template <typename CppTypeName>
@@ -134,8 +139,8 @@ private:
 
     // Sort string
     template <bool stable>
-    static void sort_on_not_null_binary_column(Column* column, bool is_asc_order, Permutation& perm, size_t offset,
-                                               size_t count = 0) {
+    static Status sort_on_not_null_binary_column(RuntimeState* state, Column* column, bool is_asc_order,
+                                                 Permutation& perm, size_t offset, size_t count = 0) {
         const size_t row_num = (count == 0 || offset + count > perm.size()) ? (perm.size() - offset) : count;
         auto* binary_column = reinterpret_cast<BinaryColumn*>(column);
         auto& data = binary_column->get_data();
@@ -171,20 +176,22 @@ private:
         };
 
         if (is_asc_order) {
-            pdqsort(sort_items.begin(), sort_items.end(), less_fn);
+            pdqsort(state->cancelled_ref(), sort_items.begin(), sort_items.end(), less_fn);
         } else {
-            pdqsort(sort_items.begin(), sort_items.end(), greater_fn);
+            pdqsort(state->cancelled_ref(), sort_items.begin(), sort_items.end(), greater_fn);
         }
+        RETURN_IF_CANCELLED(state);
         for (size_t i = 0; i < row_num; ++i) {
             perm[i + offset].index_in_chunk = sort_items[i].index_in_chunk;
         }
+        return Status::OK();
     }
 
     // Sort on some numeric column which has no NULL value in sorting range.
     // Only supports: integers, floats. Not Slice, DecimalV2Value.
     template <typename CppTypeName, bool stable>
-    static void sort_on_not_null_fixed_size_column(Column* column, bool is_asc_order, Permutation& perm, size_t offset,
-                                                   size_t count = 0) {
+    static Status sort_on_not_null_fixed_size_column(RuntimeState* state, Column* column, bool is_asc_order,
+                                                     Permutation& perm, size_t offset, size_t count = 0) {
         // column->size() == perm.size()
         const size_t row_num = (count == 0 || offset + count > perm.size()) ? (perm.size() - offset) : count;
         const CppTypeName* data = static_cast<CppTypeName*>((void*)column->mutable_raw_data());
@@ -216,14 +223,16 @@ private:
         };
 
         if (is_asc_order) {
-            pdqsort(sort_items.begin(), sort_items.end(), less_fn);
+            pdqsort(state->cancelled_ref(), sort_items.begin(), sort_items.end(), less_fn);
         } else {
-            pdqsort(sort_items.begin(), sort_items.end(), greater_fn);
+            pdqsort(state->cancelled_ref(), sort_items.begin(), sort_items.end(), greater_fn);
         }
+        RETURN_IF_CANCELLED(state);
         // output permutation
         for (size_t i = 0; i < row_num; ++i) {
             perm[i + offset].index_in_chunk = sort_items[i].index_in_chunk;
         }
+        return Status::OK();
     }
 };
 
@@ -294,10 +303,20 @@ bool ChunksSorterFullSort::pull_chunk(ChunkPtr* chunk) {
     _append_rows_to_chunk(chunk->get(), _sorted_segment->chunk.get(), _sorted_permutation, _next_output_row, count);
     _next_output_row += count;
 
-    if (_next_output_row >= _sorted_permutation.size()) {
-        return true;
+    return _next_output_row >= _sorted_permutation.size();
+}
+
+int64_t ChunksSorterFullSort::mem_usage() const {
+    int64_t usage = 0;
+    if (_big_chunk != nullptr) {
+        usage += _big_chunk->memory_usage();
     }
-    return false;
+    if (_sorted_segment != nullptr) {
+        usage += _sorted_segment->mem_usage();
+    }
+    usage += _sorted_permutation.capacity() * sizeof(Permutation);
+    usage += _selective_values.capacity() * sizeof(uint32_t);
+    return usage;
 }
 
 Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
@@ -308,9 +327,9 @@ Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
     // For no more than three order-by columns, sorting by columns can benefit from reducing
     // the cost of calling virtual functions of Column::compare_at.
     if (_get_number_of_order_by_columns() <= 3) {
-        _sort_by_columns();
+        RETURN_IF_ERROR(_sort_by_columns(state));
     } else {
-        _sort_by_row_cmp();
+        RETURN_IF_ERROR(_sort_by_row_cmp(state));
     }
     return Status::OK();
 }
@@ -330,11 +349,11 @@ Status ChunksSorterFullSort::_build_sorting_data(RuntimeState* state) {
 }
 
 // Sort in row style with simplified Permutation struct for the seek of a better cache.
-void ChunksSorterFullSort::_sort_by_row_cmp() {
+Status ChunksSorterFullSort::_sort_by_row_cmp(RuntimeState* state) {
     SCOPED_TIMER(_sort_timer);
 
     if (_get_number_of_order_by_columns() < 1) {
-        return;
+        return Status::OK();
     }
 
     // In this case, PermutationItem::chunk_index is constantly 0,
@@ -360,42 +379,46 @@ void ChunksSorterFullSort::_sort_by_row_cmp() {
         }
     };
 
-    pdqsort(indices.begin(), indices.end(), cmp_fn);
+    pdqsort(state->cancelled_ref(), indices.begin(), indices.end(), cmp_fn);
+    RETURN_IF_CANCELLED(state);
 
     // Set the permutation array to sorted indices.
     for (size_t i = 0; i < elem_number; ++i) {
         _sorted_permutation[i].index_in_chunk = _sorted_permutation[i].permutation_index = indices[i];
     }
+    return Status::OK();
 }
 
-#define CASE_FOR_NULLABLE_COLUMN_SORT(PrimitiveTypeName)                                                       \
-    case PrimitiveTypeName: {                                                                                  \
-        if (stable) {                                                                                          \
-            SortHelper::sort_on_nullable_column<PrimitiveTypeName, true>(column, is_asc_order, is_null_first,  \
-                                                                         _sorted_permutation);                 \
-        } else {                                                                                               \
-            SortHelper::sort_on_nullable_column<PrimitiveTypeName, false>(column, is_asc_order, is_null_first, \
-                                                                          _sorted_permutation);                \
-        }                                                                                                      \
-        break;                                                                                                 \
+#define CASE_FOR_NULLABLE_COLUMN_SORT(PrimitiveTypeName)                                    \
+    case PrimitiveTypeName: {                                                               \
+        if (stable) {                                                                       \
+            RETURN_IF_ERROR((SortHelper::sort_on_nullable_column<PrimitiveTypeName, true>(  \
+                    state, column, is_asc_order, is_null_first, _sorted_permutation)));     \
+        } else {                                                                            \
+            RETURN_IF_ERROR((SortHelper::sort_on_nullable_column<PrimitiveTypeName, false>( \
+                    state, column, is_asc_order, is_null_first, _sorted_permutation)));     \
+        }                                                                                   \
+        break;                                                                              \
     }
 
-#define CASE_FOR_NOT_NULL_COLUMN_SORT(PrimitiveTypeName)                                                              \
-    case PrimitiveTypeName: {                                                                                         \
-        if (stable) {                                                                                                 \
-            SortHelper::sort_on_not_null_column<PrimitiveTypeName, true>(column, is_asc_order, _sorted_permutation);  \
-        } else {                                                                                                      \
-            SortHelper::sort_on_not_null_column<PrimitiveTypeName, false>(column, is_asc_order, _sorted_permutation); \
-        }                                                                                                             \
-        break;                                                                                                        \
+#define CASE_FOR_NOT_NULL_COLUMN_SORT(PrimitiveTypeName)                                                               \
+    case PrimitiveTypeName: {                                                                                          \
+        if (stable) {                                                                                                  \
+            RETURN_IF_ERROR((SortHelper::sort_on_not_null_column<PrimitiveTypeName, true>(state, column, is_asc_order, \
+                                                                                          _sorted_permutation)));      \
+        } else {                                                                                                       \
+            RETURN_IF_ERROR((SortHelper::sort_on_not_null_column<PrimitiveTypeName, false>(                            \
+                    state, column, is_asc_order, _sorted_permutation)));                                               \
+        }                                                                                                              \
+        break;                                                                                                         \
     }
 
 // Sort in column style to avoid calling virtual methods of Column.
-void ChunksSorterFullSort::_sort_by_columns() {
+Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
     SCOPED_TIMER(_sort_timer);
 
     if (_get_number_of_order_by_columns() < 1) {
-        return;
+        return Status::OK();
     }
 
     for (int col_index = static_cast<int>(_get_number_of_order_by_columns()) - 1; col_index >= 0; --col_index) {
@@ -433,8 +456,8 @@ void ChunksSorterFullSort::_sort_by_columns() {
                 CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DATETIME)
                 CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_TIME)
             default: {
-                SortHelper::sort_on_other_column(column, _sort_order_flag[col_index], _null_first_flag[col_index],
-                                                 _sorted_permutation);
+                RETURN_IF_ERROR(SortHelper::sort_on_other_column(state, column, _sort_order_flag[col_index],
+                                                                 _null_first_flag[col_index], _sorted_permutation));
                 break;
             }
             }
@@ -458,8 +481,8 @@ void ChunksSorterFullSort::_sort_by_columns() {
                 CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DATETIME)
                 CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_TIME)
             default: {
-                SortHelper::sort_on_other_column(column, _sort_order_flag[col_index], _null_first_flag[col_index],
-                                                 _sorted_permutation);
+                RETURN_IF_ERROR(SortHelper::sort_on_other_column(state, column, _sort_order_flag[col_index],
+                                                                 _null_first_flag[col_index], _sorted_permutation));
                 break;
             }
             }
@@ -470,6 +493,7 @@ void ChunksSorterFullSort::_sort_by_columns() {
             _sorted_permutation[i].permutation_index = i;
         }
     }
+    return Status::OK();
 }
 
 void ChunksSorterFullSort::_append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset,
