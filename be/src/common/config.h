@@ -646,7 +646,7 @@ CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
 // the buffer size of SinkBuffer
-CONF_Int64(pipeline_sink_buffer_size, "1024");
+CONF_Int64(pipeline_sink_buffer_size, "64");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 // max hdfs file handle
