@@ -110,7 +110,6 @@ private:
     // return others on error
     Status _merge_rowsets_horizontally(int64_t mem_limit, Statistics* stats_output);
     Status _merge_rowsets_vertically(Statistics* stats_output);
-
 };
 
 } // namespace starrocks::vectorized
