@@ -37,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class PublishVersionDaemon extends MasterDaemon {
 
@@ -94,6 +95,7 @@ public class PublishVersionDaemon extends MasterDaemon {
         for (TransactionState transactionState : readyTransactionStates) {
             Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
             Set<Long> publishErrorReplicaIds = Sets.newHashSet();
+            Set<Long> unfinishedBackends = Sets.newHashSet();
             boolean allTaskFinished = true;
             for (PublishVersionTask publishVersionTask : transTasks.values()) {
                 if (publishVersionTask.isFinished()) {
@@ -105,11 +107,19 @@ public class PublishVersionDaemon extends MasterDaemon {
                     }
                 } else {
                     allTaskFinished = false;
+                    unfinishedBackends.add(publishVersionTask.getBackendId());
                 }
             }
             boolean shouldFinishTxn = true;
             if (!allTaskFinished) {
-                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState, publishErrorReplicaIds);
+                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
+                        publishErrorReplicaIds, unfinishedBackends);
+                if (shouldFinishTxn) {
+                    LOG.info("transaction:{} succeed for quorum finish. unfinished backends:{}, error replica:{}",
+                            transactionState.getTransactionId(),
+                            unfinishedBackends.stream().limit(10).collect(Collectors.toList()),
+                            publishErrorReplicaIds.stream().limit(10).collect(Collectors.toList()));
+                }
             }
 
             if (shouldFinishTxn) {
