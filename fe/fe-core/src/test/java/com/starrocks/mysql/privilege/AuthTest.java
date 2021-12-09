@@ -1079,6 +1079,117 @@ public class AuthTest {
         Assert.assertFalse(
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "10.1.1.1", "abcde", null));
 
+        // 38.1 grant node_priv to user
+        privileges = Lists.newArrayList(AccessPrivilege.NODE_PRIV);
+        userIdentity = new UserIdentity("zhaoliu", "%");
+        userDesc = new UserDesc(userIdentity, "12345", true);
+        tablePattern = new TablePattern("*", "*");
+
+        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        try {
+            createUserStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.createUser(createUserStmt);
+        } catch (DdlException e) {
+            Assert.fail();
+        }
+
+        grantStmt = new GrantStmt(userIdentity, null, tablePattern, privileges);
+        try {
+            grantStmt.analyze(analyzer);
+        } catch (UserException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.grant(grantStmt);
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        // 38.2 revoke node_priv from user
+        revokeStmt = new RevokeStmt(userIdentity, null, tablePattern, privileges);
+        try {
+            revokeStmt.analyze(analyzer);
+        } catch (AnalysisException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        currentUser2.clear();
+        auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhaoliu", "", "12345", currentUser2);
+        Assert.assertEquals(1, currentUser2.size());
+        Assert.assertTrue(auth.checkGlobalPriv(currentUser2.get(0), PrivPredicate.OPERATOR));
+
+        try {
+            auth.revoke(revokeStmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+        Assert.assertFalse(auth.checkGlobalPriv(currentUser2.get(0), PrivPredicate.OPERATOR));
+
+
+        // 38.3 grant node_priv to role
+        grantStmt = new GrantStmt(null, "role3", tablePattern, privileges);
+        try {
+            grantStmt.analyze(analyzer);
+        } catch (UserException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.grant(grantStmt);
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        // 38.4 revoke node_priv from role
+        userDesc = new UserDesc(new UserIdentity("sunqi", "%"), "12345", true);
+        createUserStmt = new CreateUserStmt(false, userDesc, "role3");
+        try {
+            createUserStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.createUser(createUserStmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        currentUser2.clear();
+        auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":sunqi", "", "12345", currentUser2);
+        Assert.assertEquals(1, currentUser2.size());
+        Assert.assertTrue(auth.checkGlobalPriv(currentUser2.get(0), PrivPredicate.OPERATOR));
+
+        revokeStmt = new RevokeStmt(null, "role3", tablePattern, privileges);
+        try {
+            revokeStmt.analyze(analyzer);
+        } catch (AnalysisException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.revoke(revokeStmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+        Assert.assertFalse(auth.checkGlobalPriv(currentUser2.get(0), PrivPredicate.OPERATOR));
     }
 
     @Test
@@ -1341,6 +1452,62 @@ public class AuthTest {
             auth.grant(grantStmt);
         } catch (UserException e) {
             e.printStackTrace();
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
+        dropUserStmt = new DropUserStmt(userIdentity);
+        try {
+            dropUserStmt.analyze(analyzer);
+            auth.dropUser(dropUserStmt);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        // ------ grant|revoke node_priv to|from role ------
+        // 1. grant node_priv on resource '*' to role 'role0'
+        List<AccessPrivilege> nodePrivileges = Lists.newArrayList(AccessPrivilege.NODE_PRIV);
+        grantStmt = new GrantStmt(null, role, anyResourcePattern, nodePrivileges);
+        try {
+            grantStmt.analyze(analyzer);
+            auth.grant(grantStmt);
+        } catch (UserException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        createUserStmt = new CreateUserStmt(false, userDesc, role);
+        try {
+            createUserStmt.analyze(analyzer);
+            auth.createUser(createUserStmt);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+        Assert.assertTrue(auth.checkResourcePriv(userIdentity, anyResource, PrivPredicate.OPERATOR));
+        Assert.assertTrue(auth.checkGlobalPriv(userIdentity, PrivPredicate.OPERATOR));
+
+        // 2. revoke node_priv on resource '*' from role 'role0'
+        revokeStmt = new RevokeStmt(null, role, anyResourcePattern, nodePrivileges);
+        try {
+            revokeStmt.analyze(analyzer);
+            auth.revoke(revokeStmt);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+        Assert.assertFalse(auth.checkResourcePriv(userIdentity, anyResource, PrivPredicate.OPERATOR));
+        Assert.assertFalse(auth.checkGlobalPriv(userIdentity, PrivPredicate.OPERATOR));
+
+        // ------ error case ------
+        hasException = false;
+        grantStmt = new GrantStmt(null, role, resourcePattern, nodePrivileges);
+        try {
+            grantStmt.analyze(analyzer);
+            auth.grant(grantStmt);
+        } catch (UserException e1) {
+            e1.printStackTrace();
             hasException = true;
         }
         Assert.assertTrue(hasException);
