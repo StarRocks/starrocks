@@ -17,6 +17,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -38,25 +39,29 @@ public class CTASAnalyzer {
         this.session = session;
     }
 
+    @Deprecated
     public Relation transformCTASStmt(CreateTableAsSelectStmt createTableAsSelectStmt) {
-
         List<String> columnNames = createTableAsSelectStmt.getColumnNames();
         QueryStmt queryStmt = createTableAsSelectStmt.getQueryStmt();
         CreateTableStmt createTableStmt = createTableAsSelectStmt.getCreateTableStmt();
+
+        if (createTableStmt.isExternal()) {
+            throw new SemanticException("CTAS does not support create external table");
+        }
 
         QueryRelation queryRelation = new QueryAnalyzer(catalog, session)
                 .transformQueryStmt(queryStmt, new Scope(RelationId.anonymous(), new RelationFields()));
 
         Map<String, Table> columnNameToTable = Maps.newHashMap();
-        Map<String, Table> tableRefToTableMap = Maps.newHashMap();
+        Map<String, Table> tableRefToTable = Maps.newHashMap();
 
         // For replication_num, we select the maximum value of all tables replication_num
         int defaultReplicationNum = 1;
         List<TableRef> tableRefs = ((SelectStmt) queryStmt).getTableRefs();
         for (TableRef tableRef : tableRefs) {
             String[] aliases = tableRef.getAliases();
+            Table table = catalog.getDb(tableRef.getName().getDb()).getTable(tableRef.getName().getTbl());
             for (String alias : aliases) {
-                Table table = catalog.getDb(tableRef.getName().getDb()).getTable(tableRef.getName().getTbl());
                 if (table instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) table;
                     Short replicationNum = olapTable.getDefaultReplicationNum();
@@ -64,7 +69,7 @@ public class CTASAnalyzer {
                         defaultReplicationNum = replicationNum;
                     }
                 }
-                tableRefToTableMap.put(alias, table);
+                tableRefToTable.put(alias, table);
             }
         }
 
@@ -87,7 +92,7 @@ public class CTASAnalyzer {
         stringType.setAssignedStrLenInColDefinition();
         for (int i = 0; i < allFields.size(); i++) {
             Type type = allFields.get(i).getType();
-            if ("VARCHAR".equals(type.getPrimitiveType().toString())) {
+            if (PrimitiveType.VARCHAR == type.getPrimitiveType()) {
                 type = stringType;
             }
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
@@ -96,11 +101,10 @@ public class CTASAnalyzer {
             Expr originExpression = allFields.get(i).getOriginExpression();
             if (originExpression instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) originExpression;
-                Table table = tableRefToTableMap.get(slotRef.getTblNameWithoutAnalyzed().getTbl());
+                Table table = tableRefToTable.get(slotRef.getTblNameWithoutAnalyzed().getTbl());
                 columnNameToTable.put(slotRef.getTblNameWithoutAnalyzed().getTbl() + "." + slotRef.getColumnName(), table);
             }
         }
-
 
         if (null == createTableStmt.getProperties()) {
             Map<String, String> properties = Maps.newHashMap();

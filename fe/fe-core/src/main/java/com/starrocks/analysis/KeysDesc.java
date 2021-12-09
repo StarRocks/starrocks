@@ -61,6 +61,8 @@ public class KeysDesc implements Writable {
         return keysColumnNames.contains(colName);
     }
 
+    // new planner framework use SemanticException instead of AnalysisException, this code will remove in future
+    @Deprecated
     public void analyze(List<ColumnDef> cols) throws AnalysisException {
         if (type == null) {
             throw new AnalysisException("Keys type is null.");

@@ -122,6 +122,8 @@ public class IndexDef {
         return comment;
     }
 
+    // new planner framework use SemanticException instead of AnalysisException, this code will remove in future
+    @Deprecated
     public void checkColumn(Column column, KeysType keysType) throws AnalysisException {
         if (indexType == IndexType.BITMAP) {
             String indexColName = column.getName();
