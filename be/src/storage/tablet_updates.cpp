@@ -963,7 +963,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
     context.segments_overlap = NONOVERLAPPING;
     context.max_rows_per_segment = max_rows_per_segment;
     context.writer_type =
-            (algorithm == vectorized::VERTICAL ? RowsetWriterType::VERTICAL : RowsetWriterType::HORIZONTAL);
+            (algorithm == vectorized::kVertical ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
     std::unique_ptr<RowsetWriter> rowset_writer;
     Status st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
     if (!st.ok()) {

@@ -257,8 +257,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
     cfg.chunk_size = 1000 + rand() % 2000;
-    cfg.algorithm = VERTICAL;
-    LOG(INFO) << "merge test #rowset:" << num_segment << " #row:" << N << " chunk_size:" << cfg.chunk_size;
+    cfg.algorithm = kVertical;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
@@ -347,13 +346,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
     cfg.chunk_size = 100 + rand() % 2000;
-    cfg.algorithm = VERTICAL;
-    // small size test
-    //    const int num_segment = 3;
-    //    const int N = 30;
-    //    MergeConfig cfg;
-    //    cfg.chunk_size = 20;
-    LOG(INFO) << "seq merge test #rowset:" << num_segment << " #row:" << N << " chunk_size:" << cfg.chunk_size;
+    cfg.algorithm = kVertical;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
