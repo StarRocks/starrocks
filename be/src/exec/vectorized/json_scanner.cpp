@@ -895,6 +895,13 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
         if (parse_result == StringParser::PARSE_SUCCESS) {
             _construct_numeric_column(column, i128);
         } else {
+            // Attemp to parse the string as float.
+            auto d = StringParser::string_to_float<double>(sv.data(), sv.length(), &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                i128 = static_cast<int128_t>(d);
+                _construct_numeric_column(column, i128);
+            }
+
             std::string err_msg = strings::Substitute("Unable to cast string value to LARGEINT. value=$0",
                                                       std::string(sv.data(), sv.size()));
             return Status::DataQualityError(err_msg.c_str());
@@ -908,6 +915,13 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
         if (parse_result == StringParser::PARSE_SUCCESS) {
             _construct_numeric_column(column, i64);
         } else {
+            // Attemp to parse the string as float.
+            auto d = StringParser::string_to_float<double>(sv.data(), sv.length(), &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                i64 = static_cast<int64_t>(d);
+                _construct_numeric_column(column, i64);
+            }
+
             std::string err_msg = strings::Substitute("Unable to cast string value to BIGINT. value=$0",
                                                       std::string(sv.data(), sv.size()));
             return Status::DataQualityError(err_msg.c_str());
@@ -921,6 +935,13 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
         if (parse_result == StringParser::PARSE_SUCCESS) {
             _construct_numeric_column(column, i32);
         } else {
+            // Attemp to parse the string as float.
+            auto d = StringParser::string_to_float<double>(sv.data(), sv.length(), &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                i32 = static_cast<int32_t>(d);
+                _construct_numeric_column(column, i32);
+            }
+
             std::string err_msg = strings::Substitute("Unable to cast string value to INT. value=$0",
                                                       std::string(sv.data(), sv.size()));
             return Status::DataQualityError(err_msg.c_str());
@@ -934,6 +955,13 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
         if (parse_result == StringParser::PARSE_SUCCESS) {
             _construct_numeric_column(column, i16);
         } else {
+            // Attemp to parse the string as float.
+            auto d = StringParser::string_to_float<double>(sv.data(), sv.length(), &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                i16 = static_cast<int16_t>(d);
+                _construct_numeric_column(column, i16);
+            }
+
             std::string err_msg = strings::Substitute("Unable to cast string value to SMALLINT. value=$0",
                                                       std::string(sv.data(), sv.size()));
             return Status::DataQualityError(err_msg.c_str());
@@ -947,6 +975,13 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
         if (parse_result == StringParser::PARSE_SUCCESS) {
             _construct_numeric_column(column, i8);
         } else {
+            // Attemp to parse the string as float.
+            auto d = StringParser::string_to_float<double>(sv.data(), sv.length(), &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                i8 = static_cast<int16_t>(d);
+                _construct_numeric_column(column, i8);
+            }
+
             std::string err_msg = strings::Substitute("Unable to cast string value to TINYINT. value=$0",
                                                       std::string(sv.data(), sv.size()));
             return Status::DataQualityError(err_msg.c_str());
