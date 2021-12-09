@@ -56,6 +56,21 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+        String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("colocate: false"));
+        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (REPLICATED)"));
+
+        sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1 and colocate1.k2=colocate2.k2;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("colocate: true"));
+        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (COLOCATE)"));
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
     public void testScan() throws Exception {
         String sql = "select * from t0";
         String planFragment = getFragmentPlan(sql);

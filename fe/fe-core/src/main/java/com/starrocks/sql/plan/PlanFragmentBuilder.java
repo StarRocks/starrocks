@@ -72,6 +72,7 @@ import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -1493,26 +1494,28 @@ public class PlanFragmentBuilder {
             }
         }
 
-        private void collectOlapScanInFragment(PlanNode root, List<OlapScanNode> scanNodeList) {
-            if (root instanceof OlapScanNode) {
-                scanNodeList.add((OlapScanNode) root);
+        private void collectOlapScanInFragment(OptExpression optExpression,
+                                               List<PhysicalOlapScanOperator> scanNodeList) {
+            Operator operator = optExpression.getOp();
+            if (operator instanceof PhysicalOlapScanOperator) {
+                scanNodeList.add((PhysicalOlapScanOperator) operator);
                 return;
             }
-            if (root instanceof ExchangeNode) {
+            if (operator instanceof PhysicalDistributionOperator) {
                 return;
             }
-            for (PlanNode child : root.getChildren()) {
+            for (OptExpression child : optExpression.getInputs()) {
                 collectOlapScanInFragment(child, scanNodeList);
             }
         }
 
         private boolean isColocateJoin(OptExpression optExpression, ExecPlan context, PlanNode left, PlanNode right) {
-            List<OlapScanNode> rightScanNodes = Lists.newArrayList();
-            collectOlapScanInFragment(right, rightScanNodes);
+            List<PhysicalOlapScanOperator> rightScanNodes = Lists.newArrayList();
+            collectOlapScanInFragment(optExpression.inputAt(1), rightScanNodes);
 
             PhysicalHashJoinOperator joinNode = (PhysicalHashJoinOperator) optExpression.getOp();
-            List<OlapScanNode> leftScanNodes = Lists.newArrayList();
-            collectOlapScanInFragment(left, leftScanNodes);
+            List<PhysicalOlapScanOperator> leftScanNodes = Lists.newArrayList();
+            collectOlapScanInFragment(optExpression.inputAt(0), leftScanNodes);
 
             ColumnRefSet leftChildColumns = optExpression.getInputs().get(0).getOutputColumns();
             ColumnRefSet rightChildColumns = optExpression.getInputs().get(1).getOutputColumns();
@@ -1525,18 +1528,28 @@ public class PlanFragmentBuilder {
             JoinPredicateUtils.getJoinOnPredicatesColumns(equalOnPredicate, leftChildColumns, rightChildColumns,
                     leftOnPredicateColumns, rightOnPredicateColumns);
 
+            boolean leftChildSatisfied = leftScanNodes.stream().anyMatch(olapScanNode -> leftOnPredicateColumns
+                    .containsAll(olapScanNode.getDistributionSpec().getHashDistributionDesc().getColumns()));
+
+            boolean rightChildSatisfied = rightScanNodes.stream().anyMatch(olapScanNode -> rightOnPredicateColumns
+                    .containsAll(olapScanNode.getDistributionSpec().getHashDistributionDesc().getColumns()));
+            if (!leftChildSatisfied || !rightChildSatisfied) {
+                return false;
+            }
+
             ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
-            for (OlapScanNode node : leftScanNodes) {
-                if (leftOnPredicateColumns.stream()
-                        .allMatch(s -> null != context.getDescTbl().getTupleDesc(node.getTupleId()).getSlot(s))) {
+            for (PhysicalOlapScanOperator node : leftScanNodes) {
+                List<Integer> outputColumns =
+                        node.getOutputColumns().stream().map(ColumnRefOperator::getId).collect(Collectors.toList());
+                if (outputColumns.containsAll(leftOnPredicateColumns)) {
                     boolean isColocateGroup = colocateIndex
-                            .isSameGroup(node.getOlapTable().getId(), rightScanNodes.get(0).getOlapTable().getId());
-                    if (node.getOlapTable().getId() == rightScanNodes.get(0).getOlapTable().getId() &&
+                            .isSameGroup(node.getTable().getId(), rightScanNodes.get(0).getTable().getId());
+                    if (node.getTable().getId() == rightScanNodes.get(0).getTable().getId() &&
                             !isColocateGroup) {
                         return true;
                     } else {
                         return isColocateGroup &&
-                                !colocateIndex.isGroupUnstable(colocateIndex.getGroup(node.getOlapTable().getId()));
+                                !colocateIndex.isGroupUnstable(colocateIndex.getGroup(node.getTable().getId()));
                     }
                 }
             }
