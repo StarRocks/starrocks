@@ -296,6 +296,10 @@ private:
     RuntimeProfile::Counter* _active_timer = nullptr;
     RuntimeProfile::Counter* _pending_timer = nullptr;
     RuntimeProfile::Counter* _precondition_block_timer = nullptr;
+    RuntimeProfile::Counter* _input_empty_timer = nullptr;
+    RuntimeProfile::Counter* _first_input_empty_timer = nullptr;
+    RuntimeProfile::Counter* _followup_input_empty_timer = nullptr;
+    RuntimeProfile::Counter* _output_full_timer = nullptr;
     RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
 
     RuntimeProfile::Counter* _schedule_counter = nullptr;
@@ -306,6 +310,8 @@ private:
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
     MonotonicStopWatch* _precondition_block_timer_sw = nullptr;
+    MonotonicStopWatch* _input_empty_timer_sw = nullptr;
+    MonotonicStopWatch* _output_full_timer_sw = nullptr;
 };
 
 } // namespace pipeline

@@ -17,6 +17,11 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _active_timer = ADD_TIMER(_runtime_profile, "DriverActiveTime");
     _pending_timer = ADD_TIMER(_runtime_profile, "DriverPendingTime");
     _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverPreconditionBlockTime", "DriverPendingTime");
+    _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverInputEmptyTime", "DriverPendingTime");
+    _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverFirstInputEmptyTime", "DriverInputEmptyTime");
+    _followup_input_empty_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "DriverFollowupInputEmptyTime", "DriverInputEmptyTime");
+    _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverOutputFullTime", "DriverPendingTime");
     _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
 
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
@@ -67,9 +72,13 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _total_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _pending_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _precondition_block_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _input_empty_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _output_full_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _total_timer_sw->start();
     _pending_timer_sw->start();
     _precondition_block_timer_sw->start();
+    _input_empty_timer_sw->start();
+    _output_full_timer_sw->start();
 
     return Status::OK();
 }

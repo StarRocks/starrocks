@@ -10,7 +10,7 @@
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    SourceOperator::prepare(state);
     _stream_recvr = std::move(
             static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state, _runtime_profile));
     return Status::OK();
