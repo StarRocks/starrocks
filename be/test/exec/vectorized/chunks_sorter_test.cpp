@@ -7,6 +7,7 @@
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exprs/slot_ref.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
