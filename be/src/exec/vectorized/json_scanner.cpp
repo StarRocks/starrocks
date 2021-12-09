@@ -382,7 +382,8 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         if (!st.ok()) {
             chunk->set_num_rows(n);
             _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", st.to_string());
+            row.reset();
+            _state->append_error_msg_to_file(JsonFunctions::minify_json_to_string(row), st.to_string());
             return st;
         }
     }
@@ -541,7 +542,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                 continue;
             }
 
-            RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc->type()));
+            RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc));
         }
         return Status::OK();
     } else {
@@ -565,7 +566,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
                 column->append_nulls(1);
             } else {
-                RETURN_IF_ERROR(_construct_column(val, column, slot_descs[i]->type()));
+                RETURN_IF_ERROR(_construct_column(val, column, slot_descs[i]));
             }
         }
         return Status::OK();
@@ -674,8 +675,7 @@ Status JsonReader::_read_and_parse_json() {
 }
 
 // _construct_column constructs column based on no value.
-Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column,
-                                     const TypeDescriptor& type_desc) {
+Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const SlotDescriptor* desc) {
     simdjson::ondemand::json_type tp;
     auto err = value.type().get(tp);
     if (err) {
@@ -708,11 +708,11 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
     }
 
     case simdjson::ondemand::json_type::number: {
-        return _construct_column_with_numeric_value(value, column, type_desc);
+        return _construct_column_with_numeric_value(value, column, desc);
     }
 
     case simdjson::ondemand::json_type::string: {
-        return _construct_column_with_string_value(value, column, type_desc);
+        return _construct_column_with_string_value(value, column, desc);
     }
 
     case simdjson::ondemand::json_type::object:
@@ -729,7 +729,7 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
 }
 
 Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::value& value, Column* column,
-                                                        const TypeDescriptor& type_desc) {
+                                                        const SlotDescriptor* desc) {
     simdjson::ondemand::number_type tp;
 
     auto err = value.get_number_type().get(tp);
@@ -739,6 +739,7 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
                                     simdjson::error_message(err));
         return Status::DataQualityError(err_msg.c_str());
     }
+    const TypeDescriptor& type_desc = desc->type();
 
     if (tp == simdjson::ondemand::number_type::signed_integer) {
         int64_t i64 = 0;
@@ -761,7 +762,7 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         case TYPE_INT: {
             int32_t i32 = 0;
             if (cast_int64(i64, &i32) != 0) {
-                std::string err_msg = strings::Substitute("Overflow in cast the integer value as INT. value=$0", i64);
+                std::string err_msg = strings::Substitute("Overflow in cast the integer value as INT. value=$0, column=$1", i64, desc->col_name());
                 return Status::DataQualityError(err_msg.c_str());
             }
             _construct_numeric_column(column, i32);
@@ -771,8 +772,8 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         case TYPE_SMALLINT: {
             int16_t i16 = 0;
             if (cast_int64(i64, &i16) != 0) {
-                std::string err_msg =
-                        strings::Substitute("Overflow in cast the integer value as SMALLINT. value=$0", i64);
+                std::string err_msg = strings::Substitute(
+                        "Overflow in cast the integer value as SMALLINT. value=$0, column=$1", i64, desc->col_name());
                 return Status::DataQualityError(err_msg.c_str());
             }
             _construct_numeric_column(column, i16);
@@ -782,8 +783,8 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         case TYPE_TINYINT: {
             int8_t i8 = 0;
             if (cast_int64(i64, &i8) != 0) {
-                std::string err_msg =
-                        strings::Substitute("Overflow in cast the integer value as TINYINT. value=$0", i64);
+                std::string err_msg = strings::Substitute(
+                        "Overflow in cast the integer value as TINYINT. value=$0, column=$1", i64, desc->col_name());
                 return Status::DataQualityError(err_msg.c_str());
             }
             _construct_numeric_column(column, i8);
@@ -805,6 +806,7 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         }
 
         case TYPE_VARCHAR: {
+        case TYPE_CHAR:
             auto f = fmt::format_int(i64);
 
             _construct_string_column(column, Slice{f.data(), f.size()});
@@ -812,7 +814,8 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         }
 
         default: {
-            std::string err_msg = strings::Substitute("Unable to cast the integer value. value=$0", i64);
+            std::string err_msg =
+                    strings::Substitute("Unable to cast the integer value. value=$0, column=$1", i64, desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
         }
@@ -846,12 +849,13 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         case TYPE_INT:
         case TYPE_SMALLINT:
         case TYPE_TINYINT: {
-            std::string err_msg =
-                    strings::Substitute("Unable to construct integer column with floating value. value=$0", d);
+            std::string err_msg = strings::Substitute(
+                    "Unable to construct integer column with floating value. value=$0, column=$1", d, desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
 
-        case TYPE_VARCHAR: {
+        case TYPE_VARCHAR:
+        case TYPE_CHAR: {
             std::ostringstream oss;
             oss << d;
             _construct_string_column(column, Slice{oss.str()});
@@ -859,22 +863,23 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
         }
 
         default: {
-            std::string err_msg = strings::Substitute("Unable to cast the floating value. value=$0", d);
+            std::string err_msg =
+                    strings::Substitute("Unable to cast the floating value. value=$0, column=$1", d, desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
         }
 
     } else {
         std::string_view sv;
-        simdjson::to_json_string(value).get(sv);
-        std::string err_msg =
-                strings::Substitute("unsupported value type. value=$0", std::string(sv.data(), sv.size()));
+        (void)!simdjson::to_json_string(value).get(sv);
+        std::string err_msg = strings::Substitute("unsupported value type. value=$0, column=$1",
+                                                  std::string(sv.data(), sv.size()), desc->col_name());
         return Status::DataQualityError(err_msg.c_str());
     }
 }
 
 Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value& value, Column* column,
-                                                       const TypeDescriptor& type_desc) {
+                                                       const SlotDescriptor* desc) {
     std::string_view sv;
     auto err = value.get_string().get(sv);
     if (UNLIKELY(err)) {
@@ -883,8 +888,11 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
         return Status::DataQualityError(err_msg.c_str());
     }
 
+    const TypeDescriptor& type_desc = desc->type();
+
     switch (type_desc.type) {
-    case TYPE_VARCHAR: {
+    case TYPE_VARCHAR:
+    case TYPE_CHAR: {
         _construct_string_column(column, Slice{sv.data(), sv.size()});
         return Status::OK();
     }
@@ -902,8 +910,8 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
                 _construct_numeric_column(column, i128);
             }
 
-            std::string err_msg = strings::Substitute("Unable to cast string value to LARGEINT. value=$0",
-                                                      std::string(sv.data(), sv.size()));
+            std::string err_msg = strings::Substitute("Unable to cast string value to LARGEINT. value=$0, column=$1",
+                                                      std::string(sv.data(), sv.size()), desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
         return Status::OK();
@@ -922,8 +930,8 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
                 _construct_numeric_column(column, i64);
             }
 
-            std::string err_msg = strings::Substitute("Unable to cast string value to BIGINT. value=$0",
-                                                      std::string(sv.data(), sv.size()));
+            std::string err_msg = strings::Substitute("Unable to cast string value to BIGINT. value=$0, column=$1",
+                                                      std::string(sv.data(), sv.size()), desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
         return Status::OK();
@@ -942,8 +950,8 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
                 _construct_numeric_column(column, i32);
             }
 
-            std::string err_msg = strings::Substitute("Unable to cast string value to INT. value=$0",
-                                                      std::string(sv.data(), sv.size()));
+            std::string err_msg = strings::Substitute("Unable to cast string value to INT. value=$0, column=$1",
+                                                      std::string(sv.data(), sv.size()), desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
         return Status::OK();
@@ -962,8 +970,8 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
                 _construct_numeric_column(column, i16);
             }
 
-            std::string err_msg = strings::Substitute("Unable to cast string value to SMALLINT. value=$0",
-                                                      std::string(sv.data(), sv.size()));
+            std::string err_msg = strings::Substitute("Unable to cast string value to SMALLINT. value=$0, column=$1",
+                                                      std::string(sv.data(), sv.size()), desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
         return Status::OK();
@@ -982,8 +990,8 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
                 _construct_numeric_column(column, i8);
             }
 
-            std::string err_msg = strings::Substitute("Unable to cast string value to TINYINT. value=$0",
-                                                      std::string(sv.data(), sv.size()));
+            std::string err_msg = strings::Substitute("Unable to cast string value to TINYINT. value=$0, column=$1",
+                                                      std::string(sv.data(), sv.size()), desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
         return Status::OK();
@@ -995,8 +1003,8 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
         if (parse_result == StringParser::PARSE_SUCCESS) {
             _construct_numeric_column(column, f);
         } else {
-            std::string err_msg = strings::Substitute("Unable to cast string value to FLOAT. value=$0",
-                                                      std::string(sv.data(), sv.size()));
+            std::string err_msg = strings::Substitute("Unable to cast string value to FLOAT. value=$0, column=$1",
+                                                      std::string(sv.data(), sv.size()), desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
         return Status::OK();
@@ -1008,8 +1016,8 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
         if (parse_result == StringParser::PARSE_SUCCESS) {
             _construct_numeric_column(column, d);
         } else {
-            std::string err_msg = strings::Substitute("Unable to cast string value to DOUBLE. value=$0",
-                                                      std::string(sv.data(), sv.size()));
+            std::string err_msg = strings::Substitute("Unable to cast string value to DOUBLE. value=$0, column=$1",
+                                                      std::string(sv.data(), sv.size()), desc->col_name());
             return Status::DataQualityError(err_msg.c_str());
         }
         return Status::OK();
