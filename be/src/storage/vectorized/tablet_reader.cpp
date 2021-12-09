@@ -77,15 +77,7 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
     return Status::OK();
 }
 
-Status TabletReader::_get_segment_iterators(const RowsetReadOptions& options, std::vector<ChunkIteratorPtr>* iters) {
-    SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
-    for (auto& rowset : _rowsets) {
-        RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), options, iters));
-    }
-    return Status::OK();
-}
-
-Status TabletReader::_init_collector(const TabletReaderParams& params) {
+Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     KeysType keys_type = _tablet->tablet_schema().keys_type();
     RETURN_IF_ERROR(_init_predicates(params));
@@ -109,8 +101,16 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         rs_opts.meta = _tablet->data_dir()->get_meta();
     }
 
+    SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
+    for (auto& rowset : _rowsets) {
+        RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
+    }
+    return Status::OK();
+}
+
+Status TabletReader::_init_collector(const TabletReaderParams& params) {
     std::vector<ChunkIteratorPtr> seg_iters;
-    RETURN_IF_ERROR(_get_segment_iterators(rs_opts, &seg_iters));
+    RETURN_IF_ERROR(get_segment_iterators(params, &seg_iters));
 
     // Put each SegmentIterator into a TimedChunkIterator, if a profile is provided.
     if (params.profile != nullptr) {
@@ -125,6 +125,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
 
     // If |keys_type| is UNIQUE_KEYS and |params.skip_aggregation| is true, must disable aggregate totally.
     // If |keys_type| is AGG_KEYS and |params.skip_aggregation| is true, aggregate is an optional operation.
+    KeysType keys_type = _tablet->tablet_schema().keys_type();
     const auto skip_aggr = params.skip_aggregation;
     const auto select_all_keys = _schema.num_key_fields() == _tablet->num_key_columns();
     DCHECK_LE(_schema.num_key_fields(), _tablet->num_key_columns());
