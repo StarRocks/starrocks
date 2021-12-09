@@ -982,7 +982,7 @@ public class TabletScheduler extends MasterDaemon {
             long nextTxnId =
                     Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             replica.setWatermarkTxnId(nextTxnId);
-            tabletCtx.resetDecommissionReplicaState();
+            tabletCtx.resetDecommissionedReplicaState();
             tabletCtx.setDecommissionedReplica(replica);
             replica.setState(ReplicaState.DECOMMISSION);
             // set priority to normal because it may wait for a long time. Remain it as VERY_HIGH may block other task.
@@ -1197,7 +1197,7 @@ public class TabletScheduler extends MasterDaemon {
 
     private void releaseTabletCtx(TabletSchedCtx tabletCtx, TabletSchedCtx.State state) {
         tabletCtx.setState(state);
-        tabletCtx.resetDecommissionReplicaState();
+        tabletCtx.resetDecommissionedReplicaState();
         tabletCtx.releaseResource(this);
         tabletCtx.setFinishedTime(System.currentTimeMillis());
     }

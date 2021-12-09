@@ -708,7 +708,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
     }
 
-    public void resetDecommissionReplicaState() {
+    public void resetDecommissionedReplicaState() {
         if (decommissionedReplica != null
                 && decommissionedReplica.getState() == ReplicaState.DECOMMISSION
                 && decommissionedReplicaPreviousState != null) {
