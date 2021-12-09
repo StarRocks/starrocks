@@ -12,6 +12,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -64,11 +65,13 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class Explain {
-    public static String toString(OptExpression root, List<ColumnRefOperator> outputColumns) {
+    public static String toString(OptExpression root, List<ColumnRefOperator> outputColumns,
+                                  ColumnRefFactory columnRefFactory) {
         String outputBuilder = "- Output => [" + outputColumns.stream().map(c -> new ExpressionPrinter().print(c))
                 .collect(Collectors.joining(", ")) + "]";
 
-        OperatorStr optStrings = new OperatorPrinter().visit(root, new OperatorPrinter.ExplainContext(1));
+        OperatorStr optStrings =
+                new OperatorPrinter(columnRefFactory).visit(root, new OperatorPrinter.ExplainContext(1));
         OperatorStr rootOperatorStr = new OperatorStr(outputBuilder, 0, Lists.newArrayList(optStrings));
         return rootOperatorStr.toString();
     }
@@ -101,6 +104,11 @@ public class Explain {
 
     public static class OperatorPrinter
             extends OptExpressionVisitor<OperatorStr, OperatorPrinter.ExplainContext> {
+        private ColumnRefFactory columnRefFactory;
+
+        public OperatorPrinter(ColumnRefFactory columnRefFactory) {
+            this.columnRefFactory = columnRefFactory;
+        }
 
         static class ExplainContext {
             Integer step;
@@ -393,7 +401,9 @@ public class Explain {
                                                       OperatorPrinter.ExplainContext context) {
             PhysicalTableFunctionOperator tableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- TABLE FUNCTION [" + tableFunction.getFn().functionName() + "]");
-            sb.append(buildOutputColumns(tableFunction, ""));
+            sb.append(buildOutputColumns(tableFunction, "[" +
+                    tableFunction.getOutputColumns().getStream().mapToObj(id -> columnRefFactory.getColumnRef(id)
+                    ).map(new ExpressionPrinter()::print).collect(Collectors.joining(", ")) + "]"));
             sb.append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);

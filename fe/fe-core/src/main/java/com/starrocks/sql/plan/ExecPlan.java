@@ -10,6 +10,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TExplainLevel;
 
@@ -32,14 +33,17 @@ public class ExecPlan {
 
     private final OptExpression physicalPlan;
     private final List<ColumnRefOperator> outputColumns;
+    private final ColumnRefFactory columnRefFactory;
 
     public ExecPlan(PlannerContext planCtx, ConnectContext connectContext, List<String> colNames,
-                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns) {
+                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns,
+                    ColumnRefFactory columnRefFactory) {
         this.planCtx = planCtx;
         this.connectContext = connectContext;
         this.colNames = colNames;
         this.physicalPlan = physicalPlan;
         this.outputColumns = outputColumns;
+        this.columnRefFactory = columnRefFactory;
     }
 
     public ConnectContext getConnectContext() {
@@ -93,7 +97,7 @@ public class ExecPlan {
     public String getExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
         if (level == null) {
-            str.append(Explain.toString(physicalPlan, outputColumns));
+            str.append(Explain.toString(physicalPlan, outputColumns, columnRefFactory));
         } else {
             if (planCount != 0) {
                 str.append("There are ").append(planCount).append(" plans in optimizer search space\n");
