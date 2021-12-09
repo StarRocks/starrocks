@@ -303,11 +303,26 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
 
 TEST_F(JsonScannerTest, test_multi_type) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_BOOLEAN);
+
+    types.emplace_back(TYPE_TINYINT);
+    types.emplace_back(TYPE_SMALLINT);
     types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_BIGINT);
+    // Numbers beyond range of uint64_t is not supported by json scanner.
+    // Hence, we skip the test of LARGEINT.
+
+    types.emplace_back(TYPE_FLOAT);
+    types.emplace_back(TYPE_DOUBLE);
+
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_DATE);
+    types.emplace_back(TYPE_DATETIME);
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    types.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9));
+    types.emplace_back(TypeDescriptor::create_char_type(20));
+    types.emplace_back(TYPE_TIME);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -319,17 +334,24 @@ TEST_F(JsonScannerTest, test_multi_type) {
     range.__set_path("./be/test/exec/test_data/json_scanner/test_multi_type.json");
     ranges.emplace_back(range);
 
-    auto scanner = create_json_scanner(types, ranges, {"f_float", "f_bool", "f_int", "f_string", "f_array"});
+    auto scanner = create_json_scanner(
+            types, ranges,
+            {"f_bool", "f_tinyint", "f_smallint", "f_int", "f_bigint", "f_float", "f_double", "f_varchar", "f_date",
+             "f_datetime", "f_array", "f_decimal", "f_char", "f_time"});
 
     Status st;
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
     ChunkPtr chunk = scanner->get_next().value();
-    EXPECT_EQ(5, chunk->num_columns());
+    EXPECT_EQ(14, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[3.14, 1, 123, 'starrocks', '[1,3,5]']", chunk->debug_row(0));
+    auto expected =
+            "[1, 127, 32767, 2147483647, 9223372036854775807, 3.14, 3.14, 'starrocks', 2021-12-09, 2021-12-09 "
+            "10:00:00, '[1,3,5]', 1234565789012345678901234567.123456789, 'starrocks', 36000]";
+
+    EXPECT_EQ(expected, chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_cast_type) {

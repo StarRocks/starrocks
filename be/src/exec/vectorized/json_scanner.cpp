@@ -980,10 +980,10 @@ Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value
         return Status::OK();
     }
 
+    // Treat all other types as VARCHAR.
     default: {
-        std::string err_msg =
-                strings::Substitute("unsupported value type. value=$0", std::string(sv.data(), sv.size()));
-        return Status::DataQualityError(err_msg.c_str());
+        _construct_string_column(column, Slice{sv.data(), sv.size()});
+        return Status::OK();
     }
     }
 }
