@@ -311,7 +311,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
     RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
     create_rowset_writer_context(&tablet_schema, &writer_context);
     writer_context.max_rows_per_segment = 5000;
-    writer_context.writer_type = VERTICAL;
+    writer_context.writer_type = kVertical;
 
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());

@@ -74,10 +74,10 @@ Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, s
         auto adapter_context = context;
         adapter_context.memory_format_version = memory_format_version;
         *output = std::make_unique<vectorized::RowsetWriterAdapter>(adapter_context);
-    } else if (context.writer_type == HORIZONTAL) {
+    } else if (context.writer_type == kHorizontal) {
         *output = std::make_unique<HorizontalBetaRowsetWriter>(context);
     } else {
-        DCHECK(context.writer_type == VERTICAL);
+        DCHECK(context.writer_type == kVertical);
         *output = std::make_unique<VerticalBetaRowsetWriter>(context);
     }
     return (*output)->init() == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to init rowset writer");

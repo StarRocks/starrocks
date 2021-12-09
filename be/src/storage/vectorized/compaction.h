@@ -20,12 +20,12 @@ class DataDir;
 
 enum CompactionAlgorithm {
     // compaction by all columns together.
-    HORIZONTAL = 0,
+    kHorizontal = 0,
     // compaction by column group, for tablet with many columns.
-    VERTICAL = 1
+    kVertical = 1
 };
 
-std::string compaction_algorithm_to_string(CompactionAlgorithm algorithm);
+const char* compaction_algorithm_to_string(CompactionAlgorithm algorithm);
 
 // This class is a base class for compaction.
 // The entrance of this class is compact()
@@ -54,8 +54,8 @@ public:
     static Status init(int concurreny);
 
     // choose compaction algorithm according to tablet schema, max columns per group and segment iterator num.
-    // 1. if the number of columns in the schema is less than or equal to max_columns_per_group, use HORIZONTAL.
-    // 2. if source_num is less than or equal to 1, or is more than MAX_SOURCES, use HORIZONTAL.
+    // 1. if the number of columns in the schema is less than or equal to max_columns_per_group, use kHorizontal.
+    // 2. if source_num is less than or equal to 1, or is more than MAX_SOURCES, use kHorizontal.
     static CompactionAlgorithm choose_compaction_algorithm(size_t num_columns, int64_t max_columns_per_group,
                                                            size_t source_num);
 
@@ -82,16 +82,6 @@ protected:
     // semaphore used to limit the concurrency of running compaction tasks
     static Semaphore _concurrency_sem;
 
-private:
-    StatusOr<size_t> _get_segment_iterator_num();
-
-    // merge rows from vectorized reader and write into `_output_rs_writer`.
-    // return Status::OK() and set statistics into `*stats_output`.
-    // return others on error
-    Status merge_rowsets_horizontally(int64_t mem_limit, Statistics* stats_output);
-    Status merge_rowsets_vertically(Statistics* stats_output);
-
-protected:
     MemTracker* _mem_tracker = nullptr;
     TabletSharedPtr _tablet;
     // used for vertical compaction
@@ -111,6 +101,16 @@ protected:
     Version _output_version;
 
     RuntimeProfile _runtime_profile;
+
+private:
+    StatusOr<size_t> _get_segment_iterator_num();
+
+    // merge rows from vectorized reader and write into `_output_rs_writer`.
+    // return Status::OK() and set statistics into `*stats_output`.
+    // return others on error
+    Status _merge_rowsets_horizontally(int64_t mem_limit, Statistics* stats_output);
+    Status _merge_rowsets_vertically(Statistics* stats_output);
+
 };
 
 } // namespace starrocks::vectorized

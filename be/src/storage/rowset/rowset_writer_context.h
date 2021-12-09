@@ -32,7 +32,7 @@ namespace starrocks {
 
 class TabletSchema;
 
-enum RowsetWriterType { HORIZONTAL = 0, VERTICAL = 1 };
+enum RowsetWriterType { kHorizontal = 0, kVertical = 1 };
 
 class RowsetWriterContext {
 public:
@@ -79,7 +79,7 @@ public:
 
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
 
-    RowsetWriterType writer_type = HORIZONTAL;
+    RowsetWriterType writer_type = kHorizontal;
 };
 
 } // namespace starrocks
