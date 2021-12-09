@@ -4,18 +4,13 @@
 
 #include "gutil/strings/substitute.h"
 namespace starrocks::pipeline {
-void QuerySharedDriverQueue::close() {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-    _is_closed = true;
-    _cv.notify_all();
-}
 
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level();
     {
         std::lock_guard<std::mutex> lock(_global_mutex);
-        _queues[level % QUEUE_SIZE].queue.emplace(driver);
-        _cv.notify_one();
+        _queues[level % QUEUE_SIZE].queue.emplace_back(driver);
+        ++_size;
     }
 }
 
@@ -26,49 +21,84 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
     }
 
     std::lock_guard<std::mutex> lock(_global_mutex);
+    _size += drivers.size();
     for (int i = 0; i < drivers.size(); i++) {
-        _queues[levels[i] % QUEUE_SIZE].queue.emplace(drivers[i]);
-        _cv.notify_one();
+        _queues[levels[i] % QUEUE_SIZE].queue.emplace_back(drivers[i]);
     }
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
+DriverRawPtr QuerySharedDriverQueue::put_back_and_take(const std::vector<DriverRawPtr>& drivers, size_t* queue_index) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    if (_size == 0 && drivers.size() == 1) {
+        *queue_index = drivers[0]->driver_acct().get_level() % QUEUE_SIZE;
+        return drivers[0];
+    }
+
+    _size += drivers.size();
+    for (int i = 0; i < drivers.size(); i++) {
+        _queues[drivers[i]->driver_acct().get_level() % QUEUE_SIZE].queue.emplace_back(drivers[i]);
+    }
+
+    return _do_take(queue_index);
+}
+
+DriverRawPtr QuerySharedDriverQueue::take(size_t* queue_index) {
+    std::unique_lock<std::mutex> lock(_global_mutex);
+    return _do_take(queue_index);
+}
+
+std::vector<DriverRawPtr> QuerySharedDriverQueue::steal() {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    std::vector<DriverRawPtr> steal_drivers;
+    if (_size == 0) {
+        return steal_drivers;
+    }
+
+    for (int i = 0; i < QUEUE_SIZE; ++i) {
+        int num_steals_drivers = (_queues[i].queue.size() + 1) / 2;
+        while (num_steals_drivers--) {
+            steal_drivers.emplace_back(_queues[i].queue.back());
+            _queues[i].queue.pop_back();
+        }
+    }
+
+    _size -= steal_drivers.size();
+
+    return steal_drivers;
+}
+
+DriverRawPtr QuerySharedDriverQueue::_do_take(size_t* queue_index) {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
     DriverRawPtr driver_ptr;
 
-    {
-        std::unique_lock<std::mutex> lock(_global_mutex);
-        while (true) {
-            if (_is_closed) {
-                return Status::Cancelled("Shutdown");
+    for (int i = 0; i < QUEUE_SIZE; ++i) {
+        // we just search for queue has element
+        if (!_queues[i].queue.empty()) {
+            double local_target_time = _queues[i].accu_time_after_divisor();
+            // if this is first queue that has element, we select it;
+            // else we choose queue that the execution time is less sufficient,
+            // and record time.
+            if (queue_idx < 0 || local_target_time < target_accu_time) {
+                target_accu_time = local_target_time;
+                queue_idx = i;
             }
-
-            for (int i = 0; i < QUEUE_SIZE; ++i) {
-                // we just search for queue has element
-                if (!_queues[i].queue.empty()) {
-                    double local_target_time = _queues[i].accu_time_after_divisor();
-                    // if this is first queue that has element, we select it;
-                    // else we choose queue that the execution time is less sufficient,
-                    // and record time.
-                    if (queue_idx < 0 || local_target_time < target_accu_time) {
-                        target_accu_time = local_target_time;
-                        queue_idx = i;
-                    }
-                }
-            }
-
-            if (queue_idx >= 0) {
-                break;
-            }
-            _cv.wait(lock);
         }
-        // record queue's index to accumulate time for it.
-        *queue_index = queue_idx;
-        driver_ptr = _queues[queue_idx].queue.front();
-        _queues[queue_idx].queue.pop();
     }
+
+    if (queue_idx < 0) {
+        return nullptr;
+    }
+
+    // record queue's index to accumulate time for it.
+    *queue_index = queue_idx;
+    driver_ptr = _queues[queue_idx].queue.front();
+    _queues[queue_idx].queue.pop_front();
+
+    --_size;
 
     // next pipeline driver to execute.
     return driver_ptr;

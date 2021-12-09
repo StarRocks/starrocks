@@ -9,6 +9,7 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_poller.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/pipeline/pipeline_driver_queue_manager.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state.h"
@@ -18,6 +19,7 @@
 
 namespace starrocks {
 namespace pipeline {
+
 class DriverDispatcher;
 using DriverDispatcherPtr = std::shared_ptr<DriverDispatcher>;
 
@@ -53,7 +55,7 @@ private:
 
 private:
     LimitSetter _num_threads_setter;
-    std::unique_ptr<DriverQueue> _driver_queue;
+    std::unique_ptr<DriverQueueManager> _driver_queue_manager;
     std::unique_ptr<ThreadPool> _thread_pool;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;

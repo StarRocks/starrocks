@@ -8,16 +8,18 @@
 
 namespace starrocks::pipeline {
 GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool)
-        : _driver_queue(new QuerySharedDriverQueue()),
+        : _driver_queue_manager(std::make_unique<DriverQueueManager>()),
           _thread_pool(std::move(thread_pool)),
-          _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
+          _blocked_driver_poller(new PipelineDriverPoller(_driver_queue_manager.get())),
           _exec_state_reporter(new ExecStateReporter()) {}
 
 GlobalDriverDispatcher::~GlobalDriverDispatcher() {
-    _driver_queue->close();
+    _driver_queue_manager->close();
 }
 
 void GlobalDriverDispatcher::initialize(int num_threads) {
+    _driver_queue_manager->initialize(num_threads);
+
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
@@ -26,6 +28,8 @@ void GlobalDriverDispatcher::initialize(int num_threads) {
 }
 
 void GlobalDriverDispatcher::change_num_threads(int32_t num_threads) {
+    _driver_queue_manager->change_num_dispatchers(num_threads);
+
     int32_t old_num_threads = 0;
     if (!_num_threads_setter.adjust_expect_num(num_threads, &old_num_threads)) {
         return;
@@ -46,13 +50,16 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
 }
 
 void GlobalDriverDispatcher::run() {
+    const int dispatcher_id = this->_driver_queue_manager->gen_dispatcher_id();
+
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
 
         size_t queue_index;
-        auto maybe_driver = this->_driver_queue->take(&queue_index);
+        bool is_from_remote_queue;
+        auto maybe_driver = this->_driver_queue_manager->take(dispatcher_id, &queue_index, &is_from_remote_queue);
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -87,7 +94,8 @@ void GlobalDriverDispatcher::run() {
             // query context has ready drivers to run, so extend its lifetime.
             query_ctx->extend_lifetime();
             auto status = driver->process(runtime_state);
-            this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
+            this->_driver_queue_manager->get_sub_queue(dispatcher_id, queue_index, is_from_remote_queue)
+                    ->update_accu_time(driver);
 
             if (!status.ok()) {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
@@ -107,7 +115,7 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                this->_driver_queue->put_back(driver);
+                this->_driver_queue_manager->put_back(dispatcher_id, driver);
                 break;
             }
             case FINISH:
@@ -143,7 +151,7 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
             driver->set_driver_state(DriverState::INPUT_EMPTY);
             this->_blocked_driver_poller->add_blocked_driver(driver);
         } else {
-            this->_driver_queue->put_back(driver);
+            this->_driver_queue_manager->put_back(-1, driver);
         }
     }
 }

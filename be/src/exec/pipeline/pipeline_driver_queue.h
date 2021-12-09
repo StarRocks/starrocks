@@ -19,7 +19,7 @@ public:
 
     double accu_time_after_divisor() { return _accu_consume_time.load() / factor_for_normal; }
 
-    std::queue<DriverRawPtr> queue;
+    std::deque<DriverRawPtr> queue;
     // factor for normalization
     double factor_for_normal = 0;
 
@@ -29,11 +29,15 @@ private:
 
 class DriverQueue {
 public:
+    virtual ~DriverQueue() = default;
+
     virtual void put_back(const DriverRawPtr driver) = 0;
     virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
-    virtual StatusOr<DriverRawPtr> take(size_t* queue_index) = 0;
-    virtual ~DriverQueue() = default;
-    virtual void close() = 0;
+    virtual DriverRawPtr put_back_and_take(const std::vector<DriverRawPtr>& drivers, size_t* queue_index) = 0;
+
+    virtual DriverRawPtr take(size_t* queue_index) = 0;
+    virtual std::vector<DriverRawPtr> steal() = 0;
+
     virtual SubQuerySharedDriverQueue* get_sub_queue(size_t) = 0;
 };
 
@@ -41,7 +45,7 @@ class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriv
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
 public:
-    QuerySharedDriverQueue() : _is_closed(false) {
+    QuerySharedDriverQueue() {
         double factor = 1;
         for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
             // initialize factor for every sub queue,
@@ -52,22 +56,29 @@ public:
         }
     }
     ~QuerySharedDriverQueue() override = default;
-    void close() override;
 
     static const size_t QUEUE_SIZE = 8;
     // maybe other value for ratio.
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.7;
+
     void put_back(const DriverRawPtr driver) override;
     void put_back(const std::vector<DriverRawPtr>& drivers) override;
+    DriverRawPtr put_back_and_take(const std::vector<DriverRawPtr>& drivers, size_t* queue_index) override;
+
     // return nullptr if queue is closed;
-    StatusOr<DriverRawPtr> take(size_t* queue_index) override;
+    DriverRawPtr take(size_t* queue_index) override;
+    std::vector<DriverRawPtr> steal() override;
+
     SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 
 private:
-    SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
+    // _do_take must hold _global_mutex.
+    DriverRawPtr _do_take(size_t* queue_index);
+
     std::mutex _global_mutex;
-    std::condition_variable _cv;
-    bool _is_closed;
+
+    SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
+    int _size = 0;
 };
 
 } // namespace pipeline

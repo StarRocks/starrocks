@@ -154,6 +154,7 @@ set(EXEC_FILES
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
+    pipeline/pipeline_driver_queue_manager.cpp
     pipeline/exec_state_reporter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
