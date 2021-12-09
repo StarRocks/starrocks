@@ -94,8 +94,6 @@ private:
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const SlotDescriptor *desc);
 
-    Status _construct_column_with_boolean_value(simdjson::ondemand::value& value, Column* column, const SlotDescriptor *desc);
-
     Status _construct_column_with_numeric_value(simdjson::ondemand::value& value, Column* column, const SlotDescriptor* desc);
 
     Status _construct_column_with_string_value(simdjson::ondemand::value& value, Column* column,

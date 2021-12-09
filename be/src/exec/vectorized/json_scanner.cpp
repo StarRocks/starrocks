@@ -769,6 +769,7 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
             return Status::OK();
         }
 
+        // Special treatment for bool.
         case simdjson::ondemand::json_type::boolean: {
             bool ok;
             auto err = value.get_bool().get(ok);
@@ -873,11 +874,6 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
             return Status::OK();
         }
 
-        default: {
-            std::string err_msg =
-                    strings::Substitute("Unable to cast the integer value. value=$0, column=$1", i64, desc->col_name());
-            return Status::DataQualityError(err_msg.c_str());
-        }
         }
 
     } else if (tp == simdjson::ondemand::number_type::floating_point_number) {
@@ -928,19 +924,19 @@ Status JsonReader::_construct_column_with_numeric_value(simdjson::ondemand::valu
             return Status::OK();
         }
 
-        default: {
-            std::string err_msg =
-                    strings::Substitute("Unable to cast the floating value. value=$0, column=$1", d, desc->col_name());
-            return Status::DataQualityError(err_msg.c_str());
-        }
         }
 
-    } else {
+    }
+
+    if(_strict_mode) {
         auto sv = value.raw_json_token();
         std::string err_msg = strings::Substitute("unsupported value type. value=$0, column=$1",
                                                   std::string(sv.data(), sv.size()), desc->col_name());
         return Status::DataQualityError(err_msg.c_str());
     }
+
+    column->append_nulls(1);
+    return Status::OK();
 }
 
 Status JsonReader::_construct_column_with_string_value(simdjson::ondemand::value& value, Column* column,
