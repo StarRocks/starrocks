@@ -76,7 +76,7 @@ If a role is specified, it will automatically grant all permissions the role own
     CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com'
     ```
 
-6. Create a user who is allowed to log in from '192.16' subnet and meanwhile specify its role as example_role
+6. Create a user who is allowed to log in from '192.168' subnet and meanwhile specify its role as example_role
 
     ```sql
     CREATE USER 'jack'@'192.168.%' DEFAULT ROLE 'example_role';
@@ -85,7 +85,7 @@ If a role is specified, it will automatically grant all permissions the role own
 7. Create a user who is allowed to log in from the domain named 'example_domain'
 
     ```sql
-    CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '12345';
+    CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '123456';
     ```
 
 8. Create a user and specify a role
