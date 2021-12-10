@@ -39,7 +39,7 @@ done
 export BROKER_HOME=`cd "$curdir/.."; pwd`
 export PID_DIR=`cd "$curdir"; pwd`
 
-export JAVA_OPTS="-Xmx1024m -Dfile.encoding=UTF-8"
+export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8"
 export BROKER_LOG_DIR="$BROKER_HOME/log"
 # export JAVA_HOME="/usr/java/jdk1.8.0_131"
 # java
