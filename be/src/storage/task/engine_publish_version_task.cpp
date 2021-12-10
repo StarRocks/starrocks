@@ -120,8 +120,8 @@ OLAPStatus EnginePublishVersionTask::finish() {
             }
             partition_related_tablet_infos.erase(tablet_info);
             VLOG(1) << "publish version successfully on tablet. tablet=" << tablet->full_name()
-                      << ", transaction_id=" << transaction_id << ", version=" << version.first
-                      << ", res=" << publish_status;
+                    << ", transaction_id=" << transaction_id << ", version=" << version.first
+                    << ", res=" << publish_status;
         }
 
         // check if the related tablet remained all have the version
