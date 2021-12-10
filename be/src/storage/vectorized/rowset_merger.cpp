@@ -396,8 +396,8 @@ private:
         if (stats->raw_rows_read - stats->rows_del_vec_filtered != *total_rows) {
             string msg = Substitute("update compaction rows read($0) != rows written($1)",
                                     stats->raw_rows_read - stats->rows_del_vec_filtered, *total_rows);
-            DCHECK(false) << msg;
             LOG(WARNING) << msg;
+            return Status::InternalError(msg);
         }
 
         return Status::OK();
@@ -495,8 +495,8 @@ private:
             if (non_key_stats.raw_rows_read - non_key_stats.rows_del_vec_filtered != *total_rows) {
                 string msg = Substitute("update compaction rows read($0) != rows written($1) when merging non keys",
                                         non_key_stats.raw_rows_read - non_key_stats.rows_del_vec_filtered, *total_rows);
-                DCHECK(false) << msg;
                 LOG(WARNING) << msg;
+                return Status::InternalError(msg);
             }
         }
 
