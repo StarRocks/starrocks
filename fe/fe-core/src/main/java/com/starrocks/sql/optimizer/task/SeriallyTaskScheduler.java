@@ -29,8 +29,10 @@ public class SeriallyTaskScheduler implements TaskScheduler {
                 // Should have at least one valid plan
                 if (!group.hasBestExpression(context.getRequiredProperty())) {
                     throw new StarRocksPlannerException("StarRocks planner use long time " + timeout +
-                            " ms, This probably because FE Full GC or your SQL is very complex," +
-                            "you could adjust FE JVM config or enlarge new_planner_optimize_timeout session variable",
+                            " ms, This probably because 1. FE Full GC, 2. Hive external table fetch metadata took a long time, " +
+                            "3. The SQL is very complex. " +
+                            "You could 1. adjust FE JVM config, 2. try query again, " +
+                            "3. enlarge new_planner_optimize_timeout session variable",
                             ErrorType.INTERNAL_ERROR);
                 }
                 break;
