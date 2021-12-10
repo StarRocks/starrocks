@@ -417,7 +417,7 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, false);
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 1. check fragment
