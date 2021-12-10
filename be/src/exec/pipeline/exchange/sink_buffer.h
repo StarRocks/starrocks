@@ -121,10 +121,15 @@ public:
     }
 
     bool is_full() const {
-        // If one channel is congested, it may cause all other channel unwritable
         // std::queue' read is concurrent safe without mutex
-        return std::any_of(_buffers.begin(), _buffers.end(),
-                           [](const auto& entry) { return entry.second.size() > config::pipeline_io_buffer_size; });
+        // Judgement may not that accurate because we do not known in advance which
+        // instance the data to be sent corresponds to
+        size_t max_buffer_size = config::pipeline_sink_buffer_size * _buffers.size();
+        size_t buffer_size = 0;
+        for (auto& [_, buffer] : _buffers) {
+            buffer_size += buffer.size();
+        }
+        return buffer_size > max_buffer_size;
     }
 
     bool is_finished() const {

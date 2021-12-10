@@ -48,8 +48,7 @@ std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_re
 }
 
 void ExchangeSourceOperatorFactory::close_stream_recvr() {
-    // The remain two references are hold by DataStreamMgr and ExchangeSourceOperatorFactory
-    if (++_stream_recvr_close_cnt == _stream_recvr.use_count() - 2) {
+    if (--_stream_recvr_cnt == 0) {
         _stream_recvr->close();
     }
 }
