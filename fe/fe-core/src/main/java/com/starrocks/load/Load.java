@@ -184,7 +184,7 @@ public class Load {
             List<String> columnsFromPath) throws UserException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, false);
+                columnsFromPath, false, false);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
@@ -192,7 +192,8 @@ public class Load {
                                    Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-                                   List<String> columnsFromPath, boolean isStreamLoadJson) throws UserException {
+                                   List<String> columnsFromPath, boolean isStreamLoadJson,
+                                   boolean partialUpdate) throws UserException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -292,16 +293,19 @@ public class Load {
             }
         }
 
-        // check default value
-        for (Column column : tbl.getBaseSchema()) {
-            String columnName = column.getName();
-            if (columnExprMap.containsKey(columnName)) {
-                continue;
+        // partial update do not check default value
+        if (!partialUpdate) {
+            // check default value
+            for (Column column : tbl.getBaseSchema()) {
+                String columnName = column.getName();
+                if (columnExprMap.containsKey(columnName)) {
+                    continue;
+                }
+                if (column.getDefaultValue() != null || column.isAllowNull()) {
+                    continue;
+                }
+                throw new DdlException("Column has no default value. column: " + columnName);
             }
-            if (column.getDefaultValue() != null || column.isAllowNull()) {
-                continue;
-            }
-            throw new DdlException("Column has no default value. column: " + columnName);
         }
 
         // get shadow column desc when table schema change
