@@ -113,6 +113,8 @@ public:
 
     virtual int64_t num_rows() = 0;
 
+    virtual int num_segment() = 0;
+
     virtual int64_t total_data_size() = 0;
 
     virtual RowsetId rowset_id() = 0;
