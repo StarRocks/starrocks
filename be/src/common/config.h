@@ -202,7 +202,7 @@ CONF_mInt32(doris_scanner_queue_size, "1024");
 // single read execute fragment row size
 CONF_mInt32(doris_scanner_row_num, "16384");
 // number of max hdfs scanners
-CONF_Int32(doris_max_hdfs_scanner_num, "50");
+CONF_Int32(max_hdfs_scanner_num, "50");
 // number of max scan keys
 CONF_mInt32(doris_max_scan_key_num, "1024");
 // the max number of push down values of a single column.
