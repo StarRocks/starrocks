@@ -862,7 +862,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testCastDatePredicate() throws Exception {
-        String sql = "select L_PARTKEY from lineitem where year(L_PARTKEY) = 1998";
+        String sql = "select L_SHIPDATE from lineitem where year(L_SHIPDATE) = 1998";
 
         OlapTable lineitem = (OlapTable) connectContext.getCatalog().getDb("default_cluster:test").getTable("lineitem");
 
@@ -871,7 +871,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         new Expectations(mock) {
             {
-                mock.getColumnStatistic(lineitem, "L_PARTKEY");
+                mock.getColumnStatistic(lineitem, "L_SHIPDATE");
                 result = new ColumnStatistic(19921212, 19980202, 0, 8, 20000);
             }
         };
@@ -879,9 +879,20 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
 
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("     cardinality: 85714286\n" +
-                "     column statistics: \n" +
-                "     * L_PARTKEY-->[1.9921212E7, 1.9980202E7, 0.0, 8.0, 20000.0] ESTIMATE"));
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
+                "     * L_SHIPDATE-->[1.9921212E7, 1.9980202E7, 0.0, 8.0, 1.0] ESTIMATE"));
+
+        new Expectations(mock) {
+            {
+                mock.getColumnStatistic(lineitem, "L_SHIPDATE");
+                result = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 8, 20000);
+            }
+        };
+
+        plan = getCostExplain(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
+                "     * L_SHIPDATE-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE"));
 
         connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(100));
     }
