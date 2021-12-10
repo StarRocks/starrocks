@@ -111,7 +111,7 @@ void PipelineDriverPoller::run_internal() {
         } else {
             spin_count = 0;
 
-            _dispatch_queue_manager->put_back(-1, ready_drivers);
+            _dispatch_queue_manager->put_back(ready_drivers);
             ready_drivers.clear();
         }
 

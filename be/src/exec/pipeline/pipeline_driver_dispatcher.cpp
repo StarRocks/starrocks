@@ -115,7 +115,7 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                this->_driver_queue_manager->put_back(dispatcher_id, driver);
+                this->_driver_queue_manager->put_back(driver);
                 break;
             }
             case FINISH:
@@ -151,7 +151,7 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
             driver->set_driver_state(DriverState::INPUT_EMPTY);
             this->_blocked_driver_poller->add_blocked_driver(driver);
         } else {
-            this->_driver_queue_manager->put_back(-1, driver);
+            this->_driver_queue_manager->put_back(driver);
         }
     }
 }

@@ -94,7 +94,7 @@ void DriverQueueManager::put_back(const DriverRawPtr driver) {
 }
 
 void DriverQueueManager::put_back(const std::vector<DriverRawPtr>& drivers) {
-    int dispatcher_id;
+    int dispatcher_id = 0;
     std::vector<std::vector<DriverRawPtr>> ready_drivers_per_dispatcher(_num_dispatchers);
     for (auto driver : drivers) {
         dispatcher_id = driver->dispatcher_id();
