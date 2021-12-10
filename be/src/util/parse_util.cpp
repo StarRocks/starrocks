@@ -26,14 +26,14 @@
 
 namespace starrocks {
 
-int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, bool* is_percent) {
+int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str) {
+    bool is_percent = false;
     if (mem_spec_str.empty()) {
         return 0;
     }
 
     // Assume last character indicates unit or percent.
     int32_t number_str_len = mem_spec_str.size() - 1;
-    *is_percent = false;
     int64_t multiplier = -1;
 
     // Look for accepted suffix character.
@@ -62,7 +62,7 @@ int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, bool* is_perc
     case 'B':
         break;
     case '%':
-        *is_percent = true;
+        is_percent = true;
         break;
     default:
         // No unit was given. Default to bytes.
@@ -90,7 +90,7 @@ int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, bool* is_perc
             return -1;
         }
 
-        if (*is_percent) {
+        if (is_percent) {
             bytes = (static_cast<double>(limit_val) / 100.0) * MemInfo::physical_mem();
         } else {
             bytes = limit_val;

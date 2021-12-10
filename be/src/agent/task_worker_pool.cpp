@@ -37,7 +37,6 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_client.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
@@ -1090,18 +1089,26 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
         TStatus task_status;
-
         uint32_t checksum = 0;
-        EngineChecksumTask engine_task(ExecEnv::GetInstance()->consistency_mem_tracker(),
-                                       check_consistency_req.tablet_id, check_consistency_req.schema_hash,
-                                       check_consistency_req.version, check_consistency_req.version_hash, &checksum);
-        OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-        if (res != OLAP_SUCCESS) {
-            LOG(WARNING) << "check consistency failed. status: " << res << ", signature: " << agent_task_req.signature;
-            status_code = TStatusCode::RUNTIME_ERROR;
+
+        MemTracker* mem_tracker = ExecEnv::GetInstance()->consistency_mem_tracker();
+        Status check_limit_st = mem_tracker->check_mem_limit("Start consistency check.");
+        if (!check_limit_st.ok()) {
+            LOG(WARNING) << "check consistency failed: " << check_limit_st.message();
+            status_code = TStatusCode::MEM_LIMIT_EXCEEDED;
         } else {
-            LOG(INFO) << "check consistency success. status:" << res << ", signature:" << agent_task_req.signature
-                      << ", checksum:" << checksum;
+            EngineChecksumTask engine_task(mem_tracker, check_consistency_req.tablet_id,
+                                           check_consistency_req.schema_hash, check_consistency_req.version,
+                                           check_consistency_req.version_hash, &checksum);
+            OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+            if (res != OLAP_SUCCESS) {
+                LOG(WARNING) << "check consistency failed. status: " << res
+                             << ", signature: " << agent_task_req.signature;
+                status_code = TStatusCode::RUNTIME_ERROR;
+            } else {
+                LOG(INFO) << "check consistency success. status:" << res << ", signature:" << agent_task_req.signature
+                          << ", checksum:" << checksum;
+            }
         }
 
         task_status.__set_status_code(status_code);
@@ -1121,7 +1128,7 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
 #ifndef BE_TEST
     }
 #endif
-    return (void*)nullptr;
+    return nullptr;
 }
 
 void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {

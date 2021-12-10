@@ -66,7 +66,7 @@
 namespace starrocks {
 
 // Calculate the total memory limit of all load tasks on this BE
-static int64_t calc_process_max_load_memory(int64_t process_mem_limit) {
+static int64_t calc_max_load_memory(int64_t process_mem_limit) {
     if (process_mem_limit == -1) {
         // no limit
         return -1;
@@ -76,7 +76,7 @@ static int64_t calc_process_max_load_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
 }
 
-static int64_t calc_compaction_max_load_memory(int64_t process_mem_limit) {
+static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
     int64_t limit = config::compaction_max_memory_limit;
     int64_t percent = config::compaction_max_memory_limit_percent;
 
@@ -90,7 +90,23 @@ static int64_t calc_compaction_max_load_memory(int64_t process_mem_limit) {
     if (limit < 0) {
         limit = process_mem_limit;
     }
-    if (percent < 0) {
+    if (percent < 0 || percent > 100) {
+        percent = 100;
+    }
+    return std::min<int64_t>(limit, process_mem_limit * percent / 100);
+}
+
+static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
+    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit);
+    int64_t percent = config::consistency_max_memory_limit_percent;
+
+    if (process_mem_limit < 0) {
+        return -1;
+    }
+    if (limit < 0) {
+        limit = process_mem_limit;
+    }
+    if (percent < 0 || percent > 100) {
         percent = 100;
     }
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
@@ -186,10 +202,9 @@ private:
 
 Status ExecEnv::init_mem_tracker() {
     int64_t bytes_limit = 0;
-    bool is_percent = false;
     std::stringstream ss;
     // --mem_limit="" means no memory limit
-    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, &is_percent);
+    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit);
     // use 90% of mem_limit as the soft mem limit of BE
     bytes_limit = bytes_limit * 0.9;
     if (bytes_limit <= 0) {
@@ -212,12 +227,12 @@ Status ExecEnv::init_mem_tracker() {
     _mem_tracker = new MemTracker(MemTracker::PROCESS, bytes_limit, "process");
     _query_pool_mem_tracker = new MemTracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", _mem_tracker);
 
-    int64_t load_mem_limit = calc_process_max_load_memory(_mem_tracker->limit());
+    int64_t load_mem_limit = calc_max_load_memory(_mem_tracker->limit());
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", _mem_tracker);
     // Metadata statistics memory statistics do not use new mem statistics framework with hook
     _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", nullptr);
 
-    int64_t compaction_mem_limit = calc_compaction_max_load_memory(_mem_tracker->limit());
+    int64_t compaction_mem_limit = calc_max_compaction_memory(_mem_tracker->limit());
     _compaction_mem_tracker = new MemTracker(compaction_mem_limit, "compaction", _mem_tracker);
     _schema_change_mem_tracker = new MemTracker(-1, "schema_change", _mem_tracker);
     _column_pool_mem_tracker = new MemTracker(-1, "column_pool", _mem_tracker);
@@ -225,7 +240,8 @@ Status ExecEnv::init_mem_tracker() {
     _update_mem_tracker = new MemTracker(bytes_limit * 0.6, "update", nullptr);
     _chunk_allocator_mem_tracker = new MemTracker(-1, "chunk_allocator", _mem_tracker);
     _clone_mem_tracker = new MemTracker(-1, "clone", _mem_tracker);
-    _consistency_mem_tracker = new MemTracker(-1, "consistency", _mem_tracker);
+    int64_t consistency_mem_limit = calc_max_consistency_memory(_mem_tracker->limit());
+    _consistency_mem_tracker = new MemTracker(consistency_mem_limit, "consistency", _mem_tracker);
 
     ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
 
@@ -238,7 +254,6 @@ Status ExecEnv::init_mem_tracker() {
 
 Status ExecEnv::_init_mem_tracker() {
     // Initialize global memory limit.
-    bool is_percent = false;
     std::stringstream ss;
 
     if (!BitUtil::IsPowerOf2(config::min_buffer_size)) {
@@ -246,7 +261,7 @@ Status ExecEnv::_init_mem_tracker() {
         return Status::InternalError(ss.str());
     }
 
-    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, &is_percent);
+    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit);
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
