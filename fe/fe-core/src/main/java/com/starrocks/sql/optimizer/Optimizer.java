@@ -121,6 +121,7 @@ public class Optimizer {
 
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
+        memo.removeUnreachableGroup();
 
         // collect all olap scan operator
         collectAllScanOperators(memo, rootTaskContext);
