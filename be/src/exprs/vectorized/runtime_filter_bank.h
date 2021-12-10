@@ -3,7 +3,6 @@
 #pragma once
 
 #include <mutex>
-#include <set>
 
 #include "column/column.h"
 #include "common/global_types.h"
@@ -104,16 +103,12 @@ public:
     void replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* new_probe_expr_ctx);
     std::string debug_string() const;
     JoinRuntimeFilter::RunningContext* runtime_filter_ctx() { return &_runtime_filter_ctx; }
-    bool is_local() const { return _is_local; }
-    TPlanNodeId build_plan_node_id() const { return _build_plan_node_id; }
 
 private:
     friend class HashJoinNode;
     friend class hashJoiner;
     int32_t _filter_id;
     ExprContext* _probe_expr_ctx = nullptr;
-    bool _is_local;
-    TPlanNodeId _build_plan_node_id;
     std::atomic<const JoinRuntimeFilter*> _runtime_filter;
     std::shared_ptr<const JoinRuntimeFilter> _shared_runtime_filter;
     JoinRuntimeFilter::RunningContext _runtime_filter_ctx;
@@ -153,8 +148,7 @@ public:
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
     // accept RuntimeFilterCollector from parent node
     // which means parent node to push down runtime filter.
-    void push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
-                   std::set<TPlanNodeId>& rf_waiting_set);
+    void push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids);
     std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() { return _descriptors; }
     const std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() const { return _descriptors; }
 
