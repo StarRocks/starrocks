@@ -494,7 +494,6 @@ public:
 
 private:
     const TPlanNode& _tnode;
-
     std::unordered_map<size_t, AggregatorPtr> _aggregators;
 };
 
