@@ -14,7 +14,9 @@ public:
                               const std::shared_ptr<LocalExchanger>& exchanger, const int32_t driver_sequence)
             : Operator(factory, id, "local_exchange_sink", plan_node_id),
               _exchanger(exchanger),
-              _driver_sequence(driver_sequence) {}
+              _driver_sequence(driver_sequence) {
+        _runtime_profile->add_info_string("Type", exchanger->name());
+    }
 
     ~LocalExchangeSinkOperator() override = default;
 

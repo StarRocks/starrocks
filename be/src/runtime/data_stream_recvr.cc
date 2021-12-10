@@ -144,8 +144,7 @@ private:
     ChunkQueue _chunk_queue;
     vectorized::RuntimeChunkMeta _chunk_meta;
 
-    std::unordered_set<int> _sender_eos_set;          // sender_id
-    std::unordered_map<int, int64_t> _packet_seq_map; // be_number => packet_seq
+    std::unordered_set<int> _sender_eos_set; // sender_id
 };
 
 DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int num_senders)
@@ -303,25 +302,12 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
     DCHECK(request.chunks_size() > 0);
 
     int32_t be_number = request.be_number();
-    int64_t sequence = request.sequence();
     ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
     {
         std::unique_lock<std::mutex> l(_lock);
         wait_timer.stop();
         if (_is_cancelled) {
             return Status::OK();
-        }
-        // TODO(zc): Do we really need this check?
-        auto iter = _packet_seq_map.find(be_number);
-        if (iter != _packet_seq_map.end()) {
-            if (iter->second >= sequence) {
-                LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
-                             << " receive_packet_id=" << sequence << "]";
-                return Status::OK();
-            }
-            iter->second = sequence;
-        } else {
-            _packet_seq_map.emplace(be_number, sequence);
         }
 
         // Following situation will match the following condition.
