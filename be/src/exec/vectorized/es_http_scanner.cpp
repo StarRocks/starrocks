@@ -59,6 +59,7 @@ Status EsHttpScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk, boo
     }
 
     while (!_batch_eof) {
+        RETURN_IF_CANCELLED(runtime_state);
         if (_line_eof || _es_scroll_parser == nullptr) {
             RETURN_IF_ERROR(_es_reader->get_next(&_batch_eof, _es_scroll_parser));
             _es_scroll_parser->set_params(_tuple_desc, &_docvalue_context);
