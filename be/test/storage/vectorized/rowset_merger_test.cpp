@@ -53,6 +53,8 @@ public:
 
     int64_t num_rows() override { return all_pks->size(); }
 
+    int num_segment() override { return 0; }
+
     int64_t total_data_size() override { return 0; }
 
     RowsetId rowset_id() override { return RowsetId(); }
