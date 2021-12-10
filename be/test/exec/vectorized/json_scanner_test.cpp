@@ -150,8 +150,13 @@ TEST_F(JsonScannerTest, test_json_with_path) {
 
 TEST_F(JsonScannerTest, test_one_level_array) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    TypeDescriptor t1(TYPE_ARRAY);
+    t1.children.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(t1);
+
+    TypeDescriptor t2(TYPE_ARRAY);
+    t2.children.emplace_back(TYPE_INT);
+    types.emplace_back(t2);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -174,12 +179,15 @@ TEST_F(JsonScannerTest, test_one_level_array) {
     EXPECT_EQ(2, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("['[\"10.10.0.1\",\"10.20.1.1\"]', '[10,20]']", chunk->debug_row(0));
+    EXPECT_EQ("[['10.10.0.1', '10.20.1.1'], [10, 20]]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_two_level_array) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    TypeDescriptor t1(TYPE_ARRAY);
+    t1.children.emplace_back(TYPE_ARRAY);
+    t1.children.back().children.emplace_back(TYPE_BIGINT);
+    types.emplace_back(t1);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -201,7 +209,99 @@ TEST_F(JsonScannerTest, test_two_level_array) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("['[[10,20],[30,40]]']", chunk->debug_row(0));
+    EXPECT_EQ("[[[10, 20], [30, 40]]]", chunk->debug_row(0));
+}
+
+TEST_F(JsonScannerTest, test_invalid_column_in_array) {
+    std::vector<TypeDescriptor> types;
+    TypeDescriptor t1(TYPE_ARRAY);
+    t1.children.emplace_back(TYPE_ARRAY);
+    t1.children.back().children.emplace_back(TYPE_SMALLINT);
+    types.emplace_back(t1);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test5.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(1, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("[[[NULL, 20], [30, 40]]]", chunk->debug_row(0));
+}
+
+TEST_F(JsonScannerTest, test_invalid_nested_level1) {
+    // the nested level in schema is larger than json
+    std::vector<TypeDescriptor> types;
+    TypeDescriptor t1(TYPE_ARRAY);
+    t1.children.emplace_back(TYPE_ARRAY);
+    t1.children.back().children.emplace_back(TYPE_TINYINT);
+    types.emplace_back(t1);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test6.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+
+    EXPECT_EQ(1, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("[[NULL, NULL, NULL, NULL]]", chunk->debug_row(0));
+}
+
+TEST_F(JsonScannerTest, test_invalid_nested_level2) {
+    // the nested level in schema is less than json
+    std::vector<TypeDescriptor> types;
+    TypeDescriptor t1(TYPE_ARRAY);
+    t1.children.emplace_back(TYPE_LARGEINT);
+    types.emplace_back(t1);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test7.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(1, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("[[NULL, NULL]]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_json_with_long_string) {

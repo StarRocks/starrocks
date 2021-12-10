@@ -92,12 +92,20 @@ private:
 
     Status _filter_row_with_jsonroot(simdjson::ondemand::object* row);
 
-    Status _construct_column(simdjson::ondemand::value& value, Column* column, const SlotDescriptor *desc);
+    Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
+                             const std::string& col_name);
 
-    Status _construct_column_with_numeric_value(simdjson::ondemand::value& value, Column* column, const SlotDescriptor* desc);
+    Status _construct_column_with_numeric_value(simdjson::ondemand::value& value, Column* column,
+                                                const TypeDescriptor& type_desc, const std::string& col_name);
 
     Status _construct_column_with_string_value(simdjson::ondemand::value& value, Column* column,
-                                               const SlotDescriptor* desc);
+                                               const TypeDescriptor& type_desc, const std::string& col_name);
+
+    Status _construct_column_with_boolean_value(simdjson::ondemand::value& value, Column* column,
+                                                const TypeDescriptor& type_desc, const std::string& col_name);
+
+    Status _construct_column_with_array_value(simdjson::ondemand::value& value, Column* column,
+                                              const TypeDescriptor& type_desc, const std::string& col_name);
 
     void _construct_string_column(Column* col, const Slice& s);
 
