@@ -341,8 +341,8 @@ public class ColumnDef {
         return "";
     }
 
-    public boolean hasDefaultValue() {
-        return defaultValueDef.isSet;
+    public boolean defaultValueIsNull() {
+        return defaultValueDef.expr instanceof NullLiteral;
     }
 
     @Override

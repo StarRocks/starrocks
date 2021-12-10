@@ -55,7 +55,7 @@ public class AddColumnClauseTest {
                 minTimes = 0;
                 result = "`testCol` INT";
 
-                definition.hasDefaultValue();
+                definition.defaultValueIsNull();
                 minTimes = 0;
                 result = true;
 
