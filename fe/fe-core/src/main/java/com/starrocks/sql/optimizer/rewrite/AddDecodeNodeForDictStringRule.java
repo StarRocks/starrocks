@@ -155,12 +155,24 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         public OptExpression visitProjectionAfter(OptExpression optExpression, DecodeContext context) {
             if (context.hasEncoded && optExpression.getOp().getProjection() != null) {
                 Projection projection = optExpression.getOp().getProjection();
-                if (projection.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
+                Set<Integer> stringColumnIds = context.stringColumnIdToDictColumnIds.keySet();
+
+                // if projection has not support operator in dict column,
+                // Decode node will be inserted
+                if (projection.hasUnsupportedDictOperator(stringColumnIds)) {
+                    // child has dict columns
+                    OptExpression decodeExp = generateDecodeOExpr(context, Collections.singletonList(optExpression));
+                    decodeExp.getOp().setProjection(optExpression.getOp().getProjection());
+                    optExpression.getOp().setProjection(null);
+                    context.clear();
+                    return decodeExp;
+                } else if (projection.couldApplyStringDict(stringColumnIds)) {
                     Projection newProjection = rewriteProjectOperator(projection, context);
                     optExpression.getOp().setProjection(newProjection);
                     return optExpression;
+                } else {
+                    context.clear();
                 }
-                context.clear();
             }
             return optExpression;
         }
@@ -470,7 +482,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             // now we only support max/min for dict columns
                             // so we use input dict column
                             newStringToDicts.put(outputStringColumn.getId(), dictColumnId);
-                            
+
                             newAggMap.remove(outputStringColumn);
                             outputColumn = dictColumn;
                         }
