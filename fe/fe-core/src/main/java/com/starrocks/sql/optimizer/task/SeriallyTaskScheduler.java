@@ -29,7 +29,9 @@ public class SeriallyTaskScheduler implements TaskScheduler {
                 // Should have at least one valid plan
                 if (!group.hasBestExpression(context.getRequiredProperty())) {
                     throw new StarRocksPlannerException("StarRocks planner use long time " + timeout +
-                            " remaining task num " + tasks.size(), ErrorType.INTERNAL_ERROR);
+                            " ms, This probably because FE Full GC or your SQL is very complex," +
+                            "you could adjust FE JVM config or enlarge new_planner_optimize_timeout session variable",
+                            ErrorType.INTERNAL_ERROR);
                 }
                 break;
             }
