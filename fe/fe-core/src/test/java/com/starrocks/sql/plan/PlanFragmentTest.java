@@ -4996,6 +4996,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "(((CASE WHEN false THEN -843579223 ELSE -1859488192 END)+(((-406527105)+(540481936))))) ;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: CAST(CASE WHEN CAST(1: v1 AS BOOLEAN) THEN -345600.0 END AS DOUBLE) >= 1.341067345E9, CAST(CASE WHEN CAST(1: v1 AS BOOLEAN) THEN -345600.0 END AS DOUBLE) <= -1.725533361E9"));
+                "PREDICATES: CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) >= 1.341067345E9, CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) <= -1.725533361E9"));
     }
 }
