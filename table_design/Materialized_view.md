@@ -64,7 +64,7 @@ GROUP BY id
 
 * 取消正在创建的物化视图
 
-`CANCEL ALTER MATERIALIZED VIEW FROM db_name.table_name`
+`CANCEL ALTER MATERIALIZED VIEW FROM db_name.view_name`
 
 * 如何确定查询命中了哪个物化视图
 
