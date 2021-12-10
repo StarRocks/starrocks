@@ -33,10 +33,8 @@ public:
 
     virtual void put_back(const DriverRawPtr driver) = 0;
     virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
-    virtual DriverRawPtr put_back_and_take(const std::vector<DriverRawPtr>& drivers, size_t* queue_index) = 0;
 
     virtual DriverRawPtr take(size_t* queue_index) = 0;
-    virtual std::vector<DriverRawPtr> steal() = 0;
 
     virtual SubQuerySharedDriverQueue* get_sub_queue(size_t) = 0;
 };
@@ -63,11 +61,9 @@ public:
 
     void put_back(const DriverRawPtr driver) override;
     void put_back(const std::vector<DriverRawPtr>& drivers) override;
-    DriverRawPtr put_back_and_take(const std::vector<DriverRawPtr>& drivers, size_t* queue_index) override;
 
-    // return nullptr if queue is closed;
+    // return nullptr if queue is empty.
     DriverRawPtr take(size_t* queue_index) override;
-    std::vector<DriverRawPtr> steal() override;
 
     SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 

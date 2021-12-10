@@ -28,7 +28,9 @@ void DriverQueueManager::initialize(int num_dispatchers) {
 }
 
 void DriverQueueManager::close() {
-    _pl.close();
+    for (auto& pl : _pls) {
+        pl.close();
+    }
 }
 
 StatusOr<DriverRawPtr> DriverQueueManager::take(int dispatcher_id, size_t* queue_index, bool* is_from_remote) {
@@ -41,7 +43,7 @@ StatusOr<DriverRawPtr> DriverQueueManager::take(int dispatcher_id, size_t* queue
     }
 
     for (;;) {
-        auto local_state = _pl.get_state();
+        auto local_state = _pls[dispatcher_id % NUM_PL].get_state();
         if (local_state.closed()) {
             return Status::Cancelled("Shutdown");
         }
@@ -60,19 +62,20 @@ StatusOr<DriverRawPtr> DriverQueueManager::take(int dispatcher_id, size_t* queue
             pos += offset;
 
             // 3. steal from other local queue.
-            std::vector<DriverRawPtr> steal_drivers = _queue_per_dispatcher[steal_id]->steal();
-            if (!steal_drivers.empty()) {
-                return _queue_per_dispatcher[dispatcher_id]->put_back_and_take(steal_drivers, queue_index);
+            driver = _queue_per_dispatcher[steal_id]->take(queue_index);
+            if (driver != nullptr) {
+                return driver;
             }
 
             // 4. steal from other remote queue.
-            steal_drivers = _remote_queue_per_dispatcher[steal_id]->steal();
-            if (!steal_drivers.empty()) {
-                return _queue_per_dispatcher[dispatcher_id]->put_back_and_take(steal_drivers, queue_index);
+            driver = _remote_queue_per_dispatcher[steal_id]->take(queue_index);
+            if (driver != nullptr) {
+                *is_from_remote = true;
+                return driver;
             }
         }
 
-        _pl.wait(local_state);
+        _pls[dispatcher_id % NUM_PL].wait(local_state);
     }
 }
 
@@ -82,7 +85,7 @@ void DriverQueueManager::put_back(int dispatcher_id, const DriverRawPtr driver) 
     } else {
         dispatcher_id = _random_dispatcher_id();
         _remote_queue_per_dispatcher[dispatcher_id]->put_back(driver);
-        _pl.notify_one();
+        notify(dispatcher_id, 1);
     }
 }
 
@@ -92,7 +95,8 @@ void DriverQueueManager::put_back(int dispatcher_id, const std::vector<DriverRaw
     } else {
         std::vector<std::vector<DriverRawPtr>> ready_drivers_per_dispatcher(_num_dispatchers);
         for (auto driver : drivers) {
-            ready_drivers_per_dispatcher[_random_dispatcher_id()].emplace_back(driver);
+            dispatcher_id = _random_dispatcher_id();
+            ready_drivers_per_dispatcher[dispatcher_id].emplace_back(driver);
         }
 
         for (int i = 0; i < _num_dispatchers; i++) {
@@ -101,7 +105,15 @@ void DriverQueueManager::put_back(int dispatcher_id, const std::vector<DriverRaw
             }
         }
 
-        _pl.notify(drivers.size());
+        notify(dispatcher_id, drivers.size());
+    }
+}
+
+void DriverQueueManager::notify(int dispatcher_id, int num_drivers) {
+    int pl_i = dispatcher_id % NUM_PL;
+    for (int i = 0; i < NUM_PL && num_drivers > 0; i++) {
+        num_drivers -= _pls[pl_i % NUM_PL].notify(num_drivers);
+        pl_i++;
     }
 }
 

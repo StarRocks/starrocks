@@ -30,13 +30,13 @@ public:
 
     void wait(State expected) { futex_wait_private(reinterpret_cast<int32_t*>(&_state), expected.val(), nullptr); }
 
-    void notify_one() { notify(1); }
+    int notify_one() { return notify(1); }
 
-    void notify_all() { notify(std::numeric_limits<int32_t>::max()); }
+    int notify_all() { return notify(std::numeric_limits<int32_t>::max()); }
 
-    void notify(int nwake) {
+    int notify(int nwake) {
         _state.fetch_add(1 << 1, std::memory_order_release);
-        futex_wake_private(reinterpret_cast<int32_t*>(&_state), nwake);
+        return futex_wake_private(reinterpret_cast<int32_t*>(&_state), nwake);
     }
 
 private:
@@ -62,6 +62,8 @@ public:
     void put_back(int dispatcher_id, const DriverRawPtr driver);
     void put_back(int dispatcher_id, const std::vector<DriverRawPtr>& drivers);
 
+    void notify(int dispatcher_id, int num_drivers);
+
     SubQuerySharedDriverQueue* get_sub_queue(int dispatcher_id, size_t queue_index, bool is_from_remote);
 
     // Generate dispatcher id when the dispatcher thread starts.
@@ -72,8 +74,11 @@ private:
         return _next_rand_dispatcher_id.fetch_add(1, std::memory_order_relaxed) % _num_dispatchers;
     }
 
+    static constexpr int NUM_PL = 4;
+
     // Used to block and notify dispatcher threads.
-    ParkingLot _pl;
+    // Multiple dispatcher waits in one pl.
+    ParkingLot _pls[NUM_PL];
 
     int _num_dispatchers = 0;
     // Dispatcher thread puts the driver back to its own local queue.
