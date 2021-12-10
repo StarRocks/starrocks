@@ -12,6 +12,11 @@ AggregateBaseNode::AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, c
 
 AggregateBaseNode::~AggregateBaseNode() = default;
 
+Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs));
+    return Status::OK();
+}
 Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     _aggregator = std::make_shared<Aggregator>(_tnode);
@@ -48,7 +53,7 @@ void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state,
         }
 
         bool match = false;
-        for (ExprContext* group_expr_ctx : _aggregator->group_by_expr_ctxs()) {
+        for (ExprContext* group_expr_ctx : _group_by_expr_ctxs) {
             if (group_expr_ctx->root()->is_slotref()) {
                 auto* slot = down_cast<ColumnRef*>(group_expr_ctx->root());
                 if (slot->slot_id() == slot_id) {
