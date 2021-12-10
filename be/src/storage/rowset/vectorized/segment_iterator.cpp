@@ -178,7 +178,7 @@ private:
     template <bool late_materialization>
     Status _build_context(ScanContext* ctx);
 
-    Status _init_decoders();
+    Status _init_global_dict_decoder();
 
     void _rewrite_predicates();
 
@@ -987,7 +987,7 @@ Status SegmentIterator::_init_context() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     _late_materialization_ratio = config::late_materialization_ratio;
 
-    RETURN_IF_ERROR(_init_decoders());
+    RETURN_IF_ERROR(_init_global_dict_decoder());
 
     if (_predicate_columns == 0 || _predicate_columns >= _schema.num_fields()) {
         // non or all field has predicate, disable late materialization.
@@ -1019,7 +1019,7 @@ Status SegmentIterator::_init_context() {
     return Status::OK();
 }
 
-Status SegmentIterator::_init_decoders() {
+Status SegmentIterator::_init_global_dict_decoder() {
     // init decoder for all columns
     // in some case _build_context<false> won't be called
     for (int i = 0; i < _schema.num_fields(); ++i) {
