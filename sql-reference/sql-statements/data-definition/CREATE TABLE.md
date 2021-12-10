@@ -228,9 +228,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     ```sql
     PARTITION BY RANGE (k1, k2, ...)
     (
-    PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
-    PARTITION partition_name2 VALUES LESS THAN MAXVALUE|("value1", "value2", ...)
-    ...
+        PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
+        PARTITION partition_name2 VALUES LESS THAN MAXVALUE|("value1", "value2", ...)
+        ...
     )
     ```
 
@@ -256,9 +256,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     ```sql
     PARTITION BY RANGE (k1, k2, k3, ...)
     (
-    PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)),
-    PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )),
-    "k3-upper1-2", ...
+        PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)),
+        PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )),
+        "k3-upper1-2", ...
     )
     ```
 
@@ -269,7 +269,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 3. distribution_des
 
-    1.Hash 分桶
+    Hash 分桶
 
     语法：
 
@@ -284,27 +284,37 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 4. PROPERTIES
 
-    1. 如果 ENGINE 类型为 olap,可以在 properties 设置该表数据的初始存储介质、存储到期时间和副本数。
+    1.如果 ENGINE 类型为 olap,可以在 properties 设置该表数据的初始存储介质、存储到期时间和副本数。
 
     ```sql
     PROPERTIES (
         "storage_medium" = "[SSD|HDD]",
-    ["storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss"],
-    ["replication_num" = "3"]
+        [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
+        [ "replication_num" = "3" ]
     )
     ```
 
-    storage_medium：用于指定该分区的初始存储介质，可选择 SSD 或 HDD。默认初始存储介质可通过fe的配置文件 `fe.conf` 中指定 `default_storage_medium=xxx`，如果没有指定，则默认为 HDD。
+    storage_medium：用于指定该分区的初始存储介质，可选择 SSD 或 HDD。
+    * 默认初始存储介质可通过fe的配置文件 `fe.conf` 中指定 `default_storage_medium=xxx`，如果没有指定，则默认为 HDD。
 
-    注意：当FE配置项 `enable_strict_storage_medium_check` 为 `True` 时，若集群中没有设置对应的存储介质时，建表语句会报错 `Failed to find enough host in all backends with storage medium is SSD|HDD`.
-    storage_cooldown_time： 当设置存储介质为 SSD 时，指定该分区在 SSD 上的存储到期时间。
-    默认存放 30 天。
-    格式为："yyyy-MM-dd HH:mm:ss"
-    replication_num:        指定分区的副本数。默认为 3
+    > 注意：当FE配置项 `enable_strict_storage_medium_check` 为 `True` 时，若集群中没有设置对应的存储介质时，建表语句会报错 `Failed to find enough host in all backends with storage medium is SSD|HDD`.
+
+    storage_cooldown_time：当设置存储介质为 SSD 时，指定该分区在 SSD 上的存储到期时间。
+    * 默认存放 30 天。
+    * 格式为："yyyy-MM-dd HH:mm:ss"
+
+    replication_num：指定分区的副本数。
+    * 默认为 3。
+
+    <br/>
 
     当表为单分区表时，这些属性为表的属性。
+
     当表为两级分区时，这些属性附属于每一个分区。
-    如果希望不同分区有不同属性。可以通过 ADD PARTITION 或 MODIFY PARTITION 进行操作
+
+    如果希望不同分区有不同属性。可以通过 ADD PARTITION 或 MODIFY PARTITION 进行操作。
+
+    <br/>
 
     2.如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引
     bloom filter 索引仅适用于查询条件为 in 和 equal 的情况，该列的值越分散效果越好
@@ -334,14 +344,20 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
         "dynamic_partitoin.end" = "${integer_value}",
         "dynamic_partition.prefix" = "${string_value}",
         "dynamic_partition.buckets" = "${integer_value}"
+    )
     ```
 
     dynamic_partition.enable: 用于指定表级别的动态分区功能是否开启。默认为 true。
-    dynamic_partition.time_unit: 用于指定动态添加分区的时间单位，可选择为DAY（天），WEEK(周)，MONTH（月）
+
+    dynamic_partition.time_unit: 用于指定动态添加分区的时间单位，可选择为DAY（天），WEEK(周)，MONTH（月）。
+
     dynamic_partition.start: 用于指定向前删除多少个分区。值必须小于0。默认为 Integer.MIN_VALUE。
+
     dynamic_partition.end: 用于指定提前创建的分区数量。值必须大于0。
-    dynamic_partition.prefix: 用于指定创建的分区名前缀，例如分区名前缀为p，则自动创建分区名为p20200108
-    dynamic_partition.buckets: 用于指定自动创建的分区分桶数量
+
+    dynamic_partition.prefix: 用于指定创建的分区名前缀，例如分区名前缀为p，则自动创建分区名为p20200108。
+
+    dynamic_partition.buckets: 用于指定自动创建的分区分桶数量。
 
     5.建表时可以批量创建多个 Rollup
 

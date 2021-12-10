@@ -202,23 +202,14 @@ FE底层通过执行`spark-submit`的命令去提交spark任务，因此需要�
 
 ~~~bash
 ---spark-repository--spark0/
-
    |---archive-1.0.0/
-
-   |        |\---lib-990325d2c0d1d5e45bf675e54e44fb16-spark-dpp-1.0.0\-jar-with-dependencies.jar
-
-   |        |\---lib-7670c29daf535efe3c9b923f778f61fc-spark-2x.zip
-
+   |   |---lib-990325d2c0d1d5e45bf675e54e44fb16-spark-dpp-1.0.0-jar-with-dependencies.jar
+   |   |---lib-7670c29daf535efe3c9b923f778f61fc-spark-2x.zip
    |---archive-1.1.0/
-
-   |        |\---lib-64d5696f99c379af2bee28c1c84271d5-spark-dpp-1.1.0\-jar-with-dependencies.jar
-
-   |        |\---lib-1bbb74bb6b264a270bc7fca3e964160f-spark-2x.zip
-
+   |   |---lib-64d5696f99c379af2bee28c1c84271d5-spark-dpp-1.1.0-jar-with-dependencies.jar
+   |   |---lib-1bbb74bb6b264a270bc7fca3e964160f-spark-2x.zip
    |---archive-1.2.0/
-
-   |        |-...
-
+   |   |-...
 ~~~
 
 除了spark依赖(默认以spark-2x.zip命名)，FE还会上传DPP的依赖包至远端仓库，若此次spark load提交的所有依赖文件都已存在远端仓库，那么就不需要再上传依赖，省下原来每次重复上传大量文件的时间。
