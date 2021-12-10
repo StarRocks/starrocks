@@ -31,8 +31,8 @@ std::unique_ptr<DataDecoder> get_data_decoder(EncodingTypePB encoding) {
 }
 
 Status DataDecoder::decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                                std::unique_ptr<char[]>* page, Slice& page_slice) {
-    CHECK(footer->has_type()) << "type must be set";
+                                std::unique_ptr<char[]>* page, Slice* page_slice) {
+    DCHECK(footer->has_type()) << "type must be set";
     switch (footer->type()) {
     case INDEX_PAGE:
     case DICTIONARY_PAGE:
@@ -42,12 +42,16 @@ Status DataDecoder::decode_page(PageFooterPB* footer, uint32_t footer_size, Enco
     case DATA_PAGE: {
         std::unique_ptr<DataDecoder> decoder = get_data_decoder(encoding);
         if (!decoder) {
-            return Status::InternalError("Unknown encoding");
+            std::stringstream ss;
+            ss << "Unknown encoding, encoding type is " << encoding;
+            return Status::InternalError(ss.str());
         }
         return decoder->decode_data_page(footer, footer_size, encoding, page, page_slice);
     }
     default: {
-        return Status::OK();
+        std::stringstream ss;
+        ss << "Unknown page type, page type is " << footer->type();
+        return Status::InternalError(ss.str());
     }
     }
 }

@@ -199,7 +199,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         opts.stats->uncompressed_bytes_read += body_size;
     }
 
-    RETURN_IF_ERROR(DataDecoder::decode_page(footer, footer_size + 4, opts.encoding_type, &page, page_slice));
+    RETURN_IF_ERROR(DataDecoder::decode_page(footer, footer_size + 4, opts.encoding_type, &page, &page_slice));
 
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
     if (opts.use_page_cache) {

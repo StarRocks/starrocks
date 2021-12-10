@@ -87,7 +87,7 @@ public:
         data_page_footer->set_nullmap_size(0);
         std::unique_ptr<char[]> page = nullptr;
 
-        Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, encoded_data);
+        Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
         segment_v2::PageDecoderOptions decoder_options;
@@ -152,7 +152,7 @@ public:
             starrocks::segment_v2::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
             data_page_footer->set_nullmap_size(0);
 
-            Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, encoded_data);
+            Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
             ASSERT_TRUE(st.ok());
 
             // read whole the page
@@ -219,7 +219,7 @@ public:
         data_page_footer->set_nullmap_size(0);
         std::unique_ptr<char[]> page = nullptr;
 
-        Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, encoded_data);
+        Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
         segment_v2::PageDecoderOptions decoder_options;

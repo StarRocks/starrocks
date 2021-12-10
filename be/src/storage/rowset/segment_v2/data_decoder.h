@@ -21,13 +21,13 @@ public:
     DataDecoder() = default;
     virtual ~DataDecoder() = default;
 
-    virtual void reserve_head(uint8_t head_size) { CHECK(false) << "reserve_head() not supported"; }
+    virtual void reserve_head(uint8_t head_size) {}
 
     virtual Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                                    std::unique_ptr<char[]>* page, Slice& page_slice) = 0;
+                                    std::unique_ptr<char[]>* page, Slice* page_slice) = 0;
 
     static Status decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                              std::unique_ptr<char[]>* page, Slice& page_slice);
+                              std::unique_ptr<char[]>* page, Slice* page_slice);
 };
 
 std::unique_ptr<DataDecoder> get_data_decoder(EncodingTypePB encoding);
@@ -38,7 +38,7 @@ public:
     ~BinaryPlainDecoder() = default;
 
     Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<char[]>* page, Slice& page_slice) override {
+                            std::unique_ptr<char[]>* page, Slice* page_slice) override {
         return Status::OK();
     }
 };
@@ -49,7 +49,7 @@ public:
     ~BinaryPrefixDecoder() = default;
 
     Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<char[]>* page, Slice& page_slice) override {
+                            std::unique_ptr<char[]>* page, Slice* page_slice) override {
         return Status::OK();
     }
 };
@@ -60,7 +60,7 @@ public:
     ~FrameOfReferenceDecoder() = default;
 
     Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<char[]>* page, Slice& page_slice) override {
+                            std::unique_ptr<char[]>* page, Slice* page_slice) override {
         return Status::OK();
     }
 };
@@ -71,7 +71,7 @@ public:
     ~RleDecoder() = default;
 
     Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<char[]>* page, Slice& page_slice) override {
+                            std::unique_ptr<char[]>* page, Slice* page_slice) override {
         return Status::OK();
     }
 };
@@ -82,44 +82,46 @@ public:
     ~BitShuffleDecoder() = default;
 
     void reserve_head(uint8_t head_size) override {
-        CHECK(_reserve_head_size == 0);
+        DCHECK(_reserve_head_size == 0);
         _reserve_head_size = head_size;
     }
 
     Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<char[]>* page, Slice& page_slice) override {
+                            std::unique_ptr<char[]>* page, Slice* page_slice) override {
         DataPageFooterPB data_footer = footer->data_page_footer();
 
-        size_t num_elements = decode_fixed32_le((const uint8_t*)&page_slice[_reserve_head_size + 0]);
-        size_t compressed_size = decode_fixed32_le((const uint8_t*)&page_slice[_reserve_head_size + 4]);
-        size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)&page_slice[_reserve_head_size + 8]);
-        size_t size_of_element = decode_fixed32_le((const uint8_t*)&page_slice[_reserve_head_size + 12]);
+        size_t num_elements = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 0);
+        size_t compressed_size = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 4);
+        size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 8);
+        size_t size_of_element = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 12);
         DCHECK_EQ(num_element_after_padding, ALIGN_UP(num_elements, 8U));
 
         size_t header_size = _reserve_head_size + BITSHUFFLE_PAGE_HEADER_SIZE;
         size_t data_size = num_element_after_padding * size_of_element;
         auto null_size = data_footer.nullmap_size();
 
+        // data_size is size after decoded
+        // compressed_size contains encoded data size and BITSHUFFLE_PAGE_HEADER_SIZE
         std::unique_ptr<char[]> decompressed_page(
-                new char[page_slice.size + data_size - (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE)]);
-        memcpy(decompressed_page.get(), page_slice.data, header_size);
+                new char[page_slice->size + data_size - (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE)]);
+        memcpy(decompressed_page.get(), page_slice->data, header_size);
 
-        Slice compressed_body(page_slice.data + header_size, compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);
+        Slice compressed_body(page_slice->data + header_size, compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);
         Slice decompressed_body(&(decompressed_page.get()[header_size]), data_size);
         int64_t bytes = bitshuffle::decompress_lz4(compressed_body.data, decompressed_body.data,
                                                    num_element_after_padding, size_of_element, 0);
         if (bytes != compressed_body.size) {
             return Status::Corruption(
-                    strings::Substitute("decompress failed: expected number of bytes consumed=&0 vs real consumed=$1",
+                    strings::Substitute("decompress failed: expected number of bytes consumed=$0 vs real consumed=$1",
                                         compressed_body.size, bytes));
         }
 
         memcpy(decompressed_body.data + decompressed_body.size,
-               page_slice.data + header_size + (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE),
+               page_slice->data + header_size + (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE),
                null_size + footer_size);
 
         *page = std::move(decompressed_page);
-        page_slice = Slice(page->get(), header_size + data_size + null_size + footer_size);
+        *page_slice = Slice(page->get(), header_size + data_size + null_size + footer_size);
 
         return Status::OK();
     }
@@ -134,13 +136,13 @@ public:
     ~BinaryDictDecoder() = default;
 
     void reserve_head(uint8_t head_size) override {
-        CHECK(_reserve_head_size == 0);
+        DCHECK(_reserve_head_size == 0);
         _reserve_head_size = head_size;
     }
 
     Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<char[]>* page, Slice& page_slice) override {
-        size_t type = decode_fixed32_le((const uint8_t*)&page_slice.data[0]);
+                            std::unique_ptr<char[]>* page, Slice* page_slice) override {
+        size_t type = decode_fixed32_le((const uint8_t*)&(page_slice->data[0]));
         if (type == DICT_ENCODING) {
             _data_decoder = std::make_unique<BitShuffleDecoder>();
             _data_decoder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);

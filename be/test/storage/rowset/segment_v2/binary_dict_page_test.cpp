@@ -84,7 +84,7 @@ public:
         data_page_footer->set_nullmap_size(0);
         std::unique_ptr<char[]> page = nullptr;
 
-        Status st = DataDecoder::decode_page(&footer, 0, DICT_ENCODING, &page, encoded_data);
+        Status st = DataDecoder::decode_page(&footer, 0, DICT_ENCODING, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
         PageDecoderOptions decoder_options;
@@ -187,7 +187,7 @@ public:
             data_page_footer->set_nullmap_size(0);
             std::unique_ptr<char[]> page = nullptr;
 
-            Status st = DataDecoder::decode_page(&footer, 0, DICT_ENCODING, &page, encoded_data);
+            Status st = DataDecoder::decode_page(&footer, 0, DICT_ENCODING, &page, &encoded_data);
             ASSERT_TRUE(st.ok());
 
             PageDecoderOptions decoder_options;
