@@ -30,66 +30,67 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "gutil/ref_counted.h"
 #include "runtime/mem_tracker.h"
 #include "util/uid_util.h"
+
+namespace brpc {
+class Controller;
+}
 
 namespace starrocks {
 
 class Cache;
 class TabletsChannel;
 class LoadChannel;
-
-// Tablet info which memtables submitted to flush queue when load channel memory exceeds limit.
-struct FlushTablet {
-    LoadChannel* load_channel;
-    TabletsChannel* tablets_channel;
-    int64_t tablet_id;
-    FlushTablet(LoadChannel* load_channel, TabletsChannel* tablets_channel, int64_t tablet_id)
-            : load_channel(load_channel), tablets_channel(tablets_channel), tablet_id(tablet_id) {}
-};
+class LoadChannelMgr;
 
 // A LoadChannel manages tablets channels for all indexes
 // corresponding to a certain load job
-class LoadChannel {
+class LoadChannel : public RefCountedThreadSafe<LoadChannel> {
 public:
-    LoadChannel(const UniqueId& load_id, int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker);
-    ~LoadChannel();
+    LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, int64_t timeout_s,
+                std::unique_ptr<MemTracker> mem_tracker);
 
-    // open a new load channel if not exist
-    Status open(const PTabletWriterOpenRequest& request);
+    LoadChannel(const LoadChannel&) = delete;
+    void operator=(const LoadChannel&) = delete;
+    LoadChannel(LoadChannel&&) = delete;
+    void operator=(LoadChannel&&) = delete;
 
-    Status add_chunk(const PTabletWriterAddChunkRequest& request,
-                     google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec);
+    // Open a new load channel if it does not exist.
+    // NOTE: This method may be called multiple times, and each time with a different |request|.
+    void open(brpc::Controller* cntl, const PTabletWriterOpenRequest* request, PTabletWriterOpenResult* response,
+              google::protobuf::Closure* done);
 
-    // return true if this load channel has been opened and all tablets channels are closed then.
-    bool is_finished();
+    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest* request,
+                   PTabletWriterAddBatchResult* response, google::protobuf::Closure* done);
 
-    Status cancel();
+    void cancel();
 
-    time_t last_updated_time() const { return _last_updated_time.load(); }
+    time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
     const UniqueId& load_id() const { return _load_id; }
 
     int64_t timeout() const { return _timeout_s; }
 
+    scoped_refptr<TabletsChannel> get_tablets_channel(int64_t index_id);
+
+    void remove_tablets_channel(int64_t index_id);
+
 private:
+    friend class RefCountedThreadSafe<LoadChannel>;
+    ~LoadChannel();
+
+    LoadChannelMgr* _load_mgr;
     UniqueId _load_id;
-    // the timeout of this load job.
-    // Timed out channels will be periodically deleted by LoadChannelMgr.
     int64_t _timeout_s;
-    // Tracks the total memory comsupted by current load job on this BE
     std::unique_ptr<MemTracker> _mem_tracker;
+    std::atomic<time_t> _last_updated_time;
 
     // lock protect the tablets channel map
     std::mutex _lock;
     // index id -> tablets channel
-    std::unordered_map<int64_t, std::shared_ptr<TabletsChannel>> _tablets_channels;
-    // This is to save finished channels id, to handle the retry request.
-    std::unordered_set<int64_t> _finished_channel_ids;
-    // set to true if at least one tablets channel has been opened
-    bool _opened = false;
-
-    std::atomic<time_t> _last_updated_time;
+    std::unordered_map<int64_t, scoped_refptr<TabletsChannel>> _tablets_channels;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {
