@@ -42,6 +42,7 @@ public:
     ~ExchangeSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        ++_stream_recvr_cnt;
         return std::make_shared<ExchangeSourceOperator>(this, _id, _plan_node_id);
     }
 
@@ -53,7 +54,7 @@ private:
     int32_t _num_sender;
     const RowDescriptor& _row_desc;
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
-    std::atomic<int64_t> _stream_recvr_close_cnt = 0;
+    std::atomic<int64_t> _stream_recvr_cnt = 0;
 };
 
 } // namespace pipeline
