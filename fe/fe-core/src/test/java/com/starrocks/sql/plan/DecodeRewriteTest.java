@@ -322,6 +322,62 @@ public class DecodeRewriteTest extends PlanTestBase{
     }
 
     @Test
+    public void testDecodeNodeRewrite13() throws Exception {
+        String sql;
+        String plan;
+        // case join:
+        // select unsupported_function(dict_col) from table1 join table2
+        // Add Decode Node before unsupported Projection 1
+        sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY) from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 17> : coalesce(3, CAST(4: S_NATIONKEY AS VARCHAR))"));
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 18> : <string id 3>"));
+
+        // select unsupported_function(dict_col), dict_col from table1 join table2
+        // Add Decode Node before unsupported Projection 2
+        sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY),l.S_ADDRESS,r.S_ADDRESS " +
+                "from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        plan = getFragmentPlan(sql);
+
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 3> : 3\n" +
+                "  |  <slot 11> : 11\n" +
+                "  |  <slot 17> : coalesce(3, CAST(4: S_NATIONKEY AS VARCHAR))"));
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 18> : <string id 3>\n" +
+                "  |  <dict id 19> : <string id 11>"));
+
+
+        // select unsupported_function(dict_col), supported_func(dict_col), dict_col
+        // from table1 join table2;
+        // projection has both supported operator and no-supported operator
+        sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY), upper(l.S_ADDRESS), l.S_ADDRESS " +
+                "from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        plan = getFragmentPlan(sql);
+
+        Assert.assertFalse(plan.contains("Decode"));
+
+        // select unsupported_function(dict_col), supported_func(table2.dict_col2), table2.dict_col2
+        // from table1 join table2;
+        // left table don't support dict optimize, but right table support it
+        sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY), upper(r.P_MFGR),r.P_MFGR " +
+                "from supplier l join part_v2 r on l.s_suppkey = r.P_PARTKEY";
+        plan = getFragmentPlan(sql);
+
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 21> : <string id 11>\n" +
+                "  |  <dict id 22> : <string id 20>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 22> : upper(21: P_MFGR)"));
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 19> : coalesce(3: S_ADDRESS, CAST(4: S_NATIONKEY AS VARCHAR))\n" +
+                "  |  <slot 21> : 21: P_MFGR\n" +
+                "  |  <slot 22> : upper(21: P_MFGR)"));
+    }
+
+    @Test
     public void testScanFilter() throws Exception {
         String sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
         String plan = getFragmentPlan(sql);
@@ -467,7 +523,8 @@ public class DecodeRewriteTest extends PlanTestBase{
 
     @Test
     public void testAssignWrongNullableProperty() throws Exception {
-        String sql = "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier UNION SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier;";
+        String sql =
+                "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier UNION SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier;";
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  child exprs: \n" +
