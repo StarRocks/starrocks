@@ -29,10 +29,10 @@
 #include "gen_cpp/segment_v2.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/rowset/segment_v2/storage_page_decoder.h"
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
+#include "storage/rowset/segment_v2/storage_page_decoder.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/logging.h"
 
@@ -90,7 +90,8 @@ public:
 
         StoragePageDecoder::create_global_storage_page_decoder();
         auto storage_page_decoder = StoragePageDecoder::instance();
-        Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
+        Status st =
+                storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
         segment_v2::PageDecoderOptions decoder_options;
@@ -157,7 +158,8 @@ public:
             StoragePageDecoder::create_global_storage_page_decoder();
             auto storage_page_decoder = StoragePageDecoder::instance();
 
-            Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
+            Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page,
+                                                          &encoded_data);
             ASSERT_TRUE(st.ok());
 
             // read whole the page
@@ -225,7 +227,8 @@ public:
         std::unique_ptr<char[]> page = nullptr;
         StoragePageDecoder::create_global_storage_page_decoder();
         auto storage_page_decoder = StoragePageDecoder::instance();
-        Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
+        Status st =
+                storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
         segment_v2::PageDecoderOptions decoder_options;

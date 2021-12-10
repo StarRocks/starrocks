@@ -22,7 +22,8 @@ public:
     std::unique_ptr<DataDecoder>* get_data_decoder(EncodingTypePB encoding);
 
     Status decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                              std::unique_ptr<char[]>* page, Slice* page_slice);
+                       std::unique_ptr<char[]>* page, Slice* page_slice);
+
 private:
     static StoragePageDecoder* _s_instance;
 

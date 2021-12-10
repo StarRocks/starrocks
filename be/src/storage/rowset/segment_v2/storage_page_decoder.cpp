@@ -19,13 +19,12 @@ StoragePageDecoder::StoragePageDecoder() {
 
     if (_bit_shuffle_decoder == nullptr) {
         _bit_shuffle_decoder = std::make_unique<BitShuffleDecoder>();
-    } 
+    }
 
     if (_binary_dict_decoder == nullptr) {
         _binary_dict_decoder = std::make_unique<BinaryDictDecoder>();
     }
 }
-
 
 StoragePageDecoder::~StoragePageDecoder() {}
 
@@ -50,7 +49,7 @@ std::unique_ptr<DataDecoder>* StoragePageDecoder::get_data_decoder(EncodingTypeP
 }
 
 Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                                std::unique_ptr<char[]>* page, Slice* page_slice) {
+                                       std::unique_ptr<char[]>* page, Slice* page_slice) {
     DCHECK(footer->has_type()) << "type must be set";
     switch (footer->type()) {
     case INDEX_PAGE:
