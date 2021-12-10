@@ -319,6 +319,10 @@ public:
 
     std::string to_readable_string() const;
 
+    void set_dispatcher_id(int dispatcher_id) { _dispatcher_id = dispatcher_id; }
+
+    int dispatcher_id() { return _dispatcher_id; }
+
 private:
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
@@ -360,6 +364,8 @@ private:
     const int64_t _yield_max_time_spent;
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
+
+    int _dispatcher_id = -1;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

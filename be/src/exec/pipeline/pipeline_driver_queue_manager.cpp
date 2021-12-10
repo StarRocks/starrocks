@@ -39,6 +39,7 @@ StatusOr<DriverRawPtr> DriverQueueManager::take(int dispatcher_id, size_t* queue
     // 1. take from own local queue.
     DriverRawPtr driver = _queue_per_dispatcher[dispatcher_id]->take(queue_index);
     if (driver != nullptr) {
+        driver->set_dispatcher_id(dispatcher_id);
         return driver;
     }
 
@@ -51,6 +52,7 @@ StatusOr<DriverRawPtr> DriverQueueManager::take(int dispatcher_id, size_t* queue
         // 2. take from own remote queue.
         auto driver = _remote_queue_per_dispatcher[dispatcher_id]->take(queue_index);
         if (driver != nullptr) {
+            driver->set_dispatcher_id(dispatcher_id);
             *is_from_remote = true;
             return driver;
         }
@@ -61,16 +63,18 @@ StatusOr<DriverRawPtr> DriverQueueManager::take(int dispatcher_id, size_t* queue
             const int steal_id = pos % _num_dispatchers;
             pos += offset;
 
-            // 3. steal from other local queue.
-            driver = _queue_per_dispatcher[steal_id]->take(queue_index);
+            // 3. steal from other remote queue.
+            driver = _remote_queue_per_dispatcher[steal_id]->take(queue_index);
             if (driver != nullptr) {
+                driver->set_dispatcher_id(dispatcher_id);
+                *is_from_remote = true;
                 return driver;
             }
 
-            // 4. steal from other remote queue.
-            driver = _remote_queue_per_dispatcher[steal_id]->take(queue_index);
+            // 4. steal from other local queue.
+            driver = _queue_per_dispatcher[steal_id]->take(queue_index);
             if (driver != nullptr) {
-                *is_from_remote = true;
+                driver->set_dispatcher_id(dispatcher_id);
                 return driver;
             }
         }
@@ -79,34 +83,34 @@ StatusOr<DriverRawPtr> DriverQueueManager::take(int dispatcher_id, size_t* queue
     }
 }
 
-void DriverQueueManager::put_back(int dispatcher_id, const DriverRawPtr driver) {
-    if (dispatcher_id >= 0) {
-        _queue_per_dispatcher[dispatcher_id]->put_back(driver);
+void DriverQueueManager::put_back(const DriverRawPtr driver) {
+    if (driver->dispatcher_id() >= 0) {
+        _queue_per_dispatcher[driver->dispatcher_id()]->put_back(driver);
     } else {
-        dispatcher_id = _random_dispatcher_id();
+        int dispatcher_id = _random_dispatcher_id();
         _remote_queue_per_dispatcher[dispatcher_id]->put_back(driver);
         notify(dispatcher_id, 1);
     }
 }
 
-void DriverQueueManager::put_back(int dispatcher_id, const std::vector<DriverRawPtr>& drivers) {
-    if (dispatcher_id >= 0) {
-        _queue_per_dispatcher[dispatcher_id]->put_back(drivers);
-    } else {
-        std::vector<std::vector<DriverRawPtr>> ready_drivers_per_dispatcher(_num_dispatchers);
-        for (auto driver : drivers) {
+void DriverQueueManager::put_back(const std::vector<DriverRawPtr>& drivers) {
+    int dispatcher_id;
+    std::vector<std::vector<DriverRawPtr>> ready_drivers_per_dispatcher(_num_dispatchers);
+    for (auto driver : drivers) {
+        dispatcher_id = driver->dispatcher_id();
+        if (dispatcher_id < 0) {
             dispatcher_id = _random_dispatcher_id();
-            ready_drivers_per_dispatcher[dispatcher_id].emplace_back(driver);
         }
-
-        for (int i = 0; i < _num_dispatchers; i++) {
-            if (!ready_drivers_per_dispatcher[i].empty()) {
-                _remote_queue_per_dispatcher[i]->put_back(ready_drivers_per_dispatcher[i]);
-            }
-        }
-
-        notify(dispatcher_id, drivers.size());
+        ready_drivers_per_dispatcher[dispatcher_id].emplace_back(driver);
     }
+
+    for (int i = 0; i < _num_dispatchers; i++) {
+        if (!ready_drivers_per_dispatcher[i].empty()) {
+            _remote_queue_per_dispatcher[i]->put_back(ready_drivers_per_dispatcher[i]);
+        }
+    }
+
+    notify(dispatcher_id, drivers.size());
 }
 
 void DriverQueueManager::notify(int dispatcher_id, int num_drivers) {

@@ -59,8 +59,8 @@ public:
     StatusOr<DriverRawPtr> take(int dispatcher_id, size_t* queue_index, bool* is_from_remote);
     // Put the driver back to _queue_per_dispatcher if dispatcher_id is not -1.
     // Otherwise, put the driver to a random _remote_queue_per_dispatcher.
-    void put_back(int dispatcher_id, const DriverRawPtr driver);
-    void put_back(int dispatcher_id, const std::vector<DriverRawPtr>& drivers);
+    void put_back(const DriverRawPtr driver);
+    void put_back(const std::vector<DriverRawPtr>& drivers);
 
     void notify(int dispatcher_id, int num_drivers);
 
