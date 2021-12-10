@@ -18,11 +18,11 @@ StoragePageDecoder::StoragePageDecoder() {
     }
 
     if (_bit_shuffle_decoder == nullptr) {
-        _bit_shuffle_decoder = std::make_unique<BitShuffleDecoder>();
+        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>();
     }
 
     if (_binary_dict_decoder == nullptr) {
-        _binary_dict_decoder = std::make_unique<BinaryDictDecoder>();
+        _binary_dict_decoder = std::make_unique<BinaryDictDataDecoder>();
     }
 }
 
@@ -64,7 +64,7 @@ Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_siz
             ss << "Unknown encoding, encoding type is " << encoding;
             return Status::InternalError(ss.str());
         }
-        return (*decoder)->decode_data_page(footer, footer_size, encoding, page, page_slice);
+        return (*decoder)->decode_page_data(footer, footer_size, encoding, page, page_slice);
     }
     default: {
         std::stringstream ss;

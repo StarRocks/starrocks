@@ -12,9 +12,6 @@ namespace segment_v2 {
 
 class StoragePageDecoder {
 public:
-    StoragePageDecoder();
-    virtual ~StoragePageDecoder();
-
     static StoragePageDecoder* instance() { return _s_instance; }
 
     static void create_global_storage_page_decoder();
@@ -25,9 +22,12 @@ public:
                        std::unique_ptr<char[]>* page, Slice* page_slice);
 
 private:
+    StoragePageDecoder();
+    virtual ~StoragePageDecoder();
+
     static StoragePageDecoder* _s_instance;
 
-    // Decode is required only when page is encoded as bitshuffle and dict
+    // Decode is required only when page data is encoded by bitshuffle and dict
     std::unique_ptr<DataDecoder> _base_decoder = nullptr;
     std::unique_ptr<DataDecoder> _bit_shuffle_decoder = nullptr;
     std::unique_ptr<DataDecoder> _binary_dict_decoder = nullptr;

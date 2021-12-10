@@ -6,6 +6,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/segment_v2.pb.h"
+#include "gutil/strings/substitute.h"
 #include "storage/rowset/segment_v2/binary_dict_page.h"
 #include "storage/rowset/segment_v2/bitshuffle_page.h"
 #include "storage/rowset/segment_v2/page_handle.h"
@@ -21,23 +22,23 @@ public:
 
     virtual void reserve_head(uint8_t head_size) {}
 
-    virtual Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+    virtual Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                                     std::unique_ptr<char[]>* page, Slice* page_slice) {
         return Status::OK();
     }
 };
 
-class BitShuffleDecoder : public DataDecoder {
+class BitShuffleDataDecoder : public DataDecoder {
 public:
-    BitShuffleDecoder() = default;
-    ~BitShuffleDecoder() = default;
+    BitShuffleDataDecoder() = default;
+    ~BitShuffleDataDecoder() = default;
 
     void reserve_head(uint8_t head_size) override {
         DCHECK(_reserve_head_size == 0);
         _reserve_head_size = head_size;
     }
 
-    Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
         DataPageFooterPB data_footer = footer->data_page_footer();
 
@@ -81,24 +82,24 @@ private:
     uint8_t _reserve_head_size = 0;
 };
 
-class BinaryDictDecoder : public DataDecoder {
+class BinaryDictDataDecoder : public DataDecoder {
 public:
-    BinaryDictDecoder() {
-        _bit_shuffle_decoder = std::make_unique<BitShuffleDecoder>();
+    BinaryDictDataDecoder() {
+        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>();
         _bit_shuffle_decoder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
     }
-    ~BinaryDictDecoder() = default;
+    ~BinaryDictDataDecoder() = default;
 
     void reserve_head(uint8_t head_size) override {
         DCHECK(_reserve_head_size == 0);
         _reserve_head_size = head_size;
     }
 
-    Status decode_data_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
         size_t type = decode_fixed32_le((const uint8_t*)&(page_slice->data[0]));
         if (type == DICT_ENCODING) {
-            return _bit_shuffle_decoder->decode_data_page(footer, footer_size, encoding, page, page_slice);
+            return _bit_shuffle_decoder->decode_page_data(footer, footer_size, encoding, page, page_slice);
         } else if (type == PLAIN_ENCODING) {
             return Status::OK();
         } else {
@@ -109,7 +110,7 @@ public:
 
 private:
     uint8_t _reserve_head_size = 0;
-    std::unique_ptr<BitShuffleDecoder> _bit_shuffle_decoder;
+    std::unique_ptr<BitShuffleDataDecoder> _bit_shuffle_decoder;
 };
 
 } // namespace starrocks::segment_v2
