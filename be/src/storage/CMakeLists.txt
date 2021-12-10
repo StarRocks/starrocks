@@ -20,31 +20,26 @@
 # under the License.
 
 # where to put generated libraries
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/olap")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 # where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/olap")
+set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
 add_subdirectory(fs)
 
-add_library(Olap STATIC
-    aggregate_func.cpp
+add_library(Storage STATIC
     base_tablet.cpp
     comparison_predicate.cpp
     decimal12.cpp
     delete_handler.cpp
     del_vector.cpp
-    generic_iterators.cpp
     hll.cpp
     in_list_predicate.cpp
-    iterators.cpp
     key_coder.cpp
     lru_cache.cpp
     memtable_flush_executor.cpp
-    merger.cpp
     null_predicate.cpp
-    olap_cond.cpp
     kv_store.cpp
     olap_server.cpp
     options.cpp
@@ -52,16 +47,10 @@ add_library(Olap STATIC
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
-    push_handler.cpp
-    reader.cpp
     rowset_update_state.cpp
     update_compaction_state.cpp
-    row_block.cpp
-    row_block2.cpp
-    row_cursor.cpp
     version_graph.cpp
     schema.cpp
-    schema_change.cpp
     storage_engine.cpp
     data_dir.cpp
     short_key_index.cpp
@@ -100,8 +89,6 @@ add_library(Olap STATIC
     rowset/segment_v2/binary_dict_page.cpp
     rowset/segment_v2/binary_prefix_page.cpp
     rowset/segment_v2/segment.cpp
-    rowset/segment_v2/segment_iterator.cpp
-    rowset/segment_v2/empty_segment_iterator.cpp
     rowset/segment_v2/segment_writer.cpp
     rowset/segment_v2/storage_page_decoder.cpp
     rowset/segment_v2/block_split_bloom_filter.cpp
@@ -114,7 +101,6 @@ add_library(Olap STATIC
     rowset/vectorized/segment_chunk_iterator_adapter.cpp
     rowset/vectorized/segment_iterator.cpp
     rowset/vectorized/segment_options.cpp
-    rowset/vectorized/segment_v2_iterator_adapter.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp

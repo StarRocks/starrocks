@@ -83,8 +83,6 @@ public class SetOperationStmt extends QueryStmt {
 
     private AggregateInfo distinctAggInfo;  // only set if we have DISTINCT ops
 
-    private boolean hasDistinct = false;
-
     // Single tuple materialized by the set operation. Set in analyze().
     private TupleId tupleId;
 
@@ -181,10 +179,6 @@ public class SetOperationStmt extends QueryStmt {
 
     public List<SetOperand> getAllOperands() {
         return allOperands_;
-    }
-
-    public boolean hasAllOps() {
-        return !allOperands_.isEmpty();
     }
 
     public AggregateInfo getDistinctAggInfo() {
@@ -474,31 +468,12 @@ public class SetOperationStmt extends QueryStmt {
         // One slot per expr in the select blocks. Use first select block as representative.
         List<Expr> firstSelectExprs = operands.get(0).getQueryStmt().getResultExprs();
 
-        // TODO(zc) Column stats
-        /*
-        // Compute column stats for the materialized slots from the source exprs.
-        List<ColumnStats> columnStats = Lists.newArrayList();
-        for (int i = 0; i < operands_.size(); ++i) {
-            List<Expr> selectExprs = operands_.get(i).getQueryStmt().getResultExprs();
-            for (int j = 0; j < selectExprs.size(); ++j) {
-                ColumnStats statsToAdd = ColumnStats.fromExpr(selectExprs.get(j));
-                if (i == 0) {
-                    columnStats.add(statsToAdd);
-                } else {
-                    columnStats.get(j).add(statsToAdd);
-                }
-            }
-        }
-        */
-
         // Create tuple descriptor and slots.
         for (int i = 0; i < firstSelectExprs.size(); ++i) {
             Expr expr = firstSelectExprs.get(i);
             SlotDescriptor slotDesc = analyzer.addSlotDescriptor(tupleDesc);
             slotDesc.setLabel(getColLabels().get(i));
             slotDesc.setType(expr.getType());
-            // TODO(zc)
-            // slotDesc.setStats(columnStats.get(i));
             SlotRef outputSlotRef = new SlotRef(slotDesc);
             resultExprs.add(outputSlotRef);
 
@@ -674,6 +649,57 @@ public class SetOperationStmt extends QueryStmt {
         // Limit clause.
         if (hasLimitClause()) {
             strBuilder.append(limitElement.toSql());
+        }
+        return strBuilder.toString();
+    }
+
+    @Override
+    public String toDigest() {
+        StringBuilder strBuilder = new StringBuilder();
+        if (withClause_ != null) {
+            strBuilder.append(withClause_.toDigest());
+            strBuilder.append(" ");
+        }
+
+        strBuilder.append(operands.get(0).getQueryStmt().toDigest());
+        for (int i = 1; i < operands.size() - 1; ++i) {
+            strBuilder.append(
+                    " " + operands.get(i).getOperation().toString() + " "
+                            + ((operands.get(i).getQualifier() == Qualifier.ALL) ? "all " : ""));
+            if (operands.get(i).getQueryStmt() instanceof SetOperationStmt) {
+                strBuilder.append("(");
+            }
+            strBuilder.append(operands.get(i).getQueryStmt().toDigest());
+            if (operands.get(i).getQueryStmt() instanceof SetOperationStmt) {
+                strBuilder.append(")");
+            }
+        }
+        // Determine whether we need parenthesis around the last Set operand.
+        SetOperand lastOperand = operands.get(operands.size() - 1);
+        QueryStmt lastQueryStmt = lastOperand.getQueryStmt();
+        strBuilder.append(" " + lastOperand.getOperation().toString() + " "
+                + ((lastOperand.getQualifier() == Qualifier.ALL) ? "all " : ""));
+        if (lastQueryStmt instanceof SetOperationStmt || ((hasOrderByClause() || hasLimitClause()) &&
+                !lastQueryStmt.hasLimitClause() &&
+                !lastQueryStmt.hasOrderByClause())) {
+            strBuilder.append("(");
+            strBuilder.append(lastQueryStmt.toDigest());
+            strBuilder.append(")");
+        } else {
+            strBuilder.append(lastQueryStmt.toDigest());
+        }
+        // Order By clause
+        if (hasOrderByClause()) {
+            strBuilder.append(" order by ");
+            for (int i = 0; i < orderByElements.size(); ++i) {
+                strBuilder.append(orderByElements.get(i).getExpr().toDigest());
+                strBuilder.append(orderByElements.get(i).getIsAsc() ? " aec" : " desc");
+                strBuilder.append((i + 1 != orderByElements.size()) ? ", " : "");
+            }
+        }
+        // Limit clause.
+        if (hasLimitClause()) {
+            strBuilder.append(limitElement.toDigest());
         }
         return strBuilder.toString();
     }

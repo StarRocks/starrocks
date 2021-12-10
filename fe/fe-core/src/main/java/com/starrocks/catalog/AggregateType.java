@@ -126,7 +126,7 @@ public enum AggregateType {
         this.sqlName = sqlName;
     }
 
-    public static boolean checkCompatibility(AggregateType aggType, PrimitiveType priType) {
+    public static boolean checkPrimitiveTypeCompatibility(AggregateType aggType, PrimitiveType priType) {
         return compatibilityMap.get(aggType).contains(priType);
     }
 
@@ -139,8 +139,8 @@ public enum AggregateType {
         return toSql();
     }
 
-    public boolean checkCompatibility(PrimitiveType priType) {
-        return checkCompatibility(this, priType);
+    public boolean checkCompatibility(Type type) {
+        return checkPrimitiveTypeCompatibility(this, type.getPrimitiveType()) || (this.isReplaceFamily() && type.isArrayType());
     }
 
     public boolean isReplaceFamily() {

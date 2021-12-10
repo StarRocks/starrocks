@@ -44,6 +44,9 @@ public class PruneWindowColumnsRule extends TransformationRule {
         windowOperator.getOrderByElements().stream().map(Ordering::getColumnRef).forEach(
                 e -> requiredOutputColumns.union(e.getUsedColumns()));
 
+        windowOperator.getEnforceSortColumns().stream().map(Ordering::getColumnRef).forEach(
+                e -> requiredOutputColumns.union(e.getUsedColumns()));
+
         if (newWindowCall.keySet().equals(windowOperator.getWindowCall().keySet())) {
             return Collections.emptyList();
         }

@@ -35,6 +35,7 @@ static inline size_t null_mask(const ColumnPtr& column) {
 template <PrimitiveType Type>
 class ColumnViewer {
 public:
+    static auto constexpr TYPE = Type;
     explicit ColumnViewer(const ColumnPtr& column)
             : _not_const_mask(not_const_mask(column)), _null_mask(null_mask(column)) {
         if (column->only_null()) {

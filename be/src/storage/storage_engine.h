@@ -175,6 +175,8 @@ public:
 
     bool bg_worker_stopped() { return _bg_worker_stopped.load(std::memory_order_consume); }
 
+    MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
+
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.

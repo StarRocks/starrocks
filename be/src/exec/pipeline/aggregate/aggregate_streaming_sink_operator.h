@@ -10,8 +10,8 @@
 namespace starrocks::pipeline {
 class AggregateStreamingSinkOperator : public Operator {
 public:
-    AggregateStreamingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : Operator(id, "aggregate_streaming_sink", plan_node_id), _aggregator(std::move(aggregator)) {
+    AggregateStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
+            : Operator(factory, id, "aggregate_streaming_sink", plan_node_id), _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase1);
         _aggregator->ref();
     }
@@ -57,7 +57,7 @@ public:
     ~AggregateStreamingSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AggregateStreamingSinkOperator>(_id, _plan_node_id,
+        return std::make_shared<AggregateStreamingSinkOperator>(this, _id, _plan_node_id,
                                                                 _aggregator_factory->get_or_create(driver_sequence));
     }
 

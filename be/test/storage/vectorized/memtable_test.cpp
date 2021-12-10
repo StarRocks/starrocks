@@ -231,7 +231,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(pchunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_EQ(OLAP_SUCCESS, _mem_table->flush());
     RowsetSharedPtr rowset = _writer->build();
@@ -278,7 +278,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(pchunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_EQ(OLAP_SUCCESS, _mem_table->flush());
     RowsetSharedPtr rowset = _writer->build();
@@ -332,7 +332,7 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(chunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_EQ(OLAP_SUCCESS, _mem_table->flush());
     RowsetSharedPtr rowset = _writer->build();
@@ -364,7 +364,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(chunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
 }
 
@@ -400,7 +400,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(chunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_FALSE(_mem_table->finalize().ok());
 }
 

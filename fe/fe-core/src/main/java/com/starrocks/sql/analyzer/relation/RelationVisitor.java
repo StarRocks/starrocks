@@ -14,7 +14,7 @@ public abstract class RelationVisitor<R, C> {
         return null;
     }
 
-    public R visitQuerySpecification(QuerySpecification node, C context) {
+    public R visitSelect(SelectRelation node, C context) {
         return null;
     }
 

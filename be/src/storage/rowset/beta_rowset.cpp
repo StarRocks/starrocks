@@ -29,7 +29,6 @@
 #include <set>
 
 #include "gutil/strings/substitute.h"
-#include "storage/rowset/beta_rowset_reader.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
@@ -76,7 +75,8 @@ Status BetaRowset::do_load() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = segment_v2::Segment::open(block_mgr, seg_path, seg_id, _schema, &footer_size_hint);
+        auto res = segment_v2::Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path,
+                                             seg_id, _schema, &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -85,12 +85,6 @@ Status BetaRowset::do_load() {
         _segments.push_back(std::move(res).value());
     }
     return Status::OK();
-}
-
-OLAPStatus BetaRowset::create_reader(RowsetReaderSharedPtr* result) {
-    // NOTE: We use std::static_pointer_cast for performance
-    *result = std::make_shared<BetaRowsetReader>(std::static_pointer_cast<BetaRowset>(shared_from_this()));
-    return OLAP_SUCCESS;
 }
 
 OLAPStatus BetaRowset::remove() {
@@ -210,6 +204,11 @@ public:
         return _iter->init_encoded_schema(dict_maps);
     }
 
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        return _iter->init_output_schema(unused_output_column_ids);
+    }
+
 protected:
     Status do_get_next(vectorized::Chunk* chunk) override { return _iter->get_next(chunk); }
     Status do_get_next(vectorized::Chunk* chunk, vector<uint32_t>* rowid) override {
@@ -250,6 +249,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     seg_options.reader_type = options.reader_type;
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
+    seg_options.unused_output_column_ids = options.unused_output_column_ids;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }
@@ -275,6 +275,9 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
 
     std::vector<vectorized::ChunkIteratorPtr> tmp_seg_iters;
     tmp_seg_iters.reserve(num_segments());
+    if (options.stats) {
+        options.stats->segments_read_count += num_segments();
+    }
     for (auto& seg_ptr : segments()) {
         if (seg_ptr->num_rows() == 0) {
             continue;

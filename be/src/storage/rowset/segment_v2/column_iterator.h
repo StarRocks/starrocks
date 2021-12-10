@@ -43,7 +43,6 @@ class ReadableBlock;
 namespace segment_v2 {
 
 class ColumnReader;
-class RowRanges;
 
 struct ColumnIteratorOptions {
     fs::ReadableBlock* rblock = nullptr;
@@ -100,15 +99,6 @@ public:
     virtual Status next_batch(size_t* n, vectorized::Column* dst) = 0;
 
     virtual ordinal_t get_current_ordinal() const = 0;
-
-    virtual Status get_row_ranges_by_zone_map(CondColumn* cond_column, CondColumn* delete_condition,
-                                              RowRanges* row_ranges) {
-        return Status::OK();
-    }
-
-    virtual Status get_row_ranges_by_bloom_filter(CondColumn* cond_column, RowRanges* row_ranges) {
-        return Status::OK();
-    }
 
     /// for vectorized engine
     virtual Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,

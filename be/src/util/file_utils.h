@@ -23,6 +23,7 @@
 #define STARROCKS_BE_UTIL_FILE_UTILS_H
 
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
 

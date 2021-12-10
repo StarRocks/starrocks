@@ -90,6 +90,7 @@ public:
         RETURN_IF_ERROR(_col_iter->fetch_dict_codes_by_rowid(rowids, size, _local_dict_code_col.get()));
         const auto& container = _get_local_dict_col_container(_local_dict_code_col.get());
         RETURN_IF_ERROR(decode_dict_codes(container.data(), container.size(), values));
+        _acquire_null_data(values, _local_dict_code_col.get());
         return Status::OK();
     }
 
@@ -140,10 +141,6 @@ public:
         if (output_nullable) {
             auto& null_data = down_cast<vectorized::NullableColumn*>(words)->null_column_data();
             null_data.resize(size);
-            for (int i = 0; i < size; ++i) {
-                null_data[i] = (res_data[i] == 0);
-            }
-            down_cast<vectorized::NullableColumn*>(words)->update_has_null();
         }
 
         return Status::OK();
@@ -158,6 +155,7 @@ public:
 private:
     Status _build_to_global_dict();
     void _init_local_dict_col();
+    void _acquire_null_data(Column* global_dict_column, Column* local_dict_column);
     const LowCardDictColumn::Container& _get_local_dict_col_container(Column* column);
 
     ColumnId _cid;

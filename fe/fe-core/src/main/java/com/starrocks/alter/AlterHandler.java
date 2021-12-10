@@ -445,20 +445,20 @@ public abstract class AlterHandler extends MasterDaemon {
             }
 
             LOG.info("before handle alter task tablet {}, replica: {}, task version: {}-{}",
-                    task.getSignature(), replica, task.getVersion(), task.getVersionHash());
+                    task.getSignature(), replica, task.getVersion());
             boolean versionChanged = false;
             if (replica.getVersion() > task.getVersion()) {
                 // Case 2.2, do nothing
             } else {
                 if (replica.getLastFailedVersion() > task.getVersion()) {
                     // Case 2.1
-                    replica.updateVersionInfo(task.getVersion(), task.getVersionHash(), replica.getDataSize(),
+                    replica.updateRowCount(task.getVersion(), replica.getDataSize(),
                             replica.getRowCount());
                     versionChanged = true;
                 } else {
                     // Case 1
                     Preconditions.checkState(replica.getLastFailedVersion() == -1, replica.getLastFailedVersion());
-                    replica.updateVersionInfo(task.getVersion(), task.getVersionHash(), replica.getDataSize(),
+                    replica.updateRowCount(task.getVersion(), replica.getDataSize(),
                             replica.getRowCount());
                     versionChanged = true;
                 }
@@ -467,10 +467,10 @@ public abstract class AlterHandler extends MasterDaemon {
             if (versionChanged) {
                 ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(task.getDbId(), task.getTableId(),
                         task.getPartitionId(), task.getIndexId(), task.getTabletId(), task.getBackendId(),
-                        replica.getId(), replica.getVersion(), replica.getVersionHash(), -1,
+                        replica.getId(), replica.getVersion(), -1,
                         replica.getDataSize(), replica.getRowCount(),
-                        replica.getLastFailedVersion(), replica.getLastFailedVersionHash(),
-                        replica.getLastSuccessVersion(), replica.getLastSuccessVersionHash());
+                        replica.getLastFailedVersion(),
+                        replica.getLastSuccessVersion());
                 Catalog.getCurrentCatalog().getEditLog().logUpdateReplica(info);
             }
 

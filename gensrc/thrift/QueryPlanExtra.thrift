@@ -30,7 +30,7 @@ include "Descriptors.thrift"
 struct TTabletVersionInfo {
   1: required i64 tablet_id
   2: required i64 version
-  3: required i64 version_hash
+  3: required i64 version_hash // Deprecated
   // i32 for historical reason
   4: required i32 schema_hash
 }

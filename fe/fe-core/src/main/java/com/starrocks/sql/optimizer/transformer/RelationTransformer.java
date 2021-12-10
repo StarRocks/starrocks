@@ -18,6 +18,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.common.Pair;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -25,13 +26,14 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.relation.CTERelation;
 import com.starrocks.sql.analyzer.relation.ExceptRelation;
 import com.starrocks.sql.analyzer.relation.IntersectRelation;
 import com.starrocks.sql.analyzer.relation.JoinRelation;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.analyzer.relation.RelationVisitor;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.analyzer.relation.SetOperationRelation;
 import com.starrocks.sql.analyzer.relation.SubqueryRelation;
 import com.starrocks.sql.analyzer.relation.TableFunctionRelation;
@@ -50,6 +52,9 @@ import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
@@ -82,43 +87,111 @@ import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTransla
 
 public class RelationTransformer extends RelationVisitor<OptExprBuilder, ExpressionMapping> {
     private final ColumnRefFactory columnRefFactory;
+    private final ConnectContext session;
+
     private List<ColumnRefOperator> outputColumn;
     private List<ColumnRefOperator> correlation = new ArrayList<>();
     private final ExpressionMapping outer;
 
-    public RelationTransformer(ColumnRefFactory columnRefFactory) {
+    public Map<String, ExpressionMapping> cteContext = new HashMap<>();
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this.columnRefFactory = columnRefFactory;
+        this.session = session;
         this.outer = new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
-    public RelationTransformer(ColumnRefFactory columnRefFactory, ExpressionMapping outer) {
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer) {
         this.columnRefFactory = columnRefFactory;
+        this.session = session;
         this.outer = outer;
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
+                               Map<String, ExpressionMapping> cteContext) {
+        this.columnRefFactory = columnRefFactory;
+        this.session = session;
+        this.cteContext = cteContext;
+        this.outer = new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
     public LogicalPlan transform(Relation relation) {
         // Set limit if user set sql_select_limit.
-        if (relation instanceof QuerySpecification) {
-            QuerySpecification querySpecification = (QuerySpecification) relation;
+        if (relation instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) relation;
             long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
-            if (!querySpecification.hasLimit() &&
+            if (!selectRelation.hasLimit() &&
                     selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-                querySpecification.setLimit(new LimitElement(selectLimit));
+                selectRelation.setLimit(new LimitElement(selectLimit));
             }
         }
-        OptExprBuilder optExprBuilder = visit(relation);
-        optExprBuilder = visitCTE(relation, optExprBuilder);
+
+        OptExprBuilder optExprBuilder;
+        if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()
+                && session.getSessionVariable().isCboCteReuse()) {
+            Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor =
+                    buildCTEAnchorAndProducer((QueryRelation) relation);
+            optExprBuilder = cteRootAndMostDeepAnchor.first;
+            OptExprBuilder builder = visit(relation);
+            cteRootAndMostDeepAnchor.second.addChild(builder);
+        } else {
+            optExprBuilder = visit(relation);
+        }
+
         return new LogicalPlan(optExprBuilder, outputColumn, correlation);
     }
 
-    public OptExprBuilder visitCTE(Relation node, OptExprBuilder builder) {
-        if (!(node instanceof QueryRelation)) {
-            return builder;
+    @Override
+    public OptExprBuilder visitCTE(CTERelation node, ExpressionMapping context) {
+        if (session.getSessionVariable().isCboCteReuse()) {
+            ExpressionMapping expressionMapping = cteContext.get(node.getCteId());
+            List<ColumnRefOperator> cteOutputs = new ArrayList<>();
+            Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
+            for (ColumnRefOperator columnRefOperator : expressionMapping.getFieldMappings()) {
+                ColumnRefOperator c = columnRefFactory.create(columnRefOperator, columnRefOperator.getType(),
+                        columnRefOperator.isNullable());
+                cteOutputs.add(c);
+                cteOutputColumnRefMap.put(c, columnRefOperator);
+            }
+
+            return new OptExprBuilder(new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap),
+                    Collections.emptyList(), new ExpressionMapping(expressionMapping.getScope(), cteOutputs));
+        } else {
+            OptExprBuilder builder = visit(node.getCteQuery());
+            return new OptExprBuilder(builder.getRoot().getOp(), builder.getInputs(),
+                    new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumn));
+        }
+    }
+
+    Pair<OptExprBuilder, OptExprBuilder> buildCTEAnchorAndProducer(QueryRelation node) {
+        OptExprBuilder root = null;
+        OptExprBuilder anchorOptBuilder = null;
+        for (CTERelation cteRelation : node.getCteRelations()) {
+            LogicalCTEAnchorOperator anchorOperator = new LogicalCTEAnchorOperator(cteRelation.getCteId());
+            LogicalCTEProduceOperator produceOperator = new LogicalCTEProduceOperator(cteRelation.getCteId());
+            LogicalPlan producerPlan =
+                    new RelationTransformer(columnRefFactory, session, cteContext).transform(
+                            cteRelation.getCteQuery());
+            OptExprBuilder produceOptBuilder =
+                    new OptExprBuilder(produceOperator, Lists.newArrayList(producerPlan.getRootBuilder()),
+                            producerPlan.getRootBuilder().getExpressionMapping());
+
+            OptExprBuilder newAnchorOptBuilder = new OptExprBuilder(anchorOperator,
+                    Lists.newArrayList(produceOptBuilder), null);
+
+            if (anchorOptBuilder != null) {
+                anchorOptBuilder.addChild(newAnchorOptBuilder);
+            } else {
+                root = newAnchorOptBuilder;
+            }
+            anchorOptBuilder = newAnchorOptBuilder;
+
+            cteContext.put(cteRelation.getCteId(), new ExpressionMapping(
+                    new Scope(RelationId.of(cteRelation.getCteQuery()), cteRelation.getRelationFields()),
+                    producerPlan.getOutputColumn()));
         }
 
-        Scope scope = ((QueryRelation) node).getOutputScope();
-
-        return builder;
+        return new Pair<>(root, anchorOptBuilder);
     }
 
     @Override
@@ -127,8 +200,8 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
     }
 
     @Override
-    public OptExprBuilder visitQuerySpecification(QuerySpecification node, ExpressionMapping context) {
-        LogicalPlan logicalPlan = new QueryTransformer(columnRefFactory, outer).plan(node);
+    public OptExprBuilder visitSelect(SelectRelation node, ExpressionMapping context) {
+        LogicalPlan logicalPlan = new QueryTransformer(columnRefFactory, session, outer).plan(node, cteContext);
 
         outputColumn = logicalPlan.getOutputColumn();
         correlation = logicalPlan.getCorrelation();
@@ -199,7 +272,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             childPlan.add(optExprBuilder);
         }
 
-        Scope outputScope = setOperationRelation.getRelations().get(0).getOutputScope();
+        Scope outputScope = setOperationRelation.getRelations().get(0).getScope();
         ExpressionMapping expressionMapping = new ExpressionMapping(outputScope, outputColumns);
 
         LogicalOperator setOperator;
@@ -236,7 +309,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
 
     @Override
     public OptExprBuilder visitValues(ValuesRelation node, ExpressionMapping context) {
-        LogicalPlan logicalPlan = new ValuesTransformer(columnRefFactory).plan(node);
+        LogicalPlan logicalPlan = new ValuesTransformer(columnRefFactory, session).plan(node);
         outputColumn = logicalPlan.getOutputColumn();
         return logicalPlan.getRootBuilder();
     }

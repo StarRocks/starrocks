@@ -27,7 +27,6 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
-#include "storage/rowset/rowset_reader.h"
 #include "storage/rowset/segment_v2/segment.h"
 
 namespace starrocks {
@@ -43,10 +42,18 @@ class KVStore;
 
 class BetaRowset : public Rowset {
 public:
-    BetaRowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
-    ~BetaRowset() override {}
+    static std::shared_ptr<BetaRowset> create(MemTracker* mem_tracker, const TabletSchema* schema,
+                                              std::string rowset_path, RowsetMetaSharedPtr rowset_meta) {
+        auto rowset =
+                std::shared_ptr<BetaRowset>(new BetaRowset(schema, std::move(rowset_path), std::move(rowset_meta)),
+                                            DeleterWithMemTracker<BetaRowset>(mem_tracker));
+        mem_tracker->consume(rowset->mem_usage());
+        return rowset;
+    }
 
-    OLAPStatus create_reader(RowsetReaderSharedPtr* result) override;
+    BetaRowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
+
+    ~BetaRowset() override {}
 
     StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                         const vectorized::RowsetReadOptions& options) override;
@@ -85,6 +92,14 @@ public:
     bool check_path(const std::string& path) override;
 
     std::vector<segment_v2::SegmentSharedPtr>& segments() { return _segments; }
+
+    int64_t mem_usage() const {
+        int64_t size = sizeof(BetaRowset);
+        if (_rowset_meta != nullptr) {
+            size += _rowset_meta->mem_usage();
+        }
+        return size;
+    }
 
 protected:
     // init segment groups

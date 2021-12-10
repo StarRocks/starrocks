@@ -16,6 +16,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -374,14 +375,25 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (desc.isDecimalV2()) {
             return ConstantOperator.createDecimal(BigDecimal.valueOf(Double.parseDouble(childString)), Type.DECIMALV2);
         } else if (desc.isDecimalV3()) {
-            BigDecimal value = new BigDecimal(childString);
+            BigDecimal decimal = new BigDecimal(childString);
             try {
-                DecimalLiteral.checkLiteralOverflow(value, (ScalarType) desc);
+                ScalarType scalarType = (ScalarType) desc;
+                DecimalLiteral.checkLiteralOverflow(decimal, scalarType);
+
+                int realScale = DecimalLiteral.getRealScale(decimal);
+                int scale = scalarType.getScalarScale();
+                if (scale <= realScale) {
+                    decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
+                }
+
+                if (scalarType.getScalarScale() == 0 && scalarType.getScalarPrecision() == 0) {
+                    throw new SemanticException("Forbidden cast to decimal(precision=0, scale=0)");
+                }
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
 
-            return ConstantOperator.createDecimal(value, desc);
+            return ConstantOperator.createDecimal(decimal, desc);
         } else if (desc.isChar() || desc.isVarchar()) {
             return ConstantOperator.createChar(childString, desc);
         }

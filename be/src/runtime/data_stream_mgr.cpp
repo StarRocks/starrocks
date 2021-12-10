@@ -29,7 +29,6 @@
 #include "gen_cpp/types.pb.h" // PUniqueId
 #include "runtime/data_stream_recvr.h"
 #include "runtime/raw_value.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/starrocks_metrics.h"
 
@@ -119,8 +118,7 @@ Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google
 
     bool eos = request->eos();
     if (request->has_row_batch()) {
-        recvr->add_batch(request->row_batch(), request->sender_id(), request->be_number(), request->packet_seq(),
-                         eos ? nullptr : done);
+        return Status::InternalError("Non-vectorized execute engine is not supported");
     }
 
     if (eos) {

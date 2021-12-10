@@ -380,8 +380,9 @@ public class StmtExecutor {
                                     execPlan.getDescTbl().toThrift(),
                                     execPlan.getColNames(), execPlan.getOutputExprs(), explainStringBuilder.toString());
                         } else {
-                            TExplainLevel level = parsedStmt.getExplainLevel().equals(StatementBase.ExplainLevel.VERBOSE)
-                                    ? TExplainLevel.VERBOSE : TExplainLevel.NORMAL;
+                            TExplainLevel level =
+                                    parsedStmt.getExplainLevel().equals(StatementBase.ExplainLevel.VERBOSE)
+                                            ? TExplainLevel.VERBOSE : TExplainLevel.NORMAL;
                             String explainString = planner.getExplainString(planner.getFragments(), level);
                             handleQueryStmt(planner.getFragments(), planner.getScanNodes(),
                                     analyzer.getDescTbl().toThrift(),
@@ -1240,6 +1241,7 @@ public class StmtExecutor {
 
     private void handleExportStmt(UUID queryId) throws Exception {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
+        exportStmt.setExportStartTime(context.getStartTime());
         context.getCatalog().getExportMgr().addExportJob(queryId, exportStmt);
     }
 
@@ -1317,14 +1319,15 @@ public class StmtExecutor {
         long transactionId = -1;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-            transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(externalTable.getSourceTableDbId(),
-                    Lists.newArrayList(externalTable.getSourceTableId()), label,
-                    externalTable.getSourceTableHost(),
-                    externalTable.getSourceTablePort(),
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                            FrontendOptions.getLocalHostAddress()),
-                    sourceType,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+            transactionId =
+                    Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(externalTable.getSourceTableDbId(),
+                            Lists.newArrayList(externalTable.getSourceTableId()), label,
+                            externalTable.getSourceTableHost(),
+                            externalTable.getSourceTablePort(),
+                            new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                                    FrontendOptions.getLocalHostAddress()),
+                            sourceType,
+                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
         } else {
             transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
@@ -1341,7 +1344,9 @@ public class StmtExecutor {
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);
             }
-            txnState.addTableIndexes((OlapTable) targetTable);
+            if (targetTable instanceof OlapTable) {
+                txnState.addTableIndexes((OlapTable) targetTable);
+            }
         }
 
         // Every time set no send flag and clean all data in buffer
@@ -1354,10 +1359,12 @@ public class StmtExecutor {
         int filteredRows = 0;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         try {
-            OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
-            dataSink.init(context.getExecutionId(), transactionId, database.getId(),
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-            dataSink.complete();
+            if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
+                OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+                dataSink.init(context.getExecutionId(), transactionId, database.getId(),
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                dataSink.complete();
+            }
 
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());
@@ -1470,7 +1477,7 @@ public class StmtExecutor {
 
             // if not using old load usage pattern, error will be returned directly to user
             StringBuilder sb = new StringBuilder(t.getMessage());
-            if (!Strings.isNullOrEmpty(coord.getTrackingUrl())) {
+            if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
                 sb.append(". url: ").append(coord.getTrackingUrl());
             }
             context.getState().setError(sb.toString());

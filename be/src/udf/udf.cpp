@@ -98,10 +98,6 @@ void FunctionContextImpl::close() {
         return;
     }
 
-    // Free local allocations first so we can detect leaks through any remaining allocations
-    // (local allocations cannot be leaked, at least not by the UDF)
-    free_local_allocations();
-
     if (_external_bytes_tracked > 0) {
         // This isn't ideal because the memory is still leaked, but don't track it so our
         // accounting stays sane.
@@ -119,14 +115,6 @@ uint8_t* FunctionContextImpl::allocate_local(int64_t byte_size) {
     uint8_t* buffer = _pool->allocate(byte_size);
     _local_allocations.push_back(buffer);
     return buffer;
-}
-
-void FunctionContextImpl::free_local_allocations() {
-    for (auto& _local_allocation : _local_allocations) {
-        _pool->free(_local_allocation);
-    }
-
-    _local_allocations.clear();
 }
 
 void FunctionContextImpl::set_constant_args(const std::vector<starrocks_udf::AnyVal*>& constant_args) {

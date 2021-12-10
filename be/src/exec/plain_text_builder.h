@@ -18,7 +18,6 @@ class OutputStream;
 
 class ExprContext;
 class FileWriter;
-class RowBatch;
 
 struct PlainTextBuilderOptions {
     std::string column_terminated_by;

@@ -82,8 +82,6 @@ public final class AggregateInfo extends AggregateInfoBase {
         }
     }
 
-    ;
-
     // created by createMergeAggInfo()
     private AggregateInfo mergeAggInfo_;
 

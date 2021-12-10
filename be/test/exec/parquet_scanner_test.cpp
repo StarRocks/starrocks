@@ -33,7 +33,6 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/tuple.h"
 #include "runtime/user_function_cache.h"
@@ -414,77 +413,6 @@ void ParquetSannerTest::init() {
     _tnode.nullable_tuples.push_back(false);
     _tnode.file_scan_node.tuple_id = 0;
     _tnode.__isset.file_scan_node = true;
-}
-
-TEST_F(ParquetSannerTest, normal) {
-    FileScanNode scan_node(&_obj_pool, _tnode, *_desc_tbl);
-    auto status = scan_node.prepare(&_runtime_state);
-    ASSERT_TRUE(status.ok());
-
-    // set scan range
-    std::vector<TScanRangeParams> scan_ranges;
-    {
-        TScanRangeParams scan_range_params;
-
-        TBrokerScanRange broker_scan_range;
-        broker_scan_range.params = _params;
-        TBrokerRangeDesc range;
-        range.start_offset = 0;
-        range.size = -1;
-        range.format_type = TFileFormatType::FORMAT_PARQUET;
-        range.splittable = true;
-
-        std::vector<std::string> columns_from_path{"value"};
-        range.__set_columns_from_path(columns_from_path);
-        range.__set_num_of_columns_from_file(19);
-#if 1
-        range.path = "./be/test/exec/test_data/parquet_scanner/localfile.parquet";
-        range.file_type = TFileType::FILE_LOCAL;
-#else
-        range.path = "hdfs://ip:8020/user/xxxx.parq";
-        range.file_type = TFileType::FILE_BROKER;
-        TNetworkAddress addr;
-        addr.__set_hostname("127.0.0.1");
-        addr.__set_port(8000);
-        broker_scan_range.broker_addresses.push_back(addr);
-#endif
-        broker_scan_range.ranges.push_back(range);
-        scan_range_params.scan_range.__set_broker_scan_range(broker_scan_range);
-        scan_ranges.push_back(scan_range_params);
-    }
-
-    scan_node.set_scan_ranges(scan_ranges);
-    status = scan_node.open(&_runtime_state);
-    ASSERT_TRUE(status.ok());
-
-    MemTracker tracker;
-    // Get batch
-    RowBatch batch(scan_node.row_desc(), _runtime_state.batch_size(), &tracker);
-    bool eof = false;
-    for (int i = 0; i < 14; i++) {
-        status = scan_node.get_next(&_runtime_state, &batch, &eof);
-        ASSERT_TRUE(status.ok());
-        ASSERT_EQ(2048, batch.num_rows());
-        ASSERT_FALSE(eof);
-        batch.reset();
-    }
-
-    status = scan_node.get_next(&_runtime_state, &batch, &eof);
-    ASSERT_TRUE(status.ok());
-    ASSERT_EQ(1328, batch.num_rows());
-    ASSERT_FALSE(eof);
-    batch.reset();
-    status = scan_node.get_next(&_runtime_state, &batch, &eof);
-    ASSERT_TRUE(status.ok());
-    ASSERT_EQ(0, batch.num_rows());
-    ASSERT_TRUE(eof);
-
-    scan_node.close(&_runtime_state);
-    {
-        std::stringstream ss;
-        scan_node.runtime_profile()->pretty_print(&ss);
-        LOG(INFO) << ss.str();
-    }
 }
 
 } // namespace starrocks

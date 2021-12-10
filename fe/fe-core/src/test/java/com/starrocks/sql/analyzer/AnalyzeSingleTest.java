@@ -167,6 +167,12 @@ public class AnalyzeSingleTest {
         analyzeSuccess("with w as (select * from t0) select * from w except select * from w");
         analyzeSuccess("with w as (select * from t0) select * from w intersect select * from w");
         analyzeSuccess(" with w as (select * from t0) select 1 from w");
+
+        /**
+         * Test cte with different relationId
+         */
+        analyzeSuccess("with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
+                "having v1 in (select v3 from w where v2 = 2)");
     }
 
     @Test
@@ -328,7 +334,7 @@ public class AnalyzeSingleTest {
                         "abs(`v1`)," +
                         "`v1` * `v1` / `v1` % `v1` + `v1` - `v1` DIV `v1`,`v2` & ~ `v1` | `v3` ^ 1," +
                         "`v1` + 20," +
-                        "CASE`v2` WHEN `v3` THEN 1 ELSE 0 END",
+                        "CASE `v2` WHEN `v3` THEN 1 ELSE 0 END",
                 String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess(

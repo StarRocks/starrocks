@@ -3,7 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.analyzer.relation.CTERelation;
 
 import java.util.List;
 import java.util.Map;
@@ -17,8 +17,7 @@ public class Scope {
     private Scope parent;
     private final RelationId relationId;
     private final RelationFields relationFields;
-
-    private Map<String, QueryRelation> cteQueries = Maps.newLinkedHashMap();
+    private final Map<String, CTERelation> cteQueries = Maps.newLinkedHashMap();
 
     public Scope(RelationId relationId, RelationFields relation) {
         this.relationId = relationId;
@@ -86,11 +85,11 @@ public class Scope {
         return new ResolvedField(this, field, hierarchyFieldIndex);
     }
 
-    public void addCteQueries(String name, QueryRelation view) {
+    public void addCteQueries(String name, CTERelation view) {
         cteQueries.put(name, view);
     }
 
-    public Optional<QueryRelation> getCteQueries(String name) {
+    public Optional<CTERelation> getCteQueries(String name) {
         if (cteQueries.containsKey(name)) {
             return Optional.of(cteQueries.get(name));
         }
@@ -102,7 +101,7 @@ public class Scope {
         return Optional.empty();
     }
 
-    public Map<String, QueryRelation> getAllCteQueries() {
+    public Map<String, CTERelation> getAllCteQueries() {
         return cteQueries;
     }
 

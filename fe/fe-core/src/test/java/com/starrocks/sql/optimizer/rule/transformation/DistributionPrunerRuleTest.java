@@ -132,7 +132,7 @@ public class DistributionPrunerRuleTest {
                 Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, inPredicateOperator1,
                         inPredicateOperator2, inPredicateOperator3, inPredicateOperator4);
         LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate,
-                1, Lists.newArrayList(1L), null, Lists.newArrayList(), null);
+                1, Lists.newArrayList(1L), null, Lists.newArrayList(), Lists.newArrayList());
         operator.setPredicate(null);
 
         new Expectations() {

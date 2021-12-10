@@ -55,9 +55,9 @@ import com.starrocks.sql.analyzer.relation.ExceptRelation;
 import com.starrocks.sql.analyzer.relation.IntersectRelation;
 import com.starrocks.sql.analyzer.relation.JoinRelation;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.analyzer.relation.RelationVisitor;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.analyzer.relation.SetOperationRelation;
 import com.starrocks.sql.analyzer.relation.SubqueryRelation;
 import com.starrocks.sql.analyzer.relation.TableFunctionRelation;
@@ -76,6 +76,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -107,6 +108,7 @@ public class QueryAnalyzer {
         }
 
         Scope scope = analyzeCTE(stmt, parent);
+        QueryRelation queryRelation;
         if (stmt instanceof SelectStmt) {
             SelectStmt selectStmt = (SelectStmt) stmt;
 
@@ -139,7 +141,9 @@ public class QueryAnalyzer {
                     fields.add(new Field("column_" + fieldIdx, outputTypes[fieldIdx], null, null));
                 }
 
-                return new ValuesRelation(rows, new RelationFields(fields));
+                queryRelation = new ValuesRelation(rows,
+                        fields.stream().map(Field::getName).collect(Collectors.toList()));
+                queryRelation.setScope(new Scope(RelationId.of(queryRelation), new RelationFields(fields)));
             } else if (selectStmt.getTableRefs().size() == 0) {
                 AnalyzeState analyzeState = new AnalyzeState();
 
@@ -152,18 +156,26 @@ public class QueryAnalyzer {
 
                 List<ArrayList<Expr>> rows = new ArrayList<>();
                 rows.add(row);
-                return new ValuesRelation(rows, outputScope.getRelationFields());
+                queryRelation = new ValuesRelation(rows,
+                        outputScope.getRelationFields().getAllFields()
+                                .stream().map(Field::getName).collect(Collectors.toList()));
+                queryRelation.setScope(outputScope);
             } else {
-                return transformSelectStmt((SelectStmt) stmt, scope);
+                queryRelation = transformSelectStmt((SelectStmt) stmt, scope);
             }
         } else if (stmt instanceof SetOperationStmt) {
-            return transformSetOperationStmt((SetOperationStmt) stmt, scope);
+            queryRelation = transformSetOperationStmt((SetOperationStmt) stmt, scope);
         } else {
             throw new StarRocksPlannerException("Error query statement", INTERNAL_ERROR);
         }
+
+        for (Map.Entry<String, CTERelation> entry : scope.getAllCteQueries().entrySet()) {
+            queryRelation.addCTERelation(entry.getValue());
+        }
+        return queryRelation;
     }
 
-    public QuerySpecification transformSelectStmt(SelectStmt stmt, Scope parent) {
+    public SelectRelation transformSelectStmt(SelectStmt stmt, Scope parent) {
         AnalyzeState analyzeState = new AnalyzeState();
         Scope sourceScope = analyzeFrom(stmt, analyzeState, parent);
         sourceScope.setParent(parent);
@@ -225,7 +237,7 @@ public class QueryAnalyzer {
              * group by expressions and aggregation expressions.
              */
             List<FunctionCallExpr> aggregationsInOrderBy = Lists.newArrayList();
-            TreeNode.collect(orderByExpressions, Expr.isAggregatePredicate(), aggregationsInOrderBy);
+            TreeNode.collect(orderByExpressions, Expr.isAggregatePredicate()::apply, aggregationsInOrderBy);
 
             /*
              * Prohibit the use of aggregate sorting for non-aggregated query,
@@ -233,7 +245,7 @@ public class QueryAnalyzer {
              * eg. select 1 from t0 order by sum(v)
              */
             List<FunctionCallExpr> aggregationsInOutput = Lists.newArrayList();
-            TreeNode.collect(sourceExpressions, Expr.isAggregatePredicate(), aggregationsInOutput);
+            TreeNode.collect(sourceExpressions, Expr.isAggregatePredicate()::apply, aggregationsInOutput);
             if (!isAggregate(aggregationsInOutput, groupByExpressions) && !aggregationsInOrderBy.isEmpty()) {
                 throw new SemanticException(
                         "ORDER BY contains aggregate function and applies to the result of a non-aggregated query");
@@ -315,7 +327,7 @@ public class QueryAnalyzer {
                     Type fieldType = relation.getOutputExpr().get(fieldIdx).getType();
 
                     if (!fieldType.equals(outputTypes[fieldIdx])) {
-                        relation.getOutputScope().getRelationFields().getFieldByIndex(fieldIdx)
+                        relation.getScope().getRelationFields().getFieldByIndex(fieldIdx)
                                 .setType(outputTypes[fieldIdx]);
                         childOutputExpressions
                                 .add(relation.getOutputExpr().get(fieldIdx).castTo(outputTypes[fieldIdx]));
@@ -341,7 +353,6 @@ public class QueryAnalyzer {
             s.setType(outputTypes[fieldIdx]);
             outputExpressions.add(s);
         }
-        Scope outputScope = new Scope(RelationId.of(setOpRelation), new RelationFields(fields));
 
         for (int i = 1; i < relations.size(); ++i) {
             SetOperationStmt.SetOperand operation = stmt.getOperands().get(i);
@@ -350,7 +361,7 @@ public class QueryAnalyzer {
                     ((UnionRelation) setOpRelation).addRelation(relations.get(i));
                 } else {
                     setOpRelation = new UnionRelation(Arrays.asList(setOpRelation, relations.get(i)),
-                            SetQualifier.convert(operation.getQualifier()), outputExpressions, outputScope);
+                            SetQualifier.convert(operation.getQualifier()), outputExpressions);
                 }
             } else if (operation.getOperation().equals(SetOperationStmt.Operation.EXCEPT)) {
                 if (operation.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
@@ -361,7 +372,7 @@ public class QueryAnalyzer {
                     ((ExceptRelation) setOpRelation).addRelation(relations.get(i));
                 } else {
                     setOpRelation = new ExceptRelation(Arrays.asList(setOpRelation, relations.get(i)),
-                            SetQualifier.convert(operation.getQualifier()), outputExpressions, outputScope);
+                            SetQualifier.convert(operation.getQualifier()), outputExpressions);
                 }
             } else if (operation.getOperation().equals(SetOperationStmt.Operation.INTERSECT)) {
                 if (operation.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
@@ -372,13 +383,14 @@ public class QueryAnalyzer {
                     ((IntersectRelation) setOpRelation).addRelation(relations.get(i));
                 } else {
                     setOpRelation = new IntersectRelation(Arrays.asList(setOpRelation, relations.get(i)),
-                            SetQualifier.convert(operation.getQualifier()), outputExpressions, outputScope);
+                            SetQualifier.convert(operation.getQualifier()), outputExpressions);
                 }
             } else {
                 throw new StarRocksPlannerException(
                         "Unsupported set operation " + stmt.getOperands().get(i).getOperation(),
                         INTERNAL_ERROR);
             }
+            setOpRelation.setScope(new Scope(RelationId.of(setOpRelation), new RelationFields(fields)));
         }
         return (SetOperationRelation) setOpRelation;
     }
@@ -391,6 +403,7 @@ public class QueryAnalyzer {
         Scope cteScope = new Scope(RelationId.anonymous(), new RelationFields());
         cteScope.setParent(scope);
         for (View withQuery : stmt.getWithClause().getViews()) {
+
             QueryRelation query = transformQueryStmt(withQuery.getQueryStmt(), cteScope);
 
             /*
@@ -399,15 +412,14 @@ public class QueryAnalyzer {
              *  and the previous CTE can rewrite the existing table name.
              *  So here will save an increasing AnalyzeState to add cte scope
              */
-            cteScope.addCteQueries(withQuery.getName(), query);
 
             /*
              * use cte column name as output scope of subquery relation fields
              */
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-            for (int fieldIdx = 0; fieldIdx < query.getOutputScope().getRelationFields().getAllFields().size();
+            for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size();
                     ++fieldIdx) {
-                Field originField = query.getOutputScope().getRelationFields().getFieldByIndex(fieldIdx);
+                Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
 
                 String database = originField.getRelationAlias() == null ? session.getDatabase() :
                         originField.getRelationAlias().getDb();
@@ -418,8 +430,13 @@ public class QueryAnalyzer {
                         originField.getType(),
                         tableName, originField.getOriginExpression()));
             }
-            query.setOutputScope(
-                    new Scope(query.getOutputScope().getRelationId(), new RelationFields(outputFields.build())));
+
+            CTERelation cteRelation = new CTERelation(
+                    String.valueOf(RelationId.of(query).hashCode()),
+                    withQuery.getName(),
+                    query);
+            cteRelation.setScope(new Scope(RelationId.of(cteRelation), new RelationFields(outputFields.build())));
+            cteScope.addCteQueries(withQuery.getName(), cteRelation);
         }
         return cteScope;
     }
@@ -651,8 +668,22 @@ public class QueryAnalyzer {
                     }
                 }
 
-                sourceRelation = new JoinRelation(tableRef.getJoinOp(), sourceRelation, relation, joinEqual,
+                JoinRelation joinRelation = new JoinRelation(tableRef.getJoinOp(), sourceRelation, relation, joinEqual,
                         tableRef.isLateral());
+                /*
+                 * New Scope needs to be constructed for select in semi/anti join
+                 */
+                Scope joinScope;
+                if (tableRef.getJoinOp().isLeftSemiAntiJoin()) {
+                    joinScope = sourceRelation.getScope();
+                } else if (tableRef.getJoinOp().isRightSemiAntiJoin()) {
+                    joinScope = relation.getScope();
+                } else {
+                    joinScope = new Scope(RelationId.of(joinRelation),
+                            sourceRelation.getRelationFields().joinWith(relation.getRelationFields()));
+                }
+                joinRelation.setScope(joinScope);
+                sourceRelation = joinRelation;
 
                 if (tableRef.getJoinHints() != null) {
                     ((JoinRelation) sourceRelation).setJoinHint(tableRef.getJoinHints().get(0));
@@ -693,22 +724,7 @@ public class QueryAnalyzer {
         }
 
         analyzeState.setRelation(sourceRelation);
-
-        if (sourceRelation instanceof JoinRelation) {
-            JoinRelation join = (JoinRelation) sourceRelation;
-            if (join.getType().isSemiAntiJoin()) {
-                /*
-                 * New Scope needs to be constructed for select in semi/anti join
-                 */
-                if (((JoinRelation) sourceRelation).getType().isLeftSemiAntiJoin()) {
-                    scope = new Scope(scope.getRelationId(), join.getLeft().getRelationFields());
-                } else if (join.getType().isRightSemiAntiJoin()) {
-                    scope = new Scope(scope.getRelationId(), join.getRight().getRelationFields());
-                }
-                return scope;
-            }
-        }
-        return new Scope(RelationId.of(sourceRelation), sourceRelation.getRelationFields());
+        return sourceRelation.getScope();
     }
 
     private void analyzeJoinHints(JoinRelation join) {
@@ -741,27 +757,30 @@ public class QueryAnalyzer {
         TableName tableName = tableRef.getAliasAsName();
 
         if (tableRef.getName() != null && Strings.isNullOrEmpty(tableName.getDb())) {
-            Optional<QueryRelation> withQuery = scope.getCteQueries(tableRef.getName().getTbl());
+            Optional<CTERelation> withQuery = scope.getCteQueries(tableRef.getName().getTbl());
             if (withQuery.isPresent()) {
-                QueryRelation qb = withQuery.get();
-
-                /*
-                 * use colLables as output scope of subquery relation fields
-                 */
+                CTERelation cteRelation = withQuery.get();
+                RelationFields withRelationFields = withQuery.get().getRelationFields();
                 ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-                for (int fieldIdx = 0; fieldIdx < qb.getOutputScope().getRelationFields().getAllFields().size();
-                        ++fieldIdx) {
-                    Field originField = qb.getOutputScope().getRelationFields().getAllFields().get(fieldIdx);
+
+                for (int fieldIdx = 0; fieldIdx < withRelationFields.getAllFields().size(); ++fieldIdx) {
+                    Field originField = withRelationFields.getAllFields().get(fieldIdx);
                     outputFields.add(new Field(
                             originField.getName(), originField.getType(), tableName,
                             originField.getOriginExpression()));
                 }
 
-                if (session.getSessionVariable().isCboCteReuse()) {
-                    return new CTERelation(tableRef.getName().getTbl(), tableRef.getAlias(), qb, outputFields.build());
-                } else {
-                    return new SubqueryRelation(tableRef.getAlias(), qb, outputFields.build());
-                }
+                // The CTERelation stored in the Scope is not used directly here, but a new Relation is copied.
+                // It is because we hope to obtain a new RelationId to distinguish multiple cte reuses.
+                // Because the reused cte should not be considered the same relation.
+                // eg: with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
+                //                "having v1 in (select v3 from w where v2 = 2)
+                // cte used in outer query and subquery can't use same relation-id and field
+                CTERelation newCteRelation =
+                        new CTERelation(cteRelation.getCteId(), cteRelation.getName(), cteRelation.getCteQuery());
+                newCteRelation.setScope(
+                        new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
+                return newCteRelation;
             }
         }
 
@@ -773,12 +792,15 @@ public class QueryAnalyzer {
 
             QueryRelation query = transformQueryStmt(viewRef.getViewStmt(), scope);
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-            for (Field field : query.getOutputScope().getRelationFields().getAllFields()) {
+            for (Field field : query.getRelationFields().getAllFields()) {
                 outputFields.add(new Field(field.getName(), field.getType(),
                         tableName, field.getOriginExpression()));
             }
 
-            return new SubqueryRelation(tableRef.getAlias(), query, outputFields.build());
+            SubqueryRelation subqueryRelation = new SubqueryRelation(tableRef.getAlias(), query);
+            subqueryRelation.setScope(
+                    new Scope(RelationId.of(subqueryRelation), new RelationFields(outputFields.build())));
+            return subqueryRelation;
         }
 
         if (tableRef instanceof FunctionTableRef) {
@@ -806,7 +828,10 @@ public class QueryAnalyzer {
                 fields.add(field);
             }
 
-            return new TableFunctionRelation(fn, child, new RelationFields(fields.build()));
+            TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(fn, child);
+            tableFunctionRelation.setScope(
+                    new Scope(RelationId.of(tableFunctionRelation), new RelationFields(fields.build())));
+            return tableFunctionRelation;
         }
 
         //Olap table
@@ -830,16 +855,21 @@ public class QueryAnalyzer {
             QueryRelation query = transformQueryStmt(view.getQueryStmt(), scope);
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-            for (Field field : query.getOutputScope().getRelationFields().getAllFields()) {
+            for (Field field : query.getRelationFields().getAllFields()) {
                 outputFields.add(new Field(field.getName(), field.getType(),
                         tableName, field.getOriginExpression()));
             }
 
-            return new SubqueryRelation(tableRef.getAlias(), query, outputFields.build());
+            SubqueryRelation subqueryRelation = new SubqueryRelation(tableRef.getAlias(), query);
+            subqueryRelation.setScope(
+                    new Scope(RelationId.of(subqueryRelation), new RelationFields(outputFields.build())));
+            return subqueryRelation;
         } else {
             if (isSupportedTable(table)) {
-                TableRelation tableRelation = new TableRelation(tableName, table, columns.build(), fields.build(),
+                TableRelation tableRelation = new TableRelation(tableName, table, columns.build(),
                         tableRef.getPartitionNames(), tableRef.getTabletIds(), tableRef.isMetaQuery());
+                tableRelation.setScope(new Scope(RelationId.of(tableRelation), new RelationFields(fields.build())));
+
                 session.getDumpInfo().addTable(tableRef.getName().getDb().split(":")[1], tableRelation.getTable());
                 return tableRelation;
             } else {
@@ -920,7 +950,7 @@ public class QueryAnalyzer {
     private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
                                                        List<Expr> outputAndOrderByExpressions) {
         List<FunctionCallExpr> aggregations = Lists.newArrayList();
-        TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate(), aggregations);
+        TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
         analyzeState.setAggregate(aggregations);

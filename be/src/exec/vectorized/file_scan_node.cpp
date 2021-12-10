@@ -17,9 +17,10 @@
 #include "exec/vectorized/orc_scanner.h"
 #include "exec/vectorized/parquet_scanner.h"
 #include "exprs/expr.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -88,10 +89,6 @@ Status FileScanNode::start_scanners() {
         _scanner_threads.emplace_back(&FileScanNode::scanner_worker, this, 0, _scan_ranges.size());
     }
     return Status::OK();
-}
-
-Status FileScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::InternalError("Not support");
 }
 
 Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
@@ -273,6 +270,8 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
 }
 
 void FileScanNode::scanner_worker(int start_idx, int length) {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
     auto status = Expr::clone_if_not_exists(_conjunct_ctxs, _runtime_state, &scanner_expr_ctxs);

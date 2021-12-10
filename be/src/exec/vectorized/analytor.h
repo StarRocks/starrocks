@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <queue>
+
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
@@ -27,6 +29,7 @@ struct FrameRange {
 
 class Analytor;
 using AnalytorPtr = std::shared_ptr<Analytor>;
+using Analytors = std::vector<AnalytorPtr>;
 
 // Component used to do analytic processing
 // it contains common data struct and algorithm of analysis

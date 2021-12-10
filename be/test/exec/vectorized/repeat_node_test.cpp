@@ -56,10 +56,6 @@ public:
         return Status::OK();
     }
 
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-        return Status::NotSupported("get_next for row_batch is not supported");
-    }
-
     Status init(const TPlanNode& tnode, RuntimeState* state) { return Status::OK(); }
 
     Status prepare(RuntimeState* state) { return Status::OK(); }

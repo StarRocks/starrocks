@@ -26,7 +26,6 @@
 #include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/raw_value.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -102,6 +101,10 @@ pipeline::OpFactories SelectNode::decompose_to_pipeline(pipeline::PipelineBuilde
     operators.emplace_back(
             std::make_shared<SelectOperatorFactory>(context->next_operator_id(), id(), std::move(_conjunct_ctxs)));
 
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     return operators;
 }
 

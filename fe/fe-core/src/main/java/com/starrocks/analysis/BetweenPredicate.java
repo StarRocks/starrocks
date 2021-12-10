@@ -94,6 +94,13 @@ public class BetweenPredicate extends Predicate {
     }
 
     @Override
+    public String toDigestImpl() {
+        String notStr = (isNotBetween) ? "not " : "";
+        return children.get(0).toDigest() + " " + notStr + "between " +
+                children.get(1).toDigest() + " and " + children.get(2).toDigest();
+    }
+
+    @Override
     public Expr clone(ExprSubstitutionMap sMap) {
         return new BetweenPredicate(this);
     }

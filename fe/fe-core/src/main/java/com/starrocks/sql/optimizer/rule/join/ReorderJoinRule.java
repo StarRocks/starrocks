@@ -227,7 +227,7 @@ public class ReorderJoinRule extends Rule {
 
             ExpressionContext expressionContext = new ExpressionContext(joinOpt);
             StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                    expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext.getDumpInfo());
+                    expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext);
             statisticsCalculator.estimatorStats();
             joinOpt.setStatistics(expressionContext.getStatistics());
             return joinOpt;
@@ -277,14 +277,14 @@ public class ReorderJoinRule extends Rule {
 
             if (childInputColumns.equals(outputColumns)) {
                 LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder().withOperator(
-                                (LogicalJoinOperator) optExpression.getOp())
+                        (LogicalJoinOperator) optExpression.getOp())
                         .setProjection(null).build();
                 OptExpression joinOpt = OptExpression.create(joinOperator, Lists.newArrayList(left, right));
                 joinOpt.deriveLogicalPropertyItself();
 
                 ExpressionContext expressionContext = new ExpressionContext(joinOpt);
                 StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                        expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext.getDumpInfo());
+                        expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext);
                 statisticsCalculator.estimatorStats();
                 joinOpt.setStatistics(expressionContext.getStatistics());
                 return joinOpt;

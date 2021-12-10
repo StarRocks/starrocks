@@ -315,7 +315,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
 
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
-                context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext().getDumpInfo());
+                context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext());
         statisticsCalculator.estimatorStats();
         groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
         return true;

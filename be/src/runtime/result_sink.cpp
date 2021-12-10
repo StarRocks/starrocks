@@ -26,12 +26,12 @@
 #include "common/config.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/file_result_writer.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/result_buffer_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/vectorized/statistic_result_writer.h"
 #include "util/uid_util.h"
@@ -102,6 +102,12 @@ Status ResultSink::open(RuntimeState* state) {
 }
 
 Status ResultSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    // The ResultWriter memory that sends the results is no longer recorded to the query memory.
+    // There are two reason:
+    // 1. the query result has come out, and then the memory limit is triggered, cancel, it is not necessary
+    // 2. if this memory is counted, The memory of the receiving thread needs to be recorded,
+    // and the life cycle of MemTracker needs to be considered
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     return _writer->append_chunk(chunk);
 }
 

@@ -264,6 +264,11 @@ endif()
 add_library(hyperscan STATIC IMPORTED)
 set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhs.a)
 
+add_library(simdjson STATIC IMPORTED)
+set_target_properties(simdjson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdjson.a)
+# Disable exceptions for simdjson.
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSIMDJSON_EXCEPTIONS=OFF")
+
 find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
 # Check if functions are supported in this platform. All flags will generated
@@ -342,7 +347,7 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
 # Debug information is stored as dwarf2 to be as compatible as possible
 #   -Werror: compile warnings should be errors when using the toolchain compiler.
 # Only enable for debug builds because this is what we test in pre-commit tests.
-set(CXX_FLAGS_DEBUG "${CXX_GCC_FLAGS} -ggdb -O0 -gdwarf-4")
+set(CXX_FLAGS_DEBUG "${CXX_GCC_FLAGS} -ggdb -O0 -gdwarf-4 -DDEBUG")
 
 # For CMAKE_BUILD_TYPE=Release
 #   -O3: Enable all compiler optimizations
@@ -424,7 +429,7 @@ set(STARROCKS_LINK_LIBS
     Exprs
     Formats
     Gutil
-    Olap
+    Storage
     Rowset
     OlapFs
     Runtime
@@ -491,6 +496,7 @@ set(STARROCKS_DEPENDENCIES
     fmt
     ryu
     hyperscan
+    simdjson
     ${WL_END_GROUP}
 )
 

@@ -291,7 +291,8 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
         vectorized::Offsets& new_offset = new_binary->get_offset();
         vectorized::Bytes& new_bytes = new_binary->get_bytes();
 
-        uint32_t len = tschema.column(field_index).length();
+        // |schema| maybe partial columns in vertical compaction, so get char column length by name.
+        uint32_t len = tschema.column(tschema.field_index(schema.field(field_index)->name())).length();
 
         new_offset.resize(num_rows + 1);
         new_bytes.assign(num_rows * len, 0); // padding 0

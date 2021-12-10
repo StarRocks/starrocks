@@ -7,15 +7,21 @@
 #include "column/column_viewer.h"
 #include "exec/vectorized/parquet_scanner.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
-#include "storage/schema_change.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/schema_change.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
+
+PushBrokerReader::~PushBrokerReader() {
+    _counter.reset();
+    _scanner.reset();
+}
 
 Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescriptorTable& t_desc_tbl) {
     // init runtime state, runtime profile, counter

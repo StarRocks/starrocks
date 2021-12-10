@@ -141,6 +141,21 @@ public class WithClause implements ParseNode {
         return "WITH " + Joiner.on(",").join(viewStrings);
     }
 
+    public String toDigest() {
+        List<String> viewStrings = Lists.newArrayList();
+        for (View view : views_) {
+            // Enclose the view alias and explicit labels in quotes if Hive cannot parse it
+            // without quotes. This is needed for view compatibility between Impala and Hive.
+            String aliasSql = ToSqlUtils.getIdentSql(view.getName());
+            if (view.hasColLabels()) {
+                aliasSql += "(" + Joiner.on(", ").join(
+                        ToSqlUtils.getIdentSqlList(view.getOriginalColLabels())) + ")";
+            }
+            viewStrings.add(aliasSql + " as (" + view.getQueryStmt().toDigest() + ")");
+        }
+        return "with " + Joiner.on(",").join(viewStrings);
+    }
+
     public List<View> getViews() {
         return views_;
     }

@@ -2,20 +2,12 @@
 
 package com.starrocks.sql.analyzer.relation;
 
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
-
-import java.util.List;
-
 public class CTERelation extends Relation {
     private final String cteId;
-
     private final String name;
+    private final QueryRelation cteQuery;
 
-    private QueryRelation cteQuery;
-
-    public CTERelation(String cteId, String name, QueryRelation cteQuery, List<Field> relationFields) {
-        super(new RelationFields(relationFields));
+    public CTERelation(String cteId, String name, QueryRelation cteQuery) {
         this.cteId = cteId;
         this.name = name;
         this.cteQuery = cteQuery;
@@ -27,6 +19,10 @@ public class CTERelation extends Relation {
 
     public String getCteId() {
         return cteId;
+    }
+
+    public String getName() {
+        return name;
     }
 
     @Override

@@ -24,7 +24,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/string_value.hpp"
-#include "runtime/vectorized_row_batch.h"
 #include "storage/decimal12.h"
 #include "storage/field.h"
 #include "storage/uint24.h"
@@ -41,59 +40,6 @@ using strings::Substitute;
 
 IN_LIST_PRED_CONSTRUCTOR(InListPredicate)
 IN_LIST_PRED_CONSTRUCTOR(NotInListPredicate)
-
-#define IN_LIST_PRED_EVALUATE(CLASS, OP)                                                               \
-    template <class type>                                                                              \
-    void CLASS<type>::evaluate(VectorizedRowBatch* batch) const {                                      \
-        uint16_t n = batch->size();                                                                    \
-        if (n == 0) {                                                                                  \
-            return;                                                                                    \
-        }                                                                                              \
-        uint16_t* sel = batch->selected();                                                             \
-        const type* col_vector = reinterpret_cast<const type*>(batch->column(_column_id)->col_data()); \
-        uint16_t new_size = 0;                                                                         \
-        if (batch->column(_column_id)->no_nulls()) {                                                   \
-            if (batch->selected_in_use()) {                                                            \
-                for (uint16_t j = 0; j != n; ++j) {                                                    \
-                    uint16_t i = sel[j];                                                               \
-                    sel[new_size] = i;                                                                 \
-                    new_size += (_values.find(col_vector[i]) OP _values.end());                        \
-                }                                                                                      \
-                batch->set_size(new_size);                                                             \
-            } else {                                                                                   \
-                for (uint16_t i = 0; i != n; ++i) {                                                    \
-                    sel[new_size] = i;                                                                 \
-                    new_size += (_values.find(col_vector[i]) OP _values.end());                        \
-                }                                                                                      \
-                if (new_size < n) {                                                                    \
-                    batch->set_size(new_size);                                                         \
-                    batch->set_selected_in_use(true);                                                  \
-                }                                                                                      \
-            }                                                                                          \
-        } else {                                                                                       \
-            bool* is_null = batch->column(_column_id)->is_null();                                      \
-            if (batch->selected_in_use()) {                                                            \
-                for (uint16_t j = 0; j != n; ++j) {                                                    \
-                    uint16_t i = sel[j];                                                               \
-                    sel[new_size] = i;                                                                 \
-                    new_size += (!is_null[i] && _values.find(col_vector[i]) OP _values.end());         \
-                }                                                                                      \
-                batch->set_size(new_size);                                                             \
-            } else {                                                                                   \
-                for (int i = 0; i != n; ++i) {                                                         \
-                    sel[new_size] = i;                                                                 \
-                    new_size += (!is_null[i] && _values.find(col_vector[i]) OP _values.end());         \
-                }                                                                                      \
-                if (new_size < n) {                                                                    \
-                    batch->set_size(new_size);                                                         \
-                    batch->set_selected_in_use(true);                                                  \
-                }                                                                                      \
-            }                                                                                          \
-        }                                                                                              \
-    }
-
-IN_LIST_PRED_EVALUATE(InListPredicate, !=)
-IN_LIST_PRED_EVALUATE(NotInListPredicate, ==)
 
 #define IN_LIST_PRED_COLUMN_BLOCK_EVALUATE(CLASS, OP)                                                    \
     template <class type>                                                                                \
@@ -166,7 +112,7 @@ IN_LIST_PRED_BITMAP_EVALUATE(NotInListPredicate, -=)
         }                                                                                                  \
         auto converter = vectorized::get_field_converter(from_type, to_type);                              \
         if (converter == nullptr) {                                                                        \
-            return Status::InternalError("Cannot get filed converter");                                    \
+            return Status::InternalError("Cannot get field converter");                                    \
         }                                                                                                  \
         switch (to_type) {                                                                                 \
         default:                                                                                           \
@@ -257,22 +203,6 @@ DEFINE_CONVERT_TO_FUNCTION(NotInListPredicate);
 
 IN_LIST_PRED_CONSTRUCTOR_DECLARATION(InListPredicate)
 IN_LIST_PRED_CONSTRUCTOR_DECLARATION(NotInListPredicate)
-
-#define IN_LIST_PRED_EVALUATE_DECLARATION(CLASS)                                 \
-    template void CLASS<int8_t>::evaluate(VectorizedRowBatch* batch) const;      \
-    template void CLASS<int16_t>::evaluate(VectorizedRowBatch* batch) const;     \
-    template void CLASS<int32_t>::evaluate(VectorizedRowBatch* batch) const;     \
-    template void CLASS<int64_t>::evaluate(VectorizedRowBatch* batch) const;     \
-    template void CLASS<int128_t>::evaluate(VectorizedRowBatch* batch) const;    \
-    template void CLASS<float>::evaluate(VectorizedRowBatch* batch) const;       \
-    template void CLASS<double>::evaluate(VectorizedRowBatch* batch) const;      \
-    template void CLASS<decimal12_t>::evaluate(VectorizedRowBatch* batch) const; \
-    template void CLASS<StringValue>::evaluate(VectorizedRowBatch* batch) const; \
-    template void CLASS<uint24_t>::evaluate(VectorizedRowBatch* batch) const;    \
-    template void CLASS<uint64_t>::evaluate(VectorizedRowBatch* batch) const;
-
-IN_LIST_PRED_EVALUATE_DECLARATION(InListPredicate)
-IN_LIST_PRED_EVALUATE_DECLARATION(NotInListPredicate)
 
 #define IN_LIST_PRED_COLUMN_BLOCK_EVALUATE_DECLARATION(CLASS)                                            \
     template void CLASS<int8_t>::evaluate(ColumnBlock* block, uint16_t* sel, uint16_t* size) const;      \

@@ -194,10 +194,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         return isInferred_;
     }
 
-    public void setIsInferred() {
-        isInferred_ = true;
-    }
-
     public static void initBuiltins(FunctionSet functionSet) {
         for (Type t : Type.getSupportedTypes()) {
             if (t.isNull() || t.isPseudoType()) {
@@ -271,6 +267,11 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
+    public String toDigestImpl() {
+        return getChild(0).toDigest() + " " + op.toString() + " " + getChild(1).toDigest();
+    }
+
+    @Override
     public String explainImpl() {
         return getChild(0).explain() + " " + op.toString() + " " + getChild(1).explain();
     }
@@ -296,9 +297,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         }
         Preconditions.checkState(match != null);
         Preconditions.checkState(match.getReturnType().getPrimitiveType() == PrimitiveType.BOOLEAN);
-        //todo(dhc): should add oppCode
-        //this.vectorOpcode = match.opcode;
-        LOG.debug(debugString() + " opcode: " + vectorOpcode);
     }
 
     private static boolean canCompareDate(PrimitiveType t1, PrimitiveType t2) {

@@ -12,14 +12,12 @@ class RowDescriptor;
 namespace pipeline {
 class ExchangeSourceOperator : public SourceOperator {
 public:
-    ExchangeSourceOperator(int32_t id, int32_t plan_node_id, int32_t num_sender, const RowDescriptor& row_desc)
-            : SourceOperator(id, "exchange_source", plan_node_id), _num_sender(num_sender), _row_desc(row_desc) {}
+    ExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id)
+            : SourceOperator(factory, id, "exchange_source", plan_node_id) {}
 
     ~ExchangeSourceOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
-
-    Status close(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -30,10 +28,8 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    int32_t _num_sender;
-    const RowDescriptor& _row_desc;
-    std::shared_ptr<DataStreamRecvr> _stream_recvr;
-    std::atomic<bool> _is_finishing{false};
+    std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
+    std::atomic<bool> _is_finishing = false;
 };
 
 class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {
@@ -46,12 +42,19 @@ public:
     ~ExchangeSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ExchangeSourceOperator>(_id, _plan_node_id, _num_sender, _row_desc);
+        ++_stream_recvr_cnt;
+        return std::make_shared<ExchangeSourceOperator>(this, _id, _plan_node_id);
     }
+
+    std::shared_ptr<DataStreamRecvr> create_stream_recvr(RuntimeState* state,
+                                                         const std::shared_ptr<RuntimeProfile>& profile);
+    void close_stream_recvr();
 
 private:
     int32_t _num_sender;
     const RowDescriptor& _row_desc;
+    std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
+    std::atomic<int64_t> _stream_recvr_cnt = 0;
 };
 
 } // namespace pipeline

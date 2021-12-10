@@ -178,7 +178,11 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
     // this time, because we will filter chunks before initialize permutations, so we just check memory usage.
     if (!_init_merged_segment) {
         // this time, Just initialized permutations.second.
-        permutation_second.resize(row_count);
+        try {
+            permutation_second.resize(row_count);
+        } catch (std::bad_alloc const&) {
+            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+        }
 
         uint32_t perm_index = 0;
         for (uint32_t i = 0; i < segments.size(); ++i) {
@@ -193,8 +197,8 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
     return Status::OK();
 }
 
-void ChunksSorterTopn::_sort_data_by_row_cmp(
-        Permutation& permutation, size_t rows_to_sort, size_t rows_size,
+Status ChunksSorterTopn::_sort_data_by_row_cmp(
+        RuntimeState* state, Permutation& permutation, size_t rows_to_sort, size_t rows_size,
         const std::function<bool(const PermutationItem& l, const PermutationItem& r)>& cmp_fn) {
     if (rows_to_sort > 0 && rows_to_sort < rows_size / 5) {
         // when Limit >= 1/5 of all data, a full sort will be faster than partial sort.
@@ -204,12 +208,14 @@ void ChunksSorterTopn::_sort_data_by_row_cmp(
         permutation.resize(rows_to_sort);
     } else {
         // full sort
-        pdqsort(permutation.begin(), permutation.end(), cmp_fn);
+        pdqsort(state->cancelled_ref(), permutation.begin(), permutation.end(), cmp_fn);
+        RETURN_IF_CANCELLED(state);
         if (rows_size > rows_to_sort) {
             // for topn, We don't need the data after [0, number_of_rows_to_sort).
             permutation.resize(rows_to_sort);
         }
     }
+    return Status::OK();
 }
 
 void ChunksSorterTopn::_set_permutation_before(Permutation& permutation, size_t size,
@@ -331,14 +337,15 @@ Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
     // permutations.second.
     size_t first_size = permutations.first.size();
     if (first_size >= number_of_rows_to_sort) {
-        _sort_data_by_row_cmp(permutations.first, number_of_rows_to_sort, first_size, cmp_fn);
+        RETURN_IF_ERROR(_sort_data_by_row_cmp(state, permutations.first, number_of_rows_to_sort, first_size, cmp_fn));
     } else {
         if (first_size > 0) {
-            pdqsort(permutations.first.begin(), permutations.first.end(), cmp_fn);
+            pdqsort(state->cancelled_ref(), permutations.first.begin(), permutations.first.end(), cmp_fn);
+            RETURN_IF_CANCELLED(state);
         }
 
-        _sort_data_by_row_cmp(permutations.second, number_of_rows_to_sort - first_size, permutations.second.size(),
-                              cmp_fn);
+        RETURN_IF_ERROR(_sort_data_by_row_cmp(state, permutations.second, number_of_rows_to_sort - first_size,
+                                              permutations.second.size(), cmp_fn));
     }
 
     return Status::OK();

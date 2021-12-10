@@ -49,6 +49,7 @@ public:
 private:
     void run();
     void finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
+    void update_profile_by_mode(FragmentContext* fragment_ctx, bool done);
 
 private:
     LimitSetter _num_threads_setter;

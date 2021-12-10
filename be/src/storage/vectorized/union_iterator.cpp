@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "column/chunk.h"
-#include "storage/iterators.h" // StorageReadOptions
 
 namespace starrocks::vectorized {
 
@@ -34,6 +33,14 @@ public:
         ChunkIterator::init_encoded_schema(dict_maps);
         for (auto& child : _children) {
             child->init_encoded_schema(dict_maps);
+        }
+        return Status::OK();
+    }
+
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        for (auto& child : _children) {
+            child->init_output_schema(unused_output_column_ids);
         }
         return Status::OK();
     }

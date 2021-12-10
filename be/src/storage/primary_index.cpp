@@ -768,7 +768,7 @@ void PrimaryIndex::unload() {
     if (!_loaded) {
         return;
     }
-    LOG(INFO) << "unload primary index tablet:" << _tablet_id << " size:" << size() << "capacity:" << capacity()
+    LOG(INFO) << "unload primary index tablet:" << _tablet_id << " size:" << size() << " capacity:" << capacity()
               << " memory: " << memory_usage();
     if (_pkey_to_rssid_rowid) {
         _pkey_to_rssid_rowid.reset();
@@ -818,7 +818,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     size_t total_dels = 0;
     auto st = tablet->updates()->get_rowsets_total_stats(rowset_ids, &total_rows2, &total_dels);
     if (!st.ok() || total_rows2 != total_rows) {
-        LOG(WARNING) << "load primary index get_rowsets_total_stats error " << st;
+        LOG(WARNING) << "load primary index get_rowsets_total_stats error: " << st;
     }
     DCHECK(total_rows2 == total_rows);
     if (total_data_size > 4000000000 || total_rows > 10000000 || total_segments > 400) {

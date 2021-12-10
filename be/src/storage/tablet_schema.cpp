@@ -25,6 +25,8 @@
 #include <cctype>
 #include <vector>
 
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/vectorized/type_utils.h"
 
@@ -393,6 +395,21 @@ bool TabletColumn::is_format_v2_column() const {
  * TabletSchema
  ******************************************************************/
 
+std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb) {
+    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb),
+                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
+    mem_tracker->consume(schema->mem_usage());
+    return schema;
+}
+
+std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
+                                                   TabletSchemaMap* schema_map) {
+    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb, schema_map),
+                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
+    mem_tracker->consume(schema->mem_usage());
+    return schema;
+}
+
 TabletSchema::~TabletSchema() {
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
@@ -484,16 +501,14 @@ size_t TabletSchema::row_size() const {
 }
 
 size_t TabletSchema::field_index(const std::string& field_name) const {
-    bool field_exist = false;
     int ordinal = -1;
     for (auto& column : _cols) {
         ordinal++;
         if (column.name() == field_name) {
-            field_exist = true;
-            break;
+            return ordinal;
         }
     }
-    return field_exist ? ordinal : -1;
+    return -1;
 }
 
 const std::vector<TabletColumn>& TabletSchema::columns() const {

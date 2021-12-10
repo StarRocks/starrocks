@@ -25,15 +25,10 @@
 #include <utility>
 
 #include "runtime/mem_pool.h"
-#include "runtime/row_batch.h"
 #include "runtime/tuple_row.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
-
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
 
 static const string LOAD_OP_COLUMN = "__op";
 

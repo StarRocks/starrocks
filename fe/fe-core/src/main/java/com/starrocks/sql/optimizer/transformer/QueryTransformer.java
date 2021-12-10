@@ -13,9 +13,10 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -42,16 +43,18 @@ import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTransla
 
 class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
+    private final ConnectContext session;
     private final ExpressionMapping outer;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
-    QueryTransformer(ColumnRefFactory columnRefFactory, ExpressionMapping outer) {
+    QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer) {
         this.columnRefFactory = columnRefFactory;
+        this.session = session;
         this.outer = outer;
     }
 
-    public LogicalPlan plan(QuerySpecification queryBlock) {
-        OptExprBuilder builder = planFrom(queryBlock.getRelation());
+    public LogicalPlan plan(SelectRelation queryBlock, Map<String, ExpressionMapping> cteContext) {
+        OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
 
         builder = filter(builder, queryBlock.getPredicate());
         builder =
@@ -101,8 +104,8 @@ class QueryTransformer {
         return outputs;
     }
 
-    private OptExprBuilder planFrom(Relation node) {
-        return new RelationTransformer(columnRefFactory).visit(node);
+    private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
+        return new RelationTransformer(columnRefFactory, session, cteContext).visit(node);
     }
 
     private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,
@@ -151,7 +154,7 @@ class QueryTransformer {
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
         for (Expr expression : expressions) {
             subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression);
@@ -169,7 +172,7 @@ class QueryTransformer {
             return subOpt;
         }
 
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
         subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate);
 
         ScalarOperator scalarPredicate =

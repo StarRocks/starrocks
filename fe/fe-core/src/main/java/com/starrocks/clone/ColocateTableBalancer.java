@@ -214,7 +214,6 @@ public class ColocateTableBalancer extends MasterDaemon {
                             continue;
                         }
                         long visibleVersion = partition.getVisibleVersion();
-                        long visibleVersionHash = partition.getVisibleVersionHash();
                         // Here we only get VISIBLE indexes. All other indexes are not queryable.
                         // So it does not matter if tablets of other indexes are not matched.
                         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
@@ -226,7 +225,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                                 Preconditions.checkState(bucketsSeq.size() == replicationNum,
                                         bucketsSeq.size() + " vs. " + replicationNum);
                                 Tablet tablet = index.getTablet(tabletId);
-                                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion, visibleVersionHash,
+                                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
                                         replicationNum, bucketsSeq);
                                 if (st != TabletStatus.HEALTHY) {
                                     isGroupStable = false;

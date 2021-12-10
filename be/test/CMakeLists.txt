@@ -34,7 +34,7 @@ set(EXEC_FILES
         #./exec/vectorized/csv_scanner_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
-        #./exec/vectorized/json_scanner_test.cpp
+        ./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
@@ -45,7 +45,6 @@ set(EXEC_FILES
         ./exec/parquet/metadata_test.cpp
         ./exec/parquet/group_reader_test.cpp
         ./exec/parquet/file_reader_test.cpp
-        ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
         ./exprs/vectorized/arithmetic_operation_test.cpp
         ./exprs/vectorized/array_element_expr_test.cpp
@@ -108,28 +107,20 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
-        ./storage/aggregate_func_test.cpp
-        ./storage/comparison_predicate_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/fs/file_block_manager_test.cpp
-        ./storage/generic_iterators_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
-        ./storage/in_list_predicate_test.cpp
         ./storage/key_coder_test.cpp
         ./storage/lru_cache_test.cpp
-        ./storage/null_predicate_test.cpp
         ./storage/kv_store_test.cpp
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
-        ./storage/row_block_test.cpp
-        ./storage/row_block_v2_test.cpp
-        ./storage/row_cursor_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
         ./storage/rowset/segment_v2/binary_dict_page_test.cpp
         ./storage/rowset/segment_v2/binary_plain_page_test.cpp
@@ -144,7 +135,6 @@ set(EXEC_FILES
         ./storage/rowset/segment_v2/ordinal_page_index_test.cpp
         ./storage/rowset/segment_v2/plain_page_test.cpp
         ./storage/rowset/segment_v2/rle_page_test.cpp
-        ./storage/rowset/segment_v2/row_ranges_test.cpp
         ./storage/rowset/segment_v2/segment_test.cpp
         ./storage/rowset/segment_v2/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
@@ -205,8 +195,6 @@ set(EXEC_FILES
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
-        ./util/arrow/arrow_row_batch_test.cpp
-        ./util/arrow/arrow_row_block_test.cpp
         ./util/bitmap_test.cpp
         ./util/bitmap_value_test.cpp
         ./util/bit_stream_utils_test.cpp
@@ -251,6 +239,11 @@ set(EXEC_FILES
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
         )
+
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
 
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)

@@ -11,7 +11,7 @@
 namespace starrocks {
 namespace vectorized {
 
-class AnalyticNode : public ExecNode {
+class AnalyticNode final : public ExecNode {
 public:
     ~AnalyticNode() override = default;
     AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -20,7 +20,6 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status close(RuntimeState* state) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(

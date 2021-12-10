@@ -62,7 +62,7 @@ public enum OperatorType {
     PHYSICAL_CTE_ANCHOR,
     PHYSICAL_CTE_PRODUCE,
     PHYSICAL_CTE_CONSUME,
-    PHYSICAL_NO_OP,
+    PHYSICAL_NO_CTE,
 
     /**
      * Scalar operator

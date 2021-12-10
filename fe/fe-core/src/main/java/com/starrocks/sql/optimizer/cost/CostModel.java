@@ -17,10 +17,14 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -109,9 +113,8 @@ public class CostModel {
                     inputStatistics.getComputeSize());
         }
 
-        // Note: This method logic must consistent with SplitAggregateRule::canGenerateTwoStageAggregate
         boolean canGenerateOneStageAggNode(ExpressionContext context) {
-            // 1 Must do two stage aggregate if child operator is LogicalRepeatOperator
+            // 1. Must do two stage aggregate if child operator is LogicalRepeatOperator
             //   If the repeat node is used as the input node of the Exchange node.
             //   Will cause the node to be unable to confirm whether it is const during serialization
             //   (BE does this for efficiency reasons).
@@ -121,7 +124,7 @@ public class CostModel {
                 return false;
             }
 
-            // 2 Must do two stage aggregate is aggregate function has array type
+            // 2. Must do two stage aggregate is aggregate function has array type
             if (context.getOp() instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
                 if (operator.getAggregations().values().stream().anyMatch(callOperator
@@ -130,14 +133,7 @@ public class CostModel {
                 }
             }
 
-            // 3 Must do one stage aggregate If the child contains limit,
-            // the aggregation must be a single node to ensure correctness.
-            // eg. select count(*) from (select * table limit 2) t
-            if (context.getChildOperator(0).hasLimit()) {
-                return true;
-            }
-
-            // 4. agg distinct function with multi columns can not generate one stage aggregate
+            // 3. agg distinct function with multi columns can not generate one stage aggregate
             if (context.getOp() instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
                 if (operator.getAggregations().values().stream().anyMatch(callOperator -> callOperator.isDistinct() &&
@@ -145,7 +141,28 @@ public class CostModel {
                     return false;
                 }
             }
+            return true;
+        }
 
+        boolean mustGenerateOneStageAggNode(ExpressionContext context) {
+            // Must do one stage aggregate If the child contains limit,
+            // the aggregation must be a single node to ensure correctness.
+            // eg. select count(*) from (select * table limit 2) t
+            if (context.getChildOperator(0).hasLimit()) {
+                return true;
+            }
+            return false;
+        }
+
+        // Note: This method logic must consistent with SplitAggregateRule::needGenerateMultiStageAggregate
+        boolean needGenerateOneStageAggNode(ExpressionContext context) {
+            if (!canGenerateOneStageAggNode(context)) {
+                return false;
+            }
+            if (mustGenerateOneStageAggNode(context)) {
+                return true;
+            }
+            // respect user hint
             int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
             return aggStage == 1 || aggStage == 0;
         }
@@ -212,7 +229,7 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            if (!canGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
+            if (!needGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
                 return CostEstimate.infinite();
             }
 
@@ -310,6 +327,31 @@ public class CostModel {
             Preconditions.checkNotNull(statistics);
 
             return CostEstimate.ofCpu(statistics.getComputeSize());
+        }
+
+        @Override
+        public CostEstimate visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
+            Statistics statistics = context.getStatistics();
+            Preconditions.checkNotNull(statistics);
+
+            // @TODO:
+            //  there only compute CTEConsume output columns, but we need compute CTEProduce output columns in fact
+            return CostEstimate.of(statistics.getComputeSize(), 0, statistics.getComputeSize());
+        }
+
+        @Override
+        public CostEstimate visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
         }
     }
 }

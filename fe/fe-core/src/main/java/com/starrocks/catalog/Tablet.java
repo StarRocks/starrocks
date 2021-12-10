@@ -72,8 +72,6 @@ public class Tablet extends MetaObject implements Writable {
     private List<Replica> replicas;
     @SerializedName(value = "checkedVersion")
     private long checkedVersion;
-    @SerializedName(value = "checkedVersionHash")
-    private long checkedVersionHash;
     @SerializedName(value = "isConsistent")
     private boolean isConsistent;
 
@@ -97,7 +95,6 @@ public class Tablet extends MetaObject implements Writable {
         }
 
         checkedVersion = -1L;
-        checkedVersionHash = -1L;
 
         isConsistent = true;
     }
@@ -110,13 +107,8 @@ public class Tablet extends MetaObject implements Writable {
         return this.checkedVersion;
     }
 
-    public long getCheckedVersionHash() {
-        return this.checkedVersionHash;
-    }
-
-    public void setCheckedVersion(long checkedVersion, long checkedVersionHash) {
+    public void setCheckedVersion(long checkedVersion) {
         this.checkedVersion = checkedVersion;
-        this.checkedVersionHash = checkedVersionHash;
     }
 
     public void setIsConsistent(boolean good) {
@@ -207,7 +199,7 @@ public class Tablet extends MetaObject implements Writable {
 
     // for query
     public void getQueryableReplicas(List<Replica> allQuerableReplica, List<Replica> localReplicas,
-                                     long visibleVersion, long visibleVersionHash, long localBeId, int schemaHash) {
+                                     long visibleVersion, long localBeId, int schemaHash) {
         for (Replica replica : replicas) {
             if (replica.isBad()) {
                 continue;
@@ -221,7 +213,7 @@ public class Tablet extends MetaObject implements Writable {
             ReplicaState state = replica.getState();
             if (state.canQuery()) {
                 // replica.getSchemaHash() == -1 is for compatibility
-                if (replica.checkVersionCatchUp(visibleVersion, visibleVersionHash, false)
+                if (replica.checkVersionCatchUp(visibleVersion, false)
                         && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
                     allQuerableReplica.add(replica);
                     if (localBeId != -1 && replica.getBackendId() == localBeId) {
@@ -232,7 +224,7 @@ public class Tablet extends MetaObject implements Writable {
         }
     }
 
-    public int getQueryableReplicasSize(long visibleVersion, long visibleVersionHash, int schemaHash) {
+    public int getQueryableReplicasSize(long visibleVersion, int schemaHash) {
         int size = 0;
         for (Replica replica : replicas) {
             if (replica.isBad()) {
@@ -247,7 +239,7 @@ public class Tablet extends MetaObject implements Writable {
             ReplicaState state = replica.getState();
             if (state.canQuery()) {
                 // replica.getSchemaHash() == -1 is for compatibility
-                if (replica.checkVersionCatchUp(visibleVersion, visibleVersionHash, false)
+                if (replica.checkVersionCatchUp(visibleVersion, false)
                         && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
                     size++;
                 }
@@ -342,7 +334,7 @@ public class Tablet extends MetaObject implements Writable {
         }
 
         out.writeLong(checkedVersion);
-        out.writeLong(checkedVersionHash);
+        out.writeLong(0); // write a version_hash for compatibility
         out.writeBoolean(isConsistent);
     }
 
@@ -361,7 +353,7 @@ public class Tablet extends MetaObject implements Writable {
 
         if (Catalog.getCurrentCatalogJournalVersion() >= 6) {
             checkedVersion = in.readLong();
-            checkedVersionHash = in.readLong();
+            in.readLong(); // read a version_hash for compatibility
             isConsistent = in.readBoolean();
         }
     }
@@ -430,7 +422,7 @@ public class Tablet extends MetaObject implements Writable {
      */
     public Pair<TabletStatus, TabletSchedCtx.Priority> getHealthStatusWithPriority(
             SystemInfoService systemInfoService, String clusterName,
-            long visibleVersion, long visibleVersionHash, int replicationNum,
+            long visibleVersion, int replicationNum,
             List<Long> aliveBeIdsInCluster) {
 
         int alive = 0;
@@ -566,7 +558,7 @@ public class Tablet extends MetaObject implements Writable {
      * No need to check if backend is available. We consider all backends in 'backendsSet' are available,
      * If not, unavailable backends will be relocated by CalocateTableBalancer first.
      */
-    public TabletStatus getColocateHealthStatus(long visibleVersion, long visibleVersionHash,
+    public TabletStatus getColocateHealthStatus(long visibleVersion,
                                                 int replicationNum, Set<Long> backendsSet) {
 
         // 1. check if replicas' backends are mismatch

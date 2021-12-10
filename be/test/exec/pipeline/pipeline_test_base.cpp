@@ -5,6 +5,8 @@
 #include <random>
 
 #include "column/nullable_column.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "runtime/date_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -26,11 +28,13 @@ OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFac
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
+        auto pseudo_plan_node_id = -200;
         auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
-        auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), mem_mgr);
+        auto local_exchange_source =
+                std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
         auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
-        auto local_exchange_sink =
-                std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), local_exchange);
+        auto local_exchange_sink = std::make_shared<LocalExchangeSinkOperatorFactory>(
+                next_operator_id(), pseudo_plan_node_id, local_exchange);
         // Add LocalExchangeSinkOperator to predecessor pipeline.
         pred_operators.emplace_back(std::move(local_exchange_sink));
         // predecessor pipeline comes to end.
@@ -59,6 +63,7 @@ void PipelineTestBase::_prepare() {
     _query_ctx = QueryContextManager::instance()->get_or_register(query_id);
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_expire_seconds(60);
+    _query_ctx->extend_lifetime();
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
@@ -79,6 +84,7 @@ void PipelineTestBase::_prepare() {
     ASSERT_TRUE(_pipeline_builder != nullptr);
     _pipelines.clear();
     _pipeline_builder();
+    _pipelines[_pipelines.size() - 1]->set_root();
     _fragment_ctx->set_pipelines(std::move(_pipelines));
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
 
@@ -87,9 +93,11 @@ void PipelineTestBase::_prepare() {
     const size_t num_pipelines = pipelines.size();
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
-
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-        const bool is_root = (n == num_pipelines - 1);
+        const bool is_root = pipeline->is_root();
+
+        LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
+                  << " fragment_instance_id=" << print_id(params.fragment_instance_id);
 
         if (pipeline->source_operator_factory()->with_morsels()) {
             // TODO(hcf) missing branch of with_morsels()

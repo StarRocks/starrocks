@@ -12,10 +12,12 @@
 #include "column/chunk.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
 #include "util/brpc_stub_cache.h"
 #include "util/callback_closure.h"
 #include "util/defer_op.h"
+#include "util/phmap/phmap.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
@@ -36,285 +38,201 @@ class SinkBuffer {
 public:
     SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations, size_t num_sinkers)
             : _mem_tracker(state->instance_mem_tracker()),
-              _brpc_timeout_ms(std::min(3600, state->query_options().query_timeout) * 1000) {
-        _threads = ExecEnv::GetInstance()->pipeline_exchange_sink_thread_pool();
+              _brpc_timeout_ms(std::min(3600, state->query_options().query_timeout) * 1000),
+              _num_uncancelled_sinkers(num_sinkers) {
         for (const auto& dest : destinations) {
             const auto& dest_instance_id = dest.fragment_instance_id;
 
-            auto it = _num_sinkers_per_dest_instance.find(dest_instance_id);
-            if (it != _num_sinkers_per_dest_instance.end()) {
+            auto it = _num_sinkers.find(dest_instance_id.lo);
+            if (it != _num_sinkers.end()) {
                 it->second += num_sinkers;
             } else {
-                _num_sinkers_per_dest_instance[dest_instance_id] = num_sinkers;
+                _num_sinkers[dest_instance_id.lo] = num_sinkers;
 
                 // This dest_instance_id first occurs, so create other variable for this dest instance.
-                auto* closure = new CallBackClosure<PTransmitChunkResult>();
-                closure->ref();
-                closure->addFailedHandler([this]() noexcept {
-                    _in_flight_rpc_num.fetch_sub(1, std::memory_order_release);
-                    {
-                        std::lock_guard<std::mutex> l(_mutex);
-                        _is_finishing = true;
-                    }
+                auto* closure = new CallBackClosure<PTransmitChunkResult, TUniqueId>(dest_instance_id);
+                closure->addFailedHandler([this, closure]() noexcept {
+                    closure->unref();
+                    _is_finishing = true;
+                    --_num_in_flight_rpc;
                     LOG(WARNING) << " transmit chunk rpc failed";
                 });
-                closure->addSuccessHandler([this](const PTransmitChunkResult& result) noexcept {
-                    _in_flight_rpc_num.fetch_sub(1, std::memory_order_release);
-                    Status status(result.status());
-                    if (!status.ok()) {
-                        {
-                            std::lock_guard<std::mutex> l(_mutex);
-                            _is_finishing = true;
-                        }
-                        LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
-                    }
-                });
-                _closures[dest_instance_id] = closure;
+                closure->addSuccessHandler(
+                        [this, closure](const TUniqueId& instance_id, const PTransmitChunkResult& result) noexcept {
+                            closure->unref();
+                            Status status(result.status());
+                            if (!status.ok()) {
+                                _is_finishing = true;
+                                LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
+                            } else {
+                                std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
+                                _try_to_send_rpc(instance_id);
+                            }
+                            --_num_in_flight_rpc;
+                        });
+                _closures[dest_instance_id.lo] = closure;
 
-                _buffers[dest_instance_id] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
-                _request_seqs[dest_instance_id] = 0;
+                _request_seqs[dest_instance_id.lo] = 0;
+                _buffers[dest_instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
+                _mutexes[dest_instance_id.lo] = std::make_unique<std::mutex>();
 
                 PUniqueId finst_id;
                 finst_id.set_hi(dest_instance_id.hi);
                 finst_id.set_lo(dest_instance_id.lo);
-                _instance_id2finst_id[dest_instance_id] = std::move(finst_id);
+                _instance_id2finst_id[dest_instance_id.lo] = std::move(finst_id);
             }
 
-            _expected_eos = 0;
-            for (auto& [_, num] : _num_sinkers_per_dest_instance) {
-                _expected_eos += num;
+            _num_remaining_eos = 0;
+            for (auto& [_, num] : _num_sinkers) {
+                _num_remaining_eos += num;
             }
         }
     }
 
     ~SinkBuffer() {
-        // Handle abnormal exit of SinkBuffer
-        // TODO(hcf) It may be solved by adding state 'PENDING_FINISH' for ExchangeSinkOperator
-        bool abnormal_exit = false;
-        if (!is_finished()) {
-            std::lock_guard<std::mutex> l(_mutex);
-            abnormal_exit = true;
-            _is_finishing = true;
-        }
-        if (abnormal_exit) {
-            for (auto& [_, closure] : _closures) {
-                auto cntl = &closure->cntl;
-                brpc::Join(cntl->call_id());
-            }
-        }
-
-        // Wait for the rpc task to exit to avoid
-        // DeferOp accessing illegal memory
-        std::promise<void>* exit_promise = nullptr;
-        {
-            std::lock_guard<std::mutex> l(_mutex);
-            exit_promise = _rpc_task_exit_promise.get();
-        }
-        if (exit_promise != nullptr) {
-            exit_promise->get_future().get();
-        }
+        DCHECK(is_finished());
 
         // Relase resources
         for (auto& [_, closure] : _closures) {
-            if (closure->unref()) {
-                delete closure;
-            }
+            delete closure;
         }
+
         for (auto& [_, buffer] : _buffers) {
             while (!buffer.empty()) {
-                auto& info = buffer.front();
-                info.params->release_finst_id();
+                auto& request = buffer.front();
+                request.params->release_finst_id();
                 buffer.pop();
             }
         }
     }
 
     void add_request(const TransmitChunkInfo& request) {
-        DCHECK(_expected_eos > 0);
-        {
-            // Guarantee that no request will be added to buffer after finishing stage
-            std::lock_guard<std::mutex> l(_mutex);
-            if (_is_finishing) {
-                request.params->release_finst_id();
-                return;
-            } else {
-                _buffers[request.fragment_instance_id].push(request);
-            }
+        DCHECK(_num_remaining_eos > 0);
+        if (_is_finishing) {
+            request.params->release_finst_id();
+            return;
         }
-
-        _try_to_trigger_rpc_task();
+        {
+            auto& instance_id = request.fragment_instance_id;
+            std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
+            _buffers[instance_id.lo].push(request);
+            _try_to_send_rpc(instance_id);
+        }
     }
 
     bool is_full() const {
-        // TODO(hcf) if one channel is congested, it may cause all other channel unwritable
         // std::queue' read is concurrent safe without mutex
-        return std::any_of(_buffers.begin(), _buffers.end(),
-                           [](const auto& entry) { return entry.second.size() > config::pipeline_io_buffer_size; });
+        // Judgement may not that accurate because we do not known in advance which
+        // instance the data to be sent corresponds to
+        size_t max_buffer_size = config::pipeline_sink_buffer_size * _buffers.size();
+        size_t buffer_size = 0;
+        for (auto& [_, buffer] : _buffers) {
+            buffer_size += buffer.size();
+        }
+        return buffer_size > max_buffer_size;
     }
 
-    bool is_finished() {
+    bool is_finished() const {
         if (!_is_finishing) {
             return false;
         }
 
-        // Here is the guarantee that
-        // 1. No new rpc task will be created after finishing stage
-        // 2. No new brpc process will be triggered after finishing stage
-        // So we just wait for existed rpc task and bprc process to be finished
-        return !_is_rpc_task_active && _in_flight_rpc_num.load(std::memory_order_acquire) == 0;
+        return _num_sending_rpc == 0 && _num_in_flight_rpc == 0;
+    }
+
+    // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
+    // the rest chunk request and EOS request needn't be sent anymore.
+    void cancel_one_sinker() {
+        if (--_num_uncancelled_sinkers == 0) {
+            _is_finishing = true;
+        }
     }
 
 private:
-    void _try_to_trigger_rpc_task() {
-        // Guarantee that no new rpc task will be created after finishing stage
-        std::lock_guard<std::mutex> l(_mutex);
+    void _try_to_send_rpc(const TUniqueId& instance_id) {
+        DeferOp defer([this]() { --_num_sending_rpc; });
+        ++_num_sending_rpc;
+
         if (_is_finishing) {
             return;
         }
 
-        // Tell rpc task scan buffer one more time
-        if (_is_rpc_task_active) {
-            _need_one_more_check = true;
+        for (;;) {
+            auto& buffer = _buffers[instance_id.lo];
+            auto* closure = _closures[instance_id.lo];
+            if (buffer.empty() || closure->is_in_flight()) {
+                return;
+            }
+
+            TransmitChunkInfo request = buffer.front();
+            buffer.pop();
+
+            if (request.params->eos()) {
+                if (--_num_remaining_eos == 0) {
+                    _is_finishing = true;
+                }
+                // Only the last eos is sent to ExchangeSourceOperator. it must be guaranteed that
+                // eos is the last packet to send to finish the input stream of the corresponding of
+                // ExchangeSourceOperator and eos is sent exactly-once.
+                if (--_num_sinkers[instance_id.lo] > 0) {
+                    if (request.params->chunks_size() == 0) {
+                        request.params->release_finst_id();
+                        continue;
+                    } else {
+                        request.params->set_eos(false);
+                    }
+                }
+            }
+
+            request.params->set_allocated_finst_id(&_instance_id2finst_id[instance_id.lo]);
+            request.params->set_sequence(_request_seqs[instance_id.lo]++);
+
+            ++_num_in_flight_rpc;
+
+            closure->ref();
+            closure->cntl.Reset();
+            closure->cntl.set_timeout_ms(_brpc_timeout_ms);
+            closure->cntl.request_attachment().append(request.attachment);
+            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+
+            request.params->release_finst_id();
             return;
         }
-
-        _rpc_task_exit_promise = std::make_shared<std::promise<void>>();
-
-        PriorityThreadPool::Task task;
-        task.work_function = [this]() { _process(); };
-        // TODO(by satanson): set a proper priority
-        task.priority = 20;
-
-        _is_rpc_task_active = true;
-        if (!_threads->offer(task)) {
-            LOG(WARNING) << "SinkBuffer failed to offer rpc task due to thread pool shutdown";
-            _is_finishing = true;
-            _is_rpc_task_active = false;
-            _rpc_task_exit_promise = nullptr;
-        }
     }
 
-    void _process() {
-        auto exit_promise = _rpc_task_exit_promise;
-        try {
-            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
-            for (;;) {
-                bool buffer_empty = true;
-                bool send_any = false;
-                for (auto& [fragment_instance_id, buffer] : _buffers) {
-                    auto* closure = _closures[fragment_instance_id];
-                    DCHECK(closure != nullptr);
-                    if (buffer.empty()) {
-                        continue;
-                    }
-                    buffer_empty = false;
-                    if (closure->has_in_flight_rpc()) {
-                        continue;
-                    }
-                    send_any = true;
-
-                    TransmitChunkInfo info = buffer.front();
-                    _send_rpc(info);
-                    info.params->release_finst_id();
-                    {
-                        std::lock_guard<std::mutex> l(_mutex);
-                        buffer.pop();
-                    }
-                }
-
-                if (buffer_empty) {
-                    // When traversing the buffer, a new request may be inserted
-                    // so the value of buffer_empty may not be that accurate, we
-                    // need to communicate with add_request through _need_one_more_check
-                    // in order to avoid exiting rpc task with non-empty buffer
-                    std::lock_guard<std::mutex> l(_mutex);
-                    if (_need_one_more_check) {
-                        _need_one_more_check = false;
-                        continue;
-                    }
-                    _need_one_more_check = false;
-                    _is_rpc_task_active = false;
-                    break;
-                } else if (!send_any) {
-#ifdef __x86_64__
-                    _mm_pause();
-#else
-                    // TODO: Maybe there's a better intrinsic like _mm_pause on non-x86_64 architecture.
-                    sched_yield();
-#endif
-                }
-            }
-        } catch (const std::exception& exp) {
-            LOG(FATAL) << "[ExchangeSinkOperator] sink_buffer::process: " << exp.what();
-        } catch (...) {
-            LOG(FATAL) << "[ExchangeSinkOperator] sink_buffer::process: UNKNOWN";
-        }
-        exit_promise->set_value();
-    }
-
-    void _send_rpc(TransmitChunkInfo& request) {
-        // Guarantee that no new brpc process will be triggered after finishing stage
-        std::lock_guard<std::mutex> l(_mutex);
-        if (_is_finishing) {
-            return;
-        }
-
-        if (request.params->eos()) {
-            if (--_expected_eos == 0) {
-                _is_finishing = true;
-            }
-            // Only the last eos is sent to ExchangeSourceOperator. it must be guaranteed that
-            // eos is the last packet to send to finish the input stream of the corresponding of
-            // ExchangeSourceOperator and eos is sent exactly-once.
-            if (--_num_sinkers_per_dest_instance[request.fragment_instance_id] > 0) {
-                if (request.params->chunks_size() == 0) {
-                    return;
-                } else {
-                    request.params->set_eos(false);
-                }
-            }
-        }
-
-        request.params->set_allocated_finst_id(&_instance_id2finst_id[request.fragment_instance_id]);
-        request.params->set_sequence(_request_seqs[request.fragment_instance_id]++);
-
-        auto* closure = _closures[request.fragment_instance_id];
-        DCHECK(closure != nullptr);
-        DCHECK(!closure->has_in_flight_rpc());
-        closure->ref();
-        closure->cntl.Reset();
-        closure->cntl.set_timeout_ms(_brpc_timeout_ms);
-        closure->cntl.request_attachment().append(request.attachment);
-        _in_flight_rpc_num.fetch_add(1, std::memory_order_release);
-        request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
-    }
-
-    PriorityThreadPool* _threads = nullptr;
     MemTracker* _mem_tracker = nullptr;
     const int32_t _brpc_timeout_ms;
 
-    std::unordered_map<TUniqueId, size_t> _num_sinkers_per_dest_instance;
-    std::unordered_map<TUniqueId, int64_t> _request_seqs;
-    std::atomic<int32_t> _in_flight_rpc_num = 0;
+    // Taking into account of efficiency, all the following maps
+    // use int64_t as key, which is the field type of TUniqueId::lo
+    // because TUniqueId::hi is exactly the same in one query
+
+    phmap::flat_hash_map<int64_t, size_t> _num_sinkers;
+    phmap::flat_hash_map<int64_t, int64_t> _request_seqs;
+    std::atomic<int32_t> _num_in_flight_rpc = 0;
+    std::atomic<int32_t> _num_uncancelled_sinkers;
+    std::atomic<int32_t> _num_remaining_eos = 0;
 
     // The request needs the reference to the allocated finst id,
     // so cache finst id for each dest fragment instance.
-    std::unordered_map<TUniqueId, PUniqueId> _instance_id2finst_id;
+    phmap::flat_hash_map<int64_t, PUniqueId> _instance_id2finst_id;
+    phmap::flat_hash_map<int64_t, CallBackClosure<PTransmitChunkResult, TUniqueId>*> _closures;
+    phmap::flat_hash_map<int64_t, std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>> _buffers;
+    phmap::flat_hash_map<int64_t, std::unique_ptr<std::mutex>> _mutexes;
 
-    std::unordered_map<TUniqueId, CallBackClosure<PTransmitChunkResult>*> _closures;
-    std::unordered_map<TUniqueId, std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>> _buffers;
+    // True means that SinkBuffer needn't input chunk and send chunk anymore,
+    // but there may be still in-flight RPC running.
+    // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.
+    // Unfortunately, _is_finishing itself cannot guarantee that no brpc process will trigger if entering finishing stage,
+    // considering the following situations(events order by time)
+    //      time1(thread A): _try_to_send_rpc check _is_finishing which returns false
+    //      time2(thread B): set _is_finishing to true
+    //      time3(thread A): _try_to_send_rpc trigger brpc process
+    // So _num_sending_rpc is introduced to solve this problem by providing extra information
+    // of how many threads are calling _try_to_send_rpc
+    std::atomic<bool> _is_finishing = false;
+    std::atomic<int32_t> _num_sending_rpc = 0;
 
-    std::mutex _mutex;
-    bool _is_finishing = false;
-    bool _need_one_more_check = false;
-    bool _is_rpc_task_active = false;
-    int32_t _expected_eos = 0;
-
-    // This field is used to help properly handle special situation
-    // that SinkBuffer may destruct when method is_finished() return false
-    std::shared_ptr<std::promise<void>> _rpc_task_exit_promise = nullptr;
-};
+}; // namespace starrocks::pipeline
 
 } // namespace starrocks::pipeline

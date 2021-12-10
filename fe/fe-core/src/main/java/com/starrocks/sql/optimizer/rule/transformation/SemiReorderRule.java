@@ -1,18 +1,24 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -55,6 +61,8 @@ public class SemiReorderRule extends TransformationRule {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
 
+        Preconditions.checkState(topJoin.getPredicate() == null);
+
         LogicalJoinOperator newTopJoin = new LogicalJoinOperator.Builder().withOperator(leftChildJoin)
                 .setProjection(topJoin.getProjection())
                 .build();
@@ -74,16 +82,24 @@ public class SemiReorderRule extends TransformationRule {
             }
         }
 
+        Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
+        if (newSemiOutputColumns.isEmpty()) {
+            ColumnRefOperator smallestColumnRef = Utils.findSmallestColumnRef(
+                    leftChildInputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+                            .collect(Collectors.toList())
+            );
+            projectMap.put(smallestColumnRef, smallestColumnRef);
+        } else {
+            projectMap = newSemiOutputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+                    .collect(Collectors.toMap(Function.identity(), Function.identity()));
+        }
+
         LogicalJoinOperator newSemiJoin = new LogicalJoinOperator.Builder().withOperator(topJoin)
-                .setProjection(new Projection(
-                        newSemiOutputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
-                                .collect(Collectors.toMap(Function.identity(), Function.identity()))))
-                .build();
+                .setProjection(new Projection(projectMap)).build();
         return Lists.newArrayList(OptExpression.create(newTopJoin,
                 Lists.newArrayList(
                         OptExpression.create(newSemiJoin,
                                 Lists.newArrayList(input.inputAt(0).inputAt(0), input.inputAt(1))),
                         input.inputAt(0).inputAt(1))));
-
     }
 }
