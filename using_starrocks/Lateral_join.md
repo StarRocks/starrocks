@@ -21,12 +21,12 @@ from table_reference join [lateral] table_reference
 Unnest关键字，是一种 table function，可以把数组类型转化成table的多行，配合 Lateral Join 就能实现我们常见的各种行展开逻辑。
 
 ~~~SQL
-SELECT student, score
+SELECT student, score , t.unnest
 FROM tests
-CROSS JOIN LATERAL UNNEST(scores) AS t (score);
+CROSS JOIN LATERAL UNNEST(scores) AS t ;
 
-SELECT student, score
-FROM tests, UNNEST(scores) AS t (score);
+SELECT student, score, t.unnest
+FROM tests, UNNEST(scores) AS t ;
 ~~~
 
 这里第二种写法是第一种的简写，可以使用Unnest 关键字省略 Lateral Join。
@@ -43,7 +43,8 @@ FROM tests, UNNEST(scores) AS t (score);
 ~~~SQL
 CREATE TABLE lateral_test2 (
     `v1` bigint(20) NULL COMMENT "",
-    `v2` string NULL COMMENT ""
+    `v2` string NULL COMMENT "",
+    `v3` string NULL COMMENT ""
 )
 duplicate key(v1)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1
@@ -53,22 +54,19 @@ PROPERTIES (
     "storage_format" = "DEFAULT"
 );
 
-insert into lateral_test2 values (1, "1,2,3"), (2, "1,3");
+insert into lateral_test2 values (1, "1,2,3","1,2"), (2, "1,3","1,3");
 ~~~
 
 ~~~Plain Text
 select * from lateral_test2;
-
-+------+-------+
-| v1   | v2    |
-+------+-------+
-|    1 | 1,2,3 |
-|    2 | 1,3   |
-+------+-------+
-
++------+-------+------+
+| v1   | v2    | v3   |
++------+-------+------+
+|    1 | 1,2,3 | 1,2  |
+|    2 | 1,3   | 1,3  |
++------+-------+------+
 
 select v1,unnest from lateral_test2 , unnest(split(v2, ",")) ;
-
 +------+--------+
 | v1   | unnest |
 +------+--------+
@@ -78,6 +76,23 @@ select v1,unnest from lateral_test2 , unnest(split(v2, ",")) ;
 |    2 | 1      |
 |    2 | 3      |
 +------+--------+
+
+---多列unnest时需要指定别名
+select v1,t1.unnest as v2,t2.unnest as v3 from lateral_test2 , unnest(split(v2, ",")) t1,unnest(split(v3, ",")) t2 ;
++------+------+------+
+| v1   | v2   | v3   |
++------+------+------+
+|    1 | 1    | 1    |
+|    1 | 1    | 2    |
+|    1 | 2    | 1    |
+|    1 | 2    | 2    |
+|    1 | 3    | 1    |
+|    1 | 3    | 2    |
+|    2 | 1    | 1    |
+|    2 | 1    | 3    |
+|    2 | 3    | 1    |
+|    2 | 3    | 3    |
++------+------+------+
 ~~~
 
 * Array类型展开成多行
@@ -175,3 +190,9 @@ select v1,unnest from lateral_test3 , unnest(bitmap_to_array(v2)) ;
 
 * 当前版本 Lateral join 仅用于和Unnest函数配合使用，实现行转列的功能，后续会支持其他table function / UDTF。
 * 当前 Lateral join 还不支持子查询。
+* 多列unnest操作需要指定别名。示例如下：
+
+~~~sql
+select v1,t1.unnest as v2,t2.unnest as v3 
+from lateral_test , unnest(v2) t1 ,unnest(v3) t2;
+~~~
