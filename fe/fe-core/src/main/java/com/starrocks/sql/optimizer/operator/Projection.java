@@ -119,6 +119,17 @@ public class Projection {
         }
     }
 
+    public boolean hasUnsupportedDictOperator(Set<Integer> stringColumnIds) {
+        ColumnRefSet stringColumnRefSet = new ColumnRefSet();
+        for (Integer stringColumnId : stringColumnIds) {
+            stringColumnRefSet.union(stringColumnId);
+        }
+
+        ColumnRefSet columnRefSet = new ColumnRefSet();
+        this.fillDisableDictOptimizeColumns(columnRefSet);
+        return columnRefSet.isIntersect(stringColumnRefSet);
+    }
+
     private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet) {
         if (!couldApplyDictOptimize(operator)) {
             columnRefSet.union(operator.getUsedColumns());
