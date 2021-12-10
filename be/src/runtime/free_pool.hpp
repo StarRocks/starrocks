@@ -71,6 +71,7 @@ public:
             size = static_cast<int64_t>(1) << free_list_idx;
             allocation = reinterpret_cast<FreeListNode*>(
                     _mem_pool->allocate(size + sizeof(FreeListNode)));
+            assert(allocation != nullptr);
         } else {
             // Remove this allocation from the list.
             _lists[free_list_idx].next = allocation->next;
