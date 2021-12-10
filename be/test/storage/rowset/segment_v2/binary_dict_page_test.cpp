@@ -32,7 +32,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/segment_v2/binary_plain_page.h"
-#include "storage/rowset/segment_v2/data_decoder.h"
+#include "storage/rowset/segment_v2/storage_page_decoder.h"
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
 #include "storage/types.h"
@@ -84,7 +84,10 @@ public:
         data_page_footer->set_nullmap_size(0);
         std::unique_ptr<char[]> page = nullptr;
 
-        Status st = DataDecoder::decode_page(&footer, 0, DICT_ENCODING, &page, &encoded_data);
+        StoragePageDecoder::create_global_storage_page_decoder();
+        auto storage_page_decoder = StoragePageDecoder::instance();
+
+        Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::DICT_ENCODING, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
         PageDecoderOptions decoder_options;
@@ -187,7 +190,10 @@ public:
             data_page_footer->set_nullmap_size(0);
             std::unique_ptr<char[]> page = nullptr;
 
-            Status st = DataDecoder::decode_page(&footer, 0, DICT_ENCODING, &page, &encoded_data);
+            StoragePageDecoder::create_global_storage_page_decoder();
+            auto storage_page_decoder = StoragePageDecoder::instance();
+
+            Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::DICT_ENCODING, &page, &encoded_data);
             ASSERT_TRUE(st.ok());
 
             PageDecoderOptions decoder_options;

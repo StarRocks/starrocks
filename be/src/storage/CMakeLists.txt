@@ -88,7 +88,6 @@ add_library(Olap STATIC
     rowset/segment_v2/column_iterator.cpp
     rowset/segment_v2/column_reader.cpp
     rowset/segment_v2/column_writer.cpp
-    rowset/segment_v2/data_decoder.cpp
     rowset/segment_v2/default_value_column_iterator.cpp
     rowset/segment_v2/dictcode_column_iterator.cpp
     rowset/segment_v2/encoding_info.cpp
@@ -104,6 +103,7 @@ add_library(Olap STATIC
     rowset/segment_v2/segment_iterator.cpp
     rowset/segment_v2/empty_segment_iterator.cpp
     rowset/segment_v2/segment_writer.cpp
+    rowset/segment_v2/storage_page_decoder.cpp
     rowset/segment_v2/block_split_bloom_filter.cpp
     rowset/segment_v2/bloom_filter_index_reader.cpp
     rowset/segment_v2/bloom_filter_index_writer.cpp

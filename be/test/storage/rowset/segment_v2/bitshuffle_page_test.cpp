@@ -29,7 +29,7 @@
 #include "gen_cpp/segment_v2.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/rowset/segment_v2/data_decoder.h"
+#include "storage/rowset/segment_v2/storage_page_decoder.h"
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
@@ -38,6 +38,7 @@
 
 using starrocks::segment_v2::PageBuilderOptions;
 using starrocks::segment_v2::DataDecoder;
+using starrocks::segment_v2::StoragePageDecoder;
 
 namespace starrocks {
 
@@ -87,7 +88,9 @@ public:
         data_page_footer->set_nullmap_size(0);
         std::unique_ptr<char[]> page = nullptr;
 
-        Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
+        StoragePageDecoder::create_global_storage_page_decoder();
+        auto storage_page_decoder = StoragePageDecoder::instance();
+        Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
         segment_v2::PageDecoderOptions decoder_options;
@@ -151,8 +154,10 @@ public:
             footer.set_type(starrocks::segment_v2::DATA_PAGE);
             starrocks::segment_v2::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
             data_page_footer->set_nullmap_size(0);
+            StoragePageDecoder::create_global_storage_page_decoder();
+            auto storage_page_decoder = StoragePageDecoder::instance();
 
-            Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
+            Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
             ASSERT_TRUE(st.ok());
 
             // read whole the page
@@ -218,8 +223,9 @@ public:
         starrocks::segment_v2::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
         std::unique_ptr<char[]> page = nullptr;
-
-        Status st = DataDecoder::decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
+        StoragePageDecoder::create_global_storage_page_decoder();
+        auto storage_page_decoder = StoragePageDecoder::instance();
+        Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
         segment_v2::PageDecoderOptions decoder_options;

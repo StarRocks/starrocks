@@ -50,6 +50,7 @@
 #include "runtime/thread_resource_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
+#include "storage/rowset/segment_v2/storage_page_decoder.h"
 #include "storage/update_manager.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
@@ -165,6 +166,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
+    segment_v2::StoragePageDecoder::create_global_storage_page_decoder();
     return Status::OK();
 }
 
