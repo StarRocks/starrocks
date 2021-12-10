@@ -277,8 +277,7 @@ public:
 
     void tablet_writer_add_batch(google::protobuf::RpcController* controller,
                                  const PTabletWriterAddBatchRequest* request, PTabletWriterAddBatchResult* response,
-                                 google::protobuf::Closure* done) override {
-    }
+                                 google::protobuf::Closure* done) override {}
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override {
         done->Run();

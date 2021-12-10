@@ -269,6 +269,13 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     if (_cur_rowset == nullptr) {
         return Status::InternalError("Fail to build rowset");
     }
+    if (_cur_rowset->num_segments() > config::tablet_max_versions) {
+        LOG(WARNING) << "Too many segment files in one load. tablet=" << _tablet->full_name()
+                     << ", segment_count=" << _cur_rowset->num_segments() << ", limit=" << config::tablet_max_versions;
+        return Status::ServiceUnavailable(
+                strings::Substitute("Too many segment files in one load. limit is $0, num_segments is $1",
+                                    config::tablet_max_versions, _cur_rowset->num_segments()));
+    }
     OLAPStatus res = _storage_engine->txn_manager()->commit_txn(_req.partition_id, _tablet, _req.txn_id, _req.load_id,
                                                                 _cur_rowset, false);
     if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
