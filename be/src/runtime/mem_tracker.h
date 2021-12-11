@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_MEM_LIMIT_H
-#define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_MEM_LIMIT_H
+#pragma once
 
 #include <cstdint>
 #include <memory>
@@ -28,17 +27,14 @@
 #include <unordered_map>
 
 #include "common/status.h"
-#include "gen_cpp/Types_types.h"
 #include "util/metrics.h"
 #include "util/runtime_profile.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
 
-class ObjectPool;
 class MemTracker;
 class RuntimeState;
-class TQueryOptions;
 
 /// A MemTracker tracks memory consumption; it contains an optional limit
 /// and can be arranged into a tree structure such that the consumption tracked
@@ -81,7 +77,7 @@ public:
         int64_t peak_consumption = 0;
     };
 
-    enum Type { NO_SET, PROCESS, QUERY_POOL, QUERY, LOAD };
+    enum Type { NO_SET, PROCESS, QUERY_POOL, QUERY, LOAD, CONSISTENCY };
 
     /// 'byte_limit' < 0 means no limit
     /// 'label' is the label used in the usage string (LogUsage())
@@ -130,22 +126,6 @@ public:
             }
         }
     }
-
-    /// Increases/Decreases the consumption of this tracker and the ancestors up to (but
-    /// not including) end_tracker. This is useful if we want to move tracking between
-    /// trackers that share a common (i.e. end_tracker) ancestor. This happens when we want
-    /// to update tracking on a particular mem tracker but the consumption against
-    /// the limit recorded in one of its ancestors already happened.
-    void consume_local(int64_t bytes, MemTracker* end_tracker) {
-        for (auto* tracker : _all_trackers) {
-            if (tracker == end_tracker) return;
-            DCHECK(!tracker->has_limit());
-            tracker->_consumption->add(bytes);
-        }
-        DCHECK(false) << "end_tracker is not an ancestor";
-    }
-
-    void release_local(int64_t bytes, MemTracker* end_tracker) { consume_local(-bytes, end_tracker); }
 
     void list_mem_usage(std::vector<SimpleItem>* items, size_t cur_level, size_t upper_level) const {
         SimpleItem item;
@@ -289,36 +269,7 @@ public:
     /// 'failed_allocation_size' is zero, nothing about the allocation size is logged.
     Status MemLimitExceeded(RuntimeState* state, const std::string& details, int64_t failed_allocation = 0);
 
-    Status check_mem_limit(const std::string& msg) const {
-        MemTracker* tracker = find_limit_exceeded_tracker();
-        if (LIKELY(tracker == nullptr)) {
-            return Status::OK();
-        }
-
-        std::stringstream str;
-        str << "Memory exceed limit. " << msg << " ";
-        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";
-        switch (tracker->type()) {
-        case MemTracker::NO_SET:
-            break;
-        case MemTracker::QUERY:
-            str << "Mem usage has exceed the limit of single query, You can change the limit by "
-                   "set session variable exec_mem_limit.";
-            break;
-        case MemTracker::PROCESS:
-            str << "Mem usage has exceed the limit of BE";
-            break;
-        case MemTracker::QUERY_POOL:
-            str << "Mem usage has exceed the limit of query pool";
-            break;
-        case MemTracker::LOAD:
-            str << "Mem usage has exceed the limit of load";
-            break;
-        default:
-            break;
-        }
-        return Status::MemoryLimitExceeded(str.str());
-    }
+    Status check_mem_limit(const std::string& msg) const;
 
     static const std::string COUNTER_NAME;
 
@@ -402,5 +353,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif
