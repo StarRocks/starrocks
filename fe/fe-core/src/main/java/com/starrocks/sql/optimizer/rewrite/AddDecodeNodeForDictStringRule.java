@@ -448,7 +448,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return exchangeOperator;
         }
 
-        private static Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
+        private static final Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
                 FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN
         );
 
@@ -574,14 +574,19 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public OptExpression visitPhysicalHashAggregate(OptExpression aggExpr, DecodeContext context) {
             visitProjectionBefore(aggExpr, context);
-            context.needEncode = true;
+
+            PhysicalHashAggregateOperator aggOperator = (PhysicalHashAggregateOperator) aggExpr.getOp();
+            context.needEncode = aggOperator.couldApplyStringDict(context.allStringColumnIds);
+            if (context.needEncode) {
+                aggOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns,
+                        context.allStringColumnIds);
+            }
 
             OptExpression childExpr = aggExpr.inputAt(0);
             context.hasEncoded = false;
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
             if (context.hasEncoded) {
-                PhysicalHashAggregateOperator aggOperator = (PhysicalHashAggregateOperator) aggExpr.getOp();
                 if (aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
                     PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator,
                             context);
