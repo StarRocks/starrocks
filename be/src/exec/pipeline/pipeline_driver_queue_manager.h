@@ -70,9 +70,7 @@ public:
     int gen_dispatcher_id() { return _next_dispatcher_id.fetch_add(1, std::memory_order_relaxed); }
 
 private:
-    int _random_dispatcher_id() {
-        return _next_rand_dispatcher_id.fetch_add(1, std::memory_order_relaxed) % _num_dispatchers;
-    }
+    int _random_dispatcher_id();
 
     static constexpr int NUM_PL = 4;
 
@@ -89,8 +87,6 @@ private:
     // Generate dispatcher id when the dispatcher thread starts.
     std::atomic<int> _next_dispatcher_id = 0;
 
-    // Start from different starting pos for every steal.
-    std::atomic<int> _next_rand_dispatcher_id = 0;
     // Each start pos is corresponding to a different step size coprime with _num_dispatchers.
     // In this way, make the steal order of the different start pos different.
     std::vector<int> _rand_step_sizes;

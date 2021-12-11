@@ -35,6 +35,7 @@ public:
     virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
 
     virtual DriverRawPtr take(size_t* queue_index) = 0;
+    virtual DriverRawPtr take_own(size_t* queue_index) = 0;
 
     virtual SubQuerySharedDriverQueue* get_sub_queue(size_t) = 0;
 };
@@ -64,6 +65,7 @@ public:
 
     // return nullptr if queue is empty.
     DriverRawPtr take(size_t* queue_index) override;
+    DriverRawPtr take_own(size_t* queue_index) override;
 
     SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 
@@ -74,7 +76,7 @@ private:
     std::mutex _global_mutex;
 
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
-    int _size = 0;
+    std::atomic<int> _size = 0;
 };
 
 } // namespace pipeline

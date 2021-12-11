@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/pipeline_driver_queue_manager.h"
 
+#include <random>
+
 namespace starrocks::pipeline {
 
 int gcd(int x, int y) {
@@ -37,7 +39,7 @@ StatusOr<DriverRawPtr> DriverQueueManager::take(int dispatcher_id, size_t* queue
     *is_from_remote = false;
 
     // 1. take from own local queue.
-    DriverRawPtr driver = _queue_per_dispatcher[dispatcher_id]->take(queue_index);
+    DriverRawPtr driver = _queue_per_dispatcher[dispatcher_id]->take_own(queue_index);
     if (driver != nullptr) {
         driver->set_dispatcher_id(dispatcher_id);
         return driver;
@@ -128,6 +130,13 @@ SubQuerySharedDriverQueue* DriverQueueManager::get_sub_queue(int dispatcher_id, 
     }
 
     return _queue_per_dispatcher[dispatcher_id]->get_sub_queue(queue_index);
+}
+
+int DriverQueueManager::_random_dispatcher_id() {
+    std::random_device rand_dev;
+    std::mt19937 generator(rand_dev());
+    std::uniform_int_distribution<int> distribution(0, _num_dispatchers - 1);
+    return distribution(generator);
 }
 
 } // namespace starrocks::pipeline

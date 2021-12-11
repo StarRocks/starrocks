@@ -27,6 +27,14 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
     }
 }
 
+DriverRawPtr QuerySharedDriverQueue::take_own(size_t* queue_index) {
+    if (_size == 0) {
+        return nullptr;
+    }
+
+    return take(queue_index);
+}
+
 DriverRawPtr QuerySharedDriverQueue::take(size_t* queue_index) {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
