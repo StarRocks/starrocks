@@ -180,7 +180,12 @@ void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_d
             LOG(WARNING) << "base compaction check interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
-        SLEEP_IN_BG_WORKER(interval);
+        do {
+            SLEEP_IN_BG_WORKER(interval);
+            if (!_options.compaction_mem_tracker->any_limit_exceeded()) {
+                break;
+            }
+        } while (true);
     }
 
     return nullptr;
@@ -205,7 +210,12 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
             LOG(WARNING) << "base compaction check interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
-        SLEEP_IN_BG_WORKER(interval);
+        do {
+            SLEEP_IN_BG_WORKER(interval);
+            if (!_options.compaction_mem_tracker->any_limit_exceeded()) {
+                break;
+            }
+        } while (true);
     }
 
     return nullptr;
@@ -295,7 +305,12 @@ void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* 
                          << "will be forced set to one";
             interval = 1;
         }
-        SLEEP_IN_BG_WORKER(interval);
+        do {
+            SLEEP_IN_BG_WORKER(interval);
+            if (!_options.compaction_mem_tracker->any_limit_exceeded()) {
+                break;
+            }
+        } while (true);
     }
 
     return nullptr;
