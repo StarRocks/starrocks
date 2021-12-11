@@ -1892,15 +1892,11 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
             return status;
         }
 
-        _tablet.obtain_push_lock();
         std::shared_ptr<Rowset> new_rowset = rowset_writer->build();
         if (new_rowset == nullptr) {
             LOG(WARNING) << "failed to build rowset, exit alter process";
-            _tablet.release_push_lock();
             return Status::InternalError("failed to build rowset, exit alter process");
         }
-
-        _tablet.release_push_lock();
 
         auto& new_rowset_load_info = new_rowset_load_infos[i];
         new_rowset_load_info.num_segments = new_rowset->num_segments();
