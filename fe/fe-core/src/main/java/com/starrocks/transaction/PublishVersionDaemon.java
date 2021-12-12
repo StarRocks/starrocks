@@ -114,12 +114,6 @@ public class PublishVersionDaemon extends MasterDaemon {
             if (!allTaskFinished) {
                 shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
                         publishErrorReplicaIds, unfinishedBackends);
-                if (shouldFinishTxn) {
-                    LOG.info("transaction:{} succeed for quorum finish. unfinished backends:{}, error replica:{}",
-                            transactionState.getTransactionId(),
-                            unfinishedBackends.stream().limit(10).collect(Collectors.toList()),
-                            publishErrorReplicaIds.stream().limit(10).collect(Collectors.toList()));
-                }
             }
 
             if (shouldFinishTxn) {

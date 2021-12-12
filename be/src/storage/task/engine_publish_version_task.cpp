@@ -146,8 +146,8 @@ OLAPStatus EnginePublishVersionTask::finish() {
         }
     }
 
-    LOG(INFO) << "finish to publish version on transaction."
-              << "transaction_id=" << transaction_id << ", error_tablet_size=" << _error_tablet_ids->size();
+    VLOG(1) << "finish to publish version on transaction."
+            << "transaction_id=" << transaction_id << ", error_tablet_size=" << _error_tablet_ids->size();
     return res;
 }
 
