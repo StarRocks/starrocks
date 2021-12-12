@@ -11,6 +11,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 
 public class FunctionAnalyzer {
 
@@ -24,6 +25,11 @@ public class FunctionAnalyzer {
         }
 
         FunctionName fnName = functionCallExpr.getFnName();
+        if (fnName.getFunction().equalsIgnoreCase("any_value")
+                && ConnectContext.get().getSessionVariable().getOnlyFullGroupBy()) {
+            throw new SemanticException("Function `any_value` is not supported when ONLY_FULL_GROUP_BY is enable.");
+        }
+
         if (fnName.getFunction().equalsIgnoreCase("date_trunc")) {
             if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
                 throw new SemanticException("date_trunc requires first parameter must be a string constant");
