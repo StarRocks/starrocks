@@ -138,6 +138,7 @@ public class Column implements Writable {
         if (defaultValueDef != null) {
             if (defaultValueDef.expr instanceof StringLiteral) {
                 this.defaultValue = ((StringLiteral) defaultValueDef.expr).getValue();
+                this.defaultExpr = new DefaultExpr(defaultValueDef.expr);
             } else if (defaultValueDef.expr instanceof NullLiteral) {
                 // for default value is null or default value is not set the defaultExpr = null
                 this.defaultExpr = null;
