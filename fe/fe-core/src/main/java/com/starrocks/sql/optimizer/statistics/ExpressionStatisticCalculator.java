@@ -209,7 +209,7 @@ public class ExpressionStatisticCalculator {
 
         private ColumnStatistic binaryExpressionCalculate(CallOperator callOperator, ColumnStatistic left,
                                                           ColumnStatistic right) {
-            double distinctValues = Math.max(left.getDistinctValuesCount(), right.getMaxValue());
+            double distinctValues = Math.max(left.getDistinctValuesCount(), right.getDistinctValuesCount());
             double nullsFraction = 1 - ((1 - left.getNullsFraction()) * (1 - right.getNullsFraction()));
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.ADD:
