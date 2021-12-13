@@ -4899,4 +4899,14 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  <slot 11> : CAST(5: v5 AS DECIMAL128(37,18))"));
         Config.enable_decimal_v3 = false;
     }
+
+    @Test
+    public void testUnnestFunctionPredicate() throws Exception {
+        String sql = "select x2, xx, unnest from " +
+                "(Select 2 as x2, group_concat(t1a, ',') as xx from test_all_type) as j0, " +
+                "unnest(split(xx, ',')) where unnest + x2 = 2;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("4:SELECT\n" +
+                "  |  predicates: CAST(13: unnest AS DOUBLE) + CAST(12: expr AS DOUBLE) = 2.0\n"));
+    }
 }
