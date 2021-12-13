@@ -242,6 +242,9 @@ public:
             }
 
             maybe_short_circuit();
+            if (_state == DriverState::PENDING_FINISH) {
+                return false;
+            }
         }
 
         // OUTPUT_FULL
@@ -253,7 +256,7 @@ public:
         return source_operator()->is_finished() || source_operator()->has_output();
     }
 
-    // Check whether an operator can be short-circuited, when is_precondition_block() from true to false.
+    // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
     void maybe_short_circuit();
 
     bool is_root() const { return _is_root; }

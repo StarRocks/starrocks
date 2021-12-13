@@ -221,7 +221,7 @@ void PipelineDriver::maybe_short_circuit() {
     size_t new_first_unfinished = _first_unfinished;
     for (int i = _first_unfinished; i < _operators.size() - 1; i++) {
         if (_operators[i]->is_finished()) {
-            new_first_unfinished = i;
+            new_first_unfinished = i + 1;
         }
     }
 
@@ -229,10 +229,16 @@ void PipelineDriver::maybe_short_circuit() {
         return;
     }
 
+    _mark_operator_finishing(_operators[new_first_unfinished], _runtime_state);
     for (auto i = _first_unfinished; i < new_first_unfinished; ++i) {
         _mark_operator_finished(_operators[i], _runtime_state);
     }
     _first_unfinished = new_first_unfinished;
+
+    if (sink_operator()->is_finished()) {
+        finish_operators(_runtime_state);
+        _state = is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
+    }
 }
 
 void PipelineDriver::mark_precondition_not_ready() {
