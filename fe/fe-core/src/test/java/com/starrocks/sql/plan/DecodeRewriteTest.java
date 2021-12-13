@@ -256,8 +256,15 @@ public class DecodeRewriteTest extends PlanTestBase{
 
     @Test
     public void testDecodeRewriteTwoFunctions() throws Exception {
-        String sql = "select substr(S_ADDRESS, 0, 1), S_ADDRESS from supplier";
-        String plan = getFragmentPlan(sql);
+        String sql;
+        String plan;
+
+        sql = "select substr(S_ADDRESS, 0, S_NATIONKEY), upper(S_ADDRESS) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
+        sql = "select substr(S_ADDRESS, 0, 1), S_ADDRESS from supplier";
+        plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  <dict id 10> : <string id 3>\n" +
                 "  |  <dict id 11> : <string id 9>\n" +
                 "  |  string functions:\n" +
@@ -349,7 +356,6 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <dict id 18> : <string id 3>\n" +
                 "  |  <dict id 19> : <string id 11>"));
 
-
         // select unsupported_function(dict_col), supported_func(dict_col), dict_col
         // from table1 join table2;
         // projection has both supported operator and no-supported operator
@@ -375,6 +381,22 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <slot 19> : coalesce(3: S_ADDRESS, CAST(4: S_NATIONKEY AS VARCHAR))\n" +
                 "  |  <slot 21> : 21: P_MFGR\n" +
                 "  |  <slot 22> : upper(21: P_MFGR)"));
+    }
+
+    @Test
+    public void testDecodeNodeRewrite14() throws Exception {
+        String sql;
+        String plan;
+        // case agg:
+        // select supported_agg(dict),unsupported_agg(dict) from table1
+        // Add Decode Node before unsupported Projection 1
+        sql = "select count(*), approx_count_distinct(S_ADDRESS) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
+        sql = "select max(S_ADDRESS), approx_count_distinct(S_ADDRESS) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test
@@ -526,18 +548,9 @@ public class DecodeRewriteTest extends PlanTestBase{
         String sql =
                 "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier UNION SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier;";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
-                "  |  child exprs: \n" +
-                "  |      [3, VARCHAR, false] | [9, BIGINT, true]\n" +
-                "  |      [14, VARCHAR, false] | [20, BIGINT, true]"));
-        Assert.assertTrue(plan.contains("  13:Project\n" +
-                "  |  output columns:\n" +
-                "  |  14 <-> [14: S_ADDRESS, VARCHAR, false]\n" +
-                "  |  20 <-> [20: dense_rank(), BIGINT, true]"));
-        Assert.assertTrue(plan.contains("  9:Decode\n" +
-                "  |  <dict id 22> : <string id 14>\n" +
-                "  |  cardinality: 1"));
-
+        // No need for low-card optimization for
+        // SCAN->DECODE->SORT
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test
