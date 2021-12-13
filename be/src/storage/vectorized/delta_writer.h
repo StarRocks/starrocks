@@ -82,7 +82,7 @@ private:
     TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
-    std::shared_ptr<MemTable> _mem_table;
+    std::unique_ptr<MemTable> _mem_table;
     const TabletSchema* _tablet_schema;
     bool _delta_written_success;
 

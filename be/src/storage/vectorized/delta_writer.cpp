@@ -149,14 +149,7 @@ Status DeltaWriter::_init() {
     _reset_mem_table();
 
     // create flush handler
-    OLAPStatus olap_status = _storage_engine->memtable_flush_executor()->create_flush_token(&_flush_token);
-    if (olap_status != OLAPStatus::OLAP_SUCCESS) {
-        std::stringstream ss;
-        ss << "Fail to create flush token. tablet_id=" << _req.tablet_id;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
-    }
-
+    _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
     _is_init = true;
     return Status::OK();
 }
@@ -189,7 +182,7 @@ Status DeltaWriter::write(Chunk* chunk, const uint32_t* indexes, uint32_t from, 
 
 Status DeltaWriter::_flush_memtable_async() {
     RETURN_IF_ERROR(_mem_table->finalize());
-    return _flush_token->submit(_mem_table);
+    return _flush_token->submit(std::move(_mem_table));
 }
 
 Status DeltaWriter::flush_memtable_async() {
@@ -227,7 +220,7 @@ Status DeltaWriter::wait_memtable_flushed() {
 }
 
 void DeltaWriter::_reset_mem_table() {
-    _mem_table = std::make_shared<MemTable>(_tablet->tablet_id(), _tablet_schema, _req.slots, _rowset_writer.get(),
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _req.slots, _rowset_writer.get(),
                                             _mem_tracker.get());
 }
 
