@@ -337,6 +337,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
     RETURN_IF_ERROR(page->_data_decoder->init());
+
     page->_first_ordinal = footer.first_ordinal();
     page->_num_rows = footer.num_values();
     page->_page_pointer = page_pointer;

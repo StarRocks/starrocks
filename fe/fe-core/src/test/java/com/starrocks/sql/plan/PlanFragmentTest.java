@@ -4901,6 +4901,34 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testPredicateOnThreeTables() throws Exception {
+        String sql = "SELECT \n" +
+                "  DISTINCT t1.v4 \n" +
+                "FROM \n" +
+                "  t1, \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t3.v1, \n" +
+                "      t3.v2, \n" +
+                "      t3.v3\n" +
+                "    FROM \n" +
+                "      t3\n" +
+                "  ) subt3 FULL \n" +
+                "  JOIN t0 ON subt3.v3 != t0.v1 \n" +
+                "  AND subt3.v3 = t0.v1 \n" +
+                "WHERE \n" +
+                "  (\n" +
+                "    (t0.v2) BETWEEN (\n" +
+                "      CAST(subt3.v2 AS STRING)\n" +
+                "    ) \n" +
+                "    AND (t0.v2)\n" +
+                "  ) = (t1.v4);";
+        String plan = getFragmentPlan(sql);
+        // check no exception
+        Assert.assertTrue(plan.contains(" 3:CROSS JOIN"));
+    }
+
+    @Test
     public void testDecimalCast() throws Exception {
         Config.enable_decimal_v3 = true;
         String sql = "select * from baseall where cast(k5 as decimal32(4,3)) = 1.234";
