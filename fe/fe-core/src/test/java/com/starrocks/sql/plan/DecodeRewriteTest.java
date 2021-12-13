@@ -52,6 +52,7 @@ public class DecodeRewriteTest extends PlanTestBase{
                 ");");
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
+        connectContext.getSessionVariable().setSqlMode(2);
     }
 
 
@@ -214,9 +215,10 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, " +
                 "count(*) from supplier group by a,b) as t ";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertFalse(plan.contains("Decode"));
-        Assert.assertTrue(plan.contains("output: multi_distinct_count(16: upper), " +
-                "multi_distinct_count(17: lower)"));
+        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: multi_distinct_count(12: count), multi_distinct_count(13: count)"));
 
         sql = "select count(distinct S_ADDRESS), count(distinct S_COMMENT) from supplier;";
         plan = getFragmentPlan(sql);
@@ -230,8 +232,8 @@ public class DecodeRewriteTest extends PlanTestBase{
         String sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by a,b";
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:13, strings:[mock], ids:[1])]"));
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:13, strings:[mock], ids:[1])]"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
 
         sql = "select count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);
@@ -311,21 +313,20 @@ public class DecodeRewriteTest extends PlanTestBase{
         sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by a,b";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 13> : <string id 9>\n" +
                 "  |  <dict id 14> : <string id 10>\n" +
-                "  |  <dict id 15> : <string id 9>\n" +
                 "  |  string functions:\n" +
-                "  |  <function id 14> : upper(13: S_ADDRESS)\n" +
-                "  |  <function id 15> : lower(14: upper)\n" +
-                "  |  use vectorized: true"));
+                "  |  <function id 13> : lower(upper(12: S_ADDRESS))\n" +
+                "  |  <function id 14> : upper(12: S_ADDRESS)"));
 
         sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 13> : <string id 10>\n" +
                 "  |  <dict id 14> : <string id 11>\n" +
-                "  |  <dict id 15> : <string id 10>\n" +
                 "  |  string functions:\n" +
-                "  |  <function id 14> : upper(13: S_ADDRESS)\n" +
-                "  |  <function id 15> : lower(14: upper)"));
+                "  |  <function id 13> : lower(upper(12: S_ADDRESS))\n" +
+                "  |  <function id 14> : upper(12: S_ADDRESS)"));
     }
 
     @Test
@@ -582,6 +583,20 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertFalse(plan.contains("Decode"));
 
         sql = "select hex(10), s_address from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
+        sql = "SELECT SUM(count) FROM (SELECT CAST((CAST((((\"C\")||(CAST(s_address AS STRING ) ))) " +
+                "BETWEEN (((\"T\")||(\"\"))) AND (\"\") AS BOOLEAN) = true) " +
+                "AND (CAST((((\"C\")||(CAST(s_address AS STRING ) ))) BETWEEN (((\"T\")||(\"\"))) " +
+                "AND (\"\") AS BOOLEAN) IS NOT NULL) AS INT) as count FROM supplier ) t;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
+        sql = "SELECT SUM(count) FROM (SELECT CAST((CAST((s_address) BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) " +
+                "AND (s_address) AS BOOLEAN) = true) AND (CAST((s_address) " +
+                "BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) AND (s_address) AS BOOLEAN) IS NOT NULL) AS INT) " +
+                "as count FROM supplier ) t;";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
     }
