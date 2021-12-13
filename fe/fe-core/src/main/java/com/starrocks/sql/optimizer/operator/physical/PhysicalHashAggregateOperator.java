@@ -174,4 +174,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return true;
     }
 
+    public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
+        ColumnRefSet dictSet = new ColumnRefSet();
+        dictColIds.forEach(dictSet::union);
+        getAggregations().values().forEach((v) -> {
+            if (!couldApplyStringDict(v, dictSet)) {
+                resultSet.union(v.getUsedColumns());
+            }
+        });
+    }
+
 }
