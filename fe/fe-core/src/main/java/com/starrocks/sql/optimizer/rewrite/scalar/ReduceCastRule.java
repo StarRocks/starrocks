@@ -68,6 +68,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
         ScalarOperator castChild = child1.getChild(0);
 
+        // Cast is allowed to change the precision in Decimal, so it should not be allowed to eliminate Cast
         if (castChild.getType().isDecimalOfAnyVersion()) {
             return operator;
         }
