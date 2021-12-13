@@ -123,7 +123,7 @@ public class InsertAnalyzer {
 
         for (Column column : table.getBaseSchema()) {
             Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-            if (defaultValueType == Column.DefaultValueType.NONE && !column.isAllowNull() &&
+            if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
                     !mentionedColumns.contains(column.getName())) {
                 throw new SemanticException("'%s' must be explicitly mentioned in column permutation",
                         column.getName());
@@ -141,7 +141,7 @@ public class InsertAnalyzer {
                     Column column = targetColumns.get(columnIdx);
                     Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                     if (row.get(columnIdx) instanceof DefaultValueExpr &&
-                            defaultValueType == Column.DefaultValueType.NONE) {
+                            defaultValueType == Column.DefaultValueType.NULL) {
                         throw new SemanticException("Column has no default value, column=%s", column.getName());
                     }
                 }

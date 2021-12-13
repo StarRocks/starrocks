@@ -221,9 +221,7 @@ public class ColumnDef {
 
         if (defaultValueDef.isSet && defaultValueDef.expr instanceof LiteralExpr) {
             try {
-                if (defaultValueDef.expr instanceof StringLiteral) {
-                    validateDefaultValue(type, defaultValueDef.expr);
-                }
+                validateDefaultValue(type, defaultValueDef.expr);
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("Invalid default value for '%s': %s", name, e.getMessage()));
             }

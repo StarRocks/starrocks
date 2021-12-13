@@ -39,6 +39,7 @@ import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.DropColumnClause;
 import com.starrocks.analysis.DropIndexClause;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
@@ -574,9 +575,10 @@ public class SchemaChangeHandler extends AlterHandler {
 
         Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
         // expr like now() or uuid() will support later
-        if (defaultValueType == Column.DefaultValueType.CONST && newColumn.getDefaultExpr() != null) {
+        if (defaultValueType == Column.DefaultValueType.CONST &&
+                newColumn.getDefaultExpr().getExpr() instanceof FunctionCallExpr) {
             throw new DdlException("Schema change currently not supported default expr:"
-                    + newColumn.getDefaultExpr().getExpr());
+                    + newColumn.getDefaultExpr().getExpr().toSql());
         }
         String newColName = newColumn.getName();
         // check the validation of aggregation method on column.

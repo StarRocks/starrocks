@@ -2,20 +2,21 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.Expr;
 
 public class DefaultExpr {
     @SerializedName("expr")
-    private String expr;
+    private Expr expr;
 
-    public DefaultExpr(String expr) {
+    public DefaultExpr(Expr expr) {
         this.expr = expr;
     }
 
-    public String getExpr() {
+    public Expr getExpr() {
         return expr;
     }
 
-    public void setExpr(String expr) {
+    public void setExpr(Expr expr) {
         this.expr = expr;
     }
 }

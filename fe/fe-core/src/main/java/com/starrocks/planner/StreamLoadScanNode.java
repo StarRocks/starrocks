@@ -215,7 +215,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
                         throw new UserException("Column(" + column + ") has unsupported default value:"
                                 + column.getDefaultExpr().getExpr());
-                    } else if (defaultValueType == Column.DefaultValueType.NONE) {
+                    } else if (defaultValueType == Column.DefaultValueType.NULL) {
                         if (column.isAllowNull()) {
                             expr = NullLiteral.create(column.getType());
                         } else {

@@ -297,7 +297,7 @@ public class Load {
                 continue;
             }
             Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-            if (defaultValueType == Column.DefaultValueType.NONE) {
+            if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull()) {
                 throw new DdlException("Column has no default value. column: " + columnName);
             }
         }
@@ -641,7 +641,7 @@ public class Load {
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
                             throw new UserException("Column(" + columnName + ") has unsupported default value:"
                                     + column.getDefaultExpr().getExpr());
-                        } else if (defaultValueType == Column.DefaultValueType.NONE) {
+                        } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 exprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {
@@ -664,7 +664,7 @@ public class Load {
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
                             throw new UserException("Column(" + columnName + ") has unsupported default value:"
                                     + column.getDefaultExpr().getExpr());
-                        } else if (defaultValueType == Column.DefaultValueType.NONE) {
+                        } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 innerIfExprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {

@@ -27,6 +27,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -138,9 +139,10 @@ public class Column implements Writable {
             if (defaultValueDef.expr instanceof StringLiteral) {
                 this.defaultValue = ((StringLiteral) defaultValueDef.expr).getValue();
             } else if (defaultValueDef.expr instanceof NullLiteral) {
+                // for default value is null or default value is not set the defaultExpr = null
                 this.defaultExpr = null;
             } else {
-                this.defaultExpr = new DefaultExpr(defaultValueDef.expr.toSql());
+                this.defaultExpr = new DefaultExpr(defaultValueDef.expr);
             }
         }
         this.comment = comment;
@@ -408,7 +410,7 @@ public class Column implements Writable {
         } else {
             sb.append("NOT NULL ");
         }
-        if (defaultExpr != null && "now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+        if (defaultExpr != null && "now()".equalsIgnoreCase(defaultExpr.getExpr().toSql())) {
             // compatible with mysql
             sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
         } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
@@ -422,22 +424,26 @@ public class Column implements Writable {
 
 
     public enum DefaultValueType {
-        NONE,       // no default value
-        CONST,      // const expr e.g. now() function
+        NULL,       // default value is not set or default value is null
+        CONST,      // const expr e.g. default "1" or now() function
         VARY        // variable expr e.g. uuid() function
     }
 
     public DefaultValueType getDefaultValueType() {
-        if (defaultValue != null) {
+        if (defaultExpr == null) {
+            return DefaultValueType.NULL;
+        }
+
+        if (defaultExpr.getExpr() instanceof StringLiteral) {
             return DefaultValueType.CONST;
-        } else if (defaultExpr != null) {
-            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+        } else if (defaultExpr.getExpr() instanceof FunctionCallExpr) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr().toSql())) {
                 return DefaultValueType.CONST;
             } else {
                 return DefaultValueType.VARY;
             }
         }
-        return DefaultValueType.NONE;
+        return DefaultValueType.VARY;
     }
 
 
@@ -446,28 +452,37 @@ public class Column implements Writable {
     // else for a batch of every row different like uuid(). return null
     // consistency requires ConnectContext.get() != null to assurance
     public String getCalculatedDefaultValue() {
-        if (defaultValue != null) {
-            return defaultValue;
+        if (defaultExpr == null) {
+            return null;
         }
-        if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            // current transaction time
-            if (ConnectContext.get() != null) {
-                LocalDateTime startTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
-                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-                return startTime.toString();
-            } else {
-                // should not run up here
-                return LocalDateTime.now().toString();
+        Expr expr = defaultExpr.getExpr();
+        if (expr instanceof StringLiteral) {
+            return ((StringLiteral) expr).getValue();
+        } else if (expr instanceof FunctionCallExpr) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr().toSql())) {
+                // current transaction time
+                if (ConnectContext.get() != null) {
+                    LocalDateTime startTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                            .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                    return startTime.toString();
+                } else {
+                    // should not run up here
+                    return LocalDateTime.now().toString();
+                }
             }
         }
         return null;
     }
 
     public String getMetaDefaultValue(List<String> extras) {
-        if (defaultValue != null) {
-            return defaultValue;
-        } else if (defaultExpr != null) {
-            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+        if (defaultExpr == null) {
+            return FeConstants.null_string;
+        }
+        Expr expr = defaultExpr.getExpr();
+        if (expr instanceof  StringLiteral) {
+            return ((StringLiteral) expr).getValue();
+        } else if (expr instanceof  FunctionCallExpr) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr().toSql())) {
                 extras.add("DEFAULT_GENERATED");
                 return "CURRENT_TIMESTAMP";
             }
@@ -593,6 +608,7 @@ public class Column implements Writable {
         notNull = in.readBoolean();
         if (notNull) {
             defaultValue = Text.readString(in);
+            defaultExpr = new DefaultExpr(new StringLiteral(defaultValue));
         }
         stats = ColumnStats.read(in);
 
@@ -610,7 +626,11 @@ public class Column implements Writable {
             return column;
         } else {
             String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, Column.class);
+            Column column = GsonUtils.GSON.fromJson(json, Column.class);
+            if (column.defaultExpr == null && column.defaultValue != null) {
+                column.defaultExpr = new DefaultExpr(new StringLiteral(column.defaultValue));
+            }
+            return column;
         }
     }
 }

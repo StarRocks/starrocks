@@ -186,7 +186,7 @@ public class InsertPlanner {
                 if (idx == -1) {
                     ScalarOperator scalarOperator;
                     Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
-                    if (defaultValueType == Column.DefaultValueType.NONE) {
+                    if (defaultValueType == Column.DefaultValueType.NULL) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                     } else if (defaultValueType == Column.DefaultValueType.CONST)  {
                         scalarOperator = ConstantOperator.createVarchar(targetColumn.getCalculatedDefaultValue());
@@ -269,7 +269,7 @@ public class InsertPlanner {
                 outputColumns.add(columnRefOperator);
 
                 Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
-                if (defaultValueType == Column.DefaultValueType.NONE) {
+                if (defaultValueType == Column.DefaultValueType.NULL) {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
                 } else if (defaultValueType == Column.DefaultValueType.CONST) {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(

@@ -528,7 +528,7 @@ public class DataDescription {
         String replaceValue = null;
         if (args.size() == 1) {
             Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-            if (defaultValueType == Column.DefaultValueType.NONE) {
+            if (defaultValueType == Column.DefaultValueType.NULL) {
                 throw new AnalysisException("Column " + column.getName() + " has no default value");
             } else if (defaultValueType == Column.DefaultValueType.CONST) {
                 replaceValue = column.getCalculatedDefaultValue();
