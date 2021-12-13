@@ -4,33 +4,66 @@
 
 #include <memory>
 
-#include "storage/rowset/segment_v2/storage_page_data_decoder.h"
+#include "common/status.h"
+#include "gen_cpp/segment_v2.pb.h"
+#include "storage/rowset/segment_v2/common.h"
+#include "util/slice.h"
+
 
 namespace starrocks {
 
 namespace segment_v2 {
 
-class StoragePageDecoder {
+class DataDecoder {
 public:
-    static StoragePageDecoder* instance() { return _s_instance; }
+    DataDecoder() = default;
+    virtual ~DataDecoder() = default;
 
-    static void create_global_storage_page_decoder();
+    static DataDecoder* get_data_decoder(EncodingTypePB encoding);
 
-    std::unique_ptr<DataDecoder>* get_data_decoder(EncodingTypePB encoding);
+    virtual void reserve_head(uint8_t head_size) {}
 
-    Status decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                       std::unique_ptr<char[]>* page, Slice* page_slice);
+    virtual Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+                                    std::unique_ptr<char[]>* page, Slice* page_slice) {
+        return Status::OK();
+    }
+};
+
+class BitShuffleDataDecoder : public DataDecoder {
+public:
+    BitShuffleDataDecoder() = default;
+    ~BitShuffleDataDecoder() = default;
+
+    void reserve_head(uint8_t head_size) override {
+        DCHECK(_reserve_head_size == 0);
+        _reserve_head_size = head_size;
+    }
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+                            std::unique_ptr<char[]>* page, Slice* page_slice) override;
 
 private:
-    StoragePageDecoder();
-    virtual ~StoragePageDecoder();
+    uint8_t _reserve_head_size = 0;
+};
 
-    static StoragePageDecoder* _s_instance;
+class BinaryDictDataDecoder : public DataDecoder {
+public:
+    BinaryDictDataDecoder() {
+        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>();
+        _bit_shuffle_decoder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
+    }
+    ~BinaryDictDataDecoder() = default;
 
-    // Decode is required only when page data is encoded by bitshuffle and dict
-    std::unique_ptr<DataDecoder> _base_decoder = nullptr;
-    std::unique_ptr<DataDecoder> _bit_shuffle_decoder = nullptr;
-    std::unique_ptr<DataDecoder> _binary_dict_decoder = nullptr;
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+                            std::unique_ptr<char[]>* page, Slice* page_slice) override;
+
+private:
+    std::unique_ptr<BitShuffleDataDecoder> _bit_shuffle_decoder;
+};
+
+class StoragePageDecoder {
+public:
+    static Status decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+                              std::unique_ptr<char[]>* page, Slice* page_slice);
 };
 
 } // namespace segment_v2

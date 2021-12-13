@@ -2,33 +2,17 @@
 
 #include "storage/rowset/segment_v2/storage_page_decoder.h"
 
+#include "gutil/strings/substitute.h"
+#include "storage/rowset/segment_v2/bitshuffle_wrapper.h"
+#include "util/coding.h"
+
 namespace starrocks::segment_v2 {
 
-StoragePageDecoder* StoragePageDecoder::_s_instance = nullptr;
+static DataDecoder _base_decoder;
+static BitShuffleDataDecoder _bit_shuffle_decoder;
+static BinaryDictDataDecoder _binary_dict_decoder;
 
-void StoragePageDecoder::create_global_storage_page_decoder() {
-    if (_s_instance == nullptr) {
-        _s_instance = new StoragePageDecoder();
-    }
-}
-
-StoragePageDecoder::StoragePageDecoder() {
-    if (_base_decoder == nullptr) {
-        _base_decoder = std::make_unique<DataDecoder>();
-    }
-
-    if (_bit_shuffle_decoder == nullptr) {
-        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>();
-    }
-
-    if (_binary_dict_decoder == nullptr) {
-        _binary_dict_decoder = std::make_unique<BinaryDictDataDecoder>();
-    }
-}
-
-StoragePageDecoder::~StoragePageDecoder() {}
-
-std::unique_ptr<DataDecoder>* StoragePageDecoder::get_data_decoder(EncodingTypePB encoding) {
+DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     switch (encoding) {
     case BIT_SHUFFLE: {
         return &_bit_shuffle_decoder;
@@ -48,6 +32,58 @@ std::unique_ptr<DataDecoder>* StoragePageDecoder::get_data_decoder(EncodingTypeP
     }
 }
 
+Status BitShuffleDataDecoder::decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+                                               std::unique_ptr<char[]>* page, Slice* page_slice) {
+    DataPageFooterPB data_footer = footer->data_page_footer();
+
+    size_t num_elements = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 0);
+    size_t compressed_size = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 4);
+    size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 8);
+    size_t size_of_element = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 12);
+    DCHECK_EQ(num_element_after_padding, ALIGN_UP(num_elements, 8U));
+
+    size_t header_size = _reserve_head_size + BITSHUFFLE_PAGE_HEADER_SIZE;
+    size_t data_size = num_element_after_padding * size_of_element;
+    auto null_size = data_footer.nullmap_size();
+
+    // data_size is size of decoded_data
+    // compressed_size contains encoded_data size and BITSHUFFLE_PAGE_HEADER_SIZE
+    std::unique_ptr<char[]> decompressed_page(
+            new char[page_slice->size + data_size - (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE)]);
+    memcpy(decompressed_page.get(), page_slice->data, header_size);
+
+    Slice compressed_body(page_slice->data + header_size, compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);
+    Slice decompressed_body(&(decompressed_page.get()[header_size]), data_size);
+    int64_t bytes = bitshuffle::decompress_lz4(compressed_body.data, decompressed_body.data, num_element_after_padding,
+                                               size_of_element, 0);
+    if (bytes != compressed_body.size) {
+        return Status::Corruption(
+                strings::Substitute("decompress failed: expected number of bytes consumed=$0 vs real consumed=$1",
+                                    compressed_body.size, bytes));
+    }
+
+    memcpy(decompressed_body.data + decompressed_body.size,
+           page_slice->data + header_size + (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE), null_size + footer_size);
+
+    *page = std::move(decompressed_page);
+    *page_slice = Slice(page->get(), header_size + data_size + null_size + footer_size);
+
+    return Status::OK();
+}
+
+Status BinaryDictDataDecoder::decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+                                               std::unique_ptr<char[]>* page, Slice* page_slice) {
+    size_t type = decode_fixed32_le((const uint8_t*)&(page_slice->data[0]));
+    if (type == DICT_ENCODING) {
+        return _bit_shuffle_decoder->decode_page_data(footer, footer_size, encoding, page, page_slice);
+    } else if (type == PLAIN_ENCODING) {
+        return Status::OK();
+    } else {
+        LOG(WARNING) << "invalide encoding type:" << type;
+        return Status::Corruption(strings::Substitute("invalid encoding type:$0", type));
+    }
+}
+
 Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                                        std::unique_ptr<char[]>* page, Slice* page_slice) {
     DCHECK(footer->has_type()) << "type must be set";
@@ -58,13 +94,13 @@ Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_siz
         return Status::OK();
     }
     case DATA_PAGE: {
-        std::unique_ptr<DataDecoder>* decoder = get_data_decoder(encoding);
-        if (*decoder == nullptr) {
+        DataDecoder* decoder = DataDecoder::get_data_decoder(encoding);
+        if (decoder == nullptr) {
             std::stringstream ss;
             ss << "Unknown encoding, encoding type is " << encoding;
             return Status::InternalError(ss.str());
         }
-        return (*decoder)->decode_page_data(footer, footer_size, encoding, page, page_slice);
+        return decoder->decode_page_data(footer, footer_size, encoding, page, page_slice);
     }
     default: {
         std::stringstream ss;

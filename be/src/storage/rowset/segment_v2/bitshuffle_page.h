@@ -46,8 +46,6 @@
 namespace starrocks {
 namespace segment_v2 {
 
-enum { BITSHUFFLE_PAGE_HEADER_SIZE = 16 };
-
 std::string bitshuffle_error_msg(int64_t err);
 
 // BitshufflePageBuilder bitshuffles and compresses the bits of fixed

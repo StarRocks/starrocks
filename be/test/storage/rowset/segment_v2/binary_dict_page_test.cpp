@@ -84,11 +84,8 @@ public:
         data_page_footer->set_nullmap_size(0);
         std::unique_ptr<char[]> page = nullptr;
 
-        StoragePageDecoder::create_global_storage_page_decoder();
-        auto storage_page_decoder = StoragePageDecoder::instance();
-
-        Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::DICT_ENCODING, &page,
-                                                      &encoded_data);
+        Status st =
+                StoragePageDecoder::decode_page(&footer, 0, starrocks::segment_v2::DICT_ENCODING, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
         PageDecoderOptions decoder_options;
@@ -191,11 +188,8 @@ public:
             data_page_footer->set_nullmap_size(0);
             std::unique_ptr<char[]> page = nullptr;
 
-            StoragePageDecoder::create_global_storage_page_decoder();
-            auto storage_page_decoder = StoragePageDecoder::instance();
-
-            Status st = storage_page_decoder->decode_page(&footer, 0, starrocks::segment_v2::DICT_ENCODING, &page,
-                                                          &encoded_data);
+            Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::segment_v2::DICT_ENCODING, &page,
+                                                        &encoded_data);
             ASSERT_TRUE(st.ok());
 
             PageDecoderOptions decoder_options;
