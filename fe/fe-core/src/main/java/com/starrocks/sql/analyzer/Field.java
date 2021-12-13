@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
@@ -18,22 +17,19 @@ public class Field {
      * Field come from scope is resolved by scope relation alias,
      * such as subquery alias and table relation name
      */
-    private final TableName relationAlias;
-    private final Expr originExpression;
+    private final TableName tableName;
+    //private final Expr originExpression;
+    private final RelationId originRelationId;
 
-    public Field(String name, Type type, TableName relationAlias, Expr originExpression) {
-        this.name = name;
-        this.type = type;
-        this.relationAlias = relationAlias;
-        this.originExpression = originExpression;
-        this.visible = true;
+    public Field(String name, Type type, TableName tableName, RelationId originRelationId) {
+        this(name, type, tableName, originRelationId, true);
     }
 
-    public Field(String name, Type type, TableName relationAlias, Expr originExpression, boolean visible) {
+    public Field(String name, Type type, TableName tableName, RelationId originRelationId, boolean visible) {
         this.name = name;
         this.type = type;
-        this.relationAlias = relationAlias;
-        this.originExpression = originExpression;
+        this.tableName = tableName;
+        this.originRelationId = originRelationId;
         this.visible = visible;
     }
 
@@ -41,12 +37,12 @@ public class Field {
         return name;
     }
 
-    public TableName getRelationAlias() {
-        return relationAlias;
+    public TableName getTableName() {
+        return tableName;
     }
 
-    public Expr getOriginExpression() {
-        return originExpression;
+    public RelationId getOriginRelationId() {
+        return originRelationId;
     }
 
     public Type getType() {
@@ -64,10 +60,10 @@ public class Field {
     public boolean canResolve(SlotRef expr) {
         TableName tableName = expr.getTblNameWithoutAnalyzed();
         if (tableName != null) {
-            if (relationAlias == null) {
+            if (this.tableName == null) {
                 return false;
             }
-            return relationAlias.getTbl().equals(expr.getTblNameWithoutAnalyzed().getTbl())
+            return this.tableName.getTbl().equals(expr.getTblNameWithoutAnalyzed().getTbl())
                     && expr.getColumnName().equalsIgnoreCase(this.name);
         } else {
             return expr.getColumnName().equalsIgnoreCase(this.name);
@@ -75,8 +71,8 @@ public class Field {
     }
 
     public boolean matchesPrefix(TableName prefix) {
-        if (relationAlias != null) {
-            return relationAlias.getTbl().equals(prefix.getTbl());
+        if (tableName != null) {
+            return tableName.getTbl().equals(prefix.getTbl());
         }
         return false;
     }

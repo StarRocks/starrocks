@@ -74,6 +74,13 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from t0 a join t0 b using(v1, v2, v3)");
         analyzeFail("select * from t0 join t0 using(v1)");
         analyzeFail("select * from t0 join t1 using(v1)");
+        analyzeFail("select * from t0 x,t0 y inner join t0 z using(v1)", "Column 'v1' is ambiguous");
+        analyzeSuccess("select * from t0,t1 inner join tnotnull using(v1)");
+        analyzeSuccess("select * from t0,t1 inner join tnotnull using(v1,v2)");
+        analyzeSuccess("select * from tnotnull inner join (select * from t0,t1) t using (v1)");
+        analyzeFail("select * from (select * from t0,tnotnull) t inner join t0 using (v1)",
+                "Column 'v1' is ambiguous");
+        analyzeSuccess("select * from tnotnull inner join (select * from t0) t using (v1)");
     }
 
     @Test
