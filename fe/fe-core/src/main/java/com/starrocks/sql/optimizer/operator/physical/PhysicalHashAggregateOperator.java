@@ -160,7 +160,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return false;
     }
 
-    private static final Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
+    public static final Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
             FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN
     );
 
