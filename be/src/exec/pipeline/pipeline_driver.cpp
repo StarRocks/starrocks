@@ -13,6 +13,8 @@
 
 namespace starrocks::pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+    _runtime_state = runtime_state;
+
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "DriverActiveTime");
     _pending_timer = ADD_TIMER(_runtime_profile, "DriverPendingTime");
@@ -213,6 +215,24 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             return _state;
         }
     }
+}
+
+void PipelineDriver::maybe_short_circuit() {
+    size_t new_first_unfinished = _first_unfinished;
+    for (int i = _first_unfinished; i < _operators.size() - 1; i++) {
+        if (_operators[i]->is_finished()) {
+            new_first_unfinished = i;
+        }
+    }
+
+    if (new_first_unfinished == _first_unfinished) {
+        return;
+    }
+
+    for (auto i = _first_unfinished; i < new_first_unfinished; ++i) {
+        _mark_operator_finished(_operators[i], _runtime_state);
+    }
+    _first_unfinished = new_first_unfinished;
 }
 
 void PipelineDriver::mark_precondition_not_ready() {

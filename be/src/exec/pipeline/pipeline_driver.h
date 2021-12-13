@@ -236,8 +236,12 @@ public:
         }
 
         // PRECONDITION_BLOCK
-        if (is_precondition_block()) {
-            return false;
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            if (is_precondition_block()) {
+                return false;
+            }
+
+            maybe_short_circuit();
         }
 
         // OUTPUT_FULL
@@ -248,6 +252,9 @@ public:
         // INPUT_EMPTY
         return source_operator()->is_finished() || source_operator()->has_output();
     }
+
+    // Check whether an operator can be short-circuited, when is_precondition_block() from true to false.
+    void maybe_short_circuit();
 
     bool is_root() const { return _is_root; }
 
@@ -261,6 +268,8 @@ private:
     void _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
     void _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
+
+    RuntimeState* _runtime_state = nullptr;
 
     Operators _operators;
 
