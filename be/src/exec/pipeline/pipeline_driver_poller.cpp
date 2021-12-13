@@ -87,9 +87,6 @@ void PipelineDriverPoller::run_internal() {
             } else if (!driver->pending_finish() && driver->fragment_ctx()->is_canceled()) {
                 // If the fragment is cancelled when the source operator is already pending i/o task,
                 // The state of driver shouldn't be changed.
-                LOG(WARNING) << "[Driver] Canceled, query_id=" << print_id(driver->query_ctx()->query_id())
-                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                             << ", error=" << driver->fragment_ctx()->final_status().to_string();
                 driver->cancel_operators(driver->fragment_ctx()->runtime_state());
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);

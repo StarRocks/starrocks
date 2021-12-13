@@ -7,6 +7,7 @@
 #include <list>
 #include <mutex>
 #include <queue>
+#include <set>
 #include <unordered_map>
 
 #include "column/chunk.h"
@@ -34,6 +35,11 @@ struct TransmitChunkInfo {
     butil::IOBuf attachment;
 };
 
+struct ClosureContext {
+    TUniqueId instance_id;
+    int64_t request_seq;
+};
+
 // TODO(hcf) how to export brpc error
 class SinkBuffer {
 public:
@@ -42,24 +48,25 @@ public:
               _brpc_timeout_ms(std::min(3600, state->query_options().query_timeout) * 1000),
               _num_uncancelled_sinkers(num_sinkers) {
         for (const auto& dest : destinations) {
-            const auto& dest_instance_id = dest.fragment_instance_id;
+            const auto& instance_id = dest.fragment_instance_id;
 
-            auto it = _num_sinkers.find(dest_instance_id.lo);
+            auto it = _num_sinkers.find(instance_id.lo);
             if (it != _num_sinkers.end()) {
                 it->second += num_sinkers;
             } else {
-                _num_sinkers[dest_instance_id.lo] = num_sinkers;
+                _num_sinkers[instance_id.lo] = num_sinkers;
 
-                _request_seqs[dest_instance_id.lo] = 0;
-                _buffers[dest_instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
-                _num_finished_rpcs[dest_instance_id.lo] = 0;
-                _num_in_flight_rpcs[dest_instance_id.lo] = 0;
-                _mutexes[dest_instance_id.lo] = std::make_unique<std::mutex>();
+                _request_seqs[instance_id.lo] = 0;
+                _finished_request_seqs[instance_id.lo] = std::set<int64_t>();
+                _buffers[instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
+                _num_finished_rpcs[instance_id.lo] = 0;
+                _num_in_flight_rpcs[instance_id.lo] = 0;
+                _mutexes[instance_id.lo] = std::make_unique<std::mutex>();
 
                 PUniqueId finst_id;
-                finst_id.set_hi(dest_instance_id.hi);
-                finst_id.set_lo(dest_instance_id.lo);
-                _instance_id2finst_id[dest_instance_id.lo] = std::move(finst_id);
+                finst_id.set_hi(instance_id.hi);
+                finst_id.set_lo(instance_id.lo);
+                _instance_id2finst_id[instance_id.lo] = std::move(finst_id);
             }
 
             _num_remaining_eos = 0;
@@ -185,37 +192,38 @@ private:
                 }
             }
 
-            auto* closure = new DisposableClosure<PTransmitChunkResult, TUniqueId>(instance_id);
-            closure->addFailedHandler([this, closure](const TUniqueId& instance_id) noexcept {
+            request.params->set_allocated_finst_id(&_instance_id2finst_id[instance_id.lo]);
+            request.params->set_sequence(_request_seqs[instance_id.lo]++);
+
+            auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
+                    {instance_id, request.params->sequence()});
+            closure->addFailedHandler([this, closure](const ClosureContext& ctx) noexcept {
                 _is_finishing = true;
                 {
-                    std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
-                    ++_num_finished_rpcs[instance_id.lo];
-                    --_num_in_flight_rpcs[instance_id.lo];
+                    std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                    ++_num_finished_rpcs[ctx.instance_id.lo];
+                    --_num_in_flight_rpcs[ctx.instance_id.lo];
                 }
                 --_total_in_flight_rpc;
                 LOG(WARNING) << " transmit chunk rpc failed";
             });
             closure->addSuccessHandler(
-                    [this, closure](const TUniqueId& instance_id, const PTransmitChunkResult& result) noexcept {
+                    [this, closure](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
                         Status status(result.status());
                         {
-                            std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
-                            ++_num_finished_rpcs[instance_id.lo];
-                            --_num_in_flight_rpcs[instance_id.lo];
+                            std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                            ++_num_finished_rpcs[ctx.instance_id.lo];
+                            --_num_in_flight_rpcs[ctx.instance_id.lo];
                         }
                         if (!status.ok()) {
                             _is_finishing = true;
                             LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
                         } else {
-                            std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
-                            _try_to_send_rpc(instance_id);
+                            std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                            _try_to_send_rpc(ctx.instance_id);
                         }
                         --_total_in_flight_rpc;
                     });
-
-            request.params->set_allocated_finst_id(&_instance_id2finst_id[instance_id.lo]);
-            request.params->set_sequence(_request_seqs[instance_id.lo]++);
 
             ++_total_in_flight_rpc;
             ++_num_in_flight_rpcs[instance_id.lo];
@@ -239,6 +247,7 @@ private:
 
     phmap::flat_hash_map<int64_t, int64_t> _num_sinkers;
     phmap::flat_hash_map<int64_t, int64_t> _request_seqs;
+    phmap::flat_hash_map<int64_t, std::set<int64_t>> _finished_request_seqs;
     std::atomic<int32_t> _total_in_flight_rpc = 0;
     std::atomic<int32_t> _num_uncancelled_sinkers;
     std::atomic<int32_t> _num_remaining_eos = 0;
