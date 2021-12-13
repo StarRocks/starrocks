@@ -338,32 +338,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                                   DecodeContext context) {
             Map<Integer, Integer> newStringToDicts = Maps.newHashMap();
 
-            Map<ColumnRefOperator, ScalarOperator> newCommonProjectMap =
-                    Maps.newHashMap(projectOperator.getCommonSubOperatorMap());
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getCommonSubOperatorMap()
-                    .entrySet()) {
-                rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
-                        newCommonProjectMap, newStringToDicts);
-            }
-
             context.stringColumnIdToDictColumnIds.putAll(newStringToDicts);
 
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap(projectOperator.getColumnRefMap());
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
                 if (kv.getValue() instanceof ColumnRefOperator) {
-                    ColumnRefOperator stringColumn = (ColumnRefOperator) kv.getValue();
-                    // If we rewrite the common project map, we need to change the value in project map
-                    if (projectOperator.getCommonSubOperatorMap().containsKey(stringColumn) &&
-                            !newCommonProjectMap.containsKey(stringColumn)) {
-                        int dictColumnId = newStringToDicts.get(stringColumn.getId());
-                        ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(dictColumnId);
-                        newProjectMap.put(dictColumn, dictColumn);
-                        newProjectMap.remove(kv.getKey());
-                        newStringToDicts.put(kv.getKey().getId(), dictColumnId);
-                    } else {
-                        rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
-                                newProjectMap, newStringToDicts);
-                    }
+                    rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
+                            newProjectMap, newStringToDicts);
                 } else {
                     rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
                             newProjectMap, newStringToDicts);
@@ -374,7 +355,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (newStringToDicts.isEmpty()) {
                 context.hasEncoded = false;
             }
-            return new Projection(newProjectMap, newCommonProjectMap);
+            return new Projection(newProjectMap, projectOperator.getCommonSubOperatorMap());
         }
 
         private void rewriteOneScalarOperatorForProjection(ColumnRefOperator oldStringColumn,
@@ -679,15 +660,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         Map<Integer, Integer> dictToStrings = Maps.newHashMap();
         for (Integer id : context.stringColumnIdToDictColumnIds.keySet()) {
             int dictId = context.stringColumnIdToDictColumnIds.get(id);
-            // For SQL: select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*)
-            // from supplier group by S_ADDRESS
-            // The project map is: 11::upper -> 12:upper
-            // The project common map is: 12::upper -> upper(2:S_ADDRESS)
-            // So the string column 11 and 12 will refer to the same int column
-            // So we need check duplicate here
-            if (!dictToStrings.containsKey(dictId)) {
-                dictToStrings.put(dictId, id);
-            }
+            dictToStrings.put(dictId, id);
         }
         PhysicalDecodeOperator decodeOperator = new PhysicalDecodeOperator(ImmutableMap.copyOf(dictToStrings),
                 Maps.newHashMap(context.stringFunctions));

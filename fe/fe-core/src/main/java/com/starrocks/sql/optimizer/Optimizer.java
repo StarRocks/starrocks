@@ -157,8 +157,9 @@ public class Optimizer {
         tryOpenPreAggregate(result);
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
-        result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
+        // This rule should be last
+        result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         return result;
     }
 

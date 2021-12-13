@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -158,6 +159,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
         return false;
     }
+
+    public static final Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
+            FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT
+    );
 
     private boolean couldApplyStringDict(CallOperator operator, ColumnRefSet dictSet) {
         for (ScalarOperator child : operator.getChildren()) {
