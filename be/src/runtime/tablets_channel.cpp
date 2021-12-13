@@ -447,6 +447,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
                 for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
                     const std::string& dict_word = slot.global_dict_words(i);
                     auto* data = _mem_pool->allocate(dict_word.size());
+                    RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
                     memcpy(data, dict_word.data(), dict_word.size());
                     Slice slice(data, dict_word.size());
                     global_dict.emplace(slice, i);

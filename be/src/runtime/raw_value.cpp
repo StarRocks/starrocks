@@ -300,6 +300,7 @@ void RawValue::write(const void* value, void* dst, const TypeDescriptor& type, M
 
         if (pool != nullptr) {
             dest->ptr = reinterpret_cast<char*>(pool->allocate(dest->len));
+            assert(dest->ptr != nullptr);
             memcpy(dest->ptr, src->ptr, dest->len);
         } else {
             dest->ptr = src->ptr;

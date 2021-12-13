@@ -217,9 +217,7 @@ public:
             out->size = elem.size;
             if (elem.size != 0) {
                 out->data = reinterpret_cast<char*>(dst->pool()->allocate(elem.size * sizeof(uint8_t)));
-                if (UNLIKELY(out->data == nullptr)) {
-                    return Status::InternalError("Mem usage has exceed the limit of BE");
-                }
+                RETURN_IF_UNLIKELY_NULL(out->data, Status::MemoryAllocFailed("alloc mem for binary plain page failed"));
                 memcpy(out->data, elem.data, elem.size);
             }
         }

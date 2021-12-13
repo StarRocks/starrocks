@@ -314,9 +314,11 @@ public:
 protected:
     char* allocate_string_value(MemPool* pool) const {
         char* type_value = (char*)pool->allocate(sizeof(Slice));
+        assert(type_value != nullptr);
         auto slice = reinterpret_cast<Slice*>(type_value);
         slice->size = _length;
         slice->data = (char*)pool->allocate(slice->size);
+        assert(slice->data != nullptr);
         return type_value;
     }
 
