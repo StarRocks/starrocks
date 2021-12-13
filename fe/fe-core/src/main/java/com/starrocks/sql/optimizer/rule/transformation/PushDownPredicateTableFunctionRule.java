@@ -32,7 +32,7 @@ public class PushDownPredicateTableFunctionRule extends TransformationRule {
         List<ScalarOperator> pushDownPredicates = Lists.newArrayList();
         for (Iterator<ScalarOperator> iter = filters.iterator(); iter.hasNext(); ) {
             ScalarOperator filter = iter.next();
-            if (!tvfOperator.getFnResultColumnRefSet().contains(filter.getUsedColumns())) {
+            if (!tvfOperator.getFnResultColumnRefSet().containsAll(filter.getUsedColumns())) {
                 iter.remove();
                 pushDownPredicates.add(filter);
             }

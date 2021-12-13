@@ -1352,7 +1352,7 @@ public class PlanFragmentBuilder {
 
                 for (BinaryPredicateOperator s : eqOnPredicates) {
                     if (!optExpr.inputAt(0).getLogicalProperty().getOutputColumns()
-                            .contains(s.getChild(0).getUsedColumns())) {
+                            .containsAll(s.getChild(0).getUsedColumns())) {
                         s.swap();
                     }
                 }

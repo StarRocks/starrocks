@@ -108,7 +108,7 @@ public class JoinAssociativityRule extends TransformationRule {
         List<ScalarOperator> newChildConjuncts = Lists.newArrayList();
         List<ScalarOperator> newParentConjuncts = Lists.newArrayList();
         for (ScalarOperator conjunct : allConjuncts) {
-            if (newRightChildColumns.contains(conjunct.getUsedColumns())) {
+            if (newRightChildColumns.containsAll(conjunct.getUsedColumns())) {
                 newChildConjuncts.add(conjunct);
             } else {
                 newParentConjuncts.add(conjunct);
@@ -148,10 +148,10 @@ public class JoinAssociativityRule extends TransformationRule {
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChildJoinProjection.getColumnRefMap()
                     .entrySet()) {
                 if (!entry.getValue().isColumnRef() &&
-                        newRightChildColumns.contains(entry.getValue().getUsedColumns())) {
+                        newRightChildColumns.containsAll(entry.getValue().getUsedColumns())) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 } else if (!entry.getValue().isColumnRef() &&
-                        leftChild1.getOutputColumns().contains(entry.getValue().getUsedColumns())) {
+                        leftChild1.getOutputColumns().containsAll(entry.getValue().getUsedColumns())) {
                     leftExpression.put(entry.getKey(), entry.getValue());
                 }
             }
@@ -200,9 +200,9 @@ public class JoinAssociativityRule extends TransformationRule {
             left = OptExpression.create(newOp, leftChild1.getInputs());
 
             //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
-            if (new ColumnRefSet(new ArrayList<>(expressionProject.keySet())).contains(
+            if (new ColumnRefSet(new ArrayList<>(expressionProject.keySet())).containsAll(
                     topJoinOperator.getOnPredicate().getUsedColumns())
-                    || new ColumnRefSet(newRightOutputColumns).contains(
+                    || new ColumnRefSet(newRightOutputColumns).containsAll(
                     topJoinOperator.getOnPredicate().getUsedColumns())) {
                 return Collections.emptyList();
             }
@@ -212,8 +212,8 @@ public class JoinAssociativityRule extends TransformationRule {
         } else {
 
             //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
-            if (leftChild1.getOutputColumns().contains(topJoinOperator.getOnPredicate().getUsedColumns())
-                    || new ColumnRefSet(newRightOutputColumns).contains(
+            if (leftChild1.getOutputColumns().containsAll(topJoinOperator.getOnPredicate().getUsedColumns())
+                    || new ColumnRefSet(newRightOutputColumns).containsAll(
                     topJoinOperator.getOnPredicate().getUsedColumns())) {
                 return Collections.emptyList();
             }
