@@ -135,4 +135,11 @@ public class ScalarTypeTest {
             Assert.assertEquals(expectResult, actualResult);
         }
     }
+
+    @Test
+    public void testMatchesType() {
+        ScalarType d1 = ScalarType.createDecimalV3NarrowestType(3, 2);
+        ScalarType d2 = ScalarType.createDecimalV3NarrowestType(2, 2);
+        Assert.assertFalse(d1.matchesType(d2));
+    }
 }

@@ -4899,4 +4899,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  <slot 11> : CAST(5: v5 AS DECIMAL128(37,18))"));
         Config.enable_decimal_v3 = false;
     }
+
+    @Test
+    public void testDecimalCast() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "SELECT k5 FROM baseall WHERE (CAST(k5 AS DECIMAL32 ) ) IN (0.006) GROUP BY k5 HAVING (k5) IN (0.005, 0.006)";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: 5: k5 = 0.006"));
+        Config.enable_decimal_v3 = false;
+    }
 }
