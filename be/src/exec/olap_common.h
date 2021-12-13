@@ -197,34 +197,31 @@ public:
     bool empty_range() { return _empty_range; }
 
     void to_olap_filter(std::vector<TCondition>& filters) {
-        if (is_fixed_value_range() && _fixed_op != FILTER_NOT_IN) {
+        // If we have fixed range value, we generate in/not-in predicates.
+        if (is_fixed_value_range()) {
+            DCHECK(_fixed_op == FILTER_IN || _fixed_op == FILTER_NOT_IN);
+            bool filter_in = (_fixed_op == FILTER_IN) ? true : false;
+
             TCondition condition;
             condition.__set_is_index_filter_only(_is_index_filter_only);
             condition.__set_column_name(_column_name);
-            condition.__set_condition_op("*=");
-
+            if (filter_in) {
+                condition.__set_condition_op("*=");
+            } else {
+                condition.__set_condition_op("!=");
+            }
             for (auto value : _fixed_values) {
                 condition.condition_values.push_back(cast_to_string(value, type(), precision(), scale()));
             }
 
-            if (!condition.condition_values.empty()) {
+            // If we use IN clause, we wish to include empty set.
+            if (filter_in || !condition.condition_values.empty()) {
                 filters.push_back(condition);
             }
-        } else if (is_fixed_value_range()) {
-            TCondition condition;
-            condition.__set_is_index_filter_only(_is_index_filter_only);
-            condition.__set_column_name(_column_name);
-            condition.__set_condition_op("!=");
+        }
 
-            for (auto value : _fixed_values) {
-                condition.condition_values.push_back(cast_to_string(value, type(), precision(), scale()));
-            }
-
-            if (!condition.condition_values.empty()) {
-                filters.push_back(condition);
-            }
-        } else {
-            DCHECK(!is_fixed_value_range());
+        // To generate binary predicates.
+        {
             TCondition low;
             low.__set_is_index_filter_only(_is_index_filter_only);
             if (_type_min != _low_value || FILTER_LARGER_OR_EQUAL != _low_op) {
