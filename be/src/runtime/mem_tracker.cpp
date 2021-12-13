@@ -203,4 +203,38 @@ Status MemTracker::MemLimitExceeded(RuntimeState* state, const std::string& deta
     LIMIT_EXCEEDED(this, state, ss.str());
 }
 
+Status MemTracker::check_mem_limit(const std::string& msg) const {
+    MemTracker* tracker = find_limit_exceeded_tracker();
+    if (LIKELY(tracker == nullptr)) {
+        return Status::OK();
+    }
+
+    std::stringstream str;
+    str << "Memory exceed limit. " << msg << " ";
+    str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";
+    switch (tracker->type()) {
+    case MemTracker::NO_SET:
+        break;
+    case MemTracker::QUERY:
+        str << "Mem usage has exceed the limit of single query, You can change the limit by "
+               "set session variable exec_mem_limit.";
+        break;
+    case MemTracker::PROCESS:
+        str << "Mem usage has exceed the limit of BE";
+        break;
+    case MemTracker::QUERY_POOL:
+        str << "Mem usage has exceed the limit of query pool";
+        break;
+    case MemTracker::LOAD:
+        str << "Mem usage has exceed the limit of load";
+        break;
+    case MemTracker::CONSISTENCY:
+        str << "Mem usage has exceed the limit of consistency";
+        break;
+    default:
+        break;
+    }
+    return Status::MemoryLimitExceeded(str.str());
+}
+
 } // end namespace starrocks

@@ -459,6 +459,8 @@ CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
+CONF_String(consistency_max_memory_limit, "10G");
+CONF_Int32(consistency_max_memory_limit_percent, "20");
 
 // update interval of tablet stat cache
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");

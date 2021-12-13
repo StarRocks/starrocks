@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -159,6 +160,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return false;
     }
 
+    public static final Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
+            FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT
+    );
+
     private boolean couldApplyStringDict(CallOperator operator, ColumnRefSet dictSet) {
         for (ScalarOperator child : operator.getChildren()) {
             if (!(child instanceof ColumnRefOperator)) {
@@ -172,6 +177,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                     operator.getFnName().equals(FunctionSet.MULTI_DISTINCT_COUNT);
         }
         return true;
+    }
+
+    public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
+        ColumnRefSet dictSet = new ColumnRefSet();
+        dictColIds.forEach(dictSet::union);
+        getAggregations().values().forEach((v) -> {
+            if (!couldApplyStringDict(v, dictSet)) {
+                resultSet.union(v.getUsedColumns());
+            }
+        });
     }
 
 }

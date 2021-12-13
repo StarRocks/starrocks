@@ -119,10 +119,16 @@ void ChecksumAction::handle(HttpRequest* req) {
 
 int64_t ChecksumAction::do_checksum(int64_t tablet_id, int64_t version, int64_t version_hash, int32_t schema_hash,
                                     HttpRequest* req) {
+    MemTracker* mem_tracker = ExecEnv::GetInstance()->consistency_mem_tracker();
+    Status check_limit_st = mem_tracker->check_mem_limit("Start consistency check.");
+    if (!check_limit_st.ok()) {
+        LOG(WARNING) << "checksum failed: " << check_limit_st.message();
+        return -1L;
+    }
+
     OLAPStatus res = OLAP_SUCCESS;
     uint32_t checksum;
-    EngineChecksumTask engine_task(ExecEnv::GetInstance()->consistency_mem_tracker(), tablet_id, schema_hash, version,
-                                   version_hash, &checksum);
+    EngineChecksumTask engine_task(mem_tracker, tablet_id, schema_hash, version, version_hash, &checksum);
     res = engine_task.execute();
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "checksum failed. status: " << res << ", signature: " << tablet_id;

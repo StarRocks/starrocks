@@ -279,3 +279,21 @@ LEFT OUTER JOIN (join-predicate [4: abs = 8: abs] post-join-predicate [null])
                 AGGREGATE ([LOCAL] aggregate [{}] group by [[8: abs]] having [null]
                     SCAN (columns[5: v4] predicate[null])
 [end]
+
+[sql]
+SELECT COUNT(*) FROM (SELECT t2.v7 FROM t2) subt2 INNER JOIN t0 ON subt2.v7 = t0.v1, (SELECT v1,v2,v3 FROM t3) subt3 INNER JOIN t1 ON subt3.v1 = t1.v4 AND subt3.v2 = t1.v4 AND subt3.v3 = t1.v5;
+[result]
+AGGREGATE ([GLOBAL] aggregate [{13: count=count(13: count)}] group by [[]] having [null]
+    EXCHANGE GATHER
+        AGGREGATE ([LOCAL] aggregate [{13: count=count()}] group by [[]] having [null]
+            INNER JOIN (join-predicate [7: v1 = 10: v4 AND 8: v2 = 10: v4 AND 9: v3 = 11: v5] post-join-predicate [null])
+                CROSS JOIN (join-predicate [null] post-join-predicate [null])
+                    INNER JOIN (join-predicate [4: v1 = 1: v7] post-join-predicate [null])
+                        SCAN (columns[4: v1] predicate[null])
+                        EXCHANGE SHUFFLE[1]
+                            SCAN (columns[1: v7] predicate[null])
+                    EXCHANGE BROADCAST
+                        SCAN (columns[7: v1, 8: v2, 9: v3] predicate[null])
+                EXCHANGE BROADCAST
+                    SCAN (columns[10: v4, 11: v5] predicate[null])
+[end]

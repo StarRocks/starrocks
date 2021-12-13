@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -99,6 +100,22 @@ public class JoinAssociativityRule extends TransformationRule {
 
         OptExpression leftChild1 = leftChild.inputAt(0);
         OptExpression leftChild2 = leftChild.inputAt(1);
+        // todo
+        //          join (b+c=a)                    join (b+c=a)
+        //        /      \                          /   \
+        //      join      C           ->           A    join
+        //      /  \                                    /   \
+        //     A    B                                  B     C
+        // cross join on predicate b+c=a transform to inner join predicate, and it's equals on predicate, but it need to
+        // generate projection xx = b+c on the new right join which we could not do now. so we just forbidden this
+        // transform easily.
+        for (ScalarOperator parentConjunct : parentConjuncts) {
+            if (parentConjunct.getUsedColumns().isIntersect(leftChild1.getOutputColumns()) &&
+                    parentConjunct.getUsedColumns().isIntersect(leftChild2.getOutputColumns()) &&
+                    parentConjunct.getUsedColumns().isIntersect(rightChild.getOutputColumns())) {
+                return Collections.emptyList();
+            }
+        }
 
         ColumnRefSet newRightChildColumns = new ColumnRefSet();
         newRightChildColumns.union(rightChild.getOutputColumns());
@@ -177,6 +194,8 @@ public class JoinAssociativityRule extends TransformationRule {
                     .setProjection(new Projection(rightExpression))
                     .build();
             newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
+
+            newRightOutputColumns = new ArrayList<>(rightExpression.keySet());
         }
 
         //build left
@@ -196,9 +215,25 @@ public class JoinAssociativityRule extends TransformationRule {
                     .setProjection(new Projection(expressionProject)).build();
             left = OptExpression.create(newOp, leftChild1.getInputs());
 
+            //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
+            if (new ColumnRefSet(new ArrayList<>(expressionProject.keySet())).contains(
+                    topJoinOperator.getOnPredicate().getUsedColumns())
+                    || new ColumnRefSet(newRightOutputColumns).contains(
+                    topJoinOperator.getOnPredicate().getUsedColumns())) {
+                return Collections.emptyList();
+            }
+
             OptExpression topJoin = OptExpression.create(topJoinOperator, left, newRightChildJoin);
             return Lists.newArrayList(topJoin);
         } else {
+
+            //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
+            if (leftChild1.getOutputColumns().contains(topJoinOperator.getOnPredicate().getUsedColumns())
+                    || new ColumnRefSet(newRightOutputColumns).contains(
+                    topJoinOperator.getOnPredicate().getUsedColumns())) {
+                return Collections.emptyList();
+            }
+
             OptExpression topJoin = OptExpression.create(topJoinOperator, leftChild1, newRightChildJoin);
             return Lists.newArrayList(topJoin);
         }

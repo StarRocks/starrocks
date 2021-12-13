@@ -31,7 +31,6 @@ namespace starrocks {
 class ParseUtil {
 public:
     // Parses mem_spec_str and returns the memory size in bytes.
-    // Sets *is_percent to indicate whether the given spec is in percent.
     // Accepted formats:
     // '<int>[bB]?'  -> bytes (default if no unit given)
     // '<float>[mM]' -> megabytes
@@ -40,7 +39,7 @@ public:
     // Requires MemInfo to be initialized for the '%' spec to work.
     // Returns 0 if mem_spec_str is empty or '-1'.
     // Returns -1 if parsing failed.
-    static int64_t parse_mem_spec(const std::string& mem_spec_str, bool* is_percent);
+    static int64_t parse_mem_spec(const std::string& mem_spec_str);
 };
 
 } // namespace starrocks

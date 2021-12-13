@@ -414,6 +414,8 @@ public class PlanFragmentBuilder {
                 Preconditions.checkState(context.getColRefToExpr().containsKey(entry.getKey()));
             }
 
+            tupleDescriptor.computeMemLayout();
+
             DecodeNode decodeNode = new DecodeNode(context.getPlanCtx().getNextNodeId(),
                     tupleDescriptor,
                     inputFragment.getPlanRoot(),
