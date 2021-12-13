@@ -44,7 +44,7 @@ private:
     friend HdfsScanner;
     friend HdfsParquetScanner;
     friend HdfsOrcScanner;
-    int kMaxConcurrency = config::max_hdfs_scanner_num;;
+    int kMaxConcurrency = config::max_hdfs_scanner_num;
 
     template <typename T>
     class Stack {
