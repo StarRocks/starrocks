@@ -695,8 +695,7 @@ public class ScalarType extends Type implements Cloneable {
             return !this.isDecimalV3()
                     || t.isWildcardDecimal()
                     || this.isWildcardDecimal()
-                    || (getScalarScale() == ((ScalarType) t).getScalarScale()
-                    && getPrecision().equals(t.getPrecision()));
+                    || (getScalarScale() == ((ScalarType) t).getScalarScale());
         }
         if (this.isStringType() && t.isStringType()) {
             return true;
