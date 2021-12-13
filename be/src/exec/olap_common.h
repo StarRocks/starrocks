@@ -37,6 +37,7 @@
 #include "exec/scan_node.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/stl_util.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
@@ -167,13 +168,6 @@ public:
 
     void convert_to_range_value();
 
-    void set_empty_value_range() {
-        _fixed_values.clear();
-        _low_value = _type_max;
-        _high_value = _type_min;
-        _fixed_op = FILTER_IN;
-    }
-
     const std::set<T>& get_fixed_value_set() const { return _fixed_values; }
 
     T get_range_max_value() const { return _high_value; }
@@ -201,21 +195,27 @@ public:
         if (is_fixed_value_range()) {
             DCHECK(_fixed_op == FILTER_IN || _fixed_op == FILTER_NOT_IN);
             bool filter_in = (_fixed_op == FILTER_IN) ? true : false;
+            const std::string op = (filter_in) ? "*=" : "!=";
 
             TCondition condition;
             condition.__set_is_index_filter_only(_is_index_filter_only);
             condition.__set_column_name(_column_name);
-            if (filter_in) {
-                condition.__set_condition_op("*=");
-            } else {
-                condition.__set_condition_op("!=");
-            }
+            condition.__set_condition_op(op);
             for (auto value : _fixed_values) {
                 condition.condition_values.push_back(cast_to_string(value, type(), precision(), scale()));
             }
 
-            // If we use IN clause, we wish to include empty set.
-            if (filter_in || !condition.condition_values.empty()) {
+            bool can_push = true;
+            if (condition.condition_values.empty()) {
+                // If we use IN clause, we wish to include empty set.
+                if (filter_in && _empty_range) {
+                    can_push = true;
+                } else {
+                    can_push = false;
+                }
+            }
+
+            if (can_push) {
                 filters.push_back(condition);
             }
         }
@@ -575,10 +575,8 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
         return Status::InternalError("AddRange failed, Invalid type");
     }
 
-    if (is_fixed_value_range()) {
-        if (_fixed_op != FILTER_IN) {
-            return Status::InternalError("operator is not FILTER_IN");
-        }
+    // If we already have IN value range, we can put `value` into it.
+    if (is_fixed_value_range() && _fixed_op == FILTER_IN) {
         std::pair<iterator_type, iterator_type> bound_pair = _fixed_values.equal_range(value);
 
         switch (op) {
@@ -603,13 +601,12 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
             break;
         }
         default: {
-            return Status::InternalError("AddRangefail! Unsupport SQLFilterOp.");
+            return Status::InternalError(strings::Substitute("Add Range Fail! Unsupport SQLFilterOp $0", op));
         }
         }
 
-        _high_value = _type_min;
-        _low_value = _type_max;
     } else {
+        // Otherwise we can put `value` into normal value range.
         if (_high_value > _low_value) {
             switch (op) {
             case FILTER_LARGER: {
@@ -657,7 +654,7 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
                 break;
             }
             default: {
-                return Status::InternalError("AddRangefail! Unsupport SQLFilterOp.");
+                return Status::InternalError(strings::Substitute("Add Range Fail! Unsupport SQLFilterOp $0", op));
             }
             }
         }
