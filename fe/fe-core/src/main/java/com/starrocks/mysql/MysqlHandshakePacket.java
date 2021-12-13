@@ -21,6 +21,8 @@
 
 package com.starrocks.mysql;
 
+import com.google.common.collect.ImmutableMap;
+
 // MySQL protocol handshake packet.
 public class MysqlHandshakePacket extends MysqlPacket {
     private static final int SCRAMBLE_LENGTH = 20;
@@ -34,7 +36,12 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private static final MysqlCapability CAPABILITY = MysqlCapability.DEFAULT_CAPABILITY;
     // status flags not supported in StarRocks
     private static final int STATUS_FLAGS = 0;
-    private static final String AUTH_PLUGIN_NAME = "mysql_native_password";
+    private static final String NATIVE_AUTH_PLUGIN_NAME = "mysql_native_password";
+    private static final String CLEAR_PASSWORD_PLUGIN_NAME = "mysql_clear_password";
+    private static final ImmutableMap<String, Boolean> supportedPlugins = new ImmutableMap.Builder<String, Boolean>()
+            .put(NATIVE_AUTH_PLUGIN_NAME, true)
+            .put(CLEAR_PASSWORD_PLUGIN_NAME, true)
+            .build();
 
     // connection id used in KILL statement.
     private int connectionId;
@@ -81,19 +88,19 @@ public class MysqlHandshakePacket extends MysqlPacket {
             serializer.writeInt1(0);
         }
         if (capability.isPluginAuth()) {
-            serializer.writeNulTerminateString(AUTH_PLUGIN_NAME);
+            serializer.writeNulTerminateString(NATIVE_AUTH_PLUGIN_NAME);
         }
     }
 
     public boolean checkAuthPluginSameAsStarRocks(String pluginName) {
-        return AUTH_PLUGIN_NAME.equals(pluginName);
+        return supportedPlugins.containsKey(pluginName) && supportedPlugins.get(pluginName);
     }
 
     // If the auth default plugin in client is different from StarRocks
     // it will create a AuthSwitchRequest
     public void buildAuthSwitchRequest(MysqlSerializer serializer) {
         serializer.writeInt1((byte) 0xfe);
-        serializer.writeNulTerminateString(AUTH_PLUGIN_NAME);
+        serializer.writeNulTerminateString(NATIVE_AUTH_PLUGIN_NAME);
         serializer.writeBytes(authPluginData);
         serializer.writeInt1(0);
     }
