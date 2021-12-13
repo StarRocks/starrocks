@@ -150,9 +150,9 @@ private:
     std::unordered_set<int> _sender_eos_set;          // sender_id
     std::unordered_map<int, int64_t> _packet_seq_map; // be_number => packet_seq
 
-    // distribution of received seq numbers:
-    // part1: { seq | 1 <= seq <= _max_processed_sequence }
-    // part2: { seq | seq = _max_processed_sequence + i, i > 1 }
+    // distribution of received sequence numbers:
+    // part1: { sequence | 1 <= sequence <= _max_processed_sequence }
+    // part2: { sequence | seq = _max_processed_sequence + i, i > 1 }
     phmap::flat_hash_map<int, int64_t> _max_processed_sequences;
     // chunk request may be out-of-order, but we have to deal with it in order
     // key of first level is be_number
@@ -402,9 +402,11 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal_for_pipeline(const PTr
     const int32_t be_number = request.be_number();
     const int32_t sequence = request.sequence();
 
-    phmap::flat_hash_map<int64_t, ChunkQueue>* chunk_queues_ptr = nullptr;
     {
         std::unique_lock<std::mutex> l(_lock);
+        if (_is_cancelled) {
+            return Status::OK();
+        }
 
         if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
             _max_processed_sequences[be_number] = -1;
@@ -413,9 +415,7 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal_for_pipeline(const PTr
         if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
             _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkQueue>();
         }
-        chunk_queues_ptr = &_buffered_chunk_queues[be_number];
     }
-    auto& chunk_queues = *chunk_queues_ptr;
 
     ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
     {
@@ -463,17 +463,24 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal_for_pipeline(const PTr
         std::unique_lock<std::mutex> l(_lock);
         wait_timer.stop();
 
-        // The local_chunk_queue can only be assigned to the map
-        // after the construction is completed
-        // Otherwise, if other threads see this queue in advance,
-        // they will think that the queue has been constructed.
-        chunk_queues[sequence] = std::move(local_chunk_queue);
-
         // _is_cancelled may be modified after checking _is_cancelled above,
         // because lock is release temporarily when deserializing chunk.
         if (_is_cancelled) {
             return Status::OK();
         }
+
+        auto& chunk_queues = _buffered_chunk_queues[be_number];
+
+        if (!local_chunk_queue.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+            local_chunk_queue.back().closure = *done;
+            *done = nullptr;
+        }
+
+        // The queue in chunk_queues cannot be changed, so it must be
+        // assigned to chunk_queues after local_chunk_queue is initialized
+        // Otherwise, other threads may see the intermediate state because
+        // the initialization of local_chunk_queue is beyond mutex
+        chunk_queues[sequence] = std::move(local_chunk_queue);
 
         phmap::flat_hash_map<int64_t, ChunkQueue>::iterator it;
         int64_t& max_processed_sequence = _max_processed_sequences[be_number];
@@ -488,7 +495,7 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal_for_pipeline(const PTr
                 _chunk_queue.emplace_back(std::move(chunk));
             }
 
-            chunk_queues.erase(max_processed_sequence + 1);
+            chunk_queues.erase(it);
             ++max_processed_sequence;
         }
 
@@ -570,6 +577,16 @@ void DataStreamRecvr::SenderQueue::cancel() {
             }
         }
         _chunk_queue.clear();
+        for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
+            for (auto& [_, chunk_queue] : chunk_queues) {
+                for (auto& item : chunk_queue) {
+                    if (item.closure != nullptr) {
+                        item.closure->Run();
+                    }
+                }
+            }
+        }
+        _buffered_chunk_queues.clear();
     }
 }
 
@@ -587,6 +604,16 @@ void DataStreamRecvr::SenderQueue::close() {
             }
         }
         _chunk_queue.clear();
+        for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
+            for (auto& [_, chunk_queue] : chunk_queues) {
+                for (auto& item : chunk_queue) {
+                    if (item.closure != nullptr) {
+                        item.closure->Run();
+                    }
+                }
+            }
+        }
+        _buffered_chunk_queues.clear();
     }
 }
 
