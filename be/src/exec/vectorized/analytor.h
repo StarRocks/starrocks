@@ -147,7 +147,7 @@ private:
     RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _rows_returned_counter;
     // Time spent processing the child rows.
-    RuntimeProfile::Counter* _compute_timer;
+    RuntimeProfile::Counter* _compute_timer{};
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;
