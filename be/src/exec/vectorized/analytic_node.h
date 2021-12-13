@@ -30,7 +30,7 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
-    const TPlanNode& _tnode;
+    const TPlanNode _tnode;
     // Tuple descriptor for storing results of analytic fn evaluation.
     const TupleDescriptor* _result_tuple_desc;
     AnalytorPtr _analytor = nullptr;
