@@ -367,6 +367,7 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
         for (int i = 0; i < dict_sz; ++i) {
             const std::string& dict_key = global_dict.strings[i];
             auto* data = _instance_mem_pool->allocate(dict_key.size());
+            RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
             memcpy(data, dict_key.data(), dict_key.size());
             Slice slice(data, dict_key.size());
             dict_map.emplace(slice, global_dict.ids[i]);
