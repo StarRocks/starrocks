@@ -1089,6 +1089,10 @@ public class Coordinator {
             }
 
             int parallelExecInstanceNum = fragment.getParallelExecNum();
+            // The instance num for result sink fragment must be 1
+            if (fragment.getSink() instanceof ResultSink) {
+                parallelExecInstanceNum = 1;
+            }
             boolean hasColocate = (isColocateFragment(fragment.getPlanRoot()) &&
                     fragmentIdToSeqToAddressMap.containsKey(fragment.getFragmentId())
                     && fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()).size() > 0);
