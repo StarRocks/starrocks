@@ -28,7 +28,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/raw_value.h"
 #include "runtime/string_value.h"
-#include "runtime/tuple_row.h"
 #include "util/mem_util.hpp"
 
 namespace starrocks {
@@ -80,61 +79,6 @@ void Tuple::deep_copy(const TupleDescriptor& desc, char** data, int* offset, boo
     *data += desc.byte_size();
     *offset += desc.byte_size();
 }
-
-template <bool collect_string_vals>
-void Tuple::materialize_exprs(TupleRow* row, const TupleDescriptor& desc,
-                              const std::vector<ExprContext*>& materialize_expr_ctxs, MemPool* pool,
-                              std::vector<StringValue*>* non_null_var_len_values, int* total_var_len) {
-    if (collect_string_vals) {
-        non_null_var_len_values->clear();
-        *total_var_len = 0;
-    }
-    memset(this, 0, desc.num_null_bytes());
-    // Evaluate the output_slot_exprs and place the results in the tuples.
-    int mat_expr_index = 0;
-    for (auto slot_desc : desc.slots()) {
-        if (!slot_desc->is_materialized()) {
-            continue;
-        }
-        // The FE ensures we don't get any TYPE_NULL expressions by picking an arbitrary type
-        // when necessary, but does not do this for slot descs.
-        // TODO: revisit this logic in the FE
-        PrimitiveType slot_type = slot_desc->type().type;
-        PrimitiveType expr_type = materialize_expr_ctxs[mat_expr_index]->root()->type().type;
-        if ((slot_type == TYPE_CHAR) || (slot_type == TYPE_VARCHAR) || (slot_type == TYPE_HLL)) {
-            DCHECK((expr_type == TYPE_CHAR) || (expr_type == TYPE_VARCHAR) || (expr_type == TYPE_HLL));
-        } else if ((slot_type == TYPE_DATE) || (slot_type == TYPE_DATETIME)) {
-            DCHECK((expr_type == TYPE_DATE) || (expr_type == TYPE_DATETIME));
-        } else {
-            DCHECK(slot_type == TYPE_NULL || slot_type == expr_type);
-        }
-        void* src = materialize_expr_ctxs[mat_expr_index]->get_value(row);
-        if (src != nullptr) {
-            void* dst = get_slot(slot_desc->tuple_offset());
-            RawValue::write(src, dst, slot_desc->type(), pool);
-            if (collect_string_vals) {
-                if (slot_desc->type().is_string_type()) {
-                    StringValue* string_val = reinterpret_cast<StringValue*>(dst);
-                    non_null_var_len_values->push_back(string_val);
-                    *total_var_len += string_val->len;
-                }
-            }
-        } else {
-            set_null(slot_desc->null_indicator_offset());
-        }
-        ++mat_expr_index;
-    }
-
-    DCHECK_EQ(mat_expr_index, materialize_expr_ctxs.size());
-}
-
-template void Tuple::materialize_exprs<false>(TupleRow* row, const TupleDescriptor& desc,
-                                              const std::vector<ExprContext*>& materialize_expr_ctxs, MemPool* pool,
-                                              std::vector<StringValue*>* non_null_var_values, int* total_var_len);
-
-template void Tuple::materialize_exprs<true>(TupleRow* row, const TupleDescriptor& desc,
-                                             const std::vector<ExprContext*>& materialize_expr_ctxs, MemPool* pool,
-                                             std::vector<StringValue*>* non_null_var_values, int* total_var_len);
 
 std::string Tuple::to_string(const TupleDescriptor& d) const {
     std::stringstream out;

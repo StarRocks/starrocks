@@ -25,7 +25,6 @@
 #include <utility>
 
 #include "runtime/mem_pool.h"
-#include "runtime/tuple_row.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
