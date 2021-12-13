@@ -1,0 +1,76 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
+#pragma once
+
+#include <string>
+
+#include "column/binary_column.h"
+#include "column/column.h"
+#include "common/status.h"
+#include "numeric_column.h"
+#include "runtime/types.h"
+#include "simdjson.h"
+
+namespace starrocks::vectorized {
+
+// The value must be in type simdjson::ondemand::json_type::number;
+static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDescriptor& type_desc,
+                                            const std::string& name, simdjson::ondemand::value& value) {
+    std::string_view sv = value.raw_json_token();
+    column->append(Slice{sv.data(), sv.size()});
+    return Status::OK();
+}
+
+// The value must be in type simdjson::ondemand::json_type::string;
+static Status add_column_with_string_value(BinaryColumn* column, const TypeDescriptor& type_desc,
+                                           const std::string& name, simdjson::ondemand::value& value) {
+    // simdjson::value::get_string() returns string without quotes.
+    std::string_view sv = value.get_string();
+    column->append(Slice{sv.data(), sv.size()});
+    return Status::OK();
+}
+// The value must be in type simdjson::ondemand::json_type::string;
+static Status add_column_with_array_object_value(BinaryColumn* column, const TypeDescriptor& type_desc,
+                                           const std::string& name, simdjson::ondemand::value& value) {
+    std::string_view sv = simdjson::to_json_string(value);
+    column->append(Slice{sv.data(), sv.size()});
+    return Status::OK();
+}
+
+Status add_binary_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                         simdjson::ondemand::value& value) {
+    auto binary_column = down_cast<BinaryColumn*>(column);
+
+    try {
+        simdjson::ondemand::json_type tp = value.type();
+        switch (tp) {
+        case simdjson::ondemand::json_type::null: {
+            binary_column->append_nulls(1);
+            return Status::OK();
+        }
+
+        case simdjson::ondemand::json_type::number: {
+            return add_column_with_numeric_value(binary_column, type_desc, name, value);
+        }
+
+        case simdjson::ondemand::json_type::string: {
+            return add_column_with_string_value(binary_column, type_desc, name, value);
+        }
+
+        case simdjson::ondemand::json_type::array:
+        case simdjson::ondemand::json_type::object: {
+            return add_column_with_array_object_value(binary_column, type_desc, name, value);
+        }
+
+        default: {
+            auto err_msg = strings::Substitute("Unsupported value type. Binary type is required. column=$0", name);
+            return Status::DataQualityError(err_msg);
+        }
+        }
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("Failed to parse value as string, column=$0", name);
+        return Status::DataQualityError(err_msg);
+    }
+}
+
+} // namespace starrocks::vectorized
