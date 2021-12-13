@@ -203,6 +203,12 @@ OLAPStatus MemTable::flush() {
             RETURN_NOT_OK(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
         }
     }
+    if (_rowset_writer->num_segment() > config::tablet_max_versions) {
+        LOG(WARNING) << "Too many segment files in one load. tablet=" << _tablet_id
+                     << ", segment_count=" << _rowset_writer->num_segment()
+                     << ", limit=" << config::tablet_max_versions;
+        return OLAP_ERR_OTHER_ERROR;
+    }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
     StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
     VLOG(1) << "memtable flush: " << duration_ns / 1000 << "us";

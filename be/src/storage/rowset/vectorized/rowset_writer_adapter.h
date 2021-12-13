@@ -54,6 +54,8 @@ public:
 
     int64_t num_rows() override { return _writer->num_rows(); }
 
+    int num_segment() override { return _writer->num_segment(); }
+
     int64_t total_data_size() override { return _writer->total_data_size(); }
 
     RowsetId rowset_id() override { return _writer->rowset_id(); }
