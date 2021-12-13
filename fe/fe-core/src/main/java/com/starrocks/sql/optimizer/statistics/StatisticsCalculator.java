@@ -93,7 +93,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -169,14 +168,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             pruneBuilder.addColumnStatistics(statistics.getColumnStatistics());
             pruneBuilder.setOutputRowCount(statistics.getOutputRowCount());
 
+            Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                 // derive stats from child
                 // use clone here because it will be rewrite later
                 ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator).clone();
-
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(
-                        projection.getCommonSubOperatorMap(), true);
-                mapOperator = mapOperator.accept(rewriter, null);
                 pruneBuilder.addColumnStatistic(columnRefOperator,
                         ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
             }
@@ -541,16 +537,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalProject(LogicalProjectOperator node, ExpressionContext context) {
-        return computeProjectNode(context, node.getColumnRefMap(), node.getCommonSubOperatorMap());
+        return computeProjectNode(context, node.getColumnRefMap());
     }
 
     @Override
     public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
-        return computeProjectNode(context, node.getColumnRefMap(), node.getCommonSubOperatorMap());
+        Preconditions.checkState(node.getCommonSubOperatorMap().isEmpty());
+        return computeProjectNode(context, node.getColumnRefMap());
     }
 
-    private Void computeProjectNode(ExpressionContext context, Map<ColumnRefOperator, ScalarOperator> columnRefMap,
-                                    Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap) {
+    private Void computeProjectNode(ExpressionContext context, Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         Preconditions.checkState(context.arity() == 1);
 
         Statistics.Builder builder = Statistics.builder();
@@ -564,9 +560,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             // derive stats from child
             // use clone here because it will be rewrite later
             ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator).clone();
-
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(commonSubOperatorMap, true);
-            mapOperator = mapOperator.accept(rewriter, null);
             ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
             builder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
             allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
