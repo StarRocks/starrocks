@@ -54,6 +54,7 @@ public class ScalarRangePredicateExtractor {
 
         Set<ScalarOperator> result = Sets.newLinkedHashSet();
         hashMap.keySet().stream().filter(k -> !onlyExtractColumnRef || k.isColumnRef())
+                .filter(k -> !k.getType().isDecimalOfAnyVersion())
                 .map(hashMap::get)
                 .filter(d -> d.sourceCount > 1)
                 .map(ValueDescriptor::toScalarOperator).forEach(result::addAll);

@@ -68,6 +68,10 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
         ScalarOperator castChild = child1.getChild(0);
 
+        if (castChild.getType().isDecimalOfAnyVersion()) {
+            return operator;
+        }
+
         if (!(castChild.getType().isNumericType() && child2.getType().isNumericType())) {
             return operator;
         }
