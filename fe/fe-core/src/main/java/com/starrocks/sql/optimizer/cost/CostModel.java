@@ -35,6 +35,7 @@ import com.starrocks.statistic.Constants;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CostModel {
     public static double calculateCost(GroupExpression expression) {
@@ -181,6 +182,10 @@ public class CostModel {
         public CostEstimate computeAggFunExtraCost(PhysicalHashAggregateOperator node, Statistics statistics,
                                                    Statistics inputStatistics) {
             CostEstimate costEstimate = CostEstimate.zero();
+            int distinctCount =
+                    node.getAggregations().values().stream().filter(aggregation -> isDistinctAggFun(aggregation, node))
+                            .collect(Collectors.toList()).size();
+
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : node.getAggregations().entrySet()) {
                 CallOperator aggregation = entry.getValue();
                 if (isDistinctAggFun(aggregation, node)) {
@@ -200,8 +205,10 @@ public class CostModel {
                     if (distinctColumn.getType().isStringType() && !(node.getType().isGlobal() && node.isSplit())) {
                         rowSize = rowSize + 16;
                     }
-                    // To avoid OOM
-                    if (buckets >= 15000000 && rowSize >= 20) {
+
+                    // only when distinct count == 1, consider to avoid OOM
+                    // because of distinct count more than 1, we must use multi_distinct function
+                    if (distinctCount == 1 && (buckets >= 15000000 && rowSize >= 20)) {
                         return CostEstimate.infinite();
                     }
 
