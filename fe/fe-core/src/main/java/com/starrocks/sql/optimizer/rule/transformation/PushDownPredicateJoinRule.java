@@ -52,7 +52,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator e : Utils.extractConjuncts(predicate)) {
                 ColumnRefSet usedColumns = e.getUsedColumns();
-                if (leftColumns.contains(usedColumns)) {
+                if (leftColumns.containsAll(usedColumns)) {
                     leftPushDown.add(e);
                 } else {
                     remainingFilter.add(e);
@@ -61,7 +61,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         } else if (join.getJoinType().isRightOuterJoin()) {
             for (ScalarOperator e : Utils.extractConjuncts(predicate)) {
                 ColumnRefSet usedColumns = e.getUsedColumns();
-                if (rightColumns.contains(usedColumns)) {
+                if (rightColumns.containsAll(usedColumns)) {
                     rightPushDown.add(e);
                 } else {
                     remainingFilter.add(e);
@@ -80,7 +80,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         } else if (join.getJoinType().isLeftSemiAntiJoin()) {
             for (ScalarOperator e : Utils.extractConjuncts(predicate)) {
                 ColumnRefSet usedColumns = e.getUsedColumns();
-                if (leftColumns.contains(usedColumns)) {
+                if (leftColumns.containsAll(usedColumns)) {
                     leftPushDown.add(e);
                 } else {
                     remainingFilter.add(e);
@@ -89,7 +89,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         } else if (join.getJoinType().isRightSemiAntiJoin()) {
             for (ScalarOperator e : Utils.extractConjuncts(predicate)) {
                 ColumnRefSet usedColumns = e.getUsedColumns();
-                if (rightColumns.contains(usedColumns)) {
+                if (rightColumns.containsAll(usedColumns)) {
                     rightPushDown.add(e);
                 } else {
                     remainingFilter.add(e);
@@ -242,13 +242,13 @@ public class PushDownPredicateJoinRule extends TransformationRule {
 
         if (join.getJoinType().isLeftOuterJoin() || join.getJoinType().isLeftSemiJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (rightOutputColumns.contains(p.getUsedColumns())) {
+                if (rightOutputColumns.containsAll(p.getUsedColumns())) {
                     rightPushDown.add(p);
                 }
             }
         } else if (join.getJoinType().isRightOuterJoin() || join.getJoinType().isRightSemiJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (leftOutputColumns.contains(p.getUsedColumns())) {
+                if (leftOutputColumns.containsAll(p.getUsedColumns())) {
                     leftPushDown.add(p);
                 }
             }
