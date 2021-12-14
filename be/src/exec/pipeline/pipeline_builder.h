@@ -21,6 +21,8 @@ public:
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipe_id(), operators));
     }
 
+    OpFactories maybe_interpolate_local_broadcast_exchange(OpFactories& pred_operators, int num_receivers);
+
     // Input the output chunks from the drivers of pred operators into ONE driver of the post operators.
     OpFactories maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators);
 
