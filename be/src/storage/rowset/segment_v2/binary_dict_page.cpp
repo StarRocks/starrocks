@@ -29,9 +29,9 @@
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/rowset/segment_v2/bitshuffle_page.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/range.h"
 #include "util/slice.h" // for Slice
 #include "util/unaligned_access.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks::segment_v2 {
 
@@ -289,7 +289,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(vectorized::SparseRange& range, v
             slices.emplace_back(_dict_decoder->string_at_index(codewords[i]));
         }
     }
-        
+
     CHECK(dst->append_strings_overflow(slices, _max_value_legth));
     return Status::OK();
 }

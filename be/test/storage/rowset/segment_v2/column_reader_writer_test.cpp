@@ -218,14 +218,15 @@ protected:
                     size_t offset = 0;
                     vectorized::SparseRangeIterator read_iter = read_range.new_iterator();
                     while (read_iter.has_more()) {
-                        vectorized::Range r = read_iter.next(read_num); 
+                        vectorized::Range r = read_iter.next(read_num);
                         for (int i = 0; i < r.span_size(); ++i) {
                             ASSERT_EQ(0, type_info->cmp(src.get(r.begin() + i), dst->get(i + offset)))
-                                    << " row " << r.begin() + i << ": " << datum_to_string(type_info.get(), src.get(r.begin() + i))
-                                    << " vs " << datum_to_string(type_info.get(), dst->get(i + offset));
+                                    << " row " << r.begin() + i << ": "
+                                    << datum_to_string(type_info.get(), src.get(r.begin() + i)) << " vs "
+                                    << datum_to_string(type_info.get(), dst->get(i + offset));
                         }
                         offset += r.span_size();
-                    }    
+                    }
                 }
             }
         }

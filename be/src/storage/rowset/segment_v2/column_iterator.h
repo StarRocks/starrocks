@@ -136,7 +136,9 @@ public:
     // type of |dst| must be `FixedLengthColumn<int32_t>` or `NullableColumn(FixedLengthColumn<int32_t>)`.
     virtual Status next_dict_codes(size_t* n, vectorized::Column* dst) { return Status::NotSupported(""); }
 
-    virtual Status next_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst) { return Status::NotSupported(""); }
+    virtual Status next_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst) {
+        return Status::NotSupported("");
+    }
 
     // given a list of dictionary codes, fill |dst| column with the decoded values.
     // |codes| pointer to the array of dictionary codes.

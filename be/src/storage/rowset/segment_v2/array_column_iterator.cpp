@@ -139,7 +139,7 @@ Status ArrayColumnIterator::next_batch(vectorized::SparseRange& range, vectorize
         RETURN_IF_ERROR(_null_iterator->next_batch(range, null_column));
         down_cast<vectorized::NullableColumn*>(dst)->update_has_null();
     }
-    
+
     vectorized::SparseRangeIterator iter = range.new_iterator();
     size_t nread = range.span_size();
 
@@ -176,7 +176,7 @@ Status ArrayColumnIterator::next_batch(vectorized::SparseRange& range, vectorize
 
     DCHECK_EQ(element_read_range.begin(), _element_iterator->get_current_ordinal());
     RETURN_IF_ERROR(_element_iterator->next_batch(element_read_range, array_column->elements_column().get()));
-    
+
     return Status::OK();
 }
 

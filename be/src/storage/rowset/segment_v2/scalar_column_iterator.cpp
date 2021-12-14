@@ -231,7 +231,7 @@ Status ScalarColumnIterator::next_batch(vectorized::SparseRange& range, vectoriz
     }
     dst->set_delete_state(contain_deleted_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     _opts.stats->bytes_read += (dst->byte_size() - prev_bytes);
-    
+
     return Status::OK();
 }
 
@@ -432,7 +432,7 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(vectorized::SparseRange& 
         if (iter.begin() >= end_ord) {
             RETURN_IF_ERROR(_page->read_dict_codes(dst, read_range));
             read_range.clear();
-        }        
+        }
     }
 
     if (!read_range.empty()) {

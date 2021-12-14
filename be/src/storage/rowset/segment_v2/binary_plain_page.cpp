@@ -4,7 +4,6 @@
 
 namespace starrocks::segment_v2 {
 
-
 template <FieldType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch(size_t* count, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
@@ -27,7 +26,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(vectorized::SparseRange& range, 
     strs.reserve(nread);
     vectorized::SparseRangeIterator iter = range.new_iterator();
     if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
-        while(iter.has_more() && nread > 0) {
+        while (iter.has_more() && nread > 0) {
             _cur_idx = iter.begin();
             vectorized::Range r = iter.next(nread);
             size_t end = _cur_idx + r.span_size();
@@ -42,7 +41,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(vectorized::SparseRange& range, 
             return Status::OK();
         }
     } else {
-        while(iter.has_more() && nread > 0) {
+        while (iter.has_more() && nread > 0) {
             _cur_idx = iter.begin();
             vectorized::Range r = iter.next(nread);
             size_t end = _cur_idx + r.span_size();

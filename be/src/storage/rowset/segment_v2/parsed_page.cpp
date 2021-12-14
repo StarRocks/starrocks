@@ -221,7 +221,6 @@ public:
         return Status::OK();
     }
 
-
 private:
     friend Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
@@ -277,7 +276,6 @@ public:
         }
         return Status::OK();
     }
-
 
     Status read(ColumnBlockView* block, size_t* count) override {
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());

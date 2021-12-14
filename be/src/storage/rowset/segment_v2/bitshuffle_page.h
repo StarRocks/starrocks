@@ -387,7 +387,6 @@ private:
     bool _parsed;
 };
 
-
 template <FieldType Type>
 inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized::Column* dst) {
     vectorized::SparseRange read_range;

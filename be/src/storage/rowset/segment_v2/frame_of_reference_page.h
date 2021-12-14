@@ -195,7 +195,8 @@ public:
                       Type == OLAP_FIELD_TYPE_DECIMAL128,
                       "unexpected field type");
         // clang-format on
-        size_t nread = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
+        size_t nread =
+                std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
         vectorized::SparseRangeIterator iter = range.new_iterator();
         while (iter.has_more() && _cur_index < _num_elements) {
             seek_to_position_in_page(iter.begin());

@@ -41,9 +41,9 @@
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
 #include "storage/types.h"
+#include "storage/vectorized/range.h"
 #include "util/coding.h"
 #include "util/faststring.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks::vectorized {
 class Column;

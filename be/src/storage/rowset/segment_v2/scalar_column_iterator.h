@@ -142,7 +142,8 @@ private:
 
     int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
     Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, vectorized::Column* dst) = nullptr;
-    Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(vectorized::SparseRange& range, vectorized::Column* dst) = nullptr;
+    Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(vectorized::SparseRange& range,
+                                                                vectorized::Column* dst) = nullptr;
     Status (ScalarColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size,
                                                             vectorized::Column* words) = nullptr;
     Status (ScalarColumnIterator::*_init_dict_decoder_func)() = nullptr;

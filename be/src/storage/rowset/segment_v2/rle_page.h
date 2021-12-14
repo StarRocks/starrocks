@@ -25,10 +25,10 @@
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
+#include "storage/vectorized/range.h"
 #include "util/coding.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks {
 namespace segment_v2 {
@@ -229,7 +229,8 @@ public:
         }
         CppType value{};
 
-        size_t nread = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
+        size_t nread =
+                std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
         vectorized::SparseRangeIterator iter = range.new_iterator();
         while (iter.has_more()) {
             seek_to_position_in_page(iter.begin());
@@ -245,7 +246,6 @@ public:
         }
         return Status::OK();
     }
-
 
     size_t count() const override { return _num_elements; }
 

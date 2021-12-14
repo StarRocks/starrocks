@@ -54,7 +54,7 @@ public:
     Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override {
         vectorized::SparseRangeIterator iter = range.new_iterator();
         size_t nread = range.span_size();
-        while(iter.has_more()) {
+        while (iter.has_more()) {
             _current_rowid = iter.begin();
             vectorized::Range r = iter.next(nread);
             Buffer<rowid_t>& v = down_cast<FixedLengthColumn<rowid_t>*>(dst)->get_data();
