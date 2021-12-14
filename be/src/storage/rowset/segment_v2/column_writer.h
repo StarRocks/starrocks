@@ -127,6 +127,8 @@ public:
 
     Field* get_field() const { return _field.get(); }
 
+    virtual uint64_t total_raw_size() const = 0;
+
 private:
     std::unique_ptr<Field> _field;
     bool _is_nullable;
@@ -172,6 +174,8 @@ public:
     ordinal_t get_next_rowid() const override { return _next_rowid; }
 
     bool is_global_dict_valid() override { return _is_global_dict_valid; }
+
+    uint64_t total_raw_size() const override { return _total_raw_size; }
 
 private:
     // All Pages will be organized into a linked list
@@ -242,6 +246,8 @@ private:
     int64_t _previous_ordinal = 0;
 
     bool _is_global_dict_valid = true;
+
+    uint64_t _total_raw_size = 0;
 };
 
 class ArrayColumnWriter final : public ColumnWriter {
@@ -274,8 +280,12 @@ public:
 
     ordinal_t get_next_rowid() const override { return _array_size_writer->get_next_rowid(); }
 
+    uint64_t total_raw_size() const override;
+
 private:
     Status _append(const vectorized::Column& column);
+
+    ColumnWriterOptions _opts;
 
     std::unique_ptr<ScalarColumnWriter> _null_writer;
     std::unique_ptr<ScalarColumnWriter> _array_size_writer;

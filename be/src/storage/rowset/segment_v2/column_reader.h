@@ -137,6 +137,7 @@ public:
     bool all_dict_encoded() const { return _flags[kAllDictEncodedPos]; }
 
     size_t num_rows() const { return _num_rows; }
+    uint64_t total_raw_size() const { return _total_raw_size; }
 
     int32_t num_data_pages() { return _ordinal_index.reader ? _ordinal_index.reader->num_data_pages() : 0; }
 
@@ -225,6 +226,7 @@ private:
     PagePointer _dict_page_pointer;
     ColumnReaderOptions _opts;
     uint64_t _num_rows = 0;
+    uint64_t _total_raw_size = 0;
     const std::string& _file_name;
 
     // initialized in init(), used for create PageDecoder

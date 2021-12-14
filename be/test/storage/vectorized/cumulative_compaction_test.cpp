@@ -251,4 +251,25 @@ TEST_F(CumulativeCompactionTest, test_vertical_compact_succeed) {
     do_compaction();
 }
 
+TEST_F(CumulativeCompactionTest, test_read_chunk_size) {
+    // total row size is 0 in old segment
+    int64_t mem_limit = 2147483648;
+    int32_t config_chunk_size = 4096;
+    int64_t total_num_rows = 10000;
+    int64_t total_row_size = 0;
+    size_t source_num = 10;
+    ASSERT_EQ(config_chunk_size, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+                                                                 total_row_size, source_num));
+
+    // normal total row size
+    total_row_size = 1073741824;
+    ASSERT_EQ(2001, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+                                                    total_row_size, source_num));
+
+    // mem limit is 0
+    mem_limit = 0;
+    ASSERT_EQ(config_chunk_size, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+                                                                 total_row_size, source_num));
+}
+
 } // namespace starrocks::vectorized

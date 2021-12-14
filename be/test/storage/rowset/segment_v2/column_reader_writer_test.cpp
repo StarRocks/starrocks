@@ -379,6 +379,10 @@ protected:
                 ASSERT_EQ("[1, 2, 3]", dst_column->debug_item(0));
                 ASSERT_EQ("[4, 5, 6]", dst_column->debug_item(1));
             }
+
+            // check num
+            ASSERT_EQ(2, reader->num_rows());
+            ASSERT_EQ(36, reader->total_raw_size());
         }
     }
 
@@ -606,6 +610,75 @@ TEST_F(ColumnReaderWriterTest, test_default_value) {
 TEST_F(ColumnReaderWriterTest, test_array_int) {
     test_int_array<2>();
     test_int_array<2>("1");
+}
+
+TEST_F(ColumnReaderWriterTest, test_scalar_column_total_raw_size) {
+    auto col = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, true);
+    size_t count = 1024;
+    col->reserve(count);
+    for (int32_t i = 0; i < count; ++i) {
+        (void)col->append_numbers(&i, sizeof(int32_t));
+    }
+    for (size_t i = 0; i < count; i += 2) {
+        ((int32_t*)col->raw_data())[i] = 0;
+        (void)col->set_null(i);
+    }
+
+    ColumnMetaPB meta;
+    auto env = std::make_unique<EnvMemory>();
+    auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
+    ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
+    const std::string fname = strings::Substitute("$0/test_scalar_column_total_raw_size.data", TEST_DIR);
+
+    // write data
+    {
+        std::unique_ptr<fs::WritableBlock> wblock;
+        fs::CreateBlockOptions opts({fname});
+        Status st = block_mgr->create_block(opts, &wblock);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        ColumnWriterOptions writer_opts;
+        writer_opts.page_format = 2;
+        writer_opts.meta = &meta;
+        writer_opts.meta->set_column_id(0);
+        writer_opts.meta->set_unique_id(0);
+        writer_opts.meta->set_type(OLAP_FIELD_TYPE_INT);
+        writer_opts.adaptive_page_format = true;
+        writer_opts.meta->set_length(0);
+        writer_opts.meta->set_encoding(BIT_SHUFFLE);
+        writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
+        writer_opts.meta->set_is_nullable(true);
+        writer_opts.need_zone_map = true;
+
+        TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, OLAP_FIELD_TYPE_INT);
+        std::unique_ptr<ColumnWriter> writer;
+        ColumnWriter::create(writer_opts, &column, wblock.get(), &writer);
+        st = writer->init();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        ASSERT_TRUE(writer->append(*col).ok());
+
+        ASSERT_TRUE(writer->finish().ok());
+        ASSERT_TRUE(writer->write_data().ok());
+        ASSERT_TRUE(writer->write_ordinal_index().ok());
+        ASSERT_TRUE(writer->write_zone_map().ok());
+
+        // close the file
+        ASSERT_TRUE(wblock->close().ok());
+    }
+
+    // read and check
+    {
+        // read and check
+        ColumnReaderOptions reader_opts;
+        reader_opts.storage_format_version = 2;
+        reader_opts.block_mgr = block_mgr.get();
+        auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), reader_opts, &meta, fname);
+        ASSERT_TRUE(res.ok());
+        auto reader = std::move(res).value();
+        ASSERT_EQ(1024, reader->num_rows());
+        ASSERT_EQ(1024 * 4 + 1024, reader->total_raw_size());
+    }
 }
 
 } // namespace starrocks::segment_v2
