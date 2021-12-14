@@ -92,8 +92,8 @@ public class JoinPredicateUtils {
                 return false;
             }
 
-            return leftColumns.contains(leftUsedColumns) && rightColumns.contains(rightUsedColumns) ||
-                    leftColumns.contains(rightUsedColumns) && rightColumns.contains(leftUsedColumns);
+            return leftColumns.containsAll(leftUsedColumns) && rightColumns.containsAll(rightUsedColumns) ||
+                    leftColumns.containsAll(rightUsedColumns) && rightColumns.containsAll(leftUsedColumns);
         }
         return false;
     }
@@ -118,30 +118,30 @@ public class JoinPredicateUtils {
                 if (usedColumns.isEmpty()) {
                     leftPushDown.add(predicate);
                     rightPushDown.add(predicate);
-                } else if (leftColumns.contains(usedColumns)) {
+                } else if (leftColumns.containsAll(usedColumns)) {
                     leftPushDown.add(predicate);
-                } else if (rightColumns.contains(usedColumns)) {
+                } else if (rightColumns.containsAll(usedColumns)) {
                     rightPushDown.add(predicate);
                 }
             }
         } else if (join.getJoinType().isOuterJoin()) {
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
-                if (leftColumns.contains(usedColumns) && join.getJoinType().isRightOuterJoin()) {
+                if (leftColumns.containsAll(usedColumns) && join.getJoinType().isRightOuterJoin()) {
                     leftPushDown.add(predicate);
-                } else if (rightColumns.contains(usedColumns) && join.getJoinType().isLeftOuterJoin()) {
+                } else if (rightColumns.containsAll(usedColumns) && join.getJoinType().isLeftOuterJoin()) {
                     rightPushDown.add(predicate);
                 }
             }
         } else if (join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
-                if (leftColumns.contains(usedColumns)) {
+                if (leftColumns.containsAll(usedColumns)) {
                     if (join.getJoinType().isLeftAntiJoin()) {
                         continue;
                     }
                     leftPushDown.add(predicate);
-                } else if (rightColumns.contains(usedColumns)) {
+                } else if (rightColumns.containsAll(usedColumns)) {
                     if (join.getJoinType().isRightAntiJoin()) {
                         continue;
                     }
@@ -247,10 +247,10 @@ public class JoinPredicateUtils {
                         "we do not support equal on predicate have multi columns in left or right",
                         ErrorType.UNSUPPORTED);
             }
-            if (leftChildColumns.contains(leftUsedColumns) && rightChildColumns.contains(rightUsedColumns)) {
+            if (leftChildColumns.containsAll(leftUsedColumns) && rightChildColumns.containsAll(rightUsedColumns)) {
                 leftOnPredicateColumns.add(leftUsedColumns.getColumnIds()[0]);
                 rightOnPredicateColumns.add(rightUsedColumns.getColumnIds()[0]);
-            } else if (leftChildColumns.contains(rightUsedColumns) && rightChildColumns.contains(leftUsedColumns)) {
+            } else if (leftChildColumns.containsAll(rightUsedColumns) && rightChildColumns.containsAll(leftUsedColumns)) {
                 leftOnPredicateColumns.add(rightUsedColumns.getColumnIds()[0]);
                 rightOnPredicateColumns.add(leftUsedColumns.getColumnIds()[0]);
             } else {
