@@ -573,8 +573,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
 
-        boolean requiredLocalColumnsFromLeft = leftChildColumns.contains(requiredLocalColumns);
-        boolean requiredLocalColumnsFromRight = rightChildColumns.contains(requiredLocalColumns);
+        boolean requiredLocalColumnsFromLeft = leftChildColumns.containsAll(requiredLocalColumns);
+        boolean requiredLocalColumnsFromRight = rightChildColumns.containsAll(requiredLocalColumns);
         boolean isLeftOrFullJoin = node.getJoinType().isLeftOuterJoin() || node.getJoinType().isFullOuterJoin();
         boolean isRightOrFullJoin = node.getJoinType().isRightOuterJoin() || node.getJoinType().isFullOuterJoin();
 

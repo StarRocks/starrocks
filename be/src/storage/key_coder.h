@@ -335,11 +335,9 @@ public:
             return Status::InvalidArgument(
                     Substitute("Key too short, need=$0 vs real=$1", index_size, encoded_key->size));
         }
-        Slice* slice = (Slice*)cell_ptr;
+        auto* slice = (Slice*)cell_ptr;
         slice->data = (char*)pool->allocate(index_size);
-        if (UNLIKELY(slice->data == nullptr)) {
-            return Status::InternalError("Mem usage has exceed the limit of BE");
-        }
+        RETURN_IF_UNLIKELY_NULL(slice->data, Status::MemoryAllocFailed("alloc mem for key decoder failed"));
         slice->size = index_size;
         memcpy(slice->data, encoded_key->data, index_size);
         encoded_key->remove_prefix(index_size);
@@ -378,11 +376,9 @@ public:
                 << "encoded_key size is larger than index_size, key_size=" << encoded_key->size
                 << ", index_size=" << index_size;
         auto copy_size = encoded_key->size;
-        Slice* slice = (Slice*)cell_ptr;
+        auto* slice = (Slice*)cell_ptr;
         slice->data = (char*)pool->allocate(copy_size);
-        if (UNLIKELY(slice->data == nullptr)) {
-            return Status::InternalError("Mem usage has exceed the limit of BE");
-        }
+        RETURN_IF_UNLIKELY_NULL(slice->data, Status::MemoryAllocFailed("alloc mem for key decoder failed"));
         slice->size = copy_size;
         memcpy(slice->data, encoded_key->data, copy_size);
         encoded_key->remove_prefix(copy_size);

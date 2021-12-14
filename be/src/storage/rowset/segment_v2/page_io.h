@@ -58,6 +58,8 @@ struct PageReadOptions {
     // if true, use DURABLE CachePriority in page cache
     // currently used for in memory olap table
     bool kept_in_memory = false;
+    // page encoding type
+    EncodingTypePB encoding_type = UNKNOWN_ENCODING;
 
     void sanity_check() const {
         CHECK_NOTNULL(rblock);

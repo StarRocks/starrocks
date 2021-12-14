@@ -49,7 +49,7 @@ public class SemiReorderRule extends TransformationRule {
         usedInRewriteSemiJoin.union(input.inputAt(0).inputAt(0).getOutputColumns());
         usedInRewriteSemiJoin.union(input.inputAt(1).getOutputColumns());
 
-        if (!usedInRewriteSemiJoin.contains(topJoin.getOnPredicate().getUsedColumns())) {
+        if (!usedInRewriteSemiJoin.containsAll(topJoin.getOnPredicate().getUsedColumns())) {
             return false;
         }
 

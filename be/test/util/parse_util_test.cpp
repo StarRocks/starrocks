@@ -24,17 +24,12 @@
 #include <gtest/gtest.h>
 
 #include <string>
-#include <vector>
-
-#include "util/mem_info.h"
 
 namespace starrocks {
 
 static void test_parse_mem_spec(const std::string& mem_spec_str, int64_t result) {
-    bool is_percent = true;
-    int64_t bytes = ParseUtil::parse_mem_spec(mem_spec_str, &is_percent);
+    int64_t bytes = ParseUtil::parse_mem_spec(mem_spec_str);
     ASSERT_EQ(result, bytes);
-    ASSERT_FALSE(is_percent);
 }
 
 TEST(TestParseMemSpec, Normal) {
@@ -55,10 +50,8 @@ TEST(TestParseMemSpec, Normal) {
     test_parse_mem_spec("8t", 8L * 1024 * 1024 * 1024 * 1024L);
     test_parse_mem_spec("128T", 128L * 1024 * 1024 * 1024 * 1024L);
 
-    bool is_percent = false;
-    int64_t bytes = ParseUtil::parse_mem_spec("20%", &is_percent);
+    int64_t bytes = ParseUtil::parse_mem_spec("20%");
     ASSERT_GT(bytes, 0);
-    ASSERT_TRUE(is_percent);
 }
 
 TEST(TestParseMemSpec, Bad) {
@@ -77,8 +70,7 @@ TEST(TestParseMemSpec, Bad) {
     bad_values.push_back("1eb");
     bad_values.push_back("%");
     for (const auto& value : bad_values) {
-        bool is_percent = false;
-        int64_t bytes = ParseUtil::parse_mem_spec(value, &is_percent);
+        int64_t bytes = ParseUtil::parse_mem_spec(value);
         ASSERT_EQ(-1, bytes);
     }
 }

@@ -333,8 +333,8 @@ public class PreAggregateTurnOnRule {
                 }
             });
             context.aggregations.forEach(a -> aggregationColumns.union(a.getUsedColumns()));
-            boolean checkLeft = leftOutputColumns.contains(aggregationColumns);
-            boolean checkRight = rightOutputColumns.contains(aggregationColumns);
+            boolean checkLeft = leftOutputColumns.containsAll(aggregationColumns);
+            boolean checkRight = rightOutputColumns.containsAll(aggregationColumns);
             // Add join on predicate and predicate to context
             if (hashJoinOperator.getJoinPredicate() != null) {
                 context.joinPredicates.add(hashJoinOperator.getJoinPredicate().clone());
