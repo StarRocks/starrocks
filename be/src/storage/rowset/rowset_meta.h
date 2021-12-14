@@ -235,17 +235,20 @@ public:
     }
 
     // get the compaction score of this rowset.
+    // valid only after make rowset visible
+    inline uint32_t get_compaction_score() const { return _compaction_score; }
+
     // if segments are overlapping, the score equals to the number of segments,
     // otherwise, score is 1.
-    uint32_t get_compaction_score() const {
-        uint32_t score = 0;
-        if (!is_segments_overlapping()) {
-            score = 1;
-        } else {
-            score = num_segments();
-            CHECK(score > 0);
+    void update_compaction_score() {
+        if (rowset_state() != VISIBLE) {
+            return;
         }
-        return score;
+        if (!is_segments_overlapping()) {
+            _compaction_score = 1;
+        } else {
+            _compaction_score = num_segments();
+        }
     }
 
     int64_t mem_usage() const { return sizeof(RowsetMeta) + _rowset_meta_pb.SpaceUsedLong() - sizeof(_rowset_meta_pb); }
@@ -278,6 +281,7 @@ private:
         } else {
             _rowset_id.init(_rowset_meta_pb.rowset_id_v2());
         }
+        update_compaction_score();
     }
 
     friend bool operator==(const RowsetMeta& a, const RowsetMeta& b) {
@@ -290,6 +294,7 @@ private:
 
     RowsetMetaPB _rowset_meta_pb;
     RowsetId _rowset_id;
+    uint32_t _compaction_score = 0;
     bool _is_removed_from_rowset_meta = false;
 };
 

@@ -60,6 +60,7 @@ Status Rowset::load() {
 void Rowset::make_visible(Version version) {
     _rowset_meta->set_version(version);
     _rowset_meta->set_rowset_state(VISIBLE);
+    _rowset_meta->update_compaction_score();
     // update create time to the visible time,
     // it's used to skip recently published version during compaction
     _rowset_meta->set_creation_time(UnixSeconds());
