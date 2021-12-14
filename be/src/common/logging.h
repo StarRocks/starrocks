@@ -79,7 +79,7 @@ class TUniqueId;
 }
 
 // Print log with query id.
-#define QUERY_LOG(level) LOG(level) << "[" << CurrentThread::query_id_string() << "] "
-#define QUERY_LOG_IF(level, cond) LOG_IF(level, cond) << "[" << tls_thread_status.query_id_string() << "] "
+#define QUERY_LOG(level) LOG(level) << "[" << tls_thread_status.query_id() << "] "
+#define QUERY_LOG_IF(level, cond) LOG_IF(level, cond) << "[" << tls_thread_status.query_id() << "] "
 
 #endif

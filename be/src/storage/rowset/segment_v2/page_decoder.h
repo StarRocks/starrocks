@@ -25,6 +25,8 @@
 #include "gen_cpp/segment_v2.pb.h"
 #include "runtime/timestamp_value.h"
 #include "storage/column_block.h" // for ColumnBlockView
+#include "storage/fs/block_manager.h"
+#include "storage/rowset/segment_v2/page_pointer.h"
 
 namespace starrocks::vectorized {
 class Column;

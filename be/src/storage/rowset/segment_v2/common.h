@@ -26,6 +26,8 @@
 
 #include "util/alignment.h"
 
+enum { BINARY_DICT_PAGE_HEADER_SIZE = 4 };
+enum { BITSHUFFLE_PAGE_HEADER_SIZE = 16 };
 namespace starrocks {
 namespace segment_v2 {
 

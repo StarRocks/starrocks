@@ -127,9 +127,6 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    // Parallelism must be 1
-    size_t degree_of_parallelism = 1;
-    operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
@@ -137,12 +134,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // shared by sink operator and source operator
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
-    auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(context->next_operator_id(),
-                                                                                        id(), aggregator_factory);
+    auto partition_expr_ctxs = std::move(_group_by_expr_ctxs);
+    auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
+            context->next_operator_id(), id(), aggregator_factory, partition_expr_ctxs);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
-    operators_with_sink.push_back(std::move(sink_operator));
-    context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
     auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(context->next_operator_id(),
@@ -150,8 +146,12 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
+    operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, partition_expr_ctxs);
+    operators_with_sink.push_back(std::move(sink_operator));
+    context->add_pipeline(operators_with_sink);
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
+    auto degree_of_parallelism = ((SourceOperatorFactory*)(operators_with_sink[0].get()))->degree_of_parallelism();
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;

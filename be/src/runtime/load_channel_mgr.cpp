@@ -278,36 +278,28 @@ Status LoadChannelMgr::_start_bg_worker() {
 }
 
 Status LoadChannelMgr::_start_load_channels_clean() {
-    std::vector<std::shared_ptr<LoadChannel>> need_delete_channels;
-    LOG(INFO) << "Cleaning timed out load channels";
+    std::vector<std::shared_ptr<LoadChannel>> timeout_channels;
     time_t now = time(nullptr);
     {
-        std::vector<UniqueId> need_delete_channel_ids;
         std::lock_guard<std::mutex> l(_lock);
         VLOG(1) << "there are " << _load_channels.size() << " running load channels";
-        int i = 0;
-        for (auto& kv : _load_channels) {
-            VLOG(1) << "load channel[" << i++ << "]: " << *(kv.second);
-            time_t last_updated_time = kv.second->last_updated_time();
-            if (difftime(now, last_updated_time) >= kv.second->timeout()) {
-                need_delete_channel_ids.emplace_back(kv.first);
-                need_delete_channels.emplace_back(kv.second);
+        for (auto it = _load_channels.begin(); it != _load_channels.end(); /**/) {
+            time_t last_updated_time = it->second->last_updated_time();
+            if (difftime(now, last_updated_time) >= it->second->timeout()) {
+                timeout_channels.emplace_back(std::move(it->second));
+                it = _load_channels.erase(it);
+            } else {
+                ++it;
             }
-        }
-
-        for (auto& key : need_delete_channel_ids) {
-            _load_channels.erase(key);
-            LOG(INFO) << "Erased timeout load channel=" << key;
         }
     }
 
     // we must cancel these load channels before destroying them.
     // otherwise some object may be invalid before trying to visit it.
     // eg: MemTracker in load channel
-    for (auto& channel : need_delete_channels) {
+    for (auto& channel : timeout_channels) {
         channel->cancel();
-        LOG(INFO) << "Deleted canceled channel load id=" << channel->load_id() << " timeout=" << channel->timeout()
-                  << "s";
+        LOG(INFO) << "Deleted timedout channel. load id=" << channel->load_id() << " timeout=" << channel->timeout();
     }
 
     // this log print every 1 min, so that we could observe the mem consumption of load process

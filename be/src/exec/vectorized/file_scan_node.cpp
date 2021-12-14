@@ -7,11 +7,8 @@
 
 #include "column/chunk.h"
 #include "common/object_pool.h"
-#include "env/compressed_file.h"
 #include "env/env.h"
 #include "env/env_broker.h"
-#include "env/env_stream_pipe.h"
-#include "env/env_util.h"
 #include "exec/vectorized/csv_scanner.h"
 #include "exec/vectorized/json_scanner.h"
 #include "exec/vectorized/orc_scanner.h"

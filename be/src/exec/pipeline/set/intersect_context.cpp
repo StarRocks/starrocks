@@ -5,6 +5,7 @@
 namespace starrocks::pipeline {
 
 Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
+    RETURN_IF_ERROR(_hash_set->init());
     _build_pool = std::make_unique<MemPool>();
 
     _dst_tuple_desc = state->desc_tbl().get_tuple_descriptor(_dst_tuple_id);

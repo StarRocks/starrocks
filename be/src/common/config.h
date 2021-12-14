@@ -201,6 +201,8 @@ CONF_mInt32(doris_scan_range_row_count, "524288");
 CONF_mInt32(doris_scanner_queue_size, "1024");
 // single read execute fragment row size
 CONF_mInt32(doris_scanner_row_num, "16384");
+// number of max hdfs scanners
+CONF_Int32(max_hdfs_scanner_num, "50");
 // number of max scan keys
 CONF_mInt32(doris_max_scan_key_num, "1024");
 // the max number of push down values of a single column.
@@ -462,6 +464,8 @@ CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
+CONF_String(consistency_max_memory_limit, "10G");
+CONF_Int32(consistency_max_memory_limit_percent, "20");
 
 // update interval of tablet stat cache
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
