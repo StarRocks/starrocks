@@ -217,7 +217,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     }
 }
 
-void PipelineDriver::maybe_short_circuit() {
+void PipelineDriver::check_short_circuit() {
     size_t new_first_unfinished = _first_unfinished;
     for (int i = _first_unfinished; i < _operators.size() - 1; i++) {
         if (_operators[i]->is_finished()) {
