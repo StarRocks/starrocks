@@ -25,6 +25,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include <map>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -40,6 +41,7 @@
 #include "util/defer_op.h"
 #include "util/faststring.h"
 #include "util/logging.h"
+#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 using std::list;
@@ -117,9 +119,10 @@ private:
 
     Status _do_get_chunk(vectorized::Chunk** chunk);
 
-    // _add_chunks_internal is called by add_chunks and add_chunks_for_pipeline
     Status _add_chunks_internal(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
                                 const std::function<void()>& cb);
+
+    Status _add_chunks_internal_for_pipeline(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, faststring* uncompressed_buffer);
@@ -146,6 +149,15 @@ private:
 
     std::unordered_set<int> _sender_eos_set;          // sender_id
     std::unordered_map<int, int64_t> _packet_seq_map; // be_number => packet_seq
+
+    // distribution of received sequence numbers:
+    // part1: { sequence | 1 <= sequence <= _max_processed_sequence }
+    // part2: { sequence | seq = _max_processed_sequence + i, i > 1 }
+    phmap::flat_hash_map<int, int64_t> _max_processed_sequences;
+    // chunk request may be out-of-order, but we have to deal with it in order
+    // key of first level is be_number
+    // key of second level is request sequence
+    phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkQueue>> _buffered_chunk_queues;
 };
 
 DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int num_senders)
@@ -383,6 +395,115 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
     return Status::OK();
 }
 
+Status DataStreamRecvr::SenderQueue::_add_chunks_internal_for_pipeline(const PTransmitChunkParams& request,
+                                                                       ::google::protobuf::Closure** done) {
+    DCHECK(request.chunks_size() > 0);
+
+    const int32_t be_number = request.be_number();
+    const int32_t sequence = request.sequence();
+
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        if (_is_cancelled) {
+            return Status::OK();
+        }
+
+        if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
+            _max_processed_sequences[be_number] = -1;
+        }
+
+        if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
+            _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkQueue>();
+        }
+    }
+
+    ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        wait_timer.stop();
+        if (_is_cancelled) {
+            return Status::OK();
+        }
+
+        // Following situation will match the following condition.
+        // Sender send a packet failed, then close the channel.
+        // but closed packet reach first, then the failed packet.
+        // Then meet the assert
+        // we remove the assert
+        if (_num_remaining_senders <= 0) {
+            DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
+            return Status::OK();
+        }
+        if (_chunk_meta.types.empty()) {
+            SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
+            auto& pchunk = request.chunks(0);
+            RETURN_IF_ERROR(_build_chunk_meta(pchunk));
+        }
+    }
+
+    size_t total_chunk_bytes = 0;
+    faststring uncompressed_buffer;
+    ChunkQueue local_chunk_queue;
+    for (auto& pchunk : request.chunks()) {
+        int64_t chunk_bytes = pchunk.data().size();
+        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
+
+        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+
+        // TODO(zc): review this chunk_bytes
+        local_chunk_queue.emplace_back(std::move(item));
+
+        total_chunk_bytes += chunk_bytes;
+    }
+    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
+
+    wait_timer.start();
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        wait_timer.stop();
+
+        // _is_cancelled may be modified after checking _is_cancelled above,
+        // because lock is release temporarily when deserializing chunk.
+        if (_is_cancelled) {
+            return Status::OK();
+        }
+
+        auto& chunk_queues = _buffered_chunk_queues[be_number];
+
+        if (!local_chunk_queue.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+            local_chunk_queue.back().closure = *done;
+            *done = nullptr;
+        }
+
+        // The queue in chunk_queues cannot be changed, so it must be
+        // assigned to chunk_queues after local_chunk_queue is initialized
+        // Otherwise, other threads may see the intermediate state because
+        // the initialization of local_chunk_queue is beyond mutex
+        chunk_queues[sequence] = std::move(local_chunk_queue);
+
+        phmap::flat_hash_map<int64_t, ChunkQueue>::iterator it;
+        int64_t& max_processed_sequence = _max_processed_sequences[be_number];
+
+        // max_processed_sequence + 1 means the first unprocessed sequence
+        while ((it = chunk_queues.find(max_processed_sequence + 1)) != chunk_queues.end()) {
+            ChunkQueue& unprocessed_chunk_queue = (*it).second;
+
+            // Now, all the packets with sequance <= unprocessed_sequence have been received
+            // so chunks of unprocessed_sequence can be flushed to ready queue
+            for (auto& chunk : unprocessed_chunk_queue) {
+                _chunk_queue.emplace_back(std::move(chunk));
+            }
+
+            chunk_queues.erase(it);
+            ++max_processed_sequence;
+        }
+
+        _recvr->_num_buffered_bytes += total_chunk_bytes;
+    }
+    return Status::OK();
+}
+
 Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request,
                                                 ::google::protobuf::Closure** done) {
     auto& condition = _data_arrival_cv;
@@ -391,7 +512,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
 
 Status DataStreamRecvr::SenderQueue::add_chunks_for_pipeline(const PTransmitChunkParams& request,
                                                              ::google::protobuf::Closure** done) {
-    return _add_chunks_internal(request, done, []() -> void {});
+    return _add_chunks_internal_for_pipeline(request, done);
 }
 
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
@@ -456,6 +577,16 @@ void DataStreamRecvr::SenderQueue::cancel() {
             }
         }
         _chunk_queue.clear();
+        for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
+            for (auto& [_, chunk_queue] : chunk_queues) {
+                for (auto& item : chunk_queue) {
+                    if (item.closure != nullptr) {
+                        item.closure->Run();
+                    }
+                }
+            }
+        }
+        _buffered_chunk_queues.clear();
     }
 }
 
@@ -473,6 +604,16 @@ void DataStreamRecvr::SenderQueue::close() {
             }
         }
         _chunk_queue.clear();
+        for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
+            for (auto& [_, chunk_queue] : chunk_queues) {
+                for (auto& item : chunk_queue) {
+                    if (item.closure != nullptr) {
+                        item.closure->Run();
+                    }
+                }
+            }
+        }
+        _buffered_chunk_queues.clear();
     }
 }
 

@@ -74,6 +74,11 @@ public:
         }
         Status* old_status = nullptr;
         if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
+            if (_final_status.load()->is_cancelled()) {
+                LOG(WARNING) << "[Driver] Canceled, query_id=" << print_id(_query_id)
+                             << ", instance_id=" << print_id(_fragment_instance_id)
+                             << ", reason=" << final_status().to_string();
+            }
             _s_status = status;
         }
     }
