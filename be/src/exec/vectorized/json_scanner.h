@@ -81,11 +81,11 @@ private:
     Status _next_row();
 
     // get_row returns row pointed by iterator.
-    Status _get_row(simdjson::ondemand::object* row, bool *empty);
+    Status _get_row(simdjson::ondemand::object* row, bool* empty);
 
     Status _get_row_from_array(simdjson::ondemand::object* row);
 
-    Status _get_row_from_document_stream(simdjson::ondemand::object* row, bool *empty);
+    Status _get_row_from_document_stream(simdjson::ondemand::object* row, bool* empty);
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                           const std::vector<SlotDescriptor*>& slot_descs);

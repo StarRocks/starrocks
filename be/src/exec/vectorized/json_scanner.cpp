@@ -113,7 +113,7 @@ Status JsonScanner::_construct_json_types() {
                 child_type->children.emplace_back(TYPE_ARRAY);
                 child_type = &(child_type->children[0]);
             }
-            if(slot_type->type == TYPE_VARCHAR)  {
+            if (slot_type->type == TYPE_VARCHAR) {
                 auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
                 child_type->children.emplace_back(varchar_type);
             } else {
@@ -435,7 +435,7 @@ Status JsonReader::_get_row_from_array(simdjson::ondemand::object* row) {
     return Status::OK();
 }
 
-Status JsonReader::_get_row_from_document_stream(simdjson::ondemand::object* row, bool *empty) {
+Status JsonReader::_get_row_from_document_stream(simdjson::ondemand::object* row, bool* empty) {
     simdjson::ondemand::document_reference doc;
     auto err = (*_doc_stream_itr).get(doc);
     if (err) {
@@ -694,51 +694,51 @@ Status JsonReader::_read_and_parse_json() {
 Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                                      const std::string& col_name) {
     switch (type_desc.type) {
-        case TYPE_BIGINT:
-            return add_nullable_numeric_column<int64_t>(column, type_desc, col_name, value, !_strict_mode);
-        case TYPE_INT:
-            return add_nullable_numeric_column<int32_t>(column, type_desc, col_name, value, !_strict_mode);
-        case TYPE_SMALLINT:
-           return add_nullable_numeric_column<int16_t>(column, type_desc, col_name, value, !_strict_mode);
-        case TYPE_TINYINT:
-            return add_nullable_numeric_column<int8_t>(column, type_desc, col_name, value, !_strict_mode);
-        case TYPE_DOUBLE:
-            return add_nullable_numeric_column<double>(column, type_desc, col_name, value, !_strict_mode);
-        case TYPE_FLOAT:
-            return add_nullable_numeric_column<float>(column, type_desc, col_name, value, !_strict_mode);
-        case TYPE_BOOLEAN:
-            return add_nullable_boolean_column(column, type_desc, col_name, value, !_strict_mode);
-        case TYPE_ARRAY: {
-            if (value.type() == simdjson::ondemand::json_type::array) {
-                auto nullable_column = down_cast<NullableColumn*>(column);
+    case TYPE_BIGINT:
+        return add_nullable_numeric_column<int64_t>(column, type_desc, col_name, value, !_strict_mode);
+    case TYPE_INT:
+        return add_nullable_numeric_column<int32_t>(column, type_desc, col_name, value, !_strict_mode);
+    case TYPE_SMALLINT:
+        return add_nullable_numeric_column<int16_t>(column, type_desc, col_name, value, !_strict_mode);
+    case TYPE_TINYINT:
+        return add_nullable_numeric_column<int8_t>(column, type_desc, col_name, value, !_strict_mode);
+    case TYPE_DOUBLE:
+        return add_nullable_numeric_column<double>(column, type_desc, col_name, value, !_strict_mode);
+    case TYPE_FLOAT:
+        return add_nullable_numeric_column<float>(column, type_desc, col_name, value, !_strict_mode);
+    case TYPE_BOOLEAN:
+        return add_nullable_boolean_column(column, type_desc, col_name, value, !_strict_mode);
+    case TYPE_ARRAY: {
+        if (value.type() == simdjson::ondemand::json_type::array) {
+            auto nullable_column = down_cast<NullableColumn*>(column);
 
-                auto array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
-                auto null_column = nullable_column->null_column();
+            auto array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
+            auto null_column = nullable_column->null_column();
 
-                auto& elems_column = array_column->elements_column();
+            auto& elems_column = array_column->elements_column();
 
-                simdjson::ondemand::array arr = value.get_array();
+            simdjson::ondemand::array arr = value.get_array();
 
-                size_t n = 0;
-                for (auto a : arr) {
-                    RETURN_IF_ERROR(_construct_column(a.value(), elems_column.get(), type_desc.children[0], col_name));
-                    n++;
-                }
-
-                auto offsets = array_column->offsets_column();
-                uint32_t sz = offsets->get_data().back() + n;
-                offsets->append_numbers(&sz, sizeof(sz));
-                null_column->append(0);
-
-                return Status::OK();
-            } else {
-                std::string_view sv = value.raw_json_token();
-                column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
-                return Status::OK();
+            size_t n = 0;
+            for (auto a : arr) {
+                RETURN_IF_ERROR(_construct_column(a.value(), elems_column.get(), type_desc.children[0], col_name));
+                n++;
             }
+
+            auto offsets = array_column->offsets_column();
+            uint32_t sz = offsets->get_data().back() + n;
+            offsets->append_numbers(&sz, sizeof(sz));
+            null_column->append(0);
+
+            return Status::OK();
+        } else {
+            std::string_view sv = value.raw_json_token();
+            column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
+            return Status::OK();
         }
-        default:
-            return add_nullable_binary_column(column, type_desc, col_name, value, !_strict_mode);
+    }
+    default:
+        return add_nullable_binary_column(column, type_desc, col_name, value, !_strict_mode);
     }
 }
 

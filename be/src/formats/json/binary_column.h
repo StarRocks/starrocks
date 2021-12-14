@@ -44,7 +44,7 @@ static Status add_column_with_boolean_value(BinaryColumn* column, const TypeDesc
 
 // The value must be in type simdjson::ondemand::json_type::string;
 static Status add_column_with_array_object_value(BinaryColumn* column, const TypeDescriptor& type_desc,
-                                           const std::string& name, simdjson::ondemand::value& value) {
+                                                 const std::string& name, simdjson::ondemand::value& value) {
     std::string_view sv = simdjson::to_json_string(value);
     std::unique_ptr<char[]> buf{new char[sv.size()]};
     size_t new_length{};

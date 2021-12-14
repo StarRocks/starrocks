@@ -4,11 +4,11 @@
 
 #include <string>
 
+#include "binary_column.h"
+#include "boolean_column.h"
 #include "column/column.h"
 #include "common/status.h"
 #include "numeric_column.h"
-#include "binary_column.h"
-#include "boolean_column.h"
 #include "runtime/types.h"
 #include "simdjson.h"
 
@@ -17,7 +17,6 @@ namespace starrocks::vectorized {
 template <typename T>
 Status add_nullable_numeric_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                    simdjson::ondemand::value& value, bool invalid_as_null) {
-
     auto nullable_column = down_cast<NullableColumn*>(column);
 
     auto& null_column = nullable_column->null_column();
@@ -42,7 +41,7 @@ Status add_nullable_numeric_column(Column* column, const TypeDescriptor& type_de
 }
 
 Status add_nullable_binary_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                   simdjson::ondemand::value& value, bool invalid_as_null) {
+                                  simdjson::ondemand::value& value, bool invalid_as_null) {
     auto nullable_column = down_cast<NullableColumn*>(column);
 
     auto& null_column = nullable_column->null_column();
@@ -92,7 +91,7 @@ Status add_nullable_boolean_column(Column* column, const TypeDescriptor& type_de
 }
 
 Status add_nullable_array_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                   simdjson::ondemand::value& value, bool invalid_as_null) {
+                                 simdjson::ondemand::value& value, bool invalid_as_null) {
     try {
         if (value.type() == simdjson::ondemand::json_type::array) {
             auto nullable_column = down_cast<NullableColumn*>(column);
@@ -107,7 +106,7 @@ Status add_nullable_array_column(Column* column, const TypeDescriptor& type_desc
                 add_nullable_array_column(elems_column.get(), type_desc.children[0], name, elem.value(),
                                           invalid_as_null);
             }
-            auto &offsets = array_column->offsets_column();
+            auto& offsets = array_column->offsets_column();
             auto sz = offsets->get_data().back() + value.count_elements();
             offsets->append_numbers(&sz, sizeof(sz));
             return Status::OK();
