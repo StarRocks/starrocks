@@ -212,6 +212,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private boolean srcPathResourceHold = false;
     private boolean destPathResourceHold = false;
 
+    private Replica decommissionedReplica;
+    private ReplicaState decommissionedReplicaPreviousState;
+
     public TabletSchedCtx(Type type, String cluster, long dbId, long tblId, long partId,
                           long idxId, long tabletId, long createTime) {
         this.type = type;
@@ -711,6 +714,19 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             this.destPathHash = -1;
             this.cloneTask = null;
         }
+    }
+
+    public void resetDecommissionedReplicaState() {
+        if (decommissionedReplica != null
+                && decommissionedReplica.getState() == ReplicaState.DECOMMISSION
+                && decommissionedReplicaPreviousState != null) {
+            decommissionedReplica.setState(decommissionedReplicaPreviousState);
+        }
+    }
+
+    public void setDecommissionedReplica(Replica replica) {
+        this.decommissionedReplica = replica;
+        this.decommissionedReplicaPreviousState = replica.getState();
     }
 
     public void deleteReplica(Replica replica) {
