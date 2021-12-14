@@ -37,6 +37,7 @@
 #include "exec/scan_node.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/stl_util.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
@@ -127,6 +128,10 @@ inline void increase(vectorized::TimestampValue& value) {
 
 } // namespace helper
 
+// There are two types of value range: Fixed Value Range and Range Value Range
+// I know "Range Value Range" sounds bad, but it's hard to turn over the de facto.
+// Fixed Value Range means discrete values in the set, like "IN (1,2,3)"
+// Range Value Range means range values like ">= 10 && <= 20"
 /**
  * @brief Column's value range
  **/
@@ -167,13 +172,6 @@ public:
 
     void convert_to_range_value();
 
-    void set_empty_value_range() {
-        _fixed_values.clear();
-        _low_value = _type_max;
-        _high_value = _type_min;
-        _fixed_op = FILTER_IN;
-    }
-
     const std::set<T>& get_fixed_value_set() const { return _fixed_values; }
 
     T get_range_max_value() const { return _high_value; }
@@ -194,37 +192,38 @@ public:
 
     void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
 
-    bool empty_range() { return _empty_range; }
-
     void to_olap_filter(std::vector<TCondition>& filters) {
-        if (is_fixed_value_range() && _fixed_op != FILTER_NOT_IN) {
+        // If we have fixed range value, we generate in/not-in predicates.
+        if (is_fixed_value_range()) {
+            DCHECK(_fixed_op == FILTER_IN || _fixed_op == FILTER_NOT_IN);
+            bool filter_in = (_fixed_op == FILTER_IN) ? true : false;
+            const std::string op = (filter_in) ? "*=" : "!=";
+
             TCondition condition;
             condition.__set_is_index_filter_only(_is_index_filter_only);
             condition.__set_column_name(_column_name);
-            condition.__set_condition_op("*=");
-
+            condition.__set_condition_op(op);
             for (auto value : _fixed_values) {
                 condition.condition_values.push_back(cast_to_string(value, type(), precision(), scale()));
             }
 
-            if (!condition.condition_values.empty()) {
-                filters.push_back(condition);
-            }
-        } else if (is_fixed_value_range()) {
-            TCondition condition;
-            condition.__set_is_index_filter_only(_is_index_filter_only);
-            condition.__set_column_name(_column_name);
-            condition.__set_condition_op("!=");
-
-            for (auto value : _fixed_values) {
-                condition.condition_values.push_back(cast_to_string(value, type(), precision(), scale()));
+            bool can_push = true;
+            if (condition.condition_values.empty()) {
+                // If we use IN clause, we wish to include empty set.
+                if (filter_in && _empty_range) {
+                    can_push = true;
+                } else {
+                    can_push = false;
+                }
             }
 
-            if (!condition.condition_values.empty()) {
+            if (can_push) {
                 filters.push_back(condition);
             }
-        } else {
-            DCHECK(!is_fixed_value_range());
+        }
+
+        // To generate binary predicates.
+        {
             TCondition low;
             low.__set_is_index_filter_only(_is_index_filter_only);
             if (_type_min != _low_value || FILTER_LARGER_OR_EQUAL != _low_op) {
@@ -470,9 +469,12 @@ template <class T>
 inline bool ColumnValueRange<T>::is_empty_value_range() const {
     if (INVALID_TYPE == _column_type) {
         return true;
-    } else {
-        return _fixed_values.empty() && _high_value <= _low_value;
     }
+    // TODO(yan): sometimes we don't have Fixed Value Range, but have
+    // following value range like > 10 && < 5, which is also empty value range.
+    // Maybe we can add that check later. Without that check, there is no correctness problem
+    // but only performance performance.
+    return _fixed_values.empty() && _empty_range;
 }
 
 template <class T>
@@ -578,10 +580,8 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
         return Status::InternalError("AddRange failed, Invalid type");
     }
 
-    if (is_fixed_value_range()) {
-        if (_fixed_op != FILTER_IN) {
-            return Status::InternalError("operator is not FILTER_IN");
-        }
+    // If we already have IN value range, we can put `value` into it.
+    if (is_fixed_value_range() && _fixed_op == FILTER_IN) {
         std::pair<iterator_type, iterator_type> bound_pair = _fixed_values.equal_range(value);
 
         switch (op) {
@@ -606,13 +606,12 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
             break;
         }
         default: {
-            return Status::InternalError("AddRangefail! Unsupport SQLFilterOp.");
+            return Status::InternalError(strings::Substitute("Add Range Fail! Unsupport SQLFilterOp $0", op));
         }
         }
 
-        _high_value = _type_min;
-        _low_value = _type_max;
     } else {
+        // Otherwise we can put `value` into normal value range.
         if (_high_value > _low_value) {
             switch (op) {
             case FILTER_LARGER: {
@@ -660,7 +659,7 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
                 break;
             }
             default: {
-                return Status::InternalError("AddRangefail! Unsupport SQLFilterOp.");
+                return Status::InternalError(strings::Substitute("Add Range Fail! Unsupport SQLFilterOp $0", op));
             }
             }
         }
@@ -668,8 +667,6 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
         if (FILTER_LARGER_OR_EQUAL == _low_op && FILTER_LESS_OR_EQUAL == _high_op && _high_value == _low_value) {
             _fixed_values.insert(_high_value);
             _fixed_op = FILTER_IN;
-            _high_value = _type_min;
-            _low_value = _type_max;
         }
     }
     _is_init_state = false;
