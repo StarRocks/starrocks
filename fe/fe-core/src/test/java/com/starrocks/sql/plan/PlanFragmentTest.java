@@ -5026,4 +5026,43 @@ public class PlanFragmentTest extends PlanTestBase {
         // check no exception
         Assert.assertTrue(plan.contains(" 3:CROSS JOIN"));
     }
+
+    @Test
+    public void testDecimalCast() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "select * from baseall where cast(k5 as decimal32(4,3)) = 1.234";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: CAST(5: k5 AS DECIMAL32(4,3)) = 1.234"));
+
+        sql = "SELECT k5 FROM baseall WHERE (CAST(k5 AS DECIMAL32 ) ) IN (0.006) " +
+                "GROUP BY k5 HAVING (k5) IN (0.005, 0.006)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: 5: k5 IN (0.005, 0.006), CAST(5: k5 AS DECIMAL32(9,9)) = 0.006"));
+        Config.enable_decimal_v3 = false;
+    }
+
+    @Test
+    public void testFullOuterJoinOutputRowCount() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "SELECT\n" +
+                "    (NOT(FALSE))\n" +
+                "FROM (\n" +
+                "    SELECT t0.v1,t0.v2,t0.v3 \n" +
+                "    FROM t0\n" +
+                "    WHERE (t0.v1) BETWEEN(CAST(t0.v2 AS DECIMAL64)) AND(t0.v1)) subt0\n" +
+                "    FULL OUTER JOIN (\n" +
+                "    SELECT t1.v4, t1.v5, t1.v6\n" +
+                "    FROM t1\n" +
+                "    WHERE TRUE) subt1 ON subt0.v3 = subt1.v6\n" +
+                "    AND subt0.v1 > ((1808124905) % (1336789350))\n" +
+                "WHERE\n" +
+                "    BITMAP_CONTAINS (bitmap_hash (\"dWyMZ\"), ((- 817000778) - (- 809159836)))\n" +
+                "GROUP BY\n" +
+                "    1.38432132E8, \"1969-12-20 10:26:22\"\n" +
+                "HAVING (COUNT(NULL))\n" +
+                "IN(- 1210205071)\n";
+        String plan = getFragmentPlan(sql);
+        // Just make sure we can get the final plan, and not crashed because of stats calculator error.
+        System.out.println(sql);
+    }
 }

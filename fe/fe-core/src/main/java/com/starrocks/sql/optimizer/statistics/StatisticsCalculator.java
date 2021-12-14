@@ -730,7 +730,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 builder.setOutputRowCount(max(0, rightRowCount - innerRowCount));
                 break;
             case FULL_OUTER_JOIN:
-                builder.setOutputRowCount(leftRowCount + rightRowCount - innerRowCount);
+                builder.setOutputRowCount(max(1, leftRowCount + rightRowCount - innerRowCount));
                 computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics, builder);
                 computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics, builder);
                 break;
