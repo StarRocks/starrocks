@@ -102,8 +102,6 @@ public:
     // `has_more` must be checked before calling this method.
     Range next(size_t size);
 
-    void next_range(size_t last_rowid, size_t size, SparseRange* srange);
-
     size_t covered_ranges(size_t size) const;
 
     size_t convert_to_bitmap(uint8_t* bitmap, size_t max_size) const;
@@ -307,33 +305,6 @@ inline Range SparseRangeIterator::next(size_t size) {
         }
     }
     return ret;
-}
-
-inline void SparseRangeIterator::next_range(size_t last_rowid, size_t size, SparseRange* srange) {
-    const std::vector<Range>& ranges = _range->_ranges;
-    while (size > 0 && _index < ranges.size()) {
-        if (_next_rowid >= last_rowid) {
-            LOG(INFO) << "get next range of cur page finish";
-            return;
-        }
-        Range r = ranges[_index];
-        size_t nread = std::min<size_t>(last_rowid - _next_rowid, std::min<size_t>(size, r.end() - _next_rowid));
-        //size_t nread = std::min<size_t>(size, r.end() - _next_rowid);
-        srange->add(Range(_next_rowid, _next_rowid + nread));
-        _next_rowid += nread;
-        if (_next_rowid == r.end()) {
-            ++_index;
-            if (_index < ranges.size()) {
-                _next_rowid = ranges[_index].begin();
-            }
-        }
-        size -= nread;
-        // all data of current page has been read, need to seek page to ensure next page
-        if (r.end() >= last_rowid || _next_rowid >= last_rowid) {
-            break;
-        }
-    }
-    return;
 }
 
 inline size_t SparseRangeIterator::covered_ranges(size_t size) const {
