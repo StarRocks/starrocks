@@ -411,6 +411,9 @@ public class ScalarOperatorFunctions {
         Preconditions.checkArgument(values.length > 0);
         final StringBuilder resultBuilder = new StringBuilder();
         for (int i = 0; i < values.length - 1; i++) {
+            if (values[i].isNull()) {
+                continue;
+            }
             resultBuilder.append(values[i].getVarchar()).append(split.getVarchar());
         }
         resultBuilder.append(values[values.length - 1].getVarchar());
