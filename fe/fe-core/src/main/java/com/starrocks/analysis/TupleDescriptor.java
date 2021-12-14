@@ -34,9 +34,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
@@ -281,28 +278,6 @@ public class TupleDescriptor {
     public void materializeSlots() {
         for (SlotDescriptor slot : slots) {
             slot.setIsMaterialized(true);
-        }
-    }
-
-    public void getTableIdToColumnNames(Map<Long, Set<String>> tableIdToColumnNames) {
-        for (SlotDescriptor slotDescriptor : slots) {
-            if (!slotDescriptor.isMaterialized()) {
-                continue;
-            }
-            if (slotDescriptor.getColumn() != null) {
-                TupleDescriptor parent = slotDescriptor.getParent();
-                Preconditions.checkState(parent != null);
-                Table table = parent.getTable();
-                Preconditions.checkState(table != null);
-                Long tableId = table.getId();
-                Set<String> columnNames = tableIdToColumnNames
-                        .computeIfAbsent(tableId, k -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER));
-                columnNames.add(slotDescriptor.getColumn().getName());
-            } else {
-                for (Expr expr : slotDescriptor.getSourceExprs()) {
-                    expr.getTableIdToColumnNames(tableIdToColumnNames);
-                }
-            }
         }
     }
 

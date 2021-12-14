@@ -24,7 +24,6 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.AnalyzeStmt;
@@ -47,11 +46,9 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.StmtRewriter;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UnsupportedStmt;
 import com.starrocks.analysis.UseStmt;
-import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -59,8 +56,6 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -88,8 +83,6 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.planner.DataSink;
-import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.Planner;
@@ -97,8 +90,6 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
-import com.starrocks.rewrite.ExprRewriter;
-import com.starrocks.rewrite.mvrewrite.MVSelectFailedException;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.StatementPlanner;
@@ -380,13 +371,7 @@ public class StmtExecutor {
                                     execPlan.getDescTbl().toThrift(),
                                     execPlan.getColNames(), execPlan.getOutputExprs(), explainStringBuilder.toString());
                         } else {
-                            TExplainLevel level =
-                                    parsedStmt.getExplainLevel().equals(StatementBase.ExplainLevel.VERBOSE)
-                                            ? TExplainLevel.VERBOSE : TExplainLevel.NORMAL;
-                            String explainString = planner.getExplainString(planner.getFragments(), level);
-                            handleQueryStmt(planner.getFragments(), planner.getScanNodes(),
-                                    analyzer.getDescTbl().toThrift(),
-                                    parsedStmt.getColLabels(), parsedStmt.getResultExprs(), explainString);
+                            Preconditions.checkState(false, "shouldn't reach here");
                         }
 
                         if (context.getSessionVariable().isReportSucc()) {
@@ -413,14 +398,10 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof UseStmt) {
                 handleUseStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
-                handleInsertStmt(uuid);
+                // handleInsertStmt(uuid);
             } else if (parsedStmt instanceof InsertStmt) { // Must ahead of DdlStmt because InsertStmt is its subclass
                 try {
-                    if (execPlanBuildByNewPlanner) {
-                        handleInsertStmtWithNewPlanner(execPlan, (InsertStmt) parsedStmt);
-                    } else {
-                        handleInsertStmt(uuid);
-                    }
+                    handleInsertStmtWithNewPlanner(execPlan, (InsertStmt) parsedStmt);
                     if (context.getSessionVariable().isReportSucc()) {
                         writeProfile(beginTimeInNanoSecond);
                     }
@@ -554,26 +535,6 @@ public class StmtExecutor {
         }
     }
 
-    // Lock all database before analyze
-    private void lock(Map<String, Database> dbs) {
-        if (dbs == null) {
-            return;
-        }
-        for (Database db : dbs.values()) {
-            db.readLock();
-        }
-    }
-
-    // unLock all database after analyze
-    private void unLock(Map<String, Database> dbs) {
-        if (dbs == null) {
-            return;
-        }
-        for (Database db : dbs.values()) {
-            db.readUnlock();
-        }
-    }
-
     // Analyze one statement to structure in memory.
     public void analyze(TQueryOptions tQueryOptions) throws UserException {
         LOG.info("begin to analyze stmt: {}, forwarded stmt id: {}", context.getStmtId(), context.getForwardedStmtId());
@@ -600,40 +561,7 @@ public class StmtExecutor {
         if (parsedStmt instanceof QueryStmt
                 || parsedStmt instanceof InsertStmt
                 || parsedStmt instanceof CreateTableAsSelectStmt) {
-            Map<String, Database> dbs = Maps.newTreeMap();
-            QueryStmt queryStmt;
-            if (parsedStmt instanceof QueryStmt) {
-                queryStmt = (QueryStmt) parsedStmt;
-                queryStmt.getDbs(context, dbs);
-            } else {
-                InsertStmt insertStmt;
-                if (parsedStmt instanceof InsertStmt) {
-                    insertStmt = (InsertStmt) parsedStmt;
-                } else {
-                    insertStmt = ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt();
-                }
-                insertStmt.getDbs(context, dbs);
-            }
-
-            lock(dbs);
-            try {
-                analyzeAndGenerateQueryPlan(tQueryOptions);
-            } catch (MVSelectFailedException e) {
-                /*
-                 * If there is MVSelectFailedException after the first planner, there will be error mv rewritten in query.
-                 * So, the query should be reanalyzed without mv rewritten and planner again.
-                 * Attention: Only error rewritten tuple is forbidden to mv rewrite in the second time.
-                 */
-                resetAnalyzerAndStmt();
-                analyzeAndGenerateQueryPlan(tQueryOptions);
-            } catch (UserException e) {
-                throw e;
-            } catch (Exception e) {
-                LOG.warn("Analyze failed because ", e);
-                throw new AnalysisException("Unexpected exception: " + e.getMessage());
-            } finally {
-                unLock(dbs);
-            }
+            Preconditions.checkState(false, "Shouldn't reach here");
         } else {
             try {
                 parsedStmt.analyze(analyzer);
@@ -644,69 +572,6 @@ public class StmtExecutor {
                 throw new AnalysisException("Unexpected exception: " + e.getMessage());
             }
         }
-    }
-
-    private void analyzeAndGenerateQueryPlan(TQueryOptions tQueryOptions) throws UserException {
-        parsedStmt.analyze(analyzer);
-        if (parsedStmt instanceof QueryStmt || parsedStmt instanceof InsertStmt) {
-            boolean isExplain = parsedStmt.isExplain();
-            // Apply expr and subquery rewrites.
-            boolean reAnalyze = false;
-
-            ExprRewriter rewriter = analyzer.getExprRewriter();
-            rewriter.reset();
-            parsedStmt.rewriteExprs(rewriter);
-            reAnalyze = rewriter.changed();
-            if (analyzer.containSubquery()) {
-                parsedStmt = StmtRewriter.rewrite(analyzer, parsedStmt);
-                reAnalyze = true;
-            }
-            if (reAnalyze) {
-                // The rewrites should have no user-visible effect. Remember the original result
-                // types and column labels to restore them after the rewritten stmt has been
-                // reset() and re-analyzed.
-                List<Type> origResultTypes = Lists.newArrayList();
-                for (Expr e : parsedStmt.getResultExprs()) {
-                    origResultTypes.add(e.getType());
-                }
-                List<String> origColLabels =
-                        Lists.newArrayList(parsedStmt.getColLabels());
-
-                // Re-analyze the stmt with a new analyzer.
-                analyzer = new Analyzer(context.getCatalog(), context);
-
-                // query re-analyze
-                parsedStmt.reset();
-                parsedStmt.analyze(analyzer);
-
-                // Restore the original result types and column labels.
-                parsedStmt.castResultExprs(origResultTypes);
-                parsedStmt.setColLabels(origColLabels);
-                if (LOG.isTraceEnabled()) {
-                    LOG.trace("rewrittenStmt: " + parsedStmt.toSql());
-                }
-                if (isExplain) {
-                    parsedStmt.setIsExplain(isExplain, parsedStmt.getExplainLevel());
-                }
-            }
-        }
-
-        // create plan
-        planner = new Planner();
-        if (parsedStmt instanceof QueryStmt || parsedStmt instanceof InsertStmt) {
-            planner.plan(parsedStmt, analyzer, tQueryOptions);
-        } else {
-            planner.plan(((CreateTableAsSelectStmt) parsedStmt).getInsertStmt(),
-                    analyzer, new TQueryOptions());
-        }
-        // TODO(zc):
-        // Preconditions.checkState(!analyzer.hasUnassignedConjuncts());
-    }
-
-    private void resetAnalyzerAndStmt() {
-        analyzer = new Analyzer(context.getCatalog(), context);
-
-        parsedStmt.reset();
     }
 
     // Because this is called by other thread
@@ -835,220 +700,6 @@ public class StmtExecutor {
             TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
             entity.counterScanFinishedTotal.increase(1L);
         }
-    }
-
-    // Process a select statement.
-    private void handleInsertStmt(UUID queryId) throws Exception {
-        // Every time set no send flag and clean all data in buffer
-        context.getMysqlChannel().reset();
-        // create plan
-        InsertStmt insertStmt = null;
-        if (parsedStmt instanceof CreateTableAsSelectStmt) {
-            // Create table here
-            ((CreateTableAsSelectStmt) parsedStmt).createTable(analyzer);
-            insertStmt = ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt();
-        } else {
-            insertStmt = (InsertStmt) parsedStmt;
-        }
-
-        // set broker table file name prefix
-        if (insertStmt.getTargetTable() instanceof BrokerTable) {
-            DataSink dataSink = insertStmt.getDataSink();
-            Preconditions.checkArgument(dataSink instanceof ExportSink);
-            // File name: <table-name>_<query-id>_0_<instance-id>_<file-number>.csv.<timestamp>
-            ((ExportSink) dataSink)
-                    .setFileNamePrefix(insertStmt.getTargetTable().getName() + "_" + queryId.toString() + "_0_");
-        }
-
-        if (insertStmt.getQueryStmt().hasOutFileClause()) {
-            throw new DdlException("Not support OUTFILE clause in INSERT statement");
-        }
-
-        String explainString = planner.getExplainString(planner.getFragments(), TExplainLevel.NORMAL);
-        if (insertStmt.getQueryStmt().isExplain()) {
-            handleExplainStmt(explainString);
-            return;
-        }
-        if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(explainString);
-        }
-
-        long createTime = System.currentTimeMillis();
-        Throwable throwable = null;
-
-        String label = insertStmt.getLabel();
-
-        long loadedRows = 0;
-        int filteredRows = 0;
-        TransactionStatus txnStatus = TransactionStatus.ABORTED;
-        try {
-            coord = new Coordinator(context, analyzer, planner);
-            coord.setQueryType(TQueryType.LOAD);
-
-            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
-
-            coord.exec();
-
-            coord.join(context.getSessionVariable().getQueryTimeoutS());
-            if (!coord.isDone()) {
-                coord.cancel();
-                ErrorReport.reportDdlException(ErrorCode.ERR_EXECUTE_TIMEOUT);
-            }
-
-            if (!coord.getExecStatus().ok()) {
-                String errMsg = coord.getExecStatus().getErrorMsg();
-                LOG.warn("insert failed: {}", errMsg);
-                ErrorReport.reportDdlException(errMsg, ErrorCode.ERR_FAILED_WHEN_INSERT);
-            }
-
-            LOG.debug("delta files is {}", coord.getDeltaUrls());
-
-            if (coord.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL) != null) {
-                loadedRows = Long.parseLong(coord.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL));
-            }
-            if (coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL) != null) {
-                filteredRows = Integer.parseInt(coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL));
-            }
-
-            // if in strict mode, insert will fail if there are filtered rows
-            if (context.getSessionVariable().getEnableInsertStrict()) {
-                if (filteredRows > 0) {
-                    context.getState().setError("Insert has filtered data in strict mode, tracking_url="
-                            + coord.getTrackingUrl());
-                    return;
-                }
-            }
-
-            TableType tableType = insertStmt.getTargetTable().getType();
-            if ((tableType != TableType.OLAP) && (tableType != TableType.OLAP_EXTERNAL)) {
-                // no need to add load job.
-                // MySQL table is already being inserted.
-                context.getState().setOk(loadedRows, filteredRows, null);
-                return;
-            }
-
-            if (loadedRows == 0 && filteredRows == 0) {
-                // if no data, just abort txn and return ok
-                if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) (insertStmt.getTargetTable());
-                    Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getSourceTableDbId(), insertStmt.getTransactionId(),
-                            externalTable.getSourceTableHost(),
-                            externalTable.getSourceTablePort(),
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-                } else {
-                    Catalog.getCurrentGlobalTransactionMgr().abortTransaction(insertStmt.getDbObj().getId(),
-                            insertStmt.getTransactionId(), TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-                }
-                context.getState().setOk();
-                return;
-            }
-
-            if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
-                ExternalOlapTable externalTable = (ExternalOlapTable) (insertStmt.getTargetTable());
-                if (Catalog.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
-                        externalTable.getSourceTableDbId(), insertStmt.getTransactionId(),
-                        externalTable.getSourceTableHost(),
-                        externalTable.getSourceTablePort(),
-                        coord.getCommitInfos())) {
-                    txnStatus = TransactionStatus.VISIBLE;
-                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-                } else {
-                    txnStatus = TransactionStatus.COMMITTED;
-                }
-                // TODO: wait remote txn finished
-            } else {
-                if (Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
-                        insertStmt.getDbObj(), insertStmt.getTransactionId(),
-                        TabletCommitInfo.fromThrift(coord.getCommitInfos()),
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
-                    txnStatus = TransactionStatus.VISIBLE;
-                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-                    // collect table-level metrics
-                    if (null != insertStmt.getTargetTable()) {
-                        TableMetricsEntity entity =
-                                TableMetricsRegistry.getInstance()
-                                        .getMetricsEntity(insertStmt.getTargetTable().getId());
-                        entity.counterInsertLoadFinishedTotal.increase(1L);
-                        entity.counterInsertLoadRowsTotal.increase(loadedRows);
-                        entity.counterInsertLoadBytesTotal
-                                .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
-                    }
-                } else {
-                    txnStatus = TransactionStatus.COMMITTED;
-                }
-            }
-        } catch (Throwable t) {
-            // if any throwable being thrown during insert operation, first we should abort this txn
-            LOG.warn("handle insert stmt fail: {}", label, t);
-            try {
-                if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) (insertStmt.getTargetTable());
-                    Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getSourceTableDbId(), insertStmt.getTransactionId(),
-                            externalTable.getSourceTableHost(),
-                            externalTable.getSourceTablePort(),
-                            t.getMessage() == null ? "unknown reason" : t.getMessage());
-                } else {
-                    Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
-                            insertStmt.getDbObj().getId(), insertStmt.getTransactionId(),
-                            t.getMessage() == null ? "unknown reason" : t.getMessage());
-                }
-            } catch (Exception abortTxnException) {
-                // just print a log if abort txn failed. This failure do not need to pass to user.
-                // user only concern abort how txn failed.
-                LOG.warn("errors when abort txn", abortTxnException);
-            }
-
-            if (!Config.using_old_load_usage_pattern) {
-                // if not using old load usage pattern, error will be returned directly to user
-                StringBuilder sb = new StringBuilder(t.getMessage());
-                if (!Strings.isNullOrEmpty(coord.getTrackingUrl())) {
-                    sb.append(". url: ").append(coord.getTrackingUrl());
-                }
-                context.getState().setError(sb.toString());
-                return;
-            }
-
-            /*
-             * If config 'using_old_load_usage_pattern' is true.
-             * StarRocks will return a label to user, and user can use this label to check load job's status,
-             * which exactly like the old insert stmt usage pattern.
-             */
-            throwable = t;
-        }
-
-        // Go here, which means:
-        // 1. transaction is finished successfully (COMMITTED or VISIBLE), or
-        // 2. transaction failed but Config.using_old_load_usage_pattern is true.
-        // we will record the load job info for these 2 cases
-
-        String errMsg = "";
-        try {
-            context.getCatalog().getLoadManager().recordFinishedLoadJob(
-                    label,
-                    insertStmt.getDb(),
-                    insertStmt.getTargetTable().getId(),
-                    EtlJobType.INSERT,
-                    createTime,
-                    throwable == null ? "" : throwable.getMessage(),
-                    coord.getTrackingUrl());
-        } catch (MetaNotFoundException e) {
-            LOG.warn("Record info of insert load with error {}", e.getMessage(), e);
-            errMsg = "Record info of insert load with error " + e.getMessage();
-        }
-
-        // {'label':'my_label1', 'status':'visible', 'txnId':'123'}
-        // {'label':'my_label1', 'status':'visible', 'txnId':'123' 'err':'error messages'}
-        StringBuilder sb = new StringBuilder();
-        sb.append("{'label':'").append(label).append("', 'status':'").append(txnStatus.name());
-        sb.append("', 'txnId':'").append(insertStmt.getTransactionId()).append("'");
-        if (!Strings.isNullOrEmpty(errMsg)) {
-            sb.append(", 'err':'").append(errMsg).append("'");
-        }
-        sb.append("}");
-
-        context.getState().setOk(loadedRows, filteredRows, sb.toString());
     }
 
     private void handleAnalyzeStmt() throws Exception {

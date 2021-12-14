@@ -522,15 +522,6 @@ public class SelectStmt extends QueryStmt {
             sqlString_ = toSql();
         }
 
-        tryConvertOuterJoinToInnerJoin(analyzer);
-
-        // 1. If disable_join_reorder is set, disable join reorder
-        // 2. If we are analyzing with clause, disable join reorder, because which is unnecessary.
-        if (!analyzer.getContext().getSessionVariable().isDisableJoinReorder() &&
-                !analyzer.isParentHasWithClause()) {
-            reorderTable(analyzer);
-        }
-
         resolveInlineViewRefs(analyzer);
 
         if (analyzer.hasEmptySpjResultSet() && aggInfo == null) {
@@ -583,19 +574,6 @@ public class SelectStmt extends QueryStmt {
         List<TupleId> result = Lists.newArrayList();
 
         for (TableRef ref : fromClause_) {
-            result.add(ref.getId());
-        }
-
-        return result;
-    }
-
-    public List<TupleId> getTableRefIdsWithoutInlineView() {
-        List<TupleId> result = Lists.newArrayList();
-
-        for (TableRef ref : fromClause_) {
-            if (ref instanceof InlineViewRef) {
-                continue;
-            }
             result.add(ref.getId());
         }
 
@@ -2088,53 +2066,6 @@ public class SelectStmt extends QueryStmt {
             }
         }
         // @TODO: should check the parameter of grouping function isn't grouping set column
-    }
-
-    // Convert outer join to inner join if the where conjuncts is strict
-    private void tryConvertOuterJoinToInnerJoin(Analyzer analyzer) {
-        List<TableRef> tables = getTableRefs();
-        int tableSize = tables.size();
-        if (tableSize < 2) {
-            return;
-        }
-        for (int i = tableSize - 1; i > 0; i--) {
-            TableRef table = tables.get(i);
-            if (table.getJoinOp().isLeftOuterJoin()) {
-                List<Expr> whereConjuncts = analyzer.getWhereConjuncts(Lists.newArrayList(table.getDesc().getId()));
-                if (couldConvertOuterToInner(whereConjuncts)) {
-                    analyzer.migrateOuterJoinConjunctsToInner(table);
-                    table.setJoinOp(JoinOperator.INNER_JOIN);
-                }
-            } else if (table.getJoinOp().isRightOuterJoin()) {
-                List<Expr> whereConjuncts = analyzer.getWhereConjuncts(table.getLeftTblRef().getAllTupleIds());
-                if (couldConvertOuterToInner(whereConjuncts)) {
-                    analyzer.migrateOuterJoinConjunctsToInner(table);
-                    table.setJoinOp(JoinOperator.INNER_JOIN);
-                }
-            } else if (table.getJoinOp().isFullOuterJoin()) {
-                boolean couldConvertLeft = couldConvertOuterToInner(
-                        analyzer.getWhereConjuncts(table.getLeftTblRef().getAllTupleIds()));
-                boolean couldConvertRight = couldConvertOuterToInner(
-                        analyzer.getWhereConjuncts(Lists.newArrayList(table.getDesc().getId())));
-                if (couldConvertLeft && couldConvertRight) {
-                    analyzer.migrateOuterJoinConjunctsToInner(table);
-                    table.setJoinOp(JoinOperator.INNER_JOIN);
-                } else if (couldConvertLeft) {
-                    table.setJoinOp(JoinOperator.LEFT_OUTER_JOIN);
-                } else if (couldConvertRight) {
-                    table.setJoinOp(JoinOperator.RIGHT_OUTER_JOIN);
-                }
-            }
-        }
-    }
-
-    private boolean couldConvertOuterToInner(List<Expr> whereConjuncts) {
-        for (Expr e : whereConjuncts) {
-            if (e.isStrictPredicate()) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Override
