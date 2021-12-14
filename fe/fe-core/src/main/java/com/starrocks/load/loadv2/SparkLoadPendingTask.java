@@ -66,6 +66,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.FilePatternVersion;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -294,10 +295,15 @@ public class SparkLoadPendingTask extends LoadTask {
 
         // default value
         String defaultValue = null;
-        if (column.getDefaultValue() != null) {
-            defaultValue = column.getDefaultValue();
+        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.VARY) {
+            throw new SemanticException("Column " + column.getName() + " has unsupported default value:" +
+                    column.getDefaultExpr().getExpr());
         }
-        if (column.isAllowNull() && column.getDefaultValue() == null) {
+        if (defaultValueType == Column.DefaultValueType.CONST) {
+            defaultValue = column.getCalculatedDefaultValue();
+        }
+        if (column.isAllowNull() && defaultValueType == Column.DefaultValueType.NULL) {
             defaultValue = "\\N";
         }
 
