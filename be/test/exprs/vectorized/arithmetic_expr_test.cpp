@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
+#include "column/column_hash.h"
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
@@ -231,7 +232,9 @@ TEST_F(VectorizedArithmeticExprTest, divExpr) {
         auto nums = std::static_pointer_cast<Int32Column>(v->data_column());
 
         ASSERT_EQ(nums->size(), 1);
-        ASSERT_EQ(nums->get_data()[0], 0);
+        int32_t zero = 0;
+        ASSERT_EQ(crc_hash_32(&nums->get_data()[0], sizeof(int32_t), 0x811C9DC5),
+                  crc_hash_32(&zero, sizeof(int32_t), 0x811C9DC5));
     }
 }
 
