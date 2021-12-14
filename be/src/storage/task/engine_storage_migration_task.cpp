@@ -65,7 +65,7 @@ OLAPStatus EngineStorageMigrationTask::execute() {
 
 OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         LOG(WARNING) << "Process is going to quit. The migration should be stopped as soon as possible.";
         return OLAP_ERR_OTHER_ERROR;
     }
@@ -330,7 +330,7 @@ OLAPStatus EngineStorageMigrationTask::_copy_index_and_data_files(
     OLAPStatus status = OLAP_SUCCESS;
     for (const auto& rs : consistent_rowsets) {
         bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-        if (!bg_worker_stopped) {
+        if (bg_worker_stopped) {
             status = OLAP_ERR_OTHER_ERROR;
             break;
         }

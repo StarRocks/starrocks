@@ -55,13 +55,17 @@ public class PhysicalValuesOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalValuesOperator empty = (PhysicalValuesOperator) o;
-        return Objects.equals(columnRefSet, empty.columnRefSet);
+        return Objects.equals(columnRefSet, empty.columnRefSet) &&
+                Objects.equals(rows, empty.rows);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(columnRefSet);
+        return Objects.hash(super.hashCode(), columnRefSet, rows);
     }
 
     @Override

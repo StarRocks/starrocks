@@ -10,9 +10,13 @@
 namespace starrocks::pipeline {
 class LocalExchangeSinkOperator final : public Operator {
 public:
-    LocalExchangeSinkOperator(int32_t id, const std::shared_ptr<LocalExchanger>& exchanger,
-                              const int32_t driver_sequence)
-            : Operator(id, "local_exchange_sink", -1), _exchanger(exchanger), _driver_sequence(driver_sequence) {}
+    LocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                              const std::shared_ptr<LocalExchanger>& exchanger, const int32_t driver_sequence)
+            : Operator(factory, id, "local_exchange_sink", plan_node_id),
+              _exchanger(exchanger),
+              _driver_sequence(driver_sequence) {
+        _runtime_profile->add_info_string("Type", exchanger->name());
+    }
 
     ~LocalExchangeSinkOperator() override = default;
 
@@ -42,13 +46,13 @@ private:
 
 class LocalExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
-    LocalExchangeSinkOperatorFactory(int32_t id, std::shared_ptr<LocalExchanger> exchanger)
-            : OperatorFactory(id, "local_exchange_sink", -1), _exchanger(std::move(exchanger)) {}
+    LocalExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<LocalExchanger> exchanger)
+            : OperatorFactory(id, "local_exchange_sink", plan_node_id), _exchanger(std::move(exchanger)) {}
 
     ~LocalExchangeSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LocalExchangeSinkOperator>(_id, _exchanger, driver_sequence);
+        return std::make_shared<LocalExchangeSinkOperator>(this, _id, _plan_node_id, _exchanger, driver_sequence);
     }
 
 private:

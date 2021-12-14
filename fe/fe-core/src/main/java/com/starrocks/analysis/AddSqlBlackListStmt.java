@@ -43,7 +43,7 @@ public class AddSqlBlackListStmt extends StatementBase {
 
         super.analyze(analyzer);
 
-        sql = sql.trim().toLowerCase().replaceAll("\\(", "\\\\(").replaceAll("\\)", "\\\\)").replaceAll(" +", " ");
+        sql = sql.trim().toLowerCase().replaceAll(" +", " ");
         if (sql != null && sql.length() > 0) {
             try {
                 sqlPattern = Pattern.compile(sql);

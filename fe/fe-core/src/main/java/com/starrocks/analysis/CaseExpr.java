@@ -125,7 +125,7 @@ public class CaseExpr extends Expr {
         StringBuilder output = new StringBuilder("CASE");
         int childIdx = 0;
         if (hasCaseExpr) {
-            output.append(children.get(childIdx++).toSql());
+            output.append(" ").append(children.get(childIdx++).toSql());
         }
         while (childIdx + 2 <= children.size()) {
             output.append(" WHEN " + children.get(childIdx++).toSql());
@@ -135,6 +135,24 @@ public class CaseExpr extends Expr {
             output.append(" ELSE " + children.get(children.size() - 1).toSql());
         }
         output.append(" END");
+        return output.toString();
+    }
+
+    @Override
+    public String toDigestImpl() {
+        StringBuilder output = new StringBuilder("case");
+        int childIdx = 0;
+        if (hasCaseExpr) {
+            output.append(" ").append(children.get(childIdx++).toDigest());
+        }
+        while (childIdx + 2 <= children.size()) {
+            output.append(" when ").append(children.get(childIdx++).toDigest());
+            output.append(" then ").append(children.get(childIdx++).toDigest());
+        }
+        if (hasElseExpr) {
+            output.append(" else ").append(children.get(children.size() - 1).toDigest());
+        }
+        output.append(" end");
         return output.toString();
     }
 
@@ -377,16 +395,6 @@ public class CaseExpr extends Expr {
             }
         }
         return false;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (Expr child : children) {
-            if (!child.isVectorized()) {
-                return false;
-            }
-        }
-        return true;
     }
 
     @Override

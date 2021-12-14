@@ -37,6 +37,14 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         return Status::OK();
     }
 
+    if (*chunk != nullptr) {
+        (*chunk)->reset();
+    }
+
+#ifdef DEBUG
+    static int loop = 0;
+#endif
+
     // TODO: merge small chunks to large chunk for optimization
     while (!_child_eos) {
         ChunkPtr input_chunk;
@@ -89,11 +97,20 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                 size_t real_capacity =
                         _aggregator->hash_map_variant().capacity() - _aggregator->hash_map_variant().capacity() / 8;
                 size_t remain_size = real_capacity - _aggregator->hash_map_variant().size();
-                bool ht_needs_expansion = remain_size < input_chunk_size;
+                [[maybe_unused]] bool ht_needs_expansion = remain_size < input_chunk_size;
+
+#ifdef DEBUG
+                // chaos test for streaming or agg, The results have to be consistent
+                // when group by type of double, it maybe cause dissonant result because of precision loss for double
+                // thus, so check case will fail, so it only work under DEBUG mode
+                loop++;
+                if (loop % 2 == 0) {
+#else
                 if (!ht_needs_expansion ||
                     _aggregator->should_expand_preagg_hash_tables(_children[0]->rows_returned(), input_chunk_size,
                                                                   _aggregator->mem_pool()->total_allocated_bytes(),
                                                                   _aggregator->hash_map_variant().size())) {
+#endif
                     RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
@@ -157,7 +174,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     }
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
-                    if ((*chunk)->num_rows() > 0) {
+                    if (*chunk != nullptr && (*chunk)->num_rows() > 0) {
                         break;
                     } else {
                         continue;
@@ -236,14 +253,20 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     // shared by sink operator factory and source operator factory
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(context->next_operator_id(), id(),
                                                                                  aggregator_factory);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
     operators_with_sink.emplace_back(sink_operator);
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
     auto source_operator = std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(), id(),
                                                                                      aggregator_factory);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's

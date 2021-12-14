@@ -21,16 +21,33 @@
 
 #include "storage/memtable_flush_executor.h"
 
-#include <functional>
 #include <memory>
 
 #include "runtime/current_thread.h"
-#include "storage/memtable.h"
 #include "storage/vectorized/memtable.h"
-#include "util/defer_op.h"
-#include "util/scoped_cleanup.h"
 
 namespace starrocks {
+
+class MemtableFlushTask final : public Runnable {
+public:
+    MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<vectorized::MemTable> memtable)
+            : _flush_token(flush_token), _memtable(std::move(memtable)) {}
+
+    ~MemtableFlushTask() = default;
+
+    void run() override {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_memtable->mem_tracker());
+
+        _flush_token->_stats.cur_flush_count++;
+        _flush_token->_flush_memtable(_memtable.get());
+        _flush_token->_stats.cur_flush_count--;
+        _memtable.reset();
+    }
+
+private:
+    FlushToken* _flush_token;
+    std::unique_ptr<vectorized::MemTable> _memtable;
+};
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
     os << "(flush time(ms)=" << stat.flush_time_ns / 1000 / 1000 << ", flush count=" << stat.flush_count << ")"
@@ -38,34 +55,16 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
     return os;
 }
 
-// The type of parameter is safe to be a reference. Because the function object
-// returned by std::bind() will increase the reference count of Memtable. i.e.,
-// after the submit() method returns, even if the caller immediately releases the
-// passed shared_ptr object, the Memtable object will not be destructed because
-// its reference count is not 0.
-OLAPStatus FlushToken::submit(const std::shared_ptr<MemTable>& memtable) {
-    RETURN_NOT_OK(_flush_status.load());
-    _flush_token->submit_func([this, memtable] { _flush_memtable(memtable); });
-    return OLAP_SUCCESS;
-}
-
-Status FlushToken::submit(const std::shared_ptr<vectorized::MemTable>& memtable) {
+Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable) {
     if (_flush_status.load() != OLAP_SUCCESS) {
         std::stringstream ss;
         ss << "tablet_id = " << memtable->tablet_id() << " flush_status error ";
         return Status::InternalError(ss.str());
     }
-    _flush_token->submit_func([this, memtable] {
-        _stats.cur_flush_count++;
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(memtable->mem_tracker());
-        DeferOp op([&] {
-            const_cast<std::shared_ptr<vectorized::MemTable>&>(memtable).reset();
-            tls_thread_status.set_mem_tracker(prev_tracker);
-            _stats.cur_flush_count--;
-        });
-        _flush_vectorized_memtable(memtable);
-    });
-    return Status::OK();
+    // Does not acount the size of MemtableFlushTask into any memory tracker
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+    auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable));
+    return _flush_token->submit(std::move(task));
 }
 
 void FlushToken::cancel() {
@@ -77,29 +76,7 @@ OLAPStatus FlushToken::wait() {
     return _flush_status.load();
 }
 
-void FlushToken::_flush_memtable(std::shared_ptr<MemTable> memtable) {
-    SCOPED_CLEANUP({ memtable.reset(); });
-
-    // If previous flush has failed, return directly
-    if (_flush_status.load() != OLAP_SUCCESS) {
-        return;
-    }
-
-    MonotonicStopWatch timer;
-    timer.start();
-    _flush_status.store(memtable->flush());
-    if (_flush_status.load() != OLAP_SUCCESS) {
-        return;
-    }
-
-    _stats.flush_time_ns += timer.elapsed_time();
-    _stats.flush_count++;
-    _stats.flush_size_bytes += memtable->memory_usage();
-}
-
-void FlushToken::_flush_vectorized_memtable(std::shared_ptr<vectorized::MemTable> memtable) {
-    SCOPED_CLEANUP({ memtable.reset(); });
-
+void FlushToken::_flush_memtable(vectorized::MemTable* memtable) {
     // If previous flush has failed, return directly
     if (_flush_status.load() != OLAP_SUCCESS) {
         return;
@@ -118,20 +95,17 @@ void FlushToken::_flush_vectorized_memtable(std::shared_ptr<vectorized::MemTable
 }
 
 Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
-    int32_t data_dir_num = data_dirs.size();
-    size_t min_threads = std::max(1, config::flush_thread_num_per_store);
-    size_t max_threads = data_dir_num * min_threads;
+    int data_dir_num = static_cast<int>(data_dirs.size());
+    int min_threads = std::max<int>(1, config::flush_thread_num_per_store);
+    int max_threads = data_dir_num * min_threads;
     return ThreadPoolBuilder("MemTableFlushThreadPool")
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)
             .build(&_flush_pool);
 }
 
-// NOTE: we use SERIAL mode here to ensure all mem-tables from one tablet are flushed in order.
-OLAPStatus MemTableFlushExecutor::create_flush_token(std::unique_ptr<FlushToken>* flush_token,
-                                                     ThreadPool::ExecutionMode execution_mode) {
-    *flush_token = std::make_unique<FlushToken>(_flush_pool->new_token(execution_mode));
-    return OLAP_SUCCESS;
+std::unique_ptr<FlushToken> MemTableFlushExecutor::create_flush_token(ThreadPool::ExecutionMode execution_mode) {
+    return std::make_unique<FlushToken>(_flush_pool->new_token(execution_mode));
 }
 
 } // namespace starrocks

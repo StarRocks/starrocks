@@ -36,6 +36,7 @@
 namespace starrocks {
 
 class TabletSchemaMap;
+class MemTracker;
 
 namespace segment_v2 {
 class SegmentReaderWriterTest;
@@ -209,6 +210,10 @@ bool operator!=(const TabletColumn& a, const TabletColumn& b);
 class TabletSchema {
 public:
     using SchemaId = int64_t;
+
+    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb);
+    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
+                                                TabletSchemaMap* schema_map);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java

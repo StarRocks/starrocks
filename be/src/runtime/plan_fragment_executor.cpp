@@ -39,7 +39,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
@@ -129,15 +128,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
     _runtime_state->set_fragment_root_id(_plan->id());
 
-    if (request.params.__isset.debug_node_id) {
-        DCHECK(request.params.__isset.debug_action);
-        DCHECK(request.params.__isset.debug_phase);
-        ExecNode::set_debug_options(request.params.debug_node_id, request.params.debug_phase,
-                                    request.params.debug_action, _plan);
-    }
-
-    if (request.fragment.__isset.global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_global_dict(request.fragment.global_dicts));
+    if (request.fragment.__isset.query_global_dicts) {
+        RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
 
     // set #senders of exchange nodes before calling Prepare()
@@ -212,7 +204,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
         _is_runtime_filter_merge_node = true;
-        _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params);
+        _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params,
+                                                       false);
     }
 
     return Status::OK();

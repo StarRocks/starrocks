@@ -14,6 +14,7 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
         _evaluate_const_columns(i);
     }
+    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }
 
@@ -181,6 +182,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (const auto& ctx : _agg_expr_ctxs) {
         RETURN_IF_ERROR(Expr::prepare(ctx, state, child_row_desc));
     }
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, child_row_desc));
 
     _mem_pool = std::make_unique<MemPool>();
 
@@ -244,6 +246,7 @@ Status Aggregator::close(RuntimeState* state) {
     for (const auto& i : _agg_expr_ctxs) {
         Expr::close(i, state);
     }
+    Expr::close(_conjunct_ctxs, state);
 
     return Status::OK();
 }
@@ -730,7 +733,11 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     if (type == HashVariantType::Type::phase1_slice || type == HashVariantType::Type::phase2_slice) {
         size_t max_size = 0;
         if (is_group_columns_fixed_size(_group_by_expr_ctxs, _group_by_types, &max_size, &has_null_column)) {
-            if (max_size < 8 || (!has_null_column && max_size == 8)) {
+            // we need reserve a byte for serialization length for nullable columns
+            if (max_size < 4 || (!has_null_column && max_size == 4)) {
+                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_fx4
+                                                 : HashVariantType::Type::phase2_slice_fx4;
+            } else if (max_size < 8 || (!has_null_column && max_size == 8)) {
                 type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_fx8
                                                  : HashVariantType::Type::phase2_slice_fx8;
             } else if (max_size < 16 || (!has_null_column && max_size == 16)) {
@@ -751,8 +758,10 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         hash_variant.TYPE->has_null_column = has_null_column; \
         hash_variant.TYPE->fixed_byte_size = fixed_byte_size; \
     }
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx4);
     SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx8);
     SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx16);
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx4);
     SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx8);
     SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx16);
 #undef SET_FIXED_SLICE_HASH_MAP_FIELD

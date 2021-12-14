@@ -29,6 +29,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPipelineProfileMode;
 import com.starrocks.thrift.TQueryOptions;
 import org.json.JSONObject;
 
@@ -113,13 +114,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_QUERY_EXPIRE_SECONDS = "pipeline_query_expire_seconds";
+    public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
 
     // disable join reorder
     public static final String DISABLE_JOIN_REORDER = "disable_join_reorder";
+
+    public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE = "enable_filter_unused_columns_in_scan_stage";
 
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
@@ -152,6 +155,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
+    public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -291,6 +295,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_USE_NTH_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private int useNthExecPlan = 0;
+
+    @VarAttr(name = CBO_CTE_REUSE)
+    private boolean cboCteReuse = false;
+
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -301,10 +309,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
-    // a query that can not make any progress for more than pipelineQueryExpireSeconds
-    // (300s in default) will be canceled.
-    @VariableMgr.VarAttr(name = PIPELINE_QUERY_EXPIRE_SECONDS)
-    private int pipelineQueryExpireSeconds = 300;
+    @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
+    private String pipelineProfileMode = "brief";
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
@@ -334,6 +340,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
+    private boolean enableFilterUnusedColumnsInScanStage = false;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -579,6 +588,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.disableJoinReorder = false;
     }
 
+    public boolean isAbleFilterUnusedColumnsInScanStage() {
+        return enableFilterUnusedColumnsInScanStage;
+    }
+
+    public void disableTrimOnlyFilteredColumnsInScanStage() {
+        this.enableFilterUnusedColumnsInScanStage = true;
+    }
+
+    public void enableTrimOnlyFilteredColumnsInScanStage() {
+        this.enableFilterUnusedColumnsInScanStage = false;
+    }
+
     public boolean isCboEnableDPJoinReorder() {
         return cboEnableDPJoinReorder;
     }
@@ -719,6 +740,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableColumnExprPredicate;
     }
 
+
+    /**
+     * check cbo_cte_reuse && enable_pipeline
+     */
+    public boolean isCboCteReuse() {
+        return cboCteReuse && enablePipelineEngine;
+    }
+
+    public void setCboCteReuse(boolean cboCteReuse) {
+        this.cboCteReuse = cboCteReuse;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -758,7 +791,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setPipeline_dop(pipelineDop);
-        tResult.setPipeline_query_expire_seconds(pipelineQueryExpireSeconds);
+        if ("brief".equalsIgnoreCase(pipelineProfileMode)) {
+            tResult.setPipeline_profile_mode(TPipelineProfileMode.BRIEF);
+        } else {
+            tResult.setPipeline_profile_mode(TPipelineProfileMode.DETAIL);
+        }
         return tResult;
     }
 

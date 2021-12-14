@@ -9,13 +9,11 @@
 #include "column/fixed_length_column_base.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
-#include "exec/text_converter.hpp"
 #include "exprs/slot_ref.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/decimalv3.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "runtime/tuple_row.h"
@@ -374,10 +372,6 @@ Status MysqlScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
         ++_num_rows_returned;
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
-}
-
-Status MysqlScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::InternalError("Not support");
 }
 
 Status MysqlScanNode::close(RuntimeState* state) {

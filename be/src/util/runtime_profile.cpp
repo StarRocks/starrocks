@@ -21,7 +21,8 @@
 
 #include "util/runtime_profile.h"
 
-#include <boost/thread/thread.hpp>
+#include <boost/date_time/posix_time/posix_time_types.hpp>
+#include <boost/thread/thread_time.hpp>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -295,6 +296,17 @@ RuntimeProfile* RuntimeProfile::create_child(const std::string& name, bool inden
     ChildVector::iterator pos = prepend ? _children.begin() : _children.end();
     add_child_unlock(child, indent, pos);
     return child;
+}
+
+void RuntimeProfile::remove_childs() {
+    std::lock_guard<std::mutex> l(_children_lock);
+    _child_map.clear();
+    _children.clear();
+}
+
+void RuntimeProfile::reverse_childs() {
+    std::lock_guard<std::mutex> l(_children_lock);
+    std::reverse(_children.begin(), _children.end());
 }
 
 void RuntimeProfile::add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos) {
@@ -650,7 +662,7 @@ void RuntimeProfile::add_bucketing_counters(const std::string& name, const std::
 
     if (_s_periodic_counter_update_state.update_thread == nullptr) {
         _s_periodic_counter_update_state.update_thread =
-                std::make_unique<boost::thread>(&RuntimeProfile::periodic_counter_update_loop);
+                std::make_unique<std::thread>(&RuntimeProfile::periodic_counter_update_loop);
     }
 
     BucketCountersInfo info{.src_counter = src_counter, .num_sampled = 0};
@@ -678,7 +690,7 @@ void RuntimeProfile::register_periodic_counter(Counter* src_counter, SampleFn sa
 
     if (_s_periodic_counter_update_state.update_thread == nullptr) {
         _s_periodic_counter_update_state.update_thread =
-                std::make_unique<boost::thread>(&RuntimeProfile::periodic_counter_update_loop);
+                std::make_unique<std::thread>(&RuntimeProfile::periodic_counter_update_loop);
     }
 
     switch (type) {

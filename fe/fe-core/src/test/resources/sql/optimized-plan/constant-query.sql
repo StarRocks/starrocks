@@ -52,7 +52,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 0:EMPTYSET
-use vectorized: true
 [end]
 
 [sql]
@@ -79,7 +78,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 2:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -91,7 +89,6 @@ UNPARTITIONED
 
 1:Project
 |  <slot 4> : 510835.0
-|  use vectorized: true
 |
 0:OlapScanNode
 TABLE: t0
@@ -103,7 +100,6 @@ tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=9.0
 numNodes=0
-use vectorized: true
 [end]
 
 [sql]
@@ -147,7 +143,6 @@ constant exprs:
 4 | 'a' | 6
 7 | '8' | 9
 limit: 2
-use vectorized: true
 [end]
 
 [sql]

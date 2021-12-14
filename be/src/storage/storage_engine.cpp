@@ -30,6 +30,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <new>
@@ -45,11 +46,9 @@
 #include "storage/fs/file_block_manager.h"
 #include "storage/lru_cache.h"
 #include "storage/memtable_flush_executor.h"
-#include "storage/reader.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
-#include "storage/schema_change.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
@@ -64,23 +63,6 @@
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 #include "util/trace.h"
-
-using apache::thrift::ThriftDebugString;
-
-using std::back_inserter;
-using std::copy;
-using std::inserter;
-using std::list;
-using std::map;
-using std::nothrow;
-using std::pair;
-using std::priority_queue;
-using std::set;
-using std::set_difference;
-using std::string;
-using std::stringstream;
-using std::vector;
-using strings::Substitute;
 
 namespace starrocks {
 
@@ -229,7 +211,7 @@ Status StorageEngine::_init_store_map() {
 }
 
 void StorageEngine::_update_storage_medium_type_count() {
-    set<TStorageMedium::type> available_storage_medium_types;
+    std::set<TStorageMedium::type> available_storage_medium_types;
 
     std::lock_guard<std::mutex> l(_store_lock);
     for (auto& it : _store_map) {
@@ -403,8 +385,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
         }
     }
     //  TODO(lingbin): should it be a global util func?
-    std::random_device rd;
-    srand(rd());
+    std::srand(std::random_device()());
     std::shuffle(stores.begin(), stores.end(), std::mt19937(std::random_device()()));
     return stores;
 }
@@ -589,7 +570,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
 
     std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+            std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
     vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
@@ -630,7 +611,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
 
     std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+            std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
     vectorized::BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
 
     Status res = base_compaction.compact();
@@ -674,7 +655,8 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
         SCOPED_RAW_TIMER(&duration_ns);
 
-        std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
+        std::unique_ptr<MemTracker> mem_tracker =
+                std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
         res = best_tablet->updates()->compaction(mem_tracker.get());
     }
     StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
@@ -699,6 +681,8 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
 
     time_t now = time(nullptr);
     tm local_tm_now;
+    memset(&local_tm_now, 0, sizeof(tm));
+
     if (localtime_r(&now, &local_tm_now) == nullptr) {
         LOG(WARNING) << "fail to localtime_r time. time=" << now;
         return OLAP_ERR_OS_ERROR;
@@ -714,14 +698,14 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
         *usage = *usage > curr_usage ? *usage : curr_usage;
 
         OLAPStatus curr_res = OLAP_SUCCESS;
-        string snapshot_path = info.path + SNAPSHOT_PREFIX;
+        std::string snapshot_path = info.path + SNAPSHOT_PREFIX;
         curr_res = _do_sweep(snapshot_path, local_now, snapshot_expire);
         if (curr_res != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to sweep snapshot. path=" << snapshot_path << ", err_code=" << curr_res;
             res = curr_res;
         }
 
-        string trash_path = info.path + TRASH_PREFIX;
+        std::string trash_path = info.path + TRASH_PREFIX;
         curr_res = _do_sweep(trash_path, local_now, curr_usage > guard_space ? 0 : trash_expire);
         if (curr_res != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to sweep trash. [path=%s" << trash_path << ", err_code=" << curr_res;
@@ -796,7 +780,7 @@ void StorageEngine::_clean_unused_txns() {
     }
 }
 
-OLAPStatus StorageEngine::_do_sweep(const string& scan_root, const time_t& local_now, const int32_t expire) {
+OLAPStatus StorageEngine::_do_sweep(const std::string& scan_root, const time_t& local_now, const int32_t expire) {
     OLAPStatus res = OLAP_SUCCESS;
     if (!FileUtils::check_exist(scan_root)) {
         // dir not existed. no need to sweep trash.
@@ -805,10 +789,12 @@ OLAPStatus StorageEngine::_do_sweep(const string& scan_root, const time_t& local
 
     try {
         for (const auto& item : std::filesystem::directory_iterator(scan_root)) {
-            string path_name = item.path().string();
-            string dir_name = item.path().filename().string();
-            string str_time = dir_name.substr(0, dir_name.find('.'));
+            std::string path_name = item.path().string();
+            std::string dir_name = item.path().filename().string();
+            std::string str_time = dir_name.substr(0, dir_name.find('.'));
             tm local_tm_create;
+            memset(&local_tm_create, 0, sizeof(tm));
+
             if (strptime(str_time.c_str(), "%Y%m%d%H%M%S", &local_tm_create) == nullptr) {
                 LOG(WARNING) << "fail to strptime time. [time=" << str_time << "]";
                 res = OLAP_ERR_OS_ERROR;
@@ -819,7 +805,7 @@ OLAPStatus StorageEngine::_do_sweep(const string& scan_root, const time_t& local
             // try get timeout in dir name, the old snapshot dir does not contain timeout
             // eg: 20190818221123.3.86400, the 86400 is timeout, in second
             size_t pos = dir_name.find('.', str_time.size() + 1);
-            if (pos != string::npos) {
+            if (pos != std::string::npos) {
                 actual_expire = std::stoi(dir_name.substr(pos + 1));
             }
             VLOG(10) << "get actual expire time " << actual_expire << " of dir: " << dir_name;
@@ -862,14 +848,13 @@ void StorageEngine::add_unused_rowset(const RowsetSharedPtr& rowset) {
         return;
     }
 
-    VLOG(3) << "add unused rowset, rowset id:" << rowset->rowset_id() << ", version:" << rowset->version().first << "-"
-            << rowset->version().second << ", unique id:" << rowset->unique_id();
+    VLOG(3) << "add unused rowset, rowset id:" << rowset->rowset_id() << ", version:" << rowset->version()
+            << ", unique id:" << rowset->unique_id();
 
     auto rowset_id = rowset->rowset_id().to_string();
 
     std::lock_guard lock(_gc_mutex);
-    auto it = _unused_rowsets.find(rowset_id);
-    if (it == _unused_rowsets.end()) {
+    if (_unused_rowsets.find(rowset_id) == _unused_rowsets.end()) {
         rowset->set_need_delete_file();
         rowset->close();
         _unused_rowsets[rowset_id] = rowset;
@@ -928,7 +913,7 @@ OLAPStatus StorageEngine::obtain_shard_path(TStorageMedium::type storage_medium,
     return res;
 }
 
-OLAPStatus StorageEngine::load_header(const string& shard_path, const TCloneReq& request, bool restore,
+OLAPStatus StorageEngine::load_header(const std::string& shard_path, const TCloneReq& request, bool restore,
                                       bool is_primary_key) {
     DataDir* store = nullptr;
     {

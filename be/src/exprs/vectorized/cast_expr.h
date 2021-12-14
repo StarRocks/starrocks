@@ -30,7 +30,6 @@ public:
             : Expr(node), _cast_element_expr(cast_element_expr) {}
 
     ~VectorizedCastArrayExpr() override = default;
-    ;
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
         ColumnPtr column = _children[0]->evaluate(context, ptr);

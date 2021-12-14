@@ -13,9 +13,9 @@
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/source_operator.h"
 #include "util/phmap/phmap.h"
-
 namespace starrocks {
 namespace pipeline {
 
@@ -29,7 +29,7 @@ enum DriverState : uint32_t {
     RUNNING = 2,
     INPUT_EMPTY = 3,
     OUTPUT_FULL = 4,
-    DEPENDENCIES_BLOCK = 5,
+    PRECONDITION_BLOCK = 5,
     FINISH = 6,
     CANCELED = 7,
     INTERNAL_ERROR = 8,
@@ -51,8 +51,8 @@ static inline std::string ds_to_string(DriverState ds) {
         return "INPUT_EMPTY";
     case OUTPUT_FULL:
         return "OUTPUT_FULL";
-    case DEPENDENCIES_BLOCK:
-        return "DEPENDENCIES_BLOCK";
+    case PRECONDITION_BLOCK:
+        return "PRECONDITION_BLOCK";
     case FINISH:
         return "FINISH";
     case CANCELED:
@@ -89,26 +89,46 @@ public:
     void update_last_chunks_moved(int64_t chunks_moved) {
         this->last_chunks_moved = chunks_moved;
         this->accumulated_chunk_moved += chunks_moved;
+        this->schedule_effective_times += (chunks_moved > 0) ? 1 : 0;
     }
+    void update_accumulated_rows_moved(int64_t rows_moved) { this->accumulated_rows_moved += rows_moved; }
     void increment_schedule_times() { this->schedule_times += 1; }
+
+    int64_t get_schedule_times() { return schedule_times; }
+
+    int64_t get_schedule_effective_times() { return schedule_effective_times; }
+
+    int64_t get_rows_per_chunk() {
+        if (accumulated_chunk_moved > 0) {
+            return accumulated_rows_moved / accumulated_chunk_moved;
+        } else {
+            return 0;
+        }
+    }
+
+    int64_t get_accumulated_chunk_moved() { return accumulated_chunk_moved; }
 
 private:
     int64_t schedule_times{0};
+    int64_t schedule_effective_times{0};
     int64_t last_time_spent{0};
     int64_t last_chunks_moved{0};
     int64_t accumulated_time_spent{0};
     int64_t accumulated_chunk_moved{0};
+    int64_t accumulated_rows_moved{0};
 };
 
 // OperatorExecState is used to guarantee that some hooks of operator
 // is called exactly one time during whole operator
 enum OperatorStage {
     INIT = 0,
-    PREPARED = 4,
-    PROCESSING = 8,
-    FINISHING = 12,
-    FINISHED = 16,
-    CLOSED = 20,
+    PREPARED = 1,
+    PRECONDITION_NOT_READY = 2,
+    PROCESSING = 3,
+    FINISHING = 4,
+    FINISHED = 5,
+    CANCELLED = 6,
+    CLOSED = 7,
 };
 
 class PipelineDriver {
@@ -147,16 +167,23 @@ public:
     StatusOr<DriverState> process(RuntimeState* runtime_state);
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
-    DriverState driver_state() { return _state; }
+    DriverState driver_state() const { return _state; }
     void set_driver_state(DriverState state) { _state = state; }
     Operators& operators() { return _operators; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
 
+    // drivers that waits for runtime filters' readiness must be marked PRECONDITION_NOT_READY and put into
+    // PipelineDriverPoller.
+    void mark_precondition_not_ready();
+    // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
+    // are finished.
+    void mark_precondition_ready(RuntimeState* runtime_state);
     void dispatch_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
     void finish_operators(RuntimeState* runtime_state);
+    void cancel_operators(RuntimeState* runtime_state);
 
     Operator* sink_operator() { return _operators.back().get(); }
     bool is_finished() {
@@ -164,6 +191,7 @@ public:
                _state == DriverState::INTERNAL_ERROR;
     }
     bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
+    bool is_still_pending_finish() { return source_operator()->pending_finish() || sink_operator()->pending_finish(); }
     // return false if all the dependencies are ready, otherwise return true.
     bool dependencies_block() {
         if (_all_dependencies_ready) {
@@ -174,16 +202,62 @@ public:
         return !_all_dependencies_ready;
     }
 
-    bool is_not_blocked() {
-        if (UNLIKELY(_state == DriverState::DEPENDENCIES_BLOCK)) {
-            return !dependencies_block();
-        } else if (_state == DriverState::OUTPUT_FULL) {
-            return sink_operator()->need_input() || sink_operator()->is_finished();
-        } else if (_state == DriverState::INPUT_EMPTY) {
-            return source_operator()->has_output() || source_operator()->is_finished();
+    // return false if all the local runtime filters are ready, otherwise return false.
+    bool local_rf_block() {
+        if (_all_local_rf_ready) {
+            return false;
         }
-        return true;
+        _all_local_rf_ready = std::all_of(_local_rf_holders.begin(), _local_rf_holders.end(),
+                                          [](auto* holder) { return holder->is_ready(); });
+        return !_all_local_rf_ready;
     }
+
+    bool global_rf_block() {
+        if (_all_global_rf_ready_or_timeout) {
+            return false;
+        }
+
+        _all_global_rf_ready_or_timeout =
+                _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
+                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(),
+                            [](auto* rf_desc) { return rf_desc->runtime_filter() != nullptr; }); // or ready.
+
+        return !_all_global_rf_ready_or_timeout;
+    }
+
+    // return true if either dependencies_block or local_rf_block return true, which means that the current driver
+    // should wait for both hash table and local runtime filters' readiness.
+    bool is_precondition_block() { return dependencies_block() || local_rf_block() || global_rf_block(); }
+
+    bool is_not_blocked() {
+        // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
+        if (sink_operator()->is_finished()) {
+            return true;
+        }
+
+        // PRECONDITION_BLOCK
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            if (is_precondition_block()) {
+                return false;
+            }
+
+            check_short_circuit();
+            if (_state == DriverState::PENDING_FINISH) {
+                return false;
+            }
+        }
+
+        // OUTPUT_FULL
+        if (!sink_operator()->need_input()) {
+            return false;
+        }
+
+        // INPUT_EMPTY
+        return source_operator()->is_finished() || source_operator()->has_output();
+    }
+
+    // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
+    void check_short_circuit();
 
     bool is_root() const { return _is_root; }
 
@@ -194,12 +268,24 @@ private:
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
     void _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
     void _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
+    void _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
     void _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
+    RuntimeState* _runtime_state = nullptr;
+
     Operators _operators;
+
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
+
+    mutable std::vector<RuntimeFilterHolder*> _local_rf_holders;
+    bool _all_local_rf_ready = false;
+
+    std::vector<vectorized::RuntimeFilterProbeDescriptor*> _global_rf_descriptors;
+    bool _all_global_rf_ready_or_timeout = false;
+    int64_t _global_rf_wait_timeout_ns = -1;
+
     size_t _first_unfinished;
     QueryContext* _query_ctx;
     FragmentContext* _fragment_ctx;
@@ -221,8 +307,23 @@ private:
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
     RuntimeProfile::Counter* _pending_timer = nullptr;
+    RuntimeProfile::Counter* _precondition_block_timer = nullptr;
+    RuntimeProfile::Counter* _input_empty_timer = nullptr;
+    RuntimeProfile::Counter* _first_input_empty_timer = nullptr;
+    RuntimeProfile::Counter* _followup_input_empty_timer = nullptr;
+    RuntimeProfile::Counter* _output_full_timer = nullptr;
+    RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
+
+    RuntimeProfile::Counter* _schedule_counter = nullptr;
+    RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
+    RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
+    RuntimeProfile::Counter* _schedule_accumulated_chunk_moved = nullptr;
+
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
+    MonotonicStopWatch* _precondition_block_timer_sw = nullptr;
+    MonotonicStopWatch* _input_empty_timer_sw = nullptr;
+    MonotonicStopWatch* _output_full_timer_sw = nullptr;
 };
 
 } // namespace pipeline

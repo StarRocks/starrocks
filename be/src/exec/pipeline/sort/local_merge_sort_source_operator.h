@@ -3,6 +3,7 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/sort_exec_exprs.h"
 
@@ -17,10 +18,14 @@ class SortContext;
  */
 class LocalMergeSortSourceOperator final : public SourceOperator {
 public:
-    LocalMergeSortSourceOperator(int32_t id, int32_t plan_node_id, SortContext* sort_context)
-            : SourceOperator(id, "local_merge_sort_source", plan_node_id), _sort_context(sort_context) {}
+    LocalMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, SortContext* sort_context)
+            : SourceOperator(factory, id, "local_merge_sort_source", plan_node_id), _sort_context(sort_context) {
+        _sort_context->ref();
+    }
 
     ~LocalMergeSortSourceOperator() override = default;
+
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -31,6 +36,7 @@ public:
     void add_morsel(Morsel* morsel) {}
 
     void set_finishing(RuntimeState* state) override;
+    void set_finished(RuntimeState* state) override;
 
 private:
     bool _is_finished = false;
@@ -39,19 +45,18 @@ private:
 
 class LocalMergeSortSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    LocalMergeSortSourceOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<SortContext>&& sort_context)
+    LocalMergeSortSourceOperatorFactory(int32_t id, int32_t plan_node_id,
+                                        const std::shared_ptr<SortContextFactory>& sort_context_factory)
             : SourceOperatorFactory(id, "local_merge_sort_source", plan_node_id),
-              _sort_context(std::move(sort_context)) {}
+              _sort_context_factory(sort_context_factory) {}
 
     ~LocalMergeSortSourceOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LocalMergeSortSourceOperator>(_id, _plan_node_id, _sort_context.get());
-    }
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
     // share data with multiple partition sort sink opeartor through _sort_context.
-    std::shared_ptr<SortContext> _sort_context;
+    std::shared_ptr<SortContextFactory> _sort_context_factory;
 };
 
 } // namespace pipeline

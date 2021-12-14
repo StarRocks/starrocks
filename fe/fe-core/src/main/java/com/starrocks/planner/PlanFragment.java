@@ -87,34 +87,34 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private static final Logger LOG = LogManager.getLogger(PlanFragment.class);
 
     // id for this plan fragment
-    private final PlanFragmentId fragmentId;
+    protected final PlanFragmentId fragmentId;
 
     // root of plan tree executed by this fragment
-    private PlanNode planRoot;
+    protected PlanNode planRoot;
 
     // exchange node to which this fragment sends its output
     private ExchangeNode destNode;
 
     // if null, outputs the entire row produced by planRoot
-    private ArrayList<Expr> outputExprs;
+    protected ArrayList<Expr> outputExprs;
 
     // created in finalize() or set in setSink()
-    private DataSink sink;
+    protected DataSink sink;
 
     // specification of the partition of the input of this fragment;
     // an UNPARTITIONED fragment is executed on only a single node
     // TODO: improve this comment, "input" is a bit misleading
-    private final DataPartition dataPartition;
+    protected final DataPartition dataPartition;
 
     // specification of how the output of this fragment is partitioned (i.e., how
     // it's sent to its destination);
     // if the output is UNPARTITIONED, it is being broadcast
-    private DataPartition outputPartition;
+    protected DataPartition outputPartition;
 
     // Whether query statistics is sent with every batch. In order to get the query
     // statistics correctly when query contains limit, it is necessary to send query 
     // statistics with every batch, or only in close.
-    private boolean transferQueryStatisticsWithEveryBatch;
+    protected boolean transferQueryStatisticsWithEveryBatch;
 
     // TODO: SubstitutionMap outputSmap;
     // substitution map to remap exprs onto the output of this fragment, to be applied
@@ -122,12 +122,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     // specification of the number of parallel when fragment is executed
     // default value is 1
-    private int parallelExecNum = 1;
+    protected int parallelExecNum = 1;
 
-    private final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
-    private final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
+    protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
+    protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
 
-    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+    protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
+    protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -168,6 +169,18 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (ConnectContext.get() != null) {
             parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
         }
+    }
+
+    public ExchangeNode getDestNode() {
+        return destNode;
+    }
+
+    public ArrayList<Expr> getOutputExprs() {
+        return outputExprs;
+    }
+
+    public DataPartition getOutputPartition() {
+        return outputPartition;
     }
 
     /**
@@ -258,22 +271,29 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         result.setPartition(dataPartition.toThrift());
 
-        if (!globalDicts.isEmpty()) {
-            List<TGlobalDict> dicts = Lists.newArrayList();
-            for(Pair<Integer, ColumnDict> dictPair: globalDicts) {
-                TGlobalDict globalDict = new TGlobalDict();
-                globalDict.setColumnId(dictPair.first);
-                List<String> strings = Lists.newArrayList();
-                List<Integer> integers = Lists.newArrayList();
-                for (Map.Entry<String, Integer> kv: dictPair.second.getDict().entrySet()) {
-                    strings.add(kv.getKey());
-                    integers.add(kv.getValue());
-                }
-                globalDict.setStrings(strings);
-                globalDict.setIds(integers);
-                dicts.add(globalDict);
+        if (!queryGlobalDicts.isEmpty()) {
+            result.setQuery_global_dicts(dictToThrift(queryGlobalDicts));
+        }
+        if (!loadGlobalDicts.isEmpty()) {
+            result.setLoad_global_dicts(dictToThrift(loadGlobalDicts));
+        }
+        return result;
+    }
+
+    private List<TGlobalDict> dictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
+        List<TGlobalDict> result = Lists.newArrayList();
+        for (Pair<Integer, ColumnDict> dictPair : dicts) {
+            TGlobalDict globalDict = new TGlobalDict();
+            globalDict.setColumnId(dictPair.first);
+            List<String> strings = Lists.newArrayList();
+            List<Integer> integers = Lists.newArrayList();
+            for (Map.Entry<String, Integer> kv : dictPair.second.getDict().entrySet()) {
+                strings.add(kv.getKey());
+                integers.add(kv.getValue());
             }
-            result.setGlobal_dicts(dicts);
+            globalDict.setStrings(strings);
+            globalDict.setIds(integers);
+            result.add(globalDict);
         }
         return result;
     }
@@ -284,20 +304,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         str.append(" OUTPUT EXPRS:");
 
         StringBuilder outputBuilder = new StringBuilder();
-        List<String> vectorizedTrace = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             outputBuilder.append(outputExprs.stream().map(Expr::toSql)
                     .collect(Collectors.joining(" | ")));
 
-            outputExprs.forEach(v -> v.isVectorizedTrace(vectorizedTrace));
         }
 
-        String outputString = outputBuilder.toString();
-        for (String trace : vectorizedTrace) {
-            outputString = outputString.replace(trace, "non-vectorized::" + trace);
-        }
-
-        str.append(outputString);
+        str.append(outputBuilder.toString());
         str.append("\n");
         str.append("  PARTITION: ").append(dataPartition.getExplainString(explainLevel)).append("\n");
         if (sink != null) {
@@ -380,10 +393,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return dataPartition;
     }
 
-    public DataPartition getOutputPartition() {
-        return outputPartition;
-    }
-
     public void setOutputPartition(DataPartition outputPartition) {
         this.outputPartition = outputPartition;
     }
@@ -428,25 +437,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public boolean isTransferQueryStatisticsWithEveryBatch() {
         return transferQueryStatisticsWithEveryBatch;
-    }
-
-    public boolean isOutPutExprsVectorized() {
-        if (outputExprs != null) {
-            for (Expr expr : outputExprs) {
-                if (!expr.isVectorized()) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    public void setOutPutExprsUseVectorized() {
-        if (outputExprs != null) {
-            for (Expr expr : outputExprs) {
-                expr.setUseVectorized(true);
-            }
-        }
     }
 
     public void collectBuildRuntimeFilters(PlanNode root) {
@@ -505,16 +495,21 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return probeRuntimeFilters;
     }
 
-    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
-        return this.globalDicts;
+    public List<Pair<Integer, ColumnDict>> getQueryGlobalDicts() {
+        return this.queryGlobalDicts;
     }
 
-    public void setGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
-        this.globalDicts = dicts;
+    public void setQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
+        this.queryGlobalDicts = dicts;
     }
 
     // For plan fragment has join
-    public void mergeGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
-        this.globalDicts.addAll(dicts);
+    public void mergeQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
+        this.queryGlobalDicts.addAll(dicts);
+    }
+
+    public void setLoadGlobalDicts(
+            List<Pair<Integer, ColumnDict>> loadGlobalDicts) {
+        this.loadGlobalDicts = loadGlobalDicts;
     }
 }

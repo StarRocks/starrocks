@@ -6,6 +6,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "exec/pipeline/operator.h"
+#include "exprs/expr_context.h"
 
 namespace starrocks {
 class TupleDescriptor;
@@ -13,14 +14,14 @@ namespace pipeline {
 using namespace vectorized;
 class RepeatOperator : public Operator {
 public:
-    RepeatOperator(int32_t id, int32_t plan_node_id, const std::vector<std::set<SlotId>>& slot_id_set_list,
-                   const std::set<SlotId>& all_slot_ids, const std::vector<std::vector<SlotId>>& null_slot_ids,
-                   const std::vector<int64_t>& repeat_id_list, uint64_t repeat_times_required,
-                   uint64_t repeat_times_last, const ColumnPtr& column_null,
+    RepeatOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                   const std::vector<std::set<SlotId>>& slot_id_set_list, const std::set<SlotId>& all_slot_ids,
+                   const std::vector<std::vector<SlotId>>& null_slot_ids, const std::vector<int64_t>& repeat_id_list,
+                   uint64_t repeat_times_required, uint64_t repeat_times_last, const ColumnPtr& column_null,
                    const std::vector<std::vector<ColumnPtr>>& grouping_columns,
                    const std::vector<std::vector<int64_t>>& grouping_list, const TupleId& output_tuple_id,
-                   const TupleDescriptor* tuple_desc)
-            : Operator(id, "repeat", plan_node_id),
+                   const TupleDescriptor* tuple_desc, const std::vector<ExprContext*>& conjunct_ctxs)
+            : Operator(factory, id, "repeat", plan_node_id),
               _slot_id_set_list(slot_id_set_list),
               _all_slot_ids(all_slot_ids),
               _null_slot_ids(null_slot_ids),
@@ -31,7 +32,8 @@ public:
               _grouping_columns(grouping_columns),
               _grouping_list(grouping_list),
               _output_tuple_id(output_tuple_id),
-              _tuple_desc(tuple_desc) {}
+              _tuple_desc(tuple_desc),
+              _conjunct_ctxs(conjunct_ctxs) {}
     ~RepeatOperator() override = default;
 
     bool has_output() const override;
@@ -55,6 +57,8 @@ private:
         return ConstColumn::create(column, num_rows);
     }
 
+    void extend_and_update_columns(vectorized::ChunkPtr* curr_chunk);
+
     /*
      * _curr_chunk
      * _curr_columns
@@ -62,8 +66,6 @@ private:
      */
     // accessing chunk.
     ChunkPtr _curr_chunk;
-    // original columns for accessing chunk.
-    Columns _curr_columns;
 
     /*
      * _slot_id_set_list
@@ -105,6 +107,8 @@ private:
     const TupleId& _output_tuple_id;
     const TupleDescriptor* _tuple_desc;
 
+    // used for expr's compute.
+    const std::vector<ExprContext*>& _conjunct_ctxs;
     // Whether prev operator has no output
     bool _is_finished = false;
 };
@@ -117,7 +121,7 @@ public:
                           uint64_t repeat_times_last, ColumnPtr&& column_null,
                           std::vector<std::vector<ColumnPtr>>&& grouping_columns,
                           std::vector<std::vector<int64_t>>&& grouping_list, TupleId&& output_tuple_id,
-                          const TupleDescriptor* tuple_desc)
+                          const TupleDescriptor* tuple_desc, std::vector<ExprContext*>&& conjunct_ctxs)
             : OperatorFactory(id, "repeat", plan_node_id),
               _slot_id_set_list(std::move(slot_id_set_list)),
               _all_slot_ids(std::move(all_slot_ids)),
@@ -129,15 +133,16 @@ public:
               _grouping_columns(std::move(grouping_columns)),
               _grouping_list(std::move(grouping_list)),
               _output_tuple_id(std::move(output_tuple_id)),
-              _tuple_desc(tuple_desc) {}
+              _tuple_desc(tuple_desc),
+              _conjunct_ctxs(std::move(conjunct_ctxs)) {}
 
     ~RepeatOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<RepeatOperator>(_id, _plan_node_id, _slot_id_set_list, _all_slot_ids, _null_slot_ids,
-                                                _repeat_id_list, _repeat_times_required, _repeat_times_last,
-                                                _column_null, _grouping_columns, _grouping_list, _output_tuple_id,
-                                                _tuple_desc);
+        return std::make_shared<RepeatOperator>(this, _id, _plan_node_id, _slot_id_set_list, _all_slot_ids,
+                                                _null_slot_ids, _repeat_id_list, _repeat_times_required,
+                                                _repeat_times_last, _column_null, _grouping_columns, _grouping_list,
+                                                _output_tuple_id, _tuple_desc, _conjunct_ctxs);
     }
 
 private:
@@ -153,6 +158,7 @@ private:
     std::vector<std::vector<int64_t>> _grouping_list;
     TupleId _output_tuple_id;
     const TupleDescriptor* _tuple_desc;
+    std::vector<ExprContext*> _conjunct_ctxs;
 };
 } // namespace pipeline
 } // namespace starrocks

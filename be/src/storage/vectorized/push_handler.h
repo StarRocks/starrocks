@@ -22,10 +22,7 @@ struct TabletVars {
 class PushBrokerReader {
 public:
     PushBrokerReader() = default;
-    ~PushBrokerReader() {
-        _counter.reset();
-        _scanner.reset();
-    }
+    ~PushBrokerReader();
 
     Status init(const TBrokerScanRange& t_scan_range, const TDescriptorTable& t_desc_tbl);
     Status next_chunk(ChunkPtr* chunk);
@@ -78,8 +75,8 @@ private:
 
     void _get_tablet_infos(const std::vector<TabletVars>& tablet_infos, std::vector<TTabletInfo>* tablet_info_vec);
 
-    Status _convert(const TabletSharedPtr& cur_tablet, const TabletSharedPtr& new_tablet_vec,
-                    RowsetSharedPtr* cur_rowset, RowsetSharedPtr* new_rowset);
+    Status _load_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset);
+    Status _delete_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset);
 
 private:
     // mainly tablet_id, version and delta file path

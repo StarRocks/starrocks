@@ -33,6 +33,7 @@ set(RUNTIME_FILES
     client_cache.cpp
     data_stream_mgr.cpp
     data_stream_sender.cpp
+    mcast_data_stream_sink.cpp
     datetime_value.cpp
     descriptors.cpp
     exec_env.cpp
@@ -45,7 +46,6 @@ set(RUNTIME_FILES
     result_sink.cpp
     result_buffer_mgr.cpp
     result_writer.cpp
-    row_batch.cpp
     runtime_state.cpp
     string_value.cpp
     thread_resource_mgr.cpp
@@ -54,7 +54,6 @@ set(RUNTIME_FILES
     large_int_value.cpp
     tuple.cpp
     tuple_row.cpp
-    vectorized_row_batch.cpp
     fragment_mgr.cpp
     dpp_sink_internal.cpp
     load_path_mgr.cpp
@@ -92,6 +91,7 @@ set(RUNTIME_FILES
     hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
     global_dicts.cpp
+    current_thread.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

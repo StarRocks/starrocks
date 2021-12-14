@@ -156,9 +156,4 @@ public class NullLiteral extends LiteralExpr {
         literal.readFields(in);
         return literal;
     }
-
-    @Override
-    public boolean isVectorized() {
-        return true;
-    }
 }

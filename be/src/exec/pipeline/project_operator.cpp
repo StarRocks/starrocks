@@ -58,19 +58,20 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
     for (size_t i = 0; i < result_columns.size(); ++i) {
         _cur_chunk->append_column(result_columns[i], _column_ids[i]);
     }
+    eval_runtime_bloom_filters(_cur_chunk.get());
     DCHECK_CHUNK(_cur_chunk);
     return Status::OK();
 }
 
 Status ProjectOperatorFactory::prepare(RuntimeState* state) {
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc));
-    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, row_desc));
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, _row_desc));
 
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
 
-    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
 
     auto init_dict_optimize = [&](std::vector<ExprContext*>& expr_ctxs, std::vector<SlotId>& target_slots) {
         _dict_optimize_parser.rewrite_exprs(&expr_ctxs, state, target_slots);
@@ -86,5 +87,6 @@ void ProjectOperatorFactory::close(RuntimeState* state) {
     Expr::close(_expr_ctxs, state);
     Expr::close(_common_sub_expr_ctxs, state);
     _dict_optimize_parser.close(state);
+    OperatorFactory::close(state);
 }
 } // namespace starrocks::pipeline

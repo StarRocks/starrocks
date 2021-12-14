@@ -3,7 +3,6 @@ package com.starrocks.sql.analyzer.relation;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.sql.analyzer.RelationFields;
 
 import java.util.List;
 
@@ -14,9 +13,7 @@ public class TableFunctionRelation extends Relation {
     private final TableFunction tableFunction;
     private final List<Expr> childExpressions;
 
-    public TableFunctionRelation(TableFunction tableFunction, List<Expr> childExpressions,
-                                 RelationFields relationFields) {
-        super(relationFields);
+    public TableFunctionRelation(TableFunction tableFunction, List<Expr> childExpressions) {
         this.tableFunction = tableFunction;
         this.childExpressions = childExpressions;
     }

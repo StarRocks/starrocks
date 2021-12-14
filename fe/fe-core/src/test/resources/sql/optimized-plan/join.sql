@@ -27,7 +27,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 6:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -41,20 +40,16 @@ UNPARTITIONED
 |  <slot 4> : 4: v4
 |  <slot 5> : 5: v5
 |  <slot 6> : 6: v6
-|  use vectorized: true
 |
 4:HASH JOIN
 |  join op: RIGHT SEMI JOIN (PARTITIONED)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: v2 = 5: v5
-|  use vectorized: true
 |
 |----3:EXCHANGE
-|       use vectorized: true
 |
 1:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -74,7 +69,6 @@ tabletList=10015,10017,10019
 cardinality=1
 avgRowSize=3.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -94,7 +88,6 @@ tabletList=10006,10008,10010
 cardinality=10000
 avgRowSize=1.0
 numNodes=0
-use vectorized: true
 [end]
 
 [sql]
@@ -216,7 +209,8 @@ select v1,v2,v3,v4 from t0 left outer join t1 on v1=v5 and 1>2
 [result]
 LEFT OUTER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    VALUES
+    EXCHANGE BROADCAST
+        VALUES
 [end]
 
 [sql]
@@ -225,7 +219,8 @@ select v1,v2,v3 from t0 left semi join t1 on v1=v5 and 1>2
 RIGHT SEMI JOIN (join-predicate [5: v5 = 1: v1] post-join-predicate [null])
     EXCHANGE SHUFFLE[5]
         SCAN (columns[5: v5] predicate[null])
-    VALUES
+    EXCHANGE SHUFFLE[1]
+        VALUES
 [end]
 
 [sql]
@@ -233,7 +228,8 @@ select v1,v2,v3,v4 from t0 inner join t1 on v1=v5 and 1>2
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     VALUES
-    VALUES
+    EXCHANGE BROADCAST
+        VALUES
 [end]
 
 [sql]
@@ -262,7 +258,8 @@ AGGREGATE ([GLOBAL] aggregate [{7: count=count(7: count)}] group by [[]] having 
         AGGREGATE ([LOCAL] aggregate [{7: count=count()}] group by [[]] having [null]
             LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
                 SCAN (columns[1: v1] predicate[null])
-                VALUES
+                EXCHANGE BROADCAST
+                    VALUES
 [end]
 [sql]
 select * from (select abs(v1) as t from t0 ) ta left join (select abs(v4) as t from t1 group by t) tb on ta.t = tb.t
@@ -274,4 +271,22 @@ LEFT OUTER JOIN (join-predicate [4: abs = 8: abs] post-join-predicate [null])
             EXCHANGE SHUFFLE[8]
                 AGGREGATE ([LOCAL] aggregate [{}] group by [[8: abs]] having [null]
                     SCAN (columns[5: v4] predicate[null])
+[end]
+
+[sql]
+SELECT COUNT(*) FROM (SELECT t2.v7 FROM t2) subt2 INNER JOIN t0 ON subt2.v7 = t0.v1, (SELECT v1,v2,v3 FROM t3) subt3 INNER JOIN t1 ON subt3.v1 = t1.v4 AND subt3.v2 = t1.v4 AND subt3.v3 = t1.v5;
+[result]
+AGGREGATE ([GLOBAL] aggregate [{13: count=count(13: count)}] group by [[]] having [null]
+    EXCHANGE GATHER
+        AGGREGATE ([LOCAL] aggregate [{13: count=count()}] group by [[]] having [null]
+            INNER JOIN (join-predicate [7: v1 = 10: v4 AND 8: v2 = 10: v4 AND 9: v3 = 11: v5] post-join-predicate [null])
+                CROSS JOIN (join-predicate [null] post-join-predicate [null])
+                    INNER JOIN (join-predicate [4: v1 = 1: v7] post-join-predicate [null])
+                        SCAN (columns[4: v1] predicate[null])
+                        EXCHANGE SHUFFLE[1]
+                            SCAN (columns[1: v7] predicate[null])
+                    EXCHANGE BROADCAST
+                        SCAN (columns[7: v1, 8: v2, 9: v3] predicate[null])
+                EXCHANGE BROADCAST
+                    SCAN (columns[10: v4, 11: v5] predicate[null])
 [end]

@@ -27,17 +27,20 @@ namespace starrocks::pipeline {
 // for each child, and a IntersectOutputSourceOperator.
 class IntersectBuildSinkOperator final : public Operator {
 public:
-    IntersectBuildSinkOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<IntersectContext> intersect_ctx,
+    IntersectBuildSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                               std::shared_ptr<IntersectContext> intersect_ctx,
                                const std::vector<ExprContext*>& dst_exprs)
-            : Operator(id, "intersect_build_sink", plan_node_id),
+            : Operator(factory, id, "intersect_build_sink", plan_node_id),
               _intersect_ctx(std::move(intersect_ctx)),
-              _dst_exprs(dst_exprs) {}
+              _dst_exprs(dst_exprs) {
+        _intersect_ctx->ref();
+    }
 
     bool need_input() const override { return !is_finished(); }
 
     bool has_output() const override { return false; }
 
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _intersect_ctx->is_finished(); }
 
     void set_finishing(RuntimeState* state) override {
         _is_finished = true;
@@ -45,6 +48,7 @@ public:
     }
 
     Status prepare(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -69,7 +73,7 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<IntersectBuildSinkOperator>(
-                _id, _plan_node_id, _intersect_partition_ctx_factory->get_or_create(driver_sequence), _dst_exprs);
+                this, _id, _plan_node_id, _intersect_partition_ctx_factory->get_or_create(driver_sequence), _dst_exprs);
     }
 
     Status prepare(RuntimeState* state) override;

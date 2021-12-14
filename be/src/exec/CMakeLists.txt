@@ -19,7 +19,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -38,7 +38,6 @@ set(EXEC_FILES
     local_file_reader.cpp
     scan_node.cpp
     select_node.cpp
-    text_converter.cpp
     sort_exec_exprs.cpp
     olap_common.cpp
     tablet_info.cpp
@@ -51,8 +50,8 @@ set(EXEC_FILES
     local_file_writer.cpp
     broker_writer.cpp
     parquet_reader.cpp
-    parquet_writer.cpp
-    vectorized/adapter_node.cpp
+    parquet_builder.cpp
+    plain_text_builder.cpp
     vectorized/aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp
@@ -133,6 +132,8 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange.cpp
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
+    pipeline/exchange/mcast_local_exchange.cpp
+    pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
     pipeline/operator_with_dependency.cpp
@@ -148,6 +149,7 @@ set(EXEC_FILES
     pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
+    pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_dispatcher.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
@@ -166,6 +168,7 @@ set(EXEC_FILES
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
+    pipeline/analysis/analytor_factory.cpp
     pipeline/table_function_operator.cpp
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
@@ -182,6 +185,11 @@ set(EXEC_FILES
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
 )
+
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
 
 set(EXEC_FILES
     ${EXEC_FILES}

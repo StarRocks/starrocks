@@ -10,14 +10,19 @@
 namespace starrocks::pipeline {
 class AggregateDistinctStreamingSourceOperator : public SourceOperator {
 public:
-    AggregateDistinctStreamingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_distinct_streaming_source", plan_node_id),
-              _aggregator(std::move(aggregator)) {}
+    AggregateDistinctStreamingSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                             AggregatorPtr aggregator)
+            : SourceOperator(factory, id, "aggregate_distinct_streaming_source", plan_node_id),
+              _aggregator(std::move(aggregator)) {
+        _aggregator->ref();
+    }
+
     ~AggregateDistinctStreamingSourceOperator() override = default;
 
     bool has_output() const override;
     bool is_finished() const override;
-    void set_finishing(RuntimeState* state) override;
+
+    void set_finished(RuntimeState* state) override;
 
     Status close(RuntimeState* state) override;
 
@@ -26,11 +31,12 @@ public:
 private:
     void _output_chunk_from_hash_set(vectorized::ChunkPtr* chunk);
 
-    // It is used to perform aggregation algorithms
-    // shared by AggregateStreamingSinkOperator
+    // It is used to perform aggregation algorithms shared by
+    // AggregateDistinctStreamingSinkOperator. It is
+    // - prepared at SinkOperator::prepare(),
+    // - reffed at constructor() of both sink and source operator,
+    // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
-    // Whether prev operator has no output
-    bool _is_finished = false;
 };
 
 class AggregateDistinctStreamingSourceOperatorFactory final : public SourceOperatorFactory {
@@ -44,7 +50,7 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateDistinctStreamingSourceOperator>(
-                _id, _plan_node_id, _aggregator_factory->get_or_create(driver_sequence));
+                this, _id, _plan_node_id, _aggregator_factory->get_or_create(driver_sequence));
     }
 
 private:

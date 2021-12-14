@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnDef.DefaultValue;
+import com.starrocks.analysis.ColumnDef.DefaultValueDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.KeysType;
@@ -318,7 +318,7 @@ public class CreateTableStmtTest {
     public void testPrimaryKeyNullable() throws Exception {
         cols = Lists.newArrayList();
         cols.add(new ColumnDef("col1", new TypeDef(ScalarType.createType(PrimitiveType.INT)), true, null, true,
-                DefaultValue.NOT_SET, ""));
+                DefaultValueDef.NOT_SET, ""));
         colsName = Lists.newArrayList();
         colsName.add("col1");
         CreateTableStmt stmt = new CreateTableStmt(false, false, tblName, cols, "olap",
@@ -332,7 +332,7 @@ public class CreateTableStmtTest {
     public void testPrimaryKeyChar() throws Exception {
         cols = Lists.newArrayList();
         cols.add(new ColumnDef("col1", new TypeDef(ScalarType.createCharType(10)), true, null, false,
-                DefaultValue.NOT_SET, ""));
+                DefaultValueDef.NOT_SET, ""));
         colsName = Lists.newArrayList();
         colsName.add("col1");
         CreateTableStmt stmt = new CreateTableStmt(false, false, tblName, cols, "olap",

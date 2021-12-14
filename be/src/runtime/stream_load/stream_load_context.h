@@ -41,6 +41,8 @@
 
 namespace starrocks {
 
+class RuntimeProfile;
+
 // kafka related info
 class KafkaLoadInfo {
 public:
@@ -113,6 +115,15 @@ public:
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
 public:
+    // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
+    // At this time, mem_tracker may have been destructed,
+    // so add shared_ptr here to prevent this from happening.
+    //
+    // 2) query_mem_tracker is the parent of instance_mem_tracker
+    // runtime_profile will be used by [consumption] of mem_tracker to record peak memory
+    std::shared_ptr<RuntimeProfile> runtime_profile;
+    std::shared_ptr<MemTracker> query_mem_tracker;
+    std::shared_ptr<MemTracker> instance_mem_tracker;
     // load type, eg: ROUTINE LOAD/MANUAL LOAD
     TLoadType::type load_type;
     // load data source: eg: KAFKA/RAW

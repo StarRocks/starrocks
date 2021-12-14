@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "column/binary_column.h"
+#include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
@@ -34,7 +35,12 @@ public:
         int size = input->size();
 
         if (input->is_constant()) {
-            int code = ColumnHelper::get_const_value<TYPE_INT>(input);
+            int code = 0;
+            if (input->only_null()) {
+                code = 0;
+            } else {
+                code = ColumnHelper::get_const_value<TYPE_INT>(input);
+            }
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(_dict_opt_ctx->filter[code], input->size());
         } else if (input->is_nullable()) {
             res_data.resize(size);
@@ -82,7 +88,18 @@ public:
 
         ColumnPtr output = nullptr;
 
-        if (input->is_nullable()) {
+        if (input->is_constant()) {
+            int res_code = 0;
+            if (input->only_null()) {
+                res_code = _dict_opt_ctx->code_convert_map[0];
+            } else {
+                res_code = _dict_opt_ctx->code_convert_map[ColumnHelper::get_const_value<TYPE_INT>(input)];
+            }
+            if (res_code == 0) {
+                return ColumnHelper::create_const_null_column(row_size);
+            }
+            return ColumnHelper::create_const_column<TYPE_INT>(res_code, row_size);
+        } else if (input->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input.get());
             const auto* null_column = down_cast<const NullColumn*>(nullable_column->null_column().get());
             const auto* data_column = down_cast<const LowCardDictColumn*>(nullable_column->data_column().get());
@@ -163,12 +180,13 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
 
     GlobalDictMap result_map;
     RGlobalDictMap rresult_map;
+    std::vector<Slice> values;
+    values.reserve(row_sz);
+
+    // distinct result values
     int id_allocator = 1;
     for (int i = 0; i < row_sz; ++i) {
-        if (viewer.is_null(i)) {
-            code_convert_map[codes[i]] = 0;
-            dict_opt_ctx->result_nullable = true;
-        } else {
+        if (!viewer.is_null(i)) {
             auto value = viewer.value(i);
             Slice slice(value.data, value.size);
             auto res = result_map.lazy_emplace(slice, [&](const auto& ctor) {
@@ -178,9 +196,27 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
                 slice = Slice(data, slice.size);
                 ctor(slice, id_allocator);
             });
+            values.emplace_back(res->first);
+        }
+    }
 
-            code_convert_map[codes[i]] = res->second;
-            rresult_map.emplace(res->second, slice);
+    // sort and build result map
+    Slice::Comparator comparator;
+    std::sort(values.begin(), values.end(), comparator);
+    int sorted_id = 1;
+    for (int i = 0; i < values.size(); ++i) {
+        auto slice = values[i];
+        result_map[slice] = sorted_id;
+        rresult_map[sorted_id++] = slice;
+    }
+
+    // build code convert map
+    for (int i = 0; i < values.size(); ++i) {
+        if (viewer.is_null(i)) {
+            code_convert_map[codes[i]] = 0;
+            dict_opt_ctx->result_nullable = true;
+        } else {
+            code_convert_map[codes[i]] = result_map.find(viewer.value(i))->second;
         }
     }
 
@@ -234,6 +270,14 @@ void DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeConte
     temp_chunk->append_column(binary_column, need_decode_slot_id);
 
     auto result_column = conjunct->evaluate(temp_chunk.get());
+    // result always null
+    if (result_column->only_null()) {
+        dict_opt_ctx->filter.resize(DICT_DECODE_MAX_SIZE + 1);
+        return;
+    }
+    // unpack result column
+    result_column = ColumnHelper::unpack_and_duplicate_const_column(result_column->size(), result_column);
+
     bool result_nullable = result_column->is_nullable();
     ColumnPtr data_column = result_column;
     if (result_nullable) {
@@ -322,7 +366,7 @@ std::pair<std::shared_ptr<BinaryColumn>, std::vector<int32_t>> extract_column_wi
 void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,
                                             const std::map<int32_t, int32_t>& dict_slots_mapping,
                                             std::vector<SlotDescriptor*>* slot_descs) {
-    const auto& global_dict = runtime_state->get_global_dict_map();
+    const auto& global_dict = runtime_state->get_query_global_dict_map();
     if (global_dict.empty()) return;
 
     for (size_t i = 0; i < slot_descs->size(); ++i) {

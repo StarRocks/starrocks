@@ -171,8 +171,12 @@ public abstract class QueryStmt extends StatementBase {
         if (hasWithClause()) {
             withClause_.analyze(analyzer);
         }
+        analyzeOutfile();
+    }
+
+    public void analyzeOutfile() throws AnalysisException {
         if (hasOutFileClause()) {
-            outFileClause.analyze(analyzer);
+            outFileClause.analyze();
         }
     }
 
@@ -292,7 +296,7 @@ public abstract class QueryStmt extends StatementBase {
             // create copies, we don't want to modify the original parse node, in case
             // we need to print it
             orderingExprs.add(orderByElement.getExpr().clone());
-            isAscOrder.add(Boolean.valueOf(orderByElement.getIsAsc()));
+            isAscOrder.add(orderByElement.getIsAsc());
             nullsFirstParams.add(orderByElement.getNullsFirstParam());
         }
         substituteOrdinalsAliases(orderingExprs, "ORDER BY", analyzer);
@@ -569,24 +573,12 @@ public abstract class QueryStmt extends StatementBase {
         resultExprs = Expr.substituteList(resultExprs, smap, analyzer, true);
     }
 
-    public boolean isForbiddenMVRewrite() {
-        return forbiddenMVRewrite;
-    }
-
     public void forbiddenMVRewrite() {
         this.forbiddenMVRewrite = true;
     }
 
     public void updateDisableTuplesMVRewriter(TupleId tupleId) {
         disableTuplesMVRewriter.add(tupleId);
-    }
-
-    public void updateDisableTuplesMVRewriter(Set<TupleId> tupleIds) {
-        disableTuplesMVRewriter.addAll(tupleIds);
-    }
-
-    public Set<TupleId> getDisableTuplesMVRewriter() {
-        return disableTuplesMVRewriter;
     }
 
     /**
@@ -634,6 +626,10 @@ public abstract class QueryStmt extends StatementBase {
 
     public OutFileClause cloneOutfileCluse() {
         return outFileClause != null ? outFileClause.clone() : null;
+    }
+
+    public String toDigest() {
+        return "";
     }
 
     /**

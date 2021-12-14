@@ -5,8 +5,9 @@
 #include <vector>
 
 #include "runtime/descriptors.h"
+#include "runtime/global_dicts.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/rowset_reader.h"
+#include "storage/rowset/segment_v2/column_iterator.h"
 #include "storage/rowset/segment_v2/segment.h"
 #include "storage/tablet.h"
 
@@ -20,6 +21,18 @@ namespace starrocks::vectorized {
 
 class Tablet;
 class SegmentMetaCollecter;
+static std::vector<std::string> FAKE_DICT_WORDS;
+static std::vector<Slice> generate_fake_dict_words() {
+    std::vector<Slice> result;
+    FAKE_DICT_WORDS.resize(DICT_DECODE_MAX_SIZE + 1);
+    result.resize(DICT_DECODE_MAX_SIZE + 1);
+    for (size_t i = 0; i < DICT_DECODE_MAX_SIZE + 1; i++) {
+        FAKE_DICT_WORDS[i] = std::to_string(i);
+        result[i] = FAKE_DICT_WORDS[i];
+    }
+    return result;
+}
+static std::vector<Slice> FAKE_DICT_SLICE_WORDS = generate_fake_dict_words();
 
 // Params for MetaReader
 // mainly include tablet
@@ -122,7 +135,7 @@ private:
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type);
     segment_v2::SegmentSharedPtr _segment;
-    std::vector<ColumnIterator*> _column_iterators;
+    std::vector<segment_v2::ColumnIterator*> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
     std::unique_ptr<fs::ReadableBlock> _rblock;
     OlapReaderStatistics _stats;

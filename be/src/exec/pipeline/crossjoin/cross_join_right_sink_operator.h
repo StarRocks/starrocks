@@ -12,19 +12,27 @@ namespace starrocks::pipeline {
 
 class CrossJoinRightSinkOperator final : public Operator {
 public:
-    CrossJoinRightSinkOperator(int32_t id, int32_t plan_node_id, const int32_t driver_sequence,
+    CrossJoinRightSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                               const int32_t driver_sequence,
                                const std::shared_ptr<CrossJoinContext>& cross_join_context)
-            : Operator(id, "cross_join_right_sink", plan_node_id),
+            : Operator(factory, id, "cross_join_right_sink", plan_node_id),
               _driver_sequence(driver_sequence),
-              _cross_join_context(cross_join_context) {}
+              _cross_join_context(cross_join_context) {
+        _cross_join_context->ref();
+    }
 
     ~CrossJoinRightSinkOperator() override = default;
+
+    Status close(RuntimeState* state) override {
+        RETURN_IF_ERROR(_cross_join_context->unref(state));
+        return Operator::close(state);
+    }
 
     bool has_output() const override { return false; }
 
     bool need_input() const override { return !is_finished(); }
 
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _cross_join_context->is_finished(); }
 
     void set_finishing(RuntimeState* state) override {
         _is_finished = true;
@@ -53,7 +61,8 @@ public:
     ~CrossJoinRightSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<CrossJoinRightSinkOperator>(_id, _plan_node_id, driver_sequence, _cross_join_context);
+        return std::make_shared<CrossJoinRightSinkOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                            _cross_join_context);
     }
 
 private:

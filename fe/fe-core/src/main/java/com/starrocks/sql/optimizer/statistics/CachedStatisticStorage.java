@@ -300,7 +300,7 @@ public class CachedStatisticStorage implements StatisticStorage {
             if (tableId != cacheKey.tableId) {
                 return false;
             }
-            return column.equalsIgnoreCase(cacheKey.column);
+            return column.equals(cacheKey.column);
         }
 
         @Override

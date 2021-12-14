@@ -4,6 +4,11 @@
 
 namespace starrocks::pipeline {
 
+Status ExceptProbeSinkOperator::close(RuntimeState* state) {
+    RETURN_IF_ERROR(_except_ctx->unref(state));
+    return Operator::close(state);
+}
+
 StatusOr<vectorized::ChunkPtr> ExceptProbeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from sink operator");
 }
@@ -15,8 +20,7 @@ Status ExceptProbeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& 
 Status ExceptProbeSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RowDescriptor row_desc;
-    Expr::prepare(_dst_exprs, state, row_desc);
+    Expr::prepare(_dst_exprs, state, _row_desc);
     Expr::open(_dst_exprs, state);
 
     return Status::OK();

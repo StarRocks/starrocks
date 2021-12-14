@@ -6,6 +6,7 @@
 #include "storage/hll.h"
 #include "util/bitmap_value.h"
 #include "util/mysql_row_buffer.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 

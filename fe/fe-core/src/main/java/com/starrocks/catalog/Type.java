@@ -1113,6 +1113,10 @@ public abstract class Type implements Cloneable {
             return t1;
         }
 
+        if (t1.isScalarType() && t2.isScalarType() && (t1.isDecimalV3() || t2.isDecimalV3())) {
+            return getAssignmentCompatibleType(t1, t2, false);
+        }
+
         if (t1.getPrimitiveType().equals(t2.getPrimitiveType())) {
             return t1;
         }
@@ -1124,10 +1128,6 @@ public abstract class Type implements Cloneable {
             return Type.VARCHAR;
         }
         if (t1ResultType == PrimitiveType.BIGINT && t2ResultType == PrimitiveType.BIGINT) {
-            return getAssignmentCompatibleType(t1, t2, false);
-        }
-
-        if (t1.isScalarType() && t2.isScalarType() && (t1.isDecimalV3() || t2.isDecimalV3())) {
             return getAssignmentCompatibleType(t1, t2, false);
         }
 

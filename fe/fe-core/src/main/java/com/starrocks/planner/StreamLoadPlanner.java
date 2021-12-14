@@ -102,13 +102,28 @@ public class StreamLoadPlanner {
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
     public TExecPlanFragmentParams plan(TUniqueId loadId) throws UserException {
+        boolean isPrimaryKey = destTable.getKeysType() == KeysType.PRIMARY_KEYS;
         resetAnalyzer();
         // construct tuple descriptor, used for scanNode and dataSink
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DstTableTuple");
         boolean negative = streamLoadTask.getNegative();
+        if (isPrimaryKey) {
+            if (negative) {
+                throw new DdlException("Primary key table does not support negative load");
+            }
+        } else {
+            if (streamLoadTask.isPartialUpdate()) {
+                throw new DdlException("Only primary key table support partial update");
+            }
+        }
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        // here we should be full schema to fill the descriptor table
-        for (Column col : destTable.getFullSchema()) {
+        List<Column> destColumns;
+        if (streamLoadTask.isPartialUpdate()) {
+            destColumns = Load.getPartialUpateColumns(destTable, streamLoadTask.getColumnExprDescs());
+        } else {
+            destColumns = destTable.getFullSchema();
+        }
+        for (Column col : destColumns) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(col);
@@ -123,7 +138,7 @@ public class StreamLoadPlanner {
                 globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
             }
         }
-        if (destTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+        if (isPrimaryKey) {
             // add op type column
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
@@ -138,7 +153,7 @@ public class StreamLoadPlanner {
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
-        LOG.info("use vectorized load: {}, load job id: {}", scanNode.isUseVectorized(), loadId);
+        LOG.info("use vectorized load: {}, load job id: {}", true, loadId);
         descTable.computeMemLayout();
 
         // create dest sink
@@ -153,7 +168,7 @@ public class StreamLoadPlanner {
         fragment.setSink(olapTableSink);
         // After data loading, we need to check the global dict for low cardinality string column
         // whether update.
-        fragment.setGlobalDicts(globalDicts);
+        fragment.setLoadGlobalDicts(globalDicts);
 
         fragment.finalize(null, false);
 

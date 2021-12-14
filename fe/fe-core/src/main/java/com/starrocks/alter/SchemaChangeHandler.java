@@ -109,6 +109,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
     // all shadow indexes should have this prefix in name
     public static final String SHADOW_NAME_PRFIX = "__starrocks_shadow_";
+    // before version 1.18, use "__doris_shadow_" as shadow index prefix
+    // check "__doris_shadow_" to prevent compatibility problems
+    public static final String SHADOW_NAME_PRFIX_V1 = "__doris_shadow_";
 
     public SchemaChangeHandler() {
         super("schema change");
@@ -569,6 +572,12 @@ public class SchemaChangeHandler extends AlterHandler {
                                    Map<Long, LinkedList<Column>> indexSchemaMap,
                                    Set<String> newColNameSet) throws DdlException {
 
+        Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
+        // expr like now() or uuid() will support later
+        if (defaultValueType == Column.DefaultValueType.CONST && newColumn.getDefaultExpr() != null) {
+            throw new DdlException("Schema change currently not supported default expr:"
+                    + newColumn.getDefaultExpr().getExpr());
+        }
         String newColName = newColumn.getName();
         // check the validation of aggregation method on column.
         // also fill the default aggregation method if not specified.
@@ -891,7 +900,8 @@ public class SchemaChangeHandler extends AlterHandler {
         double bfFpp = 0;
         try {
             bfColumns = PropertyAnalyzer
-                    .analyzeBloomFilterColumns(propertyMap, indexSchemaMap.get(olapTable.getBaseIndexId()));
+                    .analyzeBloomFilterColumns(propertyMap, indexSchemaMap.get(olapTable.getBaseIndexId()),
+                    olapTable.getKeysType() == KeysType.PRIMARY_KEYS);
             bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(propertyMap);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
@@ -1204,7 +1214,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                 .checkState(originReplica.getState() == ReplicaState.NORMAL, originReplica.getState());
                         // replica's init state is ALTER, so that tablet report process will ignore its report
                         Replica shadowReplica = new Replica(shadowReplicaId, backendId, ReplicaState.ALTER,
-                                Partition.PARTITION_INIT_VERSION, Partition.PARTITION_INIT_VERSION_HASH,
+                                Partition.PARTITION_INIT_VERSION,
                                 newSchemaHash);
                         shadowTablet.addReplica(shadowReplica);
                         healthyReplicaNum++;
@@ -1532,14 +1542,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify table properties
                 // do nothing, properties are already in propertyMap
             } else if (alterClause instanceof CreateIndexClause) {
-                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    throw new DdlException("Primary key table do not support create index");
-                }
                 processAddIndex((CreateIndexClause) alterClause, olapTable, newIndexes);
             } else if (alterClause instanceof DropIndexClause) {
-                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    throw new DdlException("Primary key table do not support drop index");
-                }
                 processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
             } else {
                 Preconditions.checkState(false);

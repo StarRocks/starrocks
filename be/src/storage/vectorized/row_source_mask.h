@@ -53,7 +53,7 @@ struct RowSourceMask {
 //     buffer.flush();
 //
 //     // read masks
-//     buffer.flip();
+//     buffer.flip_to_read();
 //     while (buffer.has_remaining().value()) {
 //         RowSourceMask mask = buffer.current();
 //         buffer.advance();
@@ -71,7 +71,7 @@ public:
     RowSourceMask current() const { return RowSourceMask(_mask_column->get(_current_index).get_uint16()); }
     void advance() { ++_current_index; }
 
-    Status flip();
+    Status flip_to_read();
     Status flush();
 
 private:

@@ -25,15 +25,12 @@ RESULT SINK
 
 14:Project
 |  <slot 49> : 48: sum / 7.0
-|  use vectorized: true
 |
 13:AGGREGATE (merge finalize)
 |  output: sum(48: sum)
 |  group by:
-|  use vectorized: true
 |
 12:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -46,11 +43,9 @@ UNPARTITIONED
 11:AGGREGATE (update serialize)
 |  output: sum(6: L_EXTENDEDPRICE)
 |  group by:
-|  use vectorized: true
 |
 10:Project
 |  <slot 6> : 6: L_EXTENDEDPRICE
-|  use vectorized: true
 |
 9:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -58,10 +53,8 @@ UNPARTITIONED
 |  colocate: false, reason:
 |  equal join conjunct: 2: L_PARTKEY = 18: P_PARTKEY
 |  other join predicates: 5: L_QUANTITY < 0.2 * 45: avg
-|  use vectorized: true
 |
 |----8:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -73,7 +66,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=24.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -86,10 +78,8 @@ UNPARTITIONED
 7:AGGREGATE (update finalize)
 |  output: avg(32: L_QUANTITY)
 |  group by: 18: P_PARTKEY, 29: L_PARTKEY
-|  use vectorized: true
 |
 6:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -104,10 +94,8 @@ HASH_PARTITIONED: 18: P_PARTKEY, 29: L_PARTKEY
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 29: L_PARTKEY = 18: P_PARTKEY
-|  use vectorized: true
 |
 |----4:EXCHANGE
-|       use vectorized: true
 |
 1:OlapScanNode
 TABLE: lineitem
@@ -119,7 +107,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=16.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -131,7 +118,6 @@ UNPARTITIONED
 
 3:Project
 |  <slot 18> : 18: P_PARTKEY
-|  use vectorized: true
 |
 2:OlapScanNode
 TABLE: part
@@ -144,6 +130,5 @@ tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=20000
 avgRowSize=28.0
 numNodes=0
-use vectorized: true
 [end]
 

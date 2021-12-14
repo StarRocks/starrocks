@@ -41,7 +41,6 @@
 #include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
 #include "runtime/raw_value.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/tuple_row.h"
 #include "service/brpc.h"
@@ -385,7 +384,8 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
           _profile(nullptr),
           _serialize_batch_timer(nullptr),
           _bytes_sent_counter(nullptr),
-          _dest_node_id(sink.dest_node_id) {
+          _dest_node_id(sink.dest_node_id),
+          _destinations(destinations) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
            sink.output_partition.type == TPartitionType::HASH_PARTITIONED ||
@@ -480,12 +480,9 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     _profile = _pool->add(new RuntimeProfile(title.str()));
     SCOPED_TIMER(_profile->total_time_counter());
     _profile->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
-    if (_part_type == TPartitionType::UNPARTITIONED || _part_type == TPartitionType::RANDOM) {
-        // Randomize the order we open/transmit to channels to avoid thundering herd problems.
-        srand(reinterpret_cast<uint64_t>(this));
-        std::shuffle(_channels.begin(), _channels.end(), std::mt19937(std::random_device()()));
-    } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
-               _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+
+    if (_part_type == TPartitionType::HASH_PARTITIONED ||
+        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
     } else {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
@@ -493,6 +490,12 @@ Status DataStreamSender::prepare(RuntimeState* state) {
             RETURN_IF_ERROR(iter->prepare(state, _row_desc));
         }
     }
+
+    // Randomize the order we open/transmit to channels to avoid thundering herd problems.
+    _channel_indices.resize(_channels.size());
+    std::iota(_channel_indices.begin(), _channel_indices.end(), 0);
+    srand(reinterpret_cast<uint64_t>(this));
+    std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_sent_counter = ADD_COUNTER(profile(), "BytesSent", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(profile(), "UncompressedBytes", TUnit::BYTES);
@@ -529,6 +532,7 @@ DataStreamSender::~DataStreamSender() {
 }
 
 Status DataStreamSender::open(RuntimeState* state) {
+    // RETURN_IF_ERROR(DataSink::open(state));
     DCHECK(state != nullptr);
     RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     for (auto iter : _partition_infos) {
@@ -555,8 +559,8 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
             construct_brpc_attachment(&_chunk_request, &attachment);
-            for (auto channel : _channels) {
-                RETURN_IF_ERROR(channel->send_chunk_request(&_chunk_request, attachment));
+            for (auto idx : _channel_indices) {
+                RETURN_IF_ERROR(_channels[idx]->send_chunk_request(&_chunk_request, attachment));
             }
             _current_request_bytes = 0;
             _chunk_request.clear_chunks();
@@ -565,7 +569,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
         // Round-robin batches among channels. Wait for the current channel to finish its
         // rpc before overwriting its batch.
         // 1. Get request of that channel
-        Channel* channel = _channels[_current_channel_idx];
+        Channel* channel = _channels[_channel_indices[_current_channel_idx]];
         bool real_sent = false;
         RETURN_IF_ERROR(channel->send_one_chunk(chunk, false, &real_sent));
         if (real_sent) {
@@ -617,7 +621,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
             }
         }
 
-        for (int i = 0; i < num_channels; ++i) {
+        for (int i : _channel_indices) {
             size_t from = _channel_row_idx_start_points[i];
             size_t size = _channel_row_idx_start_points[i + 1] - from;
             if (size == 0) {
@@ -638,6 +642,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
 }
 
 Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
+    RETURN_IF_ERROR(DataSink::close(state, exec_status));
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
     // TODO: only close channels that didn't have any errors
     // make all channels close parallel

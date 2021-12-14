@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.planner.PlanFragment;
@@ -26,6 +27,7 @@ public class ExecPlan {
     private final DescriptorTable descTbl = new DescriptorTable();
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
+    private final Map<String, PlanFragment> cteProduceFragments = Maps.newHashMap();
     private int planCount = 0;
 
     private final OptExpression physicalPlan;
@@ -78,6 +80,14 @@ public class ExecPlan {
 
     public int getPlanCount() {
         return planCount;
+    }
+
+    public Map<String, PlanFragment> getCteProduceFragments() {
+        return cteProduceFragments;
+    }
+
+    public OptExpression getPhysicalPlan() {
+        return physicalPlan;
     }
 
     public String getExplainString(TExplainLevel level) {

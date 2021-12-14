@@ -2,21 +2,15 @@
 package com.starrocks.sql.analyzer.relation;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class ValuesRelation extends QueryRelation {
     private final List<List<Expr>> rows;
 
-    public ValuesRelation(List<ArrayList<Expr>> rows, RelationFields relationFields) {
-        super(rows.get(0), new Scope(RelationId.anonymous(), relationFields),
-                relationFields.getAllFields().stream().map(Field::getName).collect(Collectors.toList()));
+    public ValuesRelation(List<ArrayList<Expr>> rows, List<String> columnOutputNames) {
+        super(rows.get(0), columnOutputNames);
         this.rows = new ArrayList<>(rows);
     }
 

@@ -78,6 +78,8 @@ OutPut Exchange Id: 25
 22:HASH JOIN
 |  join op: RIGHT SEMI JOIN (PARTITIONED)
 |  equal join conjunct: [15: PS_SUPPKEY, INT, false] = [1: S_SUPPKEY, INT, false]
+|  build runtime filters:
+|  - filter_id = 4, build_expr = (1: S_SUPPKEY), remote = true
 |  cardinality: 1561188
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -119,7 +121,7 @@ OutPut Exchange Id: 21
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----18:EXCHANGE
 |       cardinality: 1
@@ -150,7 +152,7 @@ OutPut Exchange Id: 18
 |  9 <-> [9: N_NATIONKEY, INT, false]
 |  cardinality: 1
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 16:OlapScanNode
 table: nation, rollup: nation
@@ -161,8 +163,8 @@ tabletList=10185
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 4(F07)
 
@@ -224,7 +226,7 @@ OutPut Exchange Id: 11
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |
 |----8:EXCHANGE
 |       cardinality: 5000000
@@ -238,6 +240,7 @@ actualRows=0, avgRowSize=20.0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (14: PS_PARTKEY)
+- filter_id = 4, probe_expr = (15: PS_SUPPKEY)
 column statistics:
 * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
@@ -254,7 +257,7 @@ OutPut Exchange Id: 08
 |  20 <-> [20: P_PARTKEY, INT, false]
 |  cardinality: 5000000
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |
 6:OlapScanNode
 table: part, rollup: part
@@ -265,8 +268,8 @@ tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 actualRows=0, avgRowSize=63.0
 cardinality: 5000000
 column statistics:
-* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
-* P_NAME-->[-Infinity, Infinity, 0.0, 55.0, 1.99997E7] ESTIMATE
+* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
+* P_NAME-->[-Infinity, Infinity, 0.0, 55.0, 5000000.0] ESTIMATE
 
 PLAN FRAGMENT 7(F01)
 
@@ -330,11 +333,11 @@ column statistics:
     "test.nation": {
       "nation": 25
     },
-    "test.lineitem": {
-      "lineitem": 600000000
-    },
     "test.partsupp": {
       "partsupp": 80000000
+    },
+    "test.lineitem": {
+      "lineitem": 600000000
     },
     "test.supplier": {
       "supplier": 1000000
@@ -348,16 +351,16 @@ column statistics:
       "N_NAME": "[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE",
       "N_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE"
     },
+    "test.partsupp": {
+      "PS_SUPPKEY": "[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE",
+      "PS_AVAILQTY": "[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE",
+      "PS_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE"
+    },
     "test.lineitem": {
       "L_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE",
       "L_SHIPDATE": "[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE",
       "L_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE",
       "L_QUANTITY": "[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE"
-    },
-    "test.partsupp": {
-      "PS_SUPPKEY": "[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE",
-      "PS_AVAILQTY": "[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE",
-      "PS_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE"
     },
     "test.supplier": {
       "S_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE",

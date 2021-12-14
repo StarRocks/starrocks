@@ -51,9 +51,6 @@ public:
     // open a new load channel if not exist
     Status open(const PTabletWriterOpenRequest& request);
 
-    Status add_batch(const PTabletWriterAddBatchRequest& request,
-                     google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec, int64_t* wait_lock_time_ns);
-
     Status add_chunk(const PTabletWriterAddChunkRequest& request,
                      google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec, int64_t* wait_lock_time_ns);
 

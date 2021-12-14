@@ -15,21 +15,29 @@ namespace pipeline {
 
 class CrossJoinLeftOperator final : public OperatorWithDependency {
 public:
-    CrossJoinLeftOperator(int32_t id, int32_t plan_node_id, const std::vector<ExprContext*>& conjunct_ctxs,
+    CrossJoinLeftOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                          const std::vector<ExprContext*>& conjunct_ctxs,
                           const vectorized::Buffer<SlotDescriptor*>& col_types,
                           const vectorized::Buffer<TupleId>& output_build_tuple_ids,
                           const vectorized::Buffer<TupleId>& output_probe_tuple_ids, const size_t& probe_column_count,
                           const size_t& build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context)
-            : OperatorWithDependency(id, "cross_join_left", plan_node_id),
+            : OperatorWithDependency(factory, id, "cross_join_left", plan_node_id),
               _col_types(col_types),
               _output_build_tuple_ids(output_build_tuple_ids),
               _output_probe_tuple_ids(output_probe_tuple_ids),
               _probe_column_count(probe_column_count),
               _build_column_count(build_column_count),
               _conjunct_ctxs(conjunct_ctxs),
-              _cross_join_context(cross_join_context) {}
+              _cross_join_context(cross_join_context) {
+        _cross_join_context->ref();
+    }
 
     ~CrossJoinLeftOperator() override = default;
+
+    Status close(RuntimeState* state) override {
+        RETURN_IF_ERROR(_cross_join_context->unref(state));
+        return Operator::close(state);
+    }
 
     bool is_ready() const override { return _cross_join_context->is_right_finished(); }
 
@@ -64,6 +72,8 @@ public:
     }
 
     void set_finishing(RuntimeState* state) override { _is_finished = true; }
+
+    void set_finished(RuntimeState* state) override { _cross_join_context->set_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -155,7 +165,7 @@ public:
     ~CrossJoinLeftOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<CrossJoinLeftOperator>(_id, _plan_node_id, _conjunct_ctxs, _col_types,
+        return std::make_shared<CrossJoinLeftOperator>(this, _id, _plan_node_id, _conjunct_ctxs, _col_types,
                                                        _output_build_tuple_ids, _output_probe_tuple_ids,
                                                        _probe_column_count, _build_column_count, _cross_join_context);
     }

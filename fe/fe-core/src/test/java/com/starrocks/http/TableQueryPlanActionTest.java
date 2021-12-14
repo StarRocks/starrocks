@@ -70,7 +70,6 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             Assert.assertNotNull(tabletObject.getJSONArray("routings"));
             Assert.assertEquals(3, tabletObject.getJSONArray("routings").length());
             Assert.assertEquals(testStartVersion, tabletObject.getLong("version"));
-            Assert.assertEquals(testStartVersionHash, tabletObject.getLong("versionHash"));
             Assert.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
 
         }
@@ -103,27 +102,6 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         String exception = jsonObject.getString("exception");
         Assert.assertNotNull(exception);
         Assert.assertEquals("POST body must contains [sql] root object", exception);
-    }
-
-    @Test
-    public void testInconsistentResource() throws IOException {
-        RequestBody body = RequestBody
-                .create(JSON, "{ \"sql\" :  \" select k1,k2 from " + DB_NAME + "." + TABLE_NAME + 1 + " \" }");
-        Request request = new Request.Builder()
-                .post(body)
-                .addHeader("Authorization", rootAuth)
-                .url(URI + PATH_URI)
-                .build();
-        Response response = networkClient.newCall(request).execute();
-        String respStr = Objects.requireNonNull(response.body()).string();
-        System.out.println(respStr);
-        Assert.assertNotNull(respStr);
-        expectThrowsNoException(() -> new JSONObject(respStr));
-        JSONObject jsonObject = new JSONObject(respStr);
-        Assert.assertEquals(400, jsonObject.getInt("status"));
-        String exception = jsonObject.getString("exception");
-        Assert.assertNotNull(exception);
-        Assert.assertTrue(exception.startsWith("requested database and table must consistent with sql"));
     }
 
     @Test

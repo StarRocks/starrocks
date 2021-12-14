@@ -18,7 +18,6 @@ class RowIdColumnIterator final : public starrocks::segment_v2::ColumnIterator {
     using ColumnIteratorOptions = starrocks::segment_v2::ColumnIteratorOptions;
     using ordinal_t = starrocks::segment_v2::ordinal_t;
     using rowid_t = starrocks::segment_v2::rowid_t;
-    using RowRanges = starrocks::segment_v2::RowRanges;
 
 public:
     RowIdColumnIterator() {}
@@ -60,15 +59,6 @@ public:
 
     Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
         return Status::NotSupported("Not supported by RowIdColumnIterator: next_batch");
-    }
-
-    Status get_row_ranges_by_zone_map(CondColumn* cond_column, CondColumn* delete_condition,
-                                      RowRanges* row_ranges) override {
-        return Status::NotSupported("Not supported by RowIdColumnIterator: get_row_ranges_by_zone_map");
-    }
-
-    Status get_row_ranges_by_bloom_filter(CondColumn* cond_column, RowRanges* row_ranges) override {
-        return Status::NotSupported("Not supported by RowIdColumnIterator: get_row_ranges_by_bloom_filter");
     }
 
     Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,

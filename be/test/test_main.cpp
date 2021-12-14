@@ -73,13 +73,12 @@ int main(int argc, char** argv) {
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
-    // clear caches in update manager so mem_tracker checks will not fail
-    starrocks::StorageEngine::instance()->update_manager()->clear_cache();
     (void)butil::DeleteFile(storage_root, true);
     starrocks::vectorized::TEST_clear_all_columns_this_thread();
     // delete engine
     engine->stop();
     delete engine;
+    exec_env->set_storage_engine(nullptr);
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);

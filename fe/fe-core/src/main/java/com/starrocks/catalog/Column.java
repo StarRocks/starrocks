@@ -25,21 +25,27 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TColumn;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -48,7 +54,6 @@ import java.util.Objects;
  * This class represents the column-related metadata.
  */
 public class Column implements Writable {
-    private static final Logger LOG = LogManager.getLogger(Column.class);
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "type")
@@ -70,6 +75,9 @@ public class Column implements Writable {
     private boolean isAllowNull;
     @SerializedName(value = "defaultValue")
     private String defaultValue;
+    // this handle function like now() or simple expression
+    @SerializedName(value = "defaultExpr")
+    private DefaultExpr defaultExpr;
     @SerializedName(value = "comment")
     private String comment;
     @SerializedName(value = "stats")
@@ -99,11 +107,17 @@ public class Column implements Writable {
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
                   String comment) {
+        this(name, type, isKey, aggregateType, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue)), comment);
+    }
+
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, ColumnDef.DefaultValueDef defaultValue,
+                  String comment) {
         this(name, type, isKey, aggregateType, false, defaultValue, comment);
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-                  String defaultValue, String comment) {
+                  ColumnDef.DefaultValueDef defaultValueDef, String comment) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -120,9 +134,17 @@ public class Column implements Writable {
         this.isAggregationTypeImplicit = false;
         this.isKey = isKey;
         this.isAllowNull = isAllowNull;
-        this.defaultValue = defaultValue;
+        if (defaultValueDef != null) {
+            if (defaultValueDef.expr instanceof StringLiteral) {
+                this.defaultValue = ((StringLiteral) defaultValueDef.expr).getValue();
+            } else if (defaultValueDef.expr instanceof NullLiteral) {
+                // for default value is null or default value is not set the defaultExpr = null
+                this.defaultExpr = null;
+            } else {
+                this.defaultExpr = new DefaultExpr(defaultValueDef.expr.toSql());
+            }
+        }
         this.comment = comment;
-
         this.stats = new ColumnStats();
     }
 
@@ -137,6 +159,7 @@ public class Column implements Writable {
         this.comment = column.getComment();
         this.stats = column.getStats();
         this.defineExpr = column.getDefineExpr();
+        this.defaultExpr = column.defaultExpr;
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
     }
@@ -227,6 +250,10 @@ public class Column implements Writable {
 
     public void setIsAllowNull(boolean isAllowNull) {
         this.isAllowNull = isAllowNull;
+    }
+
+    public DefaultExpr getDefaultExpr() {
+        return defaultExpr;
     }
 
     public void setDefaultValue(String defaultValue) {
@@ -344,6 +371,9 @@ public class Column implements Writable {
         if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
             return colName.substring(SchemaChangeHandler.SHADOW_NAME_PRFIX.length());
         }
+        if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+            return colName.substring(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1.length());
+        }
         return colName;
     }
 
@@ -379,7 +409,10 @@ public class Column implements Writable {
         } else {
             sb.append("NOT NULL ");
         }
-        if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
+        if (defaultExpr != null && "now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+            // compatible with mysql
+            sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+        } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
@@ -387,6 +420,63 @@ public class Column implements Writable {
 
         return sb.toString();
     }
+
+
+    public enum DefaultValueType {
+        NULL,       // default value is not set or default value is null
+        CONST,      // const expr e.g. default "1" or now() function
+        VARY        // variable expr e.g. uuid() function
+    }
+
+    public DefaultValueType getDefaultValueType() {
+        if (defaultValue != null) {
+            return DefaultValueType.CONST;
+        } else if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                return DefaultValueType.CONST;
+            } else {
+                return DefaultValueType.VARY;
+            }
+        }
+        return DefaultValueType.NULL;
+    }
+
+
+
+    // if the column have a default value or default expr can be calculated like now(). return calculated value
+    // else for a batch of every row different like uuid(). return null
+    // consistency requires ConnectContext.get() != null to assurance
+    public String getCalculatedDefaultValue() {
+        if (defaultValue != null) {
+            return defaultValue;
+        }
+        if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+            // current transaction time
+            if (ConnectContext.get() != null) {
+                LocalDateTime startTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                return startTime.toString();
+            } else {
+                // should not run up here
+                return LocalDateTime.now().toString();
+            }
+        }
+        return null;
+    }
+
+    public String getMetaDefaultValue(List<String> extras) {
+        if (defaultValue != null) {
+            return defaultValue;
+        } else if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                extras.add("DEFAULT_GENERATED");
+                return "CURRENT_TIMESTAMP";
+            }
+        }
+        return FeConstants.null_string;
+    }
+
+
 
     public String toSqlWithoutAggregateTypeName() {
         StringBuilder sb = new StringBuilder();

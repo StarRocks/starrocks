@@ -83,6 +83,7 @@ public class ExportStmt extends StatementBase {
     private boolean includeQueryId = true;
 
     private TableRef tableRef;
+    private long exportStartTime;
 
     public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
@@ -96,6 +97,14 @@ public class ExportStmt extends StatementBase {
         this.columnSeparator = DEFAULT_COLUMN_SEPARATOR;
         this.rowDelimiter = DEFAULT_LINE_DELIMITER;
         this.includeQueryId = true;
+    }
+
+    public long getExportStartTime() {
+        return exportStartTime;
+    }
+
+    public void setExportStartTime(long exportStartTime) {
+        this.exportStartTime = exportStartTime;
     }
 
     public TableName getTblName() {

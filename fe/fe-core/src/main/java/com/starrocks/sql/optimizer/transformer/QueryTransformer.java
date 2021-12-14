@@ -13,9 +13,10 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -34,26 +35,26 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator.findOrCreateColumnRefForExpr;
 
 class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
+    private final ConnectContext session;
     private final ExpressionMapping outer;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
-    QueryTransformer(ColumnRefFactory columnRefFactory, ExpressionMapping outer) {
+    QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer) {
         this.columnRefFactory = columnRefFactory;
+        this.session = session;
         this.outer = outer;
     }
 
-    public LogicalPlan plan(QuerySpecification queryBlock) {
-        OptExprBuilder builder = planFrom(queryBlock.getRelation());
+    public LogicalPlan plan(SelectRelation queryBlock, Map<String, ExpressionMapping> cteContext) {
+        OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
 
         builder = filter(builder, queryBlock.getPredicate());
         builder =
@@ -103,8 +104,8 @@ class QueryTransformer {
         return outputs;
     }
 
-    private OptExprBuilder planFrom(Relation node) {
-        return new RelationTransformer(columnRefFactory).visit(node);
+    private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
+        return new RelationTransformer(columnRefFactory, session, cteContext).visit(node);
     }
 
     private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,
@@ -153,7 +154,7 @@ class QueryTransformer {
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
         for (Expr expression : expressions) {
             subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression);
@@ -171,7 +172,7 @@ class QueryTransformer {
             return subOpt;
         }
 
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
         subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate);
 
         ScalarOperator scalarPredicate =
@@ -350,10 +351,10 @@ class QueryTransformer {
              * that needs to be repeatedly calculated.
              * This column reference is come from the child of repeat operator
              */
-            List<Set<ColumnRefOperator>> repeatColumnRefList = new ArrayList<>();
+            List<List<ColumnRefOperator>> repeatColumnRefList = new ArrayList<>();
 
             for (List<Expr> grouping : groupingSetsList) {
-                Set<ColumnRefOperator> repeatColumnRef = new HashSet<>();
+                List<ColumnRefOperator> repeatColumnRef = new ArrayList<>();
                 BitSet groupingIdBitSet = new BitSet(groupByColumnRefs.size());
                 groupingIdBitSet.set(0, groupByExpressions.size(), true);
 
@@ -372,8 +373,21 @@ class QueryTransformer {
 
             //Build grouping_id(all grouping columns)
             ColumnRefOperator grouping = columnRefFactory.create("GROUPING_ID", Type.BIGINT, false);
-            groupingIds.add(groupingIdsBitSets.stream().map(bitset ->
-                    Utils.convertBitSetToLong(bitset, groupByColumnRefs.size())).collect(Collectors.toList()));
+            List<Long> groupingID = new ArrayList<>();
+            for (BitSet bitSet : groupingIdsBitSets) {
+                long gid = Utils.convertBitSetToLong(bitSet, groupByColumnRefs.size());
+
+                // Under normal circumstances, grouping_id is unlikely to be duplicated,
+                // but if there are duplicate columns in grouping sets, the grouping_id of the two columns may be the same,
+                // eg: grouping sets((v1), (v1))
+                // causing the data to be aggregated in advance.
+                // So add pow here to ensure that the grouping_id is not repeated, to ensure that the data will not be aggregated in advance
+                while (groupingID.contains(gid)) {
+                    gid += Math.pow(2, groupByColumnRefs.size());
+                }
+                groupingID.add(gid);
+            }
+            groupingIds.add(groupingID);
             groupByColumnRefs.add(grouping);
             repeatOutput.add(grouping);
 
@@ -391,7 +405,7 @@ class QueryTransformer {
 
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
                             .translate(slotRef, subOpt.getExpressionMapping());
-                    for (Set<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
+                    for (List<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
                         if (repeatColumns.contains(groupingKey)) {
                             for (int repeatColIdx = 0; repeatColIdx < repeatColumnRefList.size(); ++repeatColIdx) {
                                 tempGroupingIdsBitSets.get(repeatColIdx).set(childIdx,

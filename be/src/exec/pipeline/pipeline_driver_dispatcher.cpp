@@ -40,7 +40,7 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
     driver->finalize(runtime_state, state);
     if (driver->query_ctx()->is_finished()) {
         auto query_id = driver->query_ctx()->query_id();
-        DCHECK(!driver->source_operator()->pending_finish());
+        DCHECK(!driver->is_still_pending_finish());
         QueryContextManager::instance()->remove(query_id);
     }
 }
@@ -61,19 +61,16 @@ void GlobalDriverDispatcher::run() {
 
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
-        // This writing is to ensure that MemTracker will not be destructed before the thread ends.
-        // This writing method is a bit tricky, and when there is a better way, replace it
+        // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
+        //  This writing method is a bit tricky, and when there is a better way, replace it
         auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
         auto* runtime_state = runtime_state_ptr.get();
         {
-            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(runtime_state->instance_mem_tracker());
-            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 
             if (fragment_ctx->is_canceled()) {
-                VLOG_ROW << "[Driver] Canceled: driver=" << driver
-                         << ", error=" << fragment_ctx->final_status().to_string();
-                driver->finish_operators(runtime_state);
-                if (driver->source_operator()->pending_finish()) {
+                driver->cancel_operators(runtime_state);
+                if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
@@ -93,10 +90,12 @@ void GlobalDriverDispatcher::run() {
             this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
 
             if (!status.ok()) {
-                VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
+                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                             << ", error=" << status.status().to_string();
                 query_ctx->cancel(status.status());
-                driver->finish_operators(runtime_state);
-                if (driver->source_operator()->pending_finish()) {
+                driver->cancel_operators(runtime_state);
+                if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
@@ -108,26 +107,19 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                VLOG_ROW << strings::Substitute("[Driver] Push back again, source=$0, state=$1",
-                                                driver->source_operator()->get_name(), ds_to_string(driver_state));
                 this->_driver_queue->put_back(driver);
                 break;
             }
             case FINISH:
             case CANCELED:
             case INTERNAL_ERROR: {
-                VLOG_ROW << strings::Substitute("[Driver] Finished, source=$0, state=$1, status=$2",
-                                                driver->source_operator()->get_name(), ds_to_string(driver_state),
-                                                fragment_ctx->final_status().to_string());
                 finalize_driver(driver, runtime_state, driver_state);
                 break;
             }
             case INPUT_EMPTY:
             case OUTPUT_FULL:
             case PENDING_FINISH:
-            case DEPENDENCIES_BLOCK: {
-                VLOG_ROW << strings::Substitute("[Driver] Blocked, source=$0, state=$1",
-                                                driver->source_operator()->get_name(), ds_to_string(driver_state));
+            case PRECONDITION_BLOCK: {
                 _blocked_driver_poller->add_blocked_driver(driver);
                 break;
             }
@@ -139,16 +131,27 @@ void GlobalDriverDispatcher::run() {
 }
 
 void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
-    if (driver->dependencies_block()) {
-        driver->set_driver_state(DriverState::DEPENDENCIES_BLOCK);
+    if (driver->is_precondition_block()) {
+        driver->set_driver_state(DriverState::PRECONDITION_BLOCK);
+        driver->mark_precondition_not_ready();
         this->_blocked_driver_poller->add_blocked_driver(driver);
     } else {
-        this->_driver_queue->put_back(driver);
+        driver->dispatch_operators();
+
+        // Try to add the driver to poller first.
+        if (!driver->source_operator()->is_finished() && !driver->source_operator()->has_output()) {
+            driver->set_driver_state(DriverState::INPUT_EMPTY);
+            this->_blocked_driver_poller->add_blocked_driver(driver);
+        } else {
+            this->_driver_queue->put_back(driver);
+        }
     }
-    driver->dispatch_operators();
 }
 
 void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
+    if (done) {
+        update_profile_by_mode(fragment_ctx, done);
+    }
     auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
@@ -165,5 +168,45 @@ void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, co
     };
 
     this->_exec_state_reporter->submit(std::move(report_task));
+}
+
+void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ctx, bool done) {
+    if (!done) {
+        return;
+    }
+
+    if (fragment_ctx->profile_mode() != TPipelineProfileMode::type::BRIEF) {
+        return;
+    }
+
+    auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+
+    std::vector<RuntimeProfile*> pipeline_profiles;
+    profile->get_children(&pipeline_profiles);
+    for (auto* pipeline_profile : pipeline_profiles) {
+        std::vector<RuntimeProfile*> pipeline_driver_profiles;
+        pipeline_profile->get_children(&pipeline_driver_profiles);
+
+        // Find the most time-consuming profile in all driver profiles
+        int64_t max_active_time = 0;
+        RuntimeProfile* pipeline_driver_profile_with_max_active_time = nullptr;
+        for (auto* pipeline_driver_profile : pipeline_driver_profiles) {
+            auto* active_timer = pipeline_driver_profile->get_counter("DriverActiveTime");
+            if (active_timer == nullptr) {
+                continue;
+            }
+            if (active_timer->value() > max_active_time) {
+                max_active_time = active_timer->value();
+                pipeline_driver_profile_with_max_active_time = pipeline_driver_profile;
+            }
+        }
+        if (pipeline_driver_profile_with_max_active_time == nullptr) {
+            continue;
+        }
+        pipeline_profile->remove_childs();
+        pipeline_driver_profile_with_max_active_time->reset_parent();
+        pipeline_profile->add_child(pipeline_driver_profile_with_max_active_time, true, nullptr);
+        pipeline_profile->add_info_string("ContainsAllPipelineDrivers", "false");
+    }
 }
 } // namespace starrocks::pipeline

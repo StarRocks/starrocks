@@ -6,7 +6,6 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -63,10 +62,6 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
     _mem_tracker->set(usage);
 
     return Status::OK();
-}
-
-Status AssertNumRowsNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
 }
 
 Status AssertNumRowsNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
@@ -147,6 +142,11 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
             context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));
     operator_before_assert_num_rows_source.emplace_back(std::move(source_factory));
 
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operator_before_assert_num_rows_source.back().get(), context,
+                                           rc_rf_probe_collector);
     return operator_before_assert_num_rows_source;
 }
 

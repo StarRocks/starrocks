@@ -30,6 +30,11 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
 
     RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool));
+    // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
+    if (tnode.sort_node.__isset.analytic_partition_exprs) {
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs, &_analytic_partition_exprs));
+    }
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;
     _is_null_first = tnode.sort_node.sort_info.nulls_first;
     bool has_outer_join_child = tnode.sort_node.__isset.has_outer_join_child && tnode.sort_node.has_outer_join_child;
@@ -84,10 +89,6 @@ Status TopNNode::open(RuntimeState* state) {
     _mem_tracker->set(_chunks_sorter->mem_usage());
 
     return status;
-}
-
-Status TopNNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for RowBatch is not supported");
 }
 
 Status TopNNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
@@ -148,7 +149,6 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     bool eos = false;
     _chunks_sorter->setup_runtime(runtime_profile(), "ChunksSorter");
     do {
-        RETURN_IF_ERROR(state->check_mem_limit("Sort"));
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;
         timer.stop();
@@ -160,10 +160,20 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         if (chunk != nullptr && chunk->num_rows() > 0) {
             ChunkPtr materialize_chunk = ChunksSorter::materialize_chunk_before_sort(
                     chunk.get(), _materialized_tuple_desc, _sort_exec_exprs, _order_by_types);
-            RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk));
+            try {
+                RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk));
+                RETURN_IF_ERROR(state->check_mem_limit("Sort"));
+            } catch (std::bad_alloc const&) {
+                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+            }
         }
     } while (!eos);
-    RETURN_IF_ERROR(_chunks_sorter->done(state));
+    try {
+        RETURN_IF_ERROR(_chunks_sorter->done(state));
+        RETURN_IF_ERROR(state->check_mem_limit("Sort"));
+    } catch (std::bad_alloc const&) {
+        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+    }
     return Status::OK();
 }
 
@@ -171,23 +181,44 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     using namespace pipeline;
 
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+    bool is_merging = _analytic_partition_exprs.empty();
 
     auto degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
-    auto sort_context = std::make_shared<SortContext>(_limit, degree_of_parallelism, _is_asc_order, _is_null_first);
+    auto sort_context_factory = std::make_shared<SortContextFactory>(is_merging, _limit, degree_of_parallelism,
+                                                                     _is_asc_order, _is_null_first);
 
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     auto partition_sort_sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
-            context->next_operator_id(), id(), sort_context, _sort_exec_exprs, _is_asc_order, _is_null_first, _offset,
-            _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
-    operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
-    context->add_pipeline(operators_sink_with_sort);
+            context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order, _is_null_first,
+            _offset, _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor,
+            _analytic_partition_exprs);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(partition_sort_sink_operator.get(), context, rc_rf_probe_collector);
 
     OpFactories operators_source_with_sort;
     auto local_merge_sort_source_operator = std::make_shared<LocalMergeSortSourceOperatorFactory>(
-            context->next_operator_id(), id(), std::move(sort_context));
-    // local_merge_sort_source_operator's instance count must be 1
-    local_merge_sort_source_operator->set_degree_of_parallelism(1);
-    operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
+            context->next_operator_id(), id(), sort_context_factory);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(local_merge_sort_source_operator.get(), context, rc_rf_probe_collector);
+
+    if (is_merging) {
+        operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
+        context->add_pipeline(operators_sink_with_sort);
+        // local_merge_sort_source_operator's instance count must be 1
+        local_merge_sort_source_operator->set_degree_of_parallelism(1);
+        operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
+    } else {
+        // prepend local shuffle to PartitionSortSinkOperator
+        operators_sink_with_sort =
+                context->maybe_interpolate_local_shuffle_exchange(operators_sink_with_sort, _analytic_partition_exprs);
+        operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
+        context->add_pipeline(operators_sink_with_sort);
+        // Each PartitionSortSinkOperator has an independent LocalMergeSortSinkOperator respectively
+        local_merge_sort_source_operator->set_degree_of_parallelism(degree_of_parallelism);
+        operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
+    }
 
     return operators_source_with_sort;
 }

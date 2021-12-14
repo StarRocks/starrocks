@@ -25,6 +25,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include <map>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -34,13 +35,13 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/vectorized/sorted_chunks_merger.h"
 #include "util/block_compression.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"
 #include "util/logging.h"
+#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 using std::list;
@@ -69,17 +70,15 @@ public:
     // must acquire data from the returned batch before the next call to get_batch().
     Status get_chunk(vectorized::Chunk** chunk);
 
+    // Same as get_chunk, but this version will not wait if there is non buffer chunks
+    Status get_chunk_for_pipeline(vectorized::Chunk** chunk);
+
     // check if data has come, work with try_get_chunk.
     bool has_chunk();
+
     // Probe for chunks, because _chunk_queue maybe empty when data hasn't come yet.
     // So compute thread should do other works.
     bool try_get_chunk(vectorized::Chunk** chunk);
-
-    // Adds a row batch to this sender queue if this stream has not been cancelled;
-    // blocks if this will make the stream exceed its buffer limit.
-    // If the total size of the batches in this queue would exceed the allowed buffer size,
-    // the queue is considered full and the call blocks until a batch is dequeued.
-    void add_batch(const PRowBatch& pb_batch, int be_number, int64_t packet_seq, ::google::protobuf::Closure** done);
 
     // Adds a column chunk to this sender queue if this stream has not been cancelled;
     // blocks if this will make the stream exceed its buffer limit.
@@ -103,17 +102,27 @@ public:
     // Must be called once to cleanup any queued resources.
     void close();
 
-    // Returns the current batch from this queue being processed by a consumer.
-    RowBatch* current_batch() const { return _current_batch.get(); }
-
     bool has_output() const;
 
     bool is_finished() const;
 
 private:
-    // _add_chunks_internal is called by add_chunks and add_chunks_for_pipeline
+    struct ChunkItem {
+        int64_t chunk_bytes = 0;
+        ChunkUniquePtr chunk_ptr;
+        // When the memory of the ChunkQueue exceeds the limit,
+        // we have to hold closure of the request, so as not to let the sender continue to send data.
+        // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
+        // the callback is closed- >run() Let the sender continue to send data
+        google::protobuf::Closure* closure = nullptr;
+    };
+
+    Status _do_get_chunk(vectorized::Chunk** chunk);
+
     Status _add_chunks_internal(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
                                 const std::function<void()>& cb);
+
+    Status _add_chunks_internal_for_pipeline(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, faststring* uncompressed_buffer);
@@ -134,34 +143,25 @@ private:
     // signal arrival of new batch or the eos/cancelled condition
     std::condition_variable _data_arrival_cv;
 
-    // queue of (batch length, batch) pairs.  The SenderQueue block owns memory to
-    // these batches. They are handed off to the caller via get_batch.
-    typedef list<pair<int, RowBatch*>> RowBatchQueue;
-    RowBatchQueue _batch_queue;
-
-    typedef std::list<std::pair<int, ChunkUniquePtr>> ChunkQueue;
+    typedef std::list<ChunkItem> ChunkQueue;
     ChunkQueue _chunk_queue;
     vectorized::RuntimeChunkMeta _chunk_meta;
-
-    // The batch that was most recently returned via get_batch(), i.e. the current batch
-    // from this queue being processed by a consumer. Is destroyed when the next batch
-    // is retrieved.
-    std::unique_ptr<RowBatch> _current_batch;
-
-    // Set to true when the first batch has been received
-    bool _received_first_batch;
 
     std::unordered_set<int> _sender_eos_set;          // sender_id
     std::unordered_map<int, int64_t> _packet_seq_map; // be_number => packet_seq
 
-    std::deque<std::pair<google::protobuf::Closure*, MonotonicStopWatch>> _pending_closures;
+    // distribution of received sequence numbers:
+    // part1: { sequence | 1 <= sequence <= _max_processed_sequence }
+    // part2: { sequence | seq = _max_processed_sequence + i, i > 1 }
+    phmap::flat_hash_map<int, int64_t> _max_processed_sequences;
+    // chunk request may be out-of-order, but we have to deal with it in order
+    // key of first level is be_number
+    // key of second level is request sequence
+    phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkQueue>> _buffered_chunk_queues;
 };
 
 DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int num_senders)
-        : _recvr(parent_recvr),
-          _is_cancelled(false),
-          _num_remaining_senders(num_senders),
-          _received_first_batch(false) {}
+        : _recvr(parent_recvr), _is_cancelled(false), _num_remaining_senders(num_senders) {}
 
 bool DataStreamRecvr::SenderQueue::has_output() const {
     std::lock_guard<std::mutex> l(_lock);
@@ -197,14 +197,13 @@ bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
         DCHECK_EQ(_num_remaining_senders, 0);
         return false;
     } else {
-        *chunk = _chunk_queue.front().second.release();
-        _recvr->_num_buffered_bytes -= _chunk_queue.front().first;
+        *chunk = _chunk_queue.front().chunk_ptr.release();
+        _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
+        auto* closure = _chunk_queue.front().closure;
         VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
         _chunk_queue.pop_front();
-        if (!_pending_closures.empty()) {
-            auto closure_pair = _pending_closures.front();
-            closure_pair.first->Run();
-            _pending_closures.pop_front();
+        if (closure != nullptr) {
+            closure->Run();
         }
         return true;
     }
@@ -219,21 +218,31 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
         _data_arrival_cv.wait(l);
     }
 
+    return _do_get_chunk(chunk);
+}
+
+Status DataStreamRecvr::SenderQueue::get_chunk_for_pipeline(vectorized::Chunk** chunk) {
+    std::unique_lock<std::mutex> l(_lock);
+    return _do_get_chunk(chunk);
+}
+
+Status DataStreamRecvr::SenderQueue::_do_get_chunk(vectorized::Chunk** chunk) {
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled SenderQueue::get_chunk");
     }
 
     if (_chunk_queue.empty()) {
-        DCHECK_EQ(_num_remaining_senders, 0);
         return Status::OK();
     }
 
-    *chunk = _chunk_queue.front().second.release();
-    _recvr->_num_buffered_bytes -= _chunk_queue.front().first;
+    *chunk = _chunk_queue.front().chunk_ptr.release();
+    auto* closure = _chunk_queue.front().closure;
+
+    _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
-    if (!_pending_closures.empty()) {
+    if (closure != nullptr) {
         // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
         // the execution thread will hold done and will not return, block brpc from sending packets,
         // and the execution thread will call run() to let brpc continue to send packets,
@@ -243,83 +252,10 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
         DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 #endif
 
-        auto closure_pair = _pending_closures.front();
-        closure_pair.first->Run();
-        _pending_closures.pop_front();
+        closure->Run();
     }
 
     return Status::OK();
-}
-
-void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_number, int64_t packet_seq,
-                                             ::google::protobuf::Closure** done) {
-    std::unique_lock<std::mutex> l(_lock);
-    if (_is_cancelled) {
-        return;
-    }
-    auto iter = _packet_seq_map.find(be_number);
-    if (iter != _packet_seq_map.end()) {
-        if (iter->second >= packet_seq) {
-            LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
-                         << " receive_packet_id=" << packet_seq << "]";
-            return;
-        }
-        iter->second = packet_seq;
-    } else {
-        _packet_seq_map.emplace(be_number, packet_seq);
-    }
-
-    int batch_size = RowBatch::get_batch_size(pb_batch);
-    COUNTER_UPDATE(_recvr->_bytes_received_counter, batch_size);
-
-    // Following situation will match the following condition.
-    // Sender send a packet failed, then close the channel.
-    // but closed packet reach first, then the failed packet.
-    // Then meet the assert
-    // we remove the assert
-    // DCHECK_GT(_num_remaining_senders, 0);
-    if (_num_remaining_senders <= 0) {
-        DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
-        return;
-    }
-
-    // We always accept the batch regardless of buffer limit, to avoid rpc pipeline stall.
-    // If exceed buffer limit, we just do not response ACK to client, so the client won't
-    // send data until ACK received.
-    // Note that if this be needs to receive data from N BEs, the size of buffer
-    // may reach as many as (buffer_size + n * buffer_size)
-    //
-    // Note: It's important that we enqueue thrift_batch regardless of buffer limit if
-    //  the queue is currently empty. In the case of a merging receiver, batches are
-    //  received from a specific queue based on data order, and the pipeline will stall
-    //  if the merger is waiting for data from an empty queue that cannot be filled
-    //  because the limit has been reached.
-    if (_is_cancelled) {
-        return;
-    }
-
-    RowBatch* batch = nullptr;
-    {
-        SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-        // Note: if this function makes a row batch, the batch *must* be added
-        // to _batch_queue. It is not valid to create the row batch and destroy
-        // it in this thread.
-        batch = new RowBatch(_recvr->row_desc(), pb_batch);
-    }
-
-    VLOG_ROW << "added #rows=" << batch->num_rows() << " batch_size=" << batch_size << "\n";
-    _batch_queue.emplace_back(batch_size, batch);
-
-    // if done is nullptr, this function can't delay this response
-    if (done != nullptr && _recvr->exceeds_limit(batch_size)) {
-        MonotonicStopWatch monotonicStopWatch;
-        monotonicStopWatch.start();
-        DCHECK(*done != nullptr);
-        _pending_closures.emplace_back(*done, monotonicStopWatch);
-        *done = nullptr;
-    }
-    _recvr->_num_buffered_bytes += batch_size;
-    _data_arrival_cv.notify_one();
 }
 
 Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) {
@@ -421,12 +357,14 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     for (auto& pchunk : request.chunks()) {
-        size_t chunk_bytes = pchunk.data().size();
+        int64_t chunk_bytes = pchunk.data().size();
         ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
         RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
+        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+
         // TODO(zc): review this chunk_bytes
-        chunks.emplace_back(chunk_bytes, std::move(chunk));
+        chunks.emplace_back(std::move(item));
 
         total_chunk_bytes += chunk_bytes;
     }
@@ -437,19 +375,132 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         std::unique_lock<std::mutex> l(_lock);
         wait_timer.stop();
 
+        // _is_cancelled may be modified after checking _is_cancelled above,
+        // because lock is release temporarily when deserializing chunk.
+        if (_is_cancelled) {
+            return Status::OK();
+        }
+
         for (auto& pair : chunks) {
             _chunk_queue.emplace_back(std::move(pair));
         }
-        // if done is nullptr, this function can't delay this response
-        if (done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
-            MonotonicStopWatch monotonicStopWatch;
-            DCHECK(*done != nullptr);
-            _pending_closures.emplace_back(*done, monotonicStopWatch);
+        if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+            _chunk_queue.back().closure = *done;
             *done = nullptr;
         }
+
         _recvr->_num_buffered_bytes += total_chunk_bytes;
     }
     cb();
+    return Status::OK();
+}
+
+Status DataStreamRecvr::SenderQueue::_add_chunks_internal_for_pipeline(const PTransmitChunkParams& request,
+                                                                       ::google::protobuf::Closure** done) {
+    DCHECK(request.chunks_size() > 0);
+
+    const int32_t be_number = request.be_number();
+    const int32_t sequence = request.sequence();
+
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        if (_is_cancelled) {
+            return Status::OK();
+        }
+
+        if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
+            _max_processed_sequences[be_number] = -1;
+        }
+
+        if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
+            _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkQueue>();
+        }
+    }
+
+    ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        wait_timer.stop();
+        if (_is_cancelled) {
+            return Status::OK();
+        }
+
+        // Following situation will match the following condition.
+        // Sender send a packet failed, then close the channel.
+        // but closed packet reach first, then the failed packet.
+        // Then meet the assert
+        // we remove the assert
+        if (_num_remaining_senders <= 0) {
+            DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
+            return Status::OK();
+        }
+        if (_chunk_meta.types.empty()) {
+            SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
+            auto& pchunk = request.chunks(0);
+            RETURN_IF_ERROR(_build_chunk_meta(pchunk));
+        }
+    }
+
+    size_t total_chunk_bytes = 0;
+    faststring uncompressed_buffer;
+    ChunkQueue local_chunk_queue;
+    for (auto& pchunk : request.chunks()) {
+        int64_t chunk_bytes = pchunk.data().size();
+        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
+
+        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+
+        // TODO(zc): review this chunk_bytes
+        local_chunk_queue.emplace_back(std::move(item));
+
+        total_chunk_bytes += chunk_bytes;
+    }
+    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
+
+    wait_timer.start();
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        wait_timer.stop();
+
+        // _is_cancelled may be modified after checking _is_cancelled above,
+        // because lock is release temporarily when deserializing chunk.
+        if (_is_cancelled) {
+            return Status::OK();
+        }
+
+        auto& chunk_queues = _buffered_chunk_queues[be_number];
+
+        if (!local_chunk_queue.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+            local_chunk_queue.back().closure = *done;
+            *done = nullptr;
+        }
+
+        // The queue in chunk_queues cannot be changed, so it must be
+        // assigned to chunk_queues after local_chunk_queue is initialized
+        // Otherwise, other threads may see the intermediate state because
+        // the initialization of local_chunk_queue is beyond mutex
+        chunk_queues[sequence] = std::move(local_chunk_queue);
+
+        phmap::flat_hash_map<int64_t, ChunkQueue>::iterator it;
+        int64_t& max_processed_sequence = _max_processed_sequences[be_number];
+
+        // max_processed_sequence + 1 means the first unprocessed sequence
+        while ((it = chunk_queues.find(max_processed_sequence + 1)) != chunk_queues.end()) {
+            ChunkQueue& unprocessed_chunk_queue = (*it).second;
+
+            // Now, all the packets with sequance <= unprocessed_sequence have been received
+            // so chunks of unprocessed_sequence can be flushed to ready queue
+            for (auto& chunk : unprocessed_chunk_queue) {
+                _chunk_queue.emplace_back(std::move(chunk));
+            }
+
+            chunk_queues.erase(it);
+            ++max_processed_sequence;
+        }
+
+        _recvr->_num_buffered_bytes += total_chunk_bytes;
+    }
     return Status::OK();
 }
 
@@ -461,7 +512,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
 
 Status DataStreamRecvr::SenderQueue::add_chunks_for_pipeline(const PTransmitChunkParams& request,
                                                              ::google::protobuf::Closure** done) {
-    return _add_chunks_internal(request, done, []() -> void {});
+    return _add_chunks_internal_for_pipeline(request, done);
 }
 
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
@@ -520,10 +571,22 @@ void DataStreamRecvr::SenderQueue::cancel() {
 
     {
         std::lock_guard<std::mutex> l(_lock);
-        for (auto closure_pair : _pending_closures) {
-            closure_pair.first->Run();
+        for (auto& item : _chunk_queue) {
+            if (item.closure != nullptr) {
+                item.closure->Run();
+            }
         }
-        _pending_closures.clear();
+        _chunk_queue.clear();
+        for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
+            for (auto& [_, chunk_queue] : chunk_queues) {
+                for (auto& item : chunk_queue) {
+                    if (item.closure != nullptr) {
+                        item.closure->Run();
+                    }
+                }
+            }
+        }
+        _buffered_chunk_queues.clear();
     }
 }
 
@@ -535,18 +598,23 @@ void DataStreamRecvr::SenderQueue::close() {
         std::lock_guard<std::mutex> l(_lock);
         _is_cancelled = true;
 
-        for (auto closure_pair : _pending_closures) {
-            closure_pair.first->Run();
+        for (auto& item : _chunk_queue) {
+            if (item.closure != nullptr) {
+                item.closure->Run();
+            }
         }
-        _pending_closures.clear();
+        _chunk_queue.clear();
+        for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
+            for (auto& [_, chunk_queue] : chunk_queues) {
+                for (auto& item : chunk_queue) {
+                    if (item.closure != nullptr) {
+                        item.closure->Run();
+                    }
+                }
+            }
+        }
+        _buffered_chunk_queues.clear();
     }
-
-    // Delete any batches queued in _batch_queue
-    for (auto& it : _batch_queue) {
-        delete it.second;
-    }
-
-    _current_batch.reset();
 }
 
 Status DataStreamRecvr::create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
@@ -638,15 +706,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     // Initialize the counters
     _bytes_received_counter = ADD_COUNTER(_profile, "BytesReceived", TUnit::BYTES);
     _request_received_counter = ADD_COUNTER(_profile, "RequestReceived", TUnit::BYTES);
-    // _bytes_received_time_series_counter =
-    //     ADD_TIME_SERIES_COUNTER(_profile, "BytesReceived", _bytes_received_counter);
     _deserialize_row_batch_timer = ADD_TIMER(_profile, "DeserializeRowBatchTimer");
-    _data_arrival_timer = ADD_TIMER(_profile, "DataArrivalWaitTime");
     _decompress_row_batch_timer = ADD_TIMER(_profile, "DecompressRowBatchTimer");
-    _deserialize_chunk_meta_timer = ADD_TIMER(_profile, "DeserializeChunkMetaTimer");
-    _buffer_full_total_timer = ADD_TIMER(_profile, "SendersBlockedTotalTimer(*)");
-    _first_batch_wait_total_timer = ADD_TIMER(_profile, "FirstBatchArrivalWaitTime");
-
     _sender_total_timer = ADD_TIMER(_profile, "SenderTotalTime");
     _sender_wait_lock_timer = ADD_TIMER(_profile, "SenderWaitLockTime");
 }
@@ -663,13 +724,6 @@ Status DataStreamRecvr::get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::
 
 bool DataStreamRecvr::is_data_ready() {
     return _chunks_merger->is_data_ready();
-}
-
-void DataStreamRecvr::add_batch(const PRowBatch& batch, int sender_id, int be_number, int64_t packet_seq,
-                                ::google::protobuf::Closure** done) {
-    int use_sender_id = _is_merging ? sender_id : 0;
-    // Add all batches to the same queue if _is_merging is false.
-    _sender_queues[use_sender_id]->add_batch(batch, be_number, packet_seq, done);
 }
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
@@ -719,6 +773,15 @@ Status DataStreamRecvr::get_chunk(std::unique_ptr<vectorized::Chunk>* chunk) {
     DCHECK_EQ(_sender_queues.size(), 1);
     vectorized::Chunk* tmp_chunk = nullptr;
     Status status = _sender_queues[0]->get_chunk(&tmp_chunk);
+    chunk->reset(tmp_chunk);
+    return status;
+}
+
+Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk) {
+    DCHECK(!_is_merging);
+    DCHECK_EQ(_sender_queues.size(), 1);
+    vectorized::Chunk* tmp_chunk = nullptr;
+    Status status = _sender_queues[0]->get_chunk_for_pipeline(&tmp_chunk);
     chunk->reset(tmp_chunk);
     return status;
 }

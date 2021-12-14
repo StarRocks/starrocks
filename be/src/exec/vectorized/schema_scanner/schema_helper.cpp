@@ -5,13 +5,11 @@
 #include <boost/thread/thread.hpp>
 #include <sstream>
 
-#include "exec/text_converter.hpp"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "runtime/tuple_row.h"

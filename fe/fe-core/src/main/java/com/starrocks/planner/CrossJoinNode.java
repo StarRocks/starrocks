@@ -23,7 +23,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
@@ -50,8 +49,6 @@ public class CrossJoinNode extends PlanNode {
         innerRef_ = innerRef;
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
-        tblRefIds.addAll(outer.getTblRefIds());
-        tblRefIds.addAll(inner.getTblRefIds());
         children.add(outer);
         children.add(inner);
 
@@ -106,23 +103,6 @@ public class CrossJoinNode extends PlanNode {
     @Override
     public int getNumInstances() {
         return Math.max(children.get(0).getNumInstances(), children.get(1).getNumInstances());
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     @Override

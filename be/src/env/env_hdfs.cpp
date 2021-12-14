@@ -3,13 +3,40 @@
 #include "env/env_hdfs.h"
 
 #include "env/env.h"
+#include "fmt/core.h"
 #include "gutil/strings/substitute.h"
+#include "hdfs/hdfs.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
 
-HdfsRandomAccessFile::HdfsRandomAccessFile(hdfsFS fs, hdfsFile file, std::string filename)
-        : _fs(fs), _file(file), _filename(std::move(filename)) {}
+HdfsRandomAccessFile::HdfsRandomAccessFile(hdfsFS fs, std::string filename)
+        : _opened(false), _fs(fs), _file(nullptr), _filename(std::move(filename)) {}
+
+HdfsRandomAccessFile::~HdfsRandomAccessFile() noexcept {
+    close();
+}
+
+Status HdfsRandomAccessFile::open() {
+    DCHECK(!_opened);
+    if (_fs) {
+        _file = hdfsOpenFile(_fs, _filename.c_str(), O_RDONLY, 0, 0, 0);
+        if (_file == nullptr) {
+            return Status::InternalError(fmt::format("open file failed, file={}", _filename));
+        }
+    }
+    _opened = true;
+    return Status::OK();
+}
+
+void HdfsRandomAccessFile::close() noexcept {
+    if (_opened) {
+        if (_fs && _file) {
+            hdfsCloseFile(_fs, _file);
+        }
+        _opened = false;
+    }
+}
 
 static Status read_at_internal(hdfsFS fs, hdfsFile file, const std::string& file_name, int64_t offset, Slice* res) {
     auto cur_offset = hdfsTell(fs, file);
@@ -40,11 +67,13 @@ static Status read_at_internal(hdfsFS fs, hdfsFile file, const std::string& file
 }
 
 Status HdfsRandomAccessFile::read(uint64_t offset, Slice* res) const {
+    DCHECK(_opened);
     RETURN_IF_ERROR(read_at_internal(_fs, _file, _filename, offset, res));
     return Status::OK();
 }
 
 Status HdfsRandomAccessFile::read_at(uint64_t offset, const Slice& res) const {
+    DCHECK(_opened);
     Slice slice = res;
     RETURN_IF_ERROR(read_at_internal(_fs, _file, _filename, offset, &slice));
     if (slice.size != res.size) {

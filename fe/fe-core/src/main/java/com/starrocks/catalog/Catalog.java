@@ -442,6 +442,8 @@ public class Catalog {
 
     private long imageJournalId;
 
+    private long feStartTime;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -506,6 +508,10 @@ public class Catalog {
 
     public DynamicPartitionScheduler getDynamicPartitionScheduler() {
         return this.dynamicPartitionScheduler;
+    }
+
+    public long getFeStartTime() {
+        return feStartTime;
     }
 
     private static class SingletonHolder {
@@ -860,6 +866,7 @@ public class Catalog {
         while (true) {
             if (isReady()) {
                 LOG.info("catalog is ready. FE type: {}", feType);
+                feStartTime = System.currentTimeMillis();
                 break;
             }
 
@@ -1298,9 +1305,7 @@ public class Catalog {
         tabletChecker.start();
         tabletScheduler.start();
         // Colocate tables balancer
-        if (!Config.disable_colocate_join) {
-            ColocateTableBalancer.getInstance().start();
-        }
+        ColocateTableBalancer.getInstance().start();
         // Publish Version Daemon
         publishVersionDaemon.start();
         // Start txn cleaner
@@ -3149,11 +3154,20 @@ public class Catalog {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Set<String> existPartitionNameSet =
                     CatalogChecker.checkPartitionNameExistForAddPartitions(olapTable, singleRangePartitionDescs);
-
+            // partition properties is prior to clause properties
+            // clause properties is prior to table properties
+            Map<String, String> properties = Maps.newHashMap();
+            properties = getOrSetDefaultProperties(olapTable, properties);
+            Map<String, String> clauseProperties = addPartitionClause.getProperties();
+            if (clauseProperties != null && !clauseProperties.isEmpty()) {
+                properties.putAll(clauseProperties);
+            }
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-                Map<String, String> sourceProperties = singleRangePartitionDesc.getProperties();
-                Map<String, String> properties = getOrSetDefaultProperties(olapTable, sourceProperties);
                 Map<String, String> cloneProperties = Maps.newHashMap(properties);
+                Map<String, String> sourceProperties = singleRangePartitionDesc.getProperties();
+                if (sourceProperties != null && !sourceProperties.isEmpty()) {
+                    cloneProperties.putAll(sourceProperties);
+                }
                 singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumns().size(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
                     rangePartitionInfo.checkAndCreateRange(singleRangePartitionDesc, isTempPartition);
@@ -3227,7 +3241,7 @@ public class Catalog {
                 long partitionId = getNextId();
                 DataProperty dataProperty = singleRangePartitionDesc.getPartitionDataProperty();
                 String partitionName = singleRangePartitionDesc.getPartitionName();
-                Pair<Long, Long> versionInfo = singleRangePartitionDesc.getVersionInfo();
+                Long version = singleRangePartitionDesc.getVersionInfo();
                 Set<Long> tabletIdSet = Sets.newHashSet();
 
                 copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
@@ -3235,7 +3249,7 @@ public class Catalog {
                 copiedTable.getPartitionInfo().setReplicationNum(partitionId, singleRangePartitionDesc.getReplicationNum());
                 copiedTable.getPartitionInfo().setIsInMemory(partitionId, singleRangePartitionDesc.isInMemory());
 
-                Partition partition = createPartition(db, copiedTable, partitionId, partitionName, versionInfo, tabletIdSet);
+                Partition partition = createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
 
                 partitionList.add(partition);
                 tabletIdSetForAll.addAll(tabletIdSet);
@@ -3394,6 +3408,11 @@ public class Catalog {
         if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
             sourceProperties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, olapTable.isInMemory().toString());
         }
+        Map<String, String> tableProperty = olapTable.getTableProperty().getProperties();
+        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            sourceProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
         return sourceProperties;
     }
 
@@ -3522,16 +3541,16 @@ public class Catalog {
     }
 
     private Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
-                                      Pair<Long, Long> versionInfo, Set<Long> tabletIdSet) throws DdlException {
+                                      Long version, Set<Long> tabletIdSet) throws DdlException {
         return createPartitionCommon(db, table, partitionId, partitionName,
                 table.getPartitionInfo().getReplicationNum(partitionId),
                 table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium(),
-                versionInfo, tabletIdSet);
+                version, tabletIdSet);
     }
 
     private Partition createPartitionCommon(Database db, OlapTable table, long partitionId, String partitionName,
                                             short replicationNum, TStorageMedium storageMedium,
-                                            Pair<Long, Long> versionInfo, Set<Long> tabletIdSet) throws DdlException {
+                                            Long version, Set<Long> tabletIdSet) throws DdlException {
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         for (long indexId : table.getIndexIdToMeta().keySet()) {
             MaterializedIndex rollup = new MaterializedIndex(indexId, IndexState.NORMAL);
@@ -3541,9 +3560,9 @@ public class Catalog {
         Partition partition =
                 new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()), distributionInfo);
 
-        // version and version hash
-        if (versionInfo != null) {
-            partition.updateVisibleVersionAndVersionHash(versionInfo.first, versionInfo.second);
+        // version
+        if (version != null) {
+            partition.updateVisibleVersion(version);
         }
 
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
@@ -3555,7 +3574,7 @@ public class Catalog {
             TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
                     storageMedium);
             createTablets(db.getClusterName(), index, ReplicaState.NORMAL, distributionInfo, partition.getVisibleVersion(),
-                    partition.getVisibleVersionHash(), replicationNum, tabletMeta, tabletIdSet);
+                    replicationNum, tabletMeta, tabletIdSet);
             if (index.getId() != table.getBaseIndexId()) {
                 // add rollup index to partition
                 partition.createRollupIndex(index);
@@ -3709,7 +3728,6 @@ public class Catalog {
                         indexMeta.getShortKeyColumnCount(),
                         indexMeta.getSchemaHash(),
                         partition.getVisibleVersion(),
-                        partition.getVisibleVersionHash(),
                         indexMeta.getKeysType(),
                         indexMeta.getStorageType(),
                         table.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium(),
@@ -3861,7 +3879,8 @@ public class Catalog {
         Set<String> bfColumns = null;
         double bfFpp = 0;
         try {
-            bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema);
+            bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
+                olapTable.getKeysType() == KeysType.PRIMARY_KEYS);
             if (bfColumns != null && bfColumns.isEmpty()) {
                 bfColumns = null;
             }
@@ -3911,8 +3930,14 @@ public class Catalog {
             long partitionId = partitionNameToId.get(tableName);
             DataProperty dataProperty = null;
             try {
-                dataProperty = PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(),
-                        DataProperty.DEFAULT_DATA_PROPERTY);
+                boolean hasMedium = false;
+                if (properties != null) {
+                    hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                }
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
+                if (hasMedium) {
+                    olapTable.setStorageMedium(dataProperty.getStorageMedium());
+                }
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -3926,10 +3951,7 @@ public class Catalog {
         // check colocation properties
         try {
             String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            if (colocateGroup != null) {
-                if (Config.disable_colocate_join) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_FEATURE_DISABLED);
-                }
+            if (!Strings.isNullOrEmpty(colocateGroup)) {
                 String fullGroupName = db.getId() + "_" + colocateGroup;
                 ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
                 if (groupSchema != null) {
@@ -3989,13 +4011,13 @@ public class Catalog {
         }
 
         // analyze version info
-        Pair<Long, Long> versionInfo = null;
+        Long version = null;
         try {
-            versionInfo = PropertyAnalyzer.analyzeVersionInfo(properties);
+            version = PropertyAnalyzer.analyzeVersionInfo(properties);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
-        Preconditions.checkNotNull(versionInfo);
+        Preconditions.checkNotNull(version);
 
         // get storage format
         TStorageFormat storageFormat = TStorageFormat.DEFAULT; // default means it's up to BE's config
@@ -4019,16 +4041,23 @@ public class Catalog {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
-                    Partition partition = createPartition(db, olapTable, partitionId, tableName, versionInfo, tabletIdSet);
+                    Partition partition = createPartition(db, olapTable, partitionId, tableName, version, tabletIdSet);
                     buildPartitions(db, olapTable, Collections.singletonList(partition));
                     olapTable.addPartition(partition);
                 } else if (partitionInfo.getType() == PartitionType.RANGE) {
                     try {
                         // just for remove entries in stmt.getProperties(),
                         // and then check if there still has unknown properties
-                        PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(), DataProperty.DEFAULT_DATA_PROPERTY);
+                        boolean hasMedium = false;
+                        if (properties != null) {
+                            hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                        }
+                        DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                                DataProperty.DEFAULT_DATA_PROPERTY);
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
-
+                        if (hasMedium) {
+                            olapTable.setStorageMedium(dataProperty.getStorageMedium());
+                        }
                         if (properties != null && !properties.isEmpty()) {
                             // here, all properties should be checked
                             throw new DdlException("Unknown properties: " + properties);
@@ -4040,7 +4069,7 @@ public class Catalog {
                     // this is a 2-level partitioned tables
                     List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
-                        Partition partition = createPartition(db, olapTable, entry.getValue(), entry.getKey(), versionInfo,
+                        Partition partition = createPartition(db, olapTable, entry.getValue(), entry.getKey(), version,
                                 tabletIdSet);
                         partitions.add(partition);
                     }
@@ -4050,7 +4079,7 @@ public class Catalog {
                         olapTable.addPartition(partition);
                     }
                 } else {
-                    throw new DdlException("Unsupport partition method: " + partitionInfo.getType().name());
+                    throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
                 }
             }
 
@@ -4338,8 +4367,7 @@ public class Catalog {
                     Preconditions.checkState(partitionId.size() == 1);
                     partition = olapTable.getPartition(partitionId.get(0));
                 }
-                sb.append(Joiner.on(",").join(partition.getVisibleVersion(), partition.getVisibleVersionHash()))
-                        .append("\"");
+                sb.append(partition.getVisibleVersion()).append("\"");
             }
 
             // colocateTable
@@ -4361,7 +4389,17 @@ public class Catalog {
             // storage type
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
-            sb.append("\n");
+
+
+            // storage media
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
+            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                sb.append("\n");
+            } else {
+                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                sb.append("\n");
+            }
 
             if (table.getType() == TableType.OLAP_EXTERNAL) {
                 ExternalOlapTable externalOlapTable = (ExternalOlapTable) table;
@@ -4478,8 +4516,7 @@ public class Catalog {
                 sb.append(entry.getValue().lowerEndpoint().toSql());
                 sb.append(", ").append(entry.getValue().upperEndpoint().toSql()).append(")");
                 sb.append("(\"version_info\" = \"");
-                sb.append(Joiner.on(",").join(partition.getVisibleVersion(), partition.getVisibleVersionHash()))
-                        .append("\"");
+                sb.append(partition.getVisibleVersion()).append("\"");
                 sb.append(");");
                 addPartitionStmt.add(sb.toString());
             }
@@ -4546,7 +4583,7 @@ public class Catalog {
     }
 
     private void createTablets(String clusterName, MaterializedIndex index, ReplicaState replicaState,
-                               DistributionInfo distributionInfo, long version, long versionHash, short replicationNum,
+                               DistributionInfo distributionInfo, long version, short replicationNum,
                                TabletMeta tabletMeta, Set<Long> tabletIdSet) throws DdlException {
         Preconditions.checkArgument(replicationNum > 0);
 
@@ -4604,7 +4641,7 @@ public class Catalog {
                 // create replicas
                 for (long backendId : chosenBackendIds) {
                     long replicaId = getNextId();
-                    Replica replica = new Replica(replicaId, backendId, replicaState, version, versionHash,
+                    Replica replica = new Replica(replicaId, backendId, replicaState, version,
                             tabletMeta.getOldSchemaHash());
                     tablet.addReplica(replica);
                 }
@@ -4763,12 +4800,10 @@ public class Catalog {
         }
 
         Replica replica = new Replica(info.getReplicaId(), info.getBackendId(), info.getVersion(),
-                info.getVersionHash(), schemaHash, info.getDataSize(), info.getRowCount(),
+                schemaHash, info.getDataSize(), info.getRowCount(),
                 ReplicaState.NORMAL,
                 info.getLastFailedVersion(),
-                info.getLastFailedVersionHash(),
-                info.getLastSuccessVersion(),
-                info.getLastSuccessVersionHash());
+                info.getLastSuccessVersion());
         tablet.addReplica(replica);
     }
 
@@ -4781,7 +4816,7 @@ public class Catalog {
         Tablet tablet = materializedIndex.getTablet(info.getTabletId());
         Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
         Preconditions.checkNotNull(replica, info);
-        replica.updateVersionInfo(info.getVersion(), info.getVersionHash(), info.getDataSize(), info.getRowCount());
+        replica.updateRowCount(info.getVersion(), info.getDataSize(), info.getRowCount());
         replica.setBad(false);
     }
 

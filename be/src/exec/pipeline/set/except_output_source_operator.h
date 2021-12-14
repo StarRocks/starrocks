@@ -12,11 +12,13 @@ namespace starrocks::pipeline {
 // For more detail information, see the comments of class ExceptBuildSinkOperator.
 class ExceptOutputSourceOperator final : public SourceOperator {
 public:
-    ExceptOutputSourceOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<ExceptContext> except_ctx,
-                               const int32_t dependency_index)
-            : SourceOperator(id, "except_output_source", plan_node_id),
+    ExceptOutputSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                               std::shared_ptr<ExceptContext> except_ctx, const int32_t dependency_index)
+            : SourceOperator(factory, id, "except_output_source", plan_node_id),
               _except_ctx(std::move(except_ctx)),
-              _dependency_index(dependency_index) {}
+              _dependency_index(dependency_index) {
+        _except_ctx->ref();
+    }
 
     bool has_output() const override {
         return _except_ctx->is_dependency_finished(_dependency_index) && !_except_ctx->is_output_finished();
@@ -26,8 +28,7 @@ public:
         return _except_ctx->is_dependency_finished(_dependency_index) && _except_ctx->is_output_finished();
     }
 
-    // Finish is noop.
-    void set_finishing(RuntimeState* state) override {}
+    void set_finished(RuntimeState* state) override { _except_ctx->set_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -49,7 +50,8 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<ExceptOutputSourceOperator>(
-                _id, _plan_node_id, _except_partition_ctx_factory->get_or_create(driver_sequence), _dependency_index);
+                this, _id, _plan_node_id, _except_partition_ctx_factory->get_or_create(driver_sequence),
+                _dependency_index);
     }
 
     void close(RuntimeState* state) override;

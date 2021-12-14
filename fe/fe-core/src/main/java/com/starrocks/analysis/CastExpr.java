@@ -164,6 +164,14 @@ public class CastExpr extends Expr {
     }
 
     @Override
+    public String toDigestImpl() {
+        if (isImplicit) {
+            return getChild(0).toDigest();
+        }
+        return "cast(" + getChild(0).toDigest() + " as " + targetTypeDef.toString() + ")";
+    }
+
+    @Override
     protected String explainImpl() {
         if (noOp) {
             return getChild(0).explain();
@@ -186,13 +194,10 @@ public class CastExpr extends Expr {
         msg.node_type = TExprNodeType.CAST_EXPR;
         msg.setOpcode(opcode);
         msg.setOutput_column(outputColumn);
-        // vectorized engine all use cast-expression
-        if (this.useVectorized || (type.isNativeType() && getChild(0).getType().isNativeType())) {
-            if (getChild(0).getType().isComplexType()) {
-                msg.setChild_type_desc(getChild(0).getType().toThrift());
-            } else {
-                msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
-            }
+        if (getChild(0).getType().isComplexType()) {
+            msg.setChild_type_desc(getChild(0).getType().toThrift());
+        } else {
+            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
         }
     }
 
@@ -323,16 +328,6 @@ public class CastExpr extends Expr {
 
     @Override
     public boolean isNullable() {
-        return true;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
         return true;
     }
 

@@ -70,6 +70,7 @@ public class ExistsPredicate extends Predicate {
         return new ExistsPredicate(this);
     }
 
+    @Override
     public String toSqlImpl() {
         StringBuilder strBuilder = new StringBuilder();
         if (notExists) {
@@ -78,6 +79,18 @@ public class ExistsPredicate extends Predicate {
         }
         strBuilder.append("EXISTS ");
         strBuilder.append(getChild(0).toSql());
+        return strBuilder.toString();
+    }
+
+    @Override
+    public String toDigestImpl() {
+        StringBuilder strBuilder = new StringBuilder();
+        if (notExists) {
+            strBuilder.append("not ");
+
+        }
+        strBuilder.append("exists ");
+        strBuilder.append(getChild(0).toDigest());
         return strBuilder.toString();
     }
 

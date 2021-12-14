@@ -1118,7 +1118,7 @@ template <bool src_is_utf8, bool fill_is_utf8, PadType pad_type>
 static inline ColumnPtr pad_utf8_const(Columns const& columns, BinaryColumn* src, const uint8_t* fill,
                                        const size_t fill_size, const size_t len,
                                        std::vector<size_t> const& fill_utf8_index) {
-    BOOST_STATIC_ASSERT(src_is_utf8 || fill_is_utf8);
+    static_assert(src_is_utf8 || fill_is_utf8);
 
     const auto num_rows = src->size();
     NullableBinaryColumnBuilder builder;

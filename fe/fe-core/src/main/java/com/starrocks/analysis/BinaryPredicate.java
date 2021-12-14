@@ -63,6 +63,9 @@ public class BinaryPredicate extends Predicate implements Writable {
     public static final com.google.common.base.Predicate<BinaryPredicate> IS_EQ_PREDICATE =
             arg -> arg.getOp() == Operator.EQ;
 
+    public static final com.google.common.base.Predicate<BinaryPredicate> IS_EQ_NULL_PREDICATE =
+            arg -> arg.getOp() == Operator.EQ_FOR_NULL;
+
     // true if this BinaryPredicate is inferred from slot equivalences, false otherwise.
     private boolean isInferred_ = false;
 
@@ -191,10 +194,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         return isInferred_;
     }
 
-    public void setIsInferred() {
-        isInferred_ = true;
-    }
-
     public static void initBuiltins(FunctionSet functionSet) {
         for (Type t : Type.getSupportedTypes()) {
             if (t.isNull() || t.isPseudoType()) {
@@ -268,6 +267,11 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
+    public String toDigestImpl() {
+        return getChild(0).toDigest() + " " + op.toString() + " " + getChild(1).toDigest();
+    }
+
+    @Override
     public String explainImpl() {
         return getChild(0).explain() + " " + op.toString() + " " + getChild(1).explain();
     }
@@ -293,9 +297,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         }
         Preconditions.checkState(match != null);
         Preconditions.checkState(match.getReturnType().getPrimitiveType() == PrimitiveType.BOOLEAN);
-        //todo(dhc): should add oppCode
-        //this.vectorOpcode = match.opcode;
-        LOG.debug(debugString() + " opcode: " + vectorOpcode);
     }
 
     private static boolean canCompareDate(PrimitiveType t1, PrimitiveType t2) {
@@ -624,28 +625,8 @@ public class BinaryPredicate extends Predicate implements Writable {
         return 31 * super.hashCode() + Objects.hashCode(op);
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     public boolean isNullable() {
         return op != Operator.EQ_FOR_NULL;
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        if (op == Operator.EQ_FOR_NULL) {
-            return false;
-        }
-        // To exclude 1 = 1;
-        return getChild(0).unwrapSlotRef() != null || getChild(1).unwrapSlotRef() != null;
     }
 
     /**

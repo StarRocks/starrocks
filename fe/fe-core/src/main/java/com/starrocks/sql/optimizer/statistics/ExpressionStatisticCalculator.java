@@ -3,9 +3,13 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -25,14 +29,21 @@ public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
-        return operator.accept(new ExpressionStatisticVisitor(input), null);
+        return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
+    }
+
+    public static ColumnStatistic calculate(ScalarOperator operator, Statistics input, double rowCount) {
+        return operator.accept(new ExpressionStatisticVisitor(input, rowCount), null);
     }
 
     private static class ExpressionStatisticVisitor extends ScalarOperatorVisitor<ColumnStatistic, Void> {
-        private final Statistics statistics;
+        private final Statistics inputStatistics;
+        // Some function estimate need plan node row count, such as COUNT
+        private final double rowCount;
 
-        public ExpressionStatisticVisitor(Statistics statistics) {
-            this.statistics = statistics;
+        public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
+            this.inputStatistics = statistics;
+            this.rowCount = rowCount;
         }
 
         @Override
@@ -42,18 +53,79 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visitVariableReference(ColumnRefOperator operator, Void context) {
-            return statistics.getColumnStatistic(operator);
+            return inputStatistics.getColumnStatistic(operator);
         }
 
         @Override
         public ColumnStatistic visitConstant(ConstantOperator operator, Void context) {
+            if (operator.isNull()) {
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
+            }
             OptionalDouble value = doubleValueFromConstant(operator);
             if (value.isPresent()) {
                 return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
                         operator.getType().getSlotSize(), 1);
+            } else if (operator.getType().isStringType()) {
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
             } else {
                 return ColumnStatistic.unknown();
             }
+        }
+
+        @Override
+        public ColumnStatistic visitCaseWhenOperator(CaseWhenOperator caseWhenOperator, Void context) {
+            // 1. compute children column statistics
+            int whenClauseSize = caseWhenOperator.getWhenClauseSize();
+            List<ColumnStatistic> childrenColumnStatistics = Lists.newArrayList();
+            for (int i = 0; i < whenClauseSize; ++i) {
+                childrenColumnStatistics.add(caseWhenOperator.getThenClause(i).accept(this, context));
+            }
+            if (caseWhenOperator.hasElse()) {
+                childrenColumnStatistics.add(caseWhenOperator.getElseClause().accept(this, context));
+            }
+            // 2. use sum of then clause and else clause's distinct values as column distinctValues
+            double distinctValues = childrenColumnStatistics.stream().mapToDouble(
+                    ColumnStatistic::getDistinctValuesCount).sum();
+            return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
+                    caseWhenOperator.getType().getSlotSize(), distinctValues);
+        }
+
+        @Override
+        public ColumnStatistic visitCastOperator(CastOperator cast, Void context) {
+            ColumnStatistic childStatistic = cast.getChild(0).accept(this, context);
+
+            if (childStatistic.isUnknown() ||
+                    inputStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+                return ColumnStatistic.unknown();
+            }
+
+            // If cast destination type is number/string, it's unnecessary to cast, keep self is enough.
+            if (!cast.getType().isDateType()) {
+                return childStatistic;
+            }
+
+            ConstantOperator max = ConstantOperator.createBigint((long) childStatistic.getMaxValue());
+            ConstantOperator min = ConstantOperator.createBigint((long) childStatistic.getMinValue());
+
+            try {
+                if (cast.getChild(0).getType().isDateType()) {
+                    max = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMaxValue()));
+                    min = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
+                } else {
+                    max = max.castTo(cast.getType());
+                    min = min.castTo(cast.getType());
+                }
+            } catch (Exception e) {
+                LOG.warn("expression statistic compute cast failed: " + max.toString() + ", " + min.toString() +
+                        ", to type: " + cast.getType());
+                return childStatistic;
+            }
+
+            double maxValue = Utils.getLongFromDateTime(max.getDatetime());
+            double minValue = Utils.getLongFromDateTime(min.getDatetime());
+
+            return new ColumnStatistic(minValue, maxValue, childStatistic.getNullsFraction(),
+                    childStatistic.getAverageRowSize(), childStatistic.getDistinctValuesCount());
         }
 
         @Override
@@ -61,20 +133,30 @@ public class ExpressionStatisticCalculator {
             List<ColumnStatistic> childrenColumnStatistics =
                     call.getChildren().stream().map(child -> child.accept(this, context)).collect(Collectors.toList());
             Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size());
-            if (childrenColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+            if (childrenColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) ||
+                    inputStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
                 return ColumnStatistic.unknown();
             }
 
             if (call.getChildren().size() == 0) {
-                return ColumnStatistic.unknown();
+                return nullaryExpressionCalculate(call);
             } else if (call.getChildren().size() == 1) {
                 return unaryExpressionCalculate(call, childrenColumnStatistics.get(0));
             } else if (call.getChildren().size() == 2) {
                 return binaryExpressionCalculate(call, childrenColumnStatistics.get(0),
                         childrenColumnStatistics.get(1));
             } else {
-                // TODO: Multiple Arithmetic calculations support later
-                return childrenColumnStatistics.get(0);
+                return multiaryExpressionCalculate(call, childrenColumnStatistics);
+            }
+        }
+
+        private ColumnStatistic nullaryExpressionCalculate(CallOperator callOperator) {
+            switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.COUNT:
+                    return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
+                            callOperator.getType().getSlotSize(), rowCount);
+                default:
+                    return ColumnStatistic.unknown();
             }
         }
 
@@ -88,8 +170,8 @@ public class ExpressionStatisticCalculator {
                     value = columnStatistic.getMinValue();
                     return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
                 case FunctionSet.YEAR:
-                    int minValue = 1000;
-                    int maxValue = 3000;
+                    int minValue = 1700;
+                    int maxValue = 2100;
                     try {
                         minValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
                         maxValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
@@ -116,6 +198,9 @@ public class ExpressionStatisticCalculator {
                     return new ColumnStatistic(0, 59, 0,
                             callOperator.getType().getSlotSize(),
                             Math.min(columnStatistic.getDistinctValuesCount(), 60));
+                case FunctionSet.COUNT:
+                    return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
+                            callOperator.getType().getSlotSize(), rowCount);
                 default:
                     // return child column statistic default
                     return columnStatistic;
@@ -124,7 +209,7 @@ public class ExpressionStatisticCalculator {
 
         private ColumnStatistic binaryExpressionCalculate(CallOperator callOperator, ColumnStatistic left,
                                                           ColumnStatistic right) {
-            double distinctValues = Math.max(left.getDistinctValuesCount(), right.getMaxValue());
+            double distinctValues = Math.max(left.getDistinctValuesCount(), right.getDistinctValuesCount());
             double nullsFraction = 1 - ((1 - left.getNullsFraction()) * (1 - right.getNullsFraction()));
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.ADD:
@@ -165,6 +250,19 @@ public class ExpressionStatisticCalculator {
                 default:
                     // return child column statistic default
                     return left;
+            }
+        }
+
+        private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,
+                                                            List<ColumnStatistic> childColumnStatisticList) {
+            switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.IF:
+                    double distinctValues = childColumnStatisticList.get(1).getDistinctValuesCount() +
+                            childColumnStatisticList.get(2).getDistinctValuesCount();
+                    return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
+                            callOperator.getType().getSlotSize(), distinctValues);
+                default:
+                    return childColumnStatisticList.get(0);
             }
         }
 

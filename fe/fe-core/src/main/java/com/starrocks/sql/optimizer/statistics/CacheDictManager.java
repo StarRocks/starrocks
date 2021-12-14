@@ -10,7 +10,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -34,8 +33,8 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
 public class CacheDictManager implements IDictManager {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
-    private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newHashSet();
-    private static final Set<Long> forbiddenDictTableIds = Sets.newHashSet();
+    private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newConcurrentHashSet();
+    private static final Set<Long> forbiddenDictTableIds = Sets.newConcurrentHashSet();
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
@@ -122,11 +121,18 @@ public class CacheDictManager implements IDictManager {
             .maximumSize(Config.statistic_cache_columns)
             .buildAsync(dictLoader);
 
-    private ColumnDict deserializeColumnDict(TStatisticData statisticData) throws AnalysisException {
+    private ColumnDict deserializeColumnDict(TStatisticData statisticData) {
+        if (statisticData.dict == null) {
+            throw new RuntimeException("Collect dict error in BE");
+        }
         TGlobalDict tGlobalDict = statisticData.dict;
         ImmutableMap.Builder<String, Integer> dicts = ImmutableMap.builder();
         if (tGlobalDict.isSetIds()) {
             int dictSize = tGlobalDict.getIdsSize();
+            ColumnIdentifier columnIdentifier = new ColumnIdentifier(statisticData.tableId, statisticData.columnName);
+            if (dictSize > 256) {
+                noDictStringColumns.add(columnIdentifier);
+            }
             for (int i = 0; i < dictSize; ++i) {
                 dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
             }
@@ -187,6 +193,16 @@ public class CacheDictManager implements IDictManager {
     @Override
     public boolean hasGlobalDict(long tableId, String columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        if (noDictStringColumns.contains(columnIdentifier)) {
+            LOG.debug("{} isn't low cardinality string column", columnName);
+            return false;
+        }
+
+        if (forbiddenDictTableIds.contains(tableId)) {
+            LOG.debug("table {} forbit low cardinality global dict", tableId);
+            return false;
+        }
+
         return dictStatistics.asMap().containsKey(columnIdentifier);
     }
 
@@ -221,17 +237,8 @@ public class CacheDictManager implements IDictManager {
     @Override
     public ColumnDict getGlobalDict(long tableId, String columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        CompletableFuture<Optional<ColumnDict>> result = dictStatistics.get(columnIdentifier);
-        Preconditions.checkArgument(result.isDone());
-        try {
-            Optional<ColumnDict> dict = result.get();
-            Preconditions.checkArgument(dict.isPresent());
-            return dict.get();
-        } catch (Exception e) {
-            LOG.warn(e);
-            Preconditions.checkArgument(false, "Shouldn't run here");
-        }
-        Preconditions.checkArgument(false, "Shouldn't run here");
-        return null;
+        Optional<ColumnDict> dict = dictStatistics.synchronous().get(columnIdentifier);
+        Preconditions.checkArgument(dict != null && dict.isPresent());
+        return dict.get();
     }
 }

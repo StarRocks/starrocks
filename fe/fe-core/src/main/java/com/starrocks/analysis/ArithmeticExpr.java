@@ -344,6 +344,15 @@ public class ArithmeticExpr extends Expr {
     }
 
     @Override
+    public String toDigestImpl() {
+        if (children.size() == 1) {
+            return op.toString() + " " + getChild(0).toDigest();
+        } else {
+            return getChild(0).toDigest() + " " + op.toString() + " " + getChild(1).toDigest();
+        }
+    }
+
+    @Override
     protected String explainImpl() {
         if (children.size() == 1) {
             return op.toString() + " " + getChild(0).explain();
@@ -355,10 +364,8 @@ public class ArithmeticExpr extends Expr {
     @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.ARITHMETIC_EXPR;
-        if (useVectorized || !type.getPrimitiveType().isDecimalOfAnyVersion()) {
-            msg.setOpcode(op.getOpcode());
-            msg.setOutput_column(outputColumn);
-        }
+        msg.setOpcode(op.getOpcode());
+        msg.setOutput_column(outputColumn);
     }
 
     @Override
@@ -472,17 +479,6 @@ public class ArithmeticExpr extends Expr {
             return true;
         }
         return hasNullableChild();
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**

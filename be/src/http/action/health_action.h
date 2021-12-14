@@ -34,7 +34,6 @@ public:
     HealthAction(ExecEnv* exec_env);
 
     ~HealthAction() override = default;
-    ;
 
     void handle(HttpRequest* req) override;
 

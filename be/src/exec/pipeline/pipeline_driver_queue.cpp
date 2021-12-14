@@ -5,7 +5,7 @@
 #include "gutil/strings/substitute.h"
 namespace starrocks::pipeline {
 void QuerySharedDriverQueue::close() {
-    std::unique_lock<std::mutex> lock(_global_mutex);
+    std::lock_guard<std::mutex> lock(_global_mutex);
     _is_closed = true;
     _cv.notify_all();
 }
@@ -13,8 +13,21 @@ void QuerySharedDriverQueue::close() {
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level();
     {
-        std::unique_lock<std::mutex> lock(_global_mutex);
+        std::lock_guard<std::mutex> lock(_global_mutex);
         _queues[level % QUEUE_SIZE].queue.emplace(driver);
+        _cv.notify_one();
+    }
+}
+
+void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
+    std::vector<int> levels(drivers.size());
+    for (int i = 0; i < drivers.size(); i++) {
+        levels[i] = drivers[i]->driver_acct().get_level();
+    }
+
+    std::lock_guard<std::mutex> lock(_global_mutex);
+    for (int i = 0; i < drivers.size(); i++) {
+        _queues[levels[i] % QUEUE_SIZE].queue.emplace(drivers[i]);
         _cv.notify_one();
     }
 }

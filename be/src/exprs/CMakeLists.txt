@@ -68,4 +68,10 @@ add_library(Exprs
   vectorized/info_func.cpp
   vectorized/runtime_filter.cpp
   vectorized/runtime_filter_bank.cpp
+  vectorized/in_const_predicate.cpp
 )
+
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+set_source_files_properties(vectorized/json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+set_source_files_properties(vectorized/json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)

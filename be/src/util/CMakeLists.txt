@@ -107,6 +107,7 @@ set(UTIL_FILES
   hdfs_util.cpp
   gc_helper.cpp
   gc_helper_smoothstep.cpp
+  sha.cpp
 )
 
 set(UTIL_FILES ${UTIL_FILES}

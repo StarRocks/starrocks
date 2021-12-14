@@ -21,6 +21,8 @@
 
 #include "storage/task/engine_clone_task.h"
 
+#include <sys/stat.h>
+
 #include <filesystem>
 #include <set>
 
@@ -295,7 +297,7 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
                                        int timeout_s, const std::vector<Version>* missed_versions,
                                        std::string* snapshot_path, int32_t* snapshot_format) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot should be stopped as soon as possible.");
     }
 
@@ -338,7 +340,7 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
 
 Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const std::string& snapshot_path) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot should be stopped as soon as possible.");
     }
 
@@ -353,7 +355,7 @@ Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const
 Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& remote_url_prefix,
                                         const std::string& local_path) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The download should be stopped as soon as possible.");
     }
 
@@ -382,7 +384,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     // The header file's name is end of .hdr.
     for (int i = 0; i < file_name_list.size() - 1; ++i) {
         bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-        if (!bg_worker_stopped) {
+        if (bg_worker_stopped) {
             return Status::InternalError(
                     "Process is going to quit. The download should be stopped as soon as possible.");
         }
@@ -458,7 +460,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, int64_t committed_version,
                                       bool incremental_clone) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone should be stopped as soon as possible.");
     }
 
@@ -512,7 +514,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         // link files from clone dir, if file exists, skip it
         for (const string& clone_file : clone_files) {
             bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-            if (!bg_worker_stopped) {
+            if (bg_worker_stopped) {
                 return Status::InternalError(
                         "Process is going to quit. The clone should be stopped as soon as possible.");
             }
@@ -560,7 +562,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta& cloned_tablet_meta,
                                                 int64_t committed_version) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone should be stopped as soon as possible.");
     }
 
@@ -590,14 +592,15 @@ Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta
     }
 
     // clone_data to tablet
-    Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    Status st = tablet->revise_tablet_meta(ExecEnv::GetInstance()->storage_engine()->tablet_meta_mem_tracker(),
+                                           rowsets_to_clone, versions_to_delete);
     LOG(INFO) << "finish to incremental clone. [tablet=" << tablet->full_name() << " status=" << st << "]";
     return st;
 }
 
 Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone should be stopped as soon as possible.");
     }
 
@@ -670,7 +673,8 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     // 2. local tablet has error in push
     // 3. local tablet cloned rowset from other nodes
     // 4. if cleared alter task info, then push will not write to new tablet, the report info is error
-    Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    Status st = tablet->revise_tablet_meta(ExecEnv::GetInstance()->storage_engine()->tablet_meta_mem_tracker(),
+                                           rowsets_to_clone, versions_to_delete);
     LOG(INFO) << "finish to full clone. tablet=" << tablet->full_name() << ", res=" << st;
     // in previous step, copy all files from CLONE_DIR to tablet dir
     // but some rowset is useless, so that remove them here
@@ -691,7 +695,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
 
 Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string& clone_dir) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (!bg_worker_stopped) {
+    if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot should be stopped as soon as possible.");
     }
 

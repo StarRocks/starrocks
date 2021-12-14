@@ -25,15 +25,10 @@
 #include <utility>
 
 #include "runtime/mem_pool.h"
-#include "runtime/row_batch.h"
 #include "runtime/tuple_row.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
-
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
 
 static const string LOAD_OP_COLUMN = "__op";
 
@@ -269,10 +264,8 @@ bool OlapTablePartitionParam::find_tablet(Tuple* tuple, const OlapTablePartition
 }
 
 Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNode>& t_exprs, Tuple** part_key) {
-    Tuple* tuple = (Tuple*)_mem_pool->allocate(_schema->tuple_desc()->byte_size());
-    if (UNLIKELY(tuple == nullptr)) {
-        return Status::InternalError("Mem usage has exceed the limit of BE");
-    }
+    auto* tuple = (Tuple*)_mem_pool->allocate(_schema->tuple_desc()->byte_size());
+    RETURN_IF_UNLIKELY_NULL(tuple, Status::MemoryAllocFailed("alloc mem for partition keys failed"));
     for (int i = 0; i < t_exprs.size(); i++) {
         const TExprNode& t_expr = t_exprs[i];
         RETURN_IF_ERROR(_create_partition_key(t_expr, tuple, _partition_slot_descs[i]));

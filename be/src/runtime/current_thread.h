@@ -5,10 +5,13 @@
 #include <string>
 
 #include "gen_cpp/Types_types.h"
+#include "gutil/macros.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "storage/storage_engine.h"
 #include "util/uid_util.h"
+
+#define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
+    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
 
 namespace starrocks {
 
@@ -17,13 +20,9 @@ class TUniqueId;
 class CurrentThread {
 public:
     CurrentThread() = default;
-    ~CurrentThread() { commit(); }
+    ~CurrentThread();
 
     void commit() {
-        StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
-        if (storage_engine != nullptr && storage_engine->bg_worker_stopped()) {
-            return;
-        }
         MemTracker* cur_tracker = mem_tracker();
         if (_cache_size != 0 && cur_tracker != nullptr) {
             cur_tracker->consume(_cache_size);
@@ -31,13 +30,9 @@ public:
         }
     }
 
-    void set_query_id(const starrocks::TUniqueId& query_id) {
-        _query_id = query_id;
-        _str_query_id = starrocks::print_id(query_id);
-    }
+    void set_query_id(const starrocks::TUniqueId& query_id) { _query_id = query_id; }
 
     const starrocks::TUniqueId& query_id() { return _query_id; }
-    const std::string& query_id_string() { return _str_query_id; }
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
@@ -61,6 +56,14 @@ public:
             cur_tracker->consume(_cache_size);
             _cache_size = 0;
         }
+    }
+
+    bool try_mem_consume(int64_t size) {
+        MemTracker* cur_tracker = mem_tracker();
+        if (cur_tracker != nullptr) {
+            return cur_tracker->try_consume(size);
+        }
+        return true;
     }
 
     void mem_consume_without_cache(int64_t size) {
@@ -87,13 +90,30 @@ public:
     }
 
 private:
+    const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
+
     int64_t _cache_size = 0;
     MemTracker* _mem_tracker = nullptr;
     TUniqueId _query_id;
-    std::string _str_query_id;
-
-    const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 };
 
 inline thread_local CurrentThread tls_thread_status;
+
+class CurrentThreadMemTrackerSetter {
+public:
+    explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
+        _old_mem_tracker = tls_thread_status.set_mem_tracker(new_mem_tracker);
+    }
+
+    ~CurrentThreadMemTrackerSetter() { (void)tls_thread_status.set_mem_tracker(_old_mem_tracker); }
+
+    CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
+    void operator=(const CurrentThreadMemTrackerSetter&) = delete;
+    CurrentThreadMemTrackerSetter(CurrentThreadMemTrackerSetter&&) = delete;
+    void operator=(CurrentThreadMemTrackerSetter&&) = delete;
+
+private:
+    MemTracker* _old_mem_tracker;
+};
+
 } // namespace starrocks

@@ -32,6 +32,12 @@ OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
 Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     DCHECK(!tnode.olap_scan_node.__isset.sort_column) << "sorted result not supported any more";
+
+    // init filtered_ouput_columns
+    for (const auto& col_name : tnode.olap_scan_node.unused_output_column_name) {
+        _unused_output_columns.emplace_back(col_name);
+    }
+
     return Status::OK();
 }
 
@@ -65,15 +71,11 @@ Status OlapScanNode::open(RuntimeState* state) {
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status);
     _update_status(status);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
                                            &(_tuple_desc->decoded_slots()));
 
     return Status::OK();
-}
-
-Status OlapScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
 }
 
 // Current get_next the chunk is nullptr when eos==true
@@ -257,6 +259,11 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             delete chunk;
             break;
         }
+        // Improve for select * from table limit x;
+        if (limit() != -1 && scanner->num_rows_read() >= limit()) {
+            status = Status::EndOfFile("limit reach");
+            break;
+        }
         if (scanner->raw_rows_read() >= raw_rows_threshold) {
             resubmit = true;
             break;
@@ -365,7 +372,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _read_uncompressed_counter = ADD_COUNTER(_scan_profile, "UncompressedBytesRead", TUnit::BYTES);
 
     _raw_rows_counter = ADD_COUNTER(_scan_profile, "RawRowsRead", TUnit::UNIT);
-    _total_pages_num_counter = ADD_COUNTER(_scan_profile, "TotalPagesNum", TUnit::UNIT);
+    _read_pages_num_counter = ADD_COUNTER(_scan_profile, "ReadPagesNum", TUnit::UNIT);
     _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
     _pushdown_predicates_counter = ADD_COUNTER(_scan_profile, "PushdownPredicates", TUnit::UNIT);
 
@@ -390,6 +397,10 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _chunk_copy_timer = ADD_CHILD_TIMER(_scan_profile, "ChunkCopy", "SegmentRead");
     _decompress_timer = ADD_CHILD_TIMER(_scan_profile, "DecompressT", "SegmentRead");
     _index_load_timer = ADD_CHILD_TIMER(_scan_profile, "IndexLoad", "SegmentRead");
+    _rowsets_read_count = ADD_CHILD_COUNTER(_scan_profile, "RowsetsReadCount", TUnit::UNIT, "SegmentRead");
+    _segments_read_count = ADD_CHILD_COUNTER(_scan_profile, "SegmentsReadCount", TUnit::UNIT, "SegmentRead");
+    _total_columns_data_page_count =
+            ADD_CHILD_COUNTER(_scan_profile, "TotalColumnsDataPageCount", TUnit::UNIT, "SegmentRead");
 
     /// IOTime
     _io_timer = ADD_TIMER(_scan_profile, "IOTime");
@@ -480,6 +491,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             scanner_params.conjunct_ctxs = &conjunct_ctxs;
             scanner_params.skip_aggregation = _olap_scan_node.is_preaggregation;
             scanner_params.need_agg_finalize = true;
+            scanner_params.unused_output_columns = &_unused_output_columns;
             auto* scanner = _obj_pool.add(new TabletScanner(this));
             RETURN_IF_ERROR(scanner->init(state, scanner_params));
             // Assume all scanners have the same schema.
@@ -537,9 +549,12 @@ void OlapScanNode::_close_pending_scanners() {
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators;
-    auto scan_operator =
-            std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
-                                                  std::move(_conjunct_ctxs), std::move(_runtime_filter_collector));
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    auto scan_operator = std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
+                                                               std::move(_conjunct_ctxs), limit());
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
     auto& morsel_queues = context->fragment_context()->morsel_queues();
     auto source_id = scan_operator->plan_node_id();
     DCHECK(morsel_queues.count(source_id));

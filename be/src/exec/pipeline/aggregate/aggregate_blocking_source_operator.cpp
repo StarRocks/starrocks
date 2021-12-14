@@ -14,14 +14,12 @@ bool AggregateBlockingSourceOperator::is_finished() const {
     return _aggregator->is_sink_complete() && _aggregator->is_ht_eos();
 }
 
-void AggregateBlockingSourceOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
+void AggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
+    _aggregator->set_finished();
 }
 
 Status AggregateBlockingSourceOperator::close(RuntimeState* state) {
-    // _aggregator is shared by sink operator and source operator
-    // we must only close it at source operator
-    RETURN_IF_ERROR(_aggregator->close(state));
+    RETURN_IF_ERROR(_aggregator->unref(state));
     return SourceOperator::close(state);
 }
 
@@ -46,17 +44,16 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
 #undef HASH_MAP_METHOD
     }
 
-    // TODO(hcf) force annotation
-    // eval_join_runtime_filters(chunk.get());
+    eval_runtime_bloom_filters(chunk.get());
 
     // For having
+    eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), chunk.get());
     size_t old_size = chunk->num_rows();
-
-    ExecNode::eval_conjuncts(_aggregator->conjunct_ctxs(), chunk.get());
     _aggregator->update_num_rows_returned(-(old_size - chunk->num_rows()));
 
     DCHECK_CHUNK(chunk);
 
     return std::move(chunk);
 }
+
 } // namespace starrocks::pipeline

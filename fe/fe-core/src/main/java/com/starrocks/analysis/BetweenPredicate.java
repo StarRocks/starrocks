@@ -81,11 +81,6 @@ public class BetweenPredicate extends Predicate {
     }
 
     @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         throw new IllegalStateException(
                 "BetweenPredicate needs to be rewritten into a CompoundPredicate.");
@@ -96,6 +91,13 @@ public class BetweenPredicate extends Predicate {
         String notStr = (isNotBetween) ? "NOT " : "";
         return children.get(0).toSql() + " " + notStr + "BETWEEN " +
                 children.get(1).toSql() + " AND " + children.get(2).toSql();
+    }
+
+    @Override
+    public String toDigestImpl() {
+        String notStr = (isNotBetween) ? "not " : "";
+        return children.get(0).toDigest() + " " + notStr + "between " +
+                children.get(1).toDigest() + " and " + children.get(2).toDigest();
     }
 
     @Override

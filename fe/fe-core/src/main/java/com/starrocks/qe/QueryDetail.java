@@ -31,8 +31,6 @@ public class QueryDetail implements Serializable {
         CANCELLED
     }
 
-    ;
-
     // When query received, FE will construct a QueryDetail
     // object. This object will set queryId, startTime, sql
     // fields. As well state is be set as RUNNING. 

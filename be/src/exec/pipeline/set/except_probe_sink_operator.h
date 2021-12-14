@@ -11,12 +11,17 @@ namespace starrocks::pipeline {
 // For more detail information, see the comments of class ExceptBuildSinkOperator.
 class ExceptProbeSinkOperator final : public Operator {
 public:
-    ExceptProbeSinkOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<ExceptContext> except_ctx,
-                            const std::vector<ExprContext*>& dst_exprs, const int32_t dependency_index)
-            : Operator(id, "except_probe_sink", plan_node_id),
+    ExceptProbeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                            std::shared_ptr<ExceptContext> except_ctx, const std::vector<ExprContext*>& dst_exprs,
+                            const int32_t dependency_index)
+            : Operator(factory, id, "except_probe_sink", plan_node_id),
               _except_ctx(std::move(except_ctx)),
               _dst_exprs(dst_exprs),
-              _dependency_index(dependency_index) {}
+              _dependency_index(dependency_index) {
+        _except_ctx->ref();
+    }
+
+    Status close(RuntimeState* state) override;
 
     bool need_input() const override {
         return _except_ctx->is_dependency_finished(_dependency_index) && !(_is_finished || _except_ctx->is_ht_empty());
@@ -25,6 +30,9 @@ public:
     bool has_output() const override { return false; }
 
     bool is_finished() const override {
+        if (_except_ctx->is_finished()) {
+            return true;
+        }
         return _except_ctx->is_dependency_finished(_dependency_index) && (_is_finished || _except_ctx->is_ht_empty());
     }
 
@@ -58,7 +66,7 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         ExceptContextPtr except_ctx = _except_partition_ctx_factory->get_or_create(driver_sequence);
-        return std::make_shared<ExceptProbeSinkOperator>(_id, _plan_node_id, std::move(except_ctx), _dst_exprs,
+        return std::make_shared<ExceptProbeSinkOperator>(this, _id, _plan_node_id, std::move(except_ctx), _dst_exprs,
                                                          _dependency_index);
     }
 

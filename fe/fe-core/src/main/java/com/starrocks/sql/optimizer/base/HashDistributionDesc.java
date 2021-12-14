@@ -10,11 +10,17 @@ import java.util.Objects;
 public class HashDistributionDesc {
     public enum SourceType {
         LOCAL, // hash property from scan node
+        // @Todo: Should modify Coordinator and PlanFragmentBuilder.
+        //  For sql: select * from t1 join[shuffle] (select x1, sum(1) from t1 group by x1) s on t1.x2 = s.x1;
+        //  Join check isn't bucket shuffle/shuffle depend on child is exchange node.
+        //  Join will mistake shuffle as bucket shuffle in PlanFragmentBuilder if aggregate node
+        //  use SHUFFLE_JOIN, and the hash algorithm is different which use for shuffle and bucket shuffle, then
+        //  the result will be error
+        SHUFFLE_AGG, // hash property from shuffle agg
         SHUFFLE_JOIN, // hash property from shuffle join
         BUCKET_JOIN, // hash property from bucket join
         // @Todo: It's a temporary solution
         FORCE_SHUFFLE_JOIN, // hash property from shuffle join if contains expression in on clause
-        SHUFFLE_AGG, // hash property from shuffle agg,
     }
 
     private final List<Integer> columns;

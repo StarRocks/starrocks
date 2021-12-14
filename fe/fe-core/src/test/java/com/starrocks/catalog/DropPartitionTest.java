@@ -109,7 +109,7 @@ public class DropPartitionTest {
         OlapTable table = (OlapTable) db.getTable("tbl1");
         Partition partition = table.getPartition("p20210202");
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
-        String dropPartitionSql = " alter table test.tbl1 drop partition force p20210202;";
+        String dropPartitionSql = " alter table test.tbl1 drop partition p20210202 force;";
         dropPartition(dropPartitionSql);
         List<Replica> replicaList =
                 Catalog.getCurrentCatalog().getTabletInvertedIndex().getReplicasByTabletId(tabletId);

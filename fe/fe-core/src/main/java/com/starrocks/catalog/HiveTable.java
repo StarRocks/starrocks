@@ -62,6 +62,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.util.Util.validateMetastoreUris;
+
 /**
  * External hive table
  * At the very beginning, hive table is only designed for spark load, and property hive.metastore.uris is used to
@@ -305,7 +307,7 @@ public class HiveTable extends Table {
     private void validate(Map<String, String> properties) throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of hive table, "
-                    + "they are: database, table and 'hive.metastore.uris'");
+                    + "they are: database, table and resource");
         }
 
         Map<String, String> copiedProps = Maps.newHashMap(properties);
@@ -322,90 +324,90 @@ public class HiveTable extends Table {
         copiedProps.remove(HIVE_TABLE);
 
         // check hive properties
-        // hive.metastore.uris or hive.resource must be set
+        // resource must be set and hive.metastore.uris will be ignored if specified.
         String hiveMetastoreUris = copiedProps.get(HIVE_METASTORE_URIS);
         String resourceName = copiedProps.get(HIVE_RESOURCE);
-        if (Strings.isNullOrEmpty(hiveMetastoreUris) && Strings.isNullOrEmpty(resourceName)) {
-            throw new DdlException("property " + HIVE_METASTORE_URIS + " or " + HIVE_RESOURCE + " must be set");
+        if (Strings.isNullOrEmpty(resourceName)) {
+            throw new DdlException("property " + HIVE_RESOURCE + " must be set");
         }
 
         if (!Strings.isNullOrEmpty(hiveMetastoreUris)) {
+            validateMetastoreUris(hiveMetastoreUris);
             copiedProps.remove(HIVE_METASTORE_URIS);
-            hiveProperties.put(HIVE_METASTORE_URIS, hiveMetastoreUris);
+            LOG.warn("property " + HIVE_METASTORE_URIS + " will be ignored " +
+                    "and hive table will be created by using property " + HIVE_RESOURCE + " only.");
         }
 
-        if (!Strings.isNullOrEmpty(resourceName)) {
-            copiedProps.remove(HIVE_RESOURCE);
-            Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
-            if (resource == null) {
-                throw new DdlException("hive resource [" + resourceName + "] not exists");
-            }
-            if (resource.getType() != ResourceType.HIVE) {
-                throw new DdlException("resource [" + resourceName + "] is not hive resource");
-            }
-            HiveResource hiveResource = (HiveResource) resource;
-            hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
-            this.resourceName = resourceName;
-
-            // check column
-            // 1. check column exists in hive table
-            // 2. check column type mapping
-            // 3. check hive partition column exists in table column list
-            org.apache.hadoop.hive.metastore.api.Table hiveTable = Catalog.getCurrentCatalog().getHiveRepository()
-                    .getTable(resourceName, this.hiveDb, this.hiveTable);
-            String hiveTableType = hiveTable.getTableType();
-            if (hiveTableType == null) {
-                throw new DdlException("Unknown hive table type.");
-            }
-            switch (hiveTableType) {
-                case "VIRTUAL_VIEW": // hive view table not supported
-                    throw new DdlException("Hive view table is not supported.");
-                case "EXTERNAL_TABLE": // hive external table supported
-                case "MANAGED_TABLE": // basic hive table supported
-                    break;
-                default:
-                    throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
-            }
-            List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
-            List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
-            Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
-                    .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
-            for (FieldSchema hiveColumn : partHiveColumns) {
-                allHiveColumns.put(hiveColumn.getName(), hiveColumn);
-            }
-            for (Column column : this.fullSchema) {
-                FieldSchema hiveColumn = allHiveColumns.get(column.getName());
-                if (hiveColumn == null) {
-                    throw new DdlException("column [" + column.getName() + "] not exists in hive");
-                }
-                Set<PrimitiveType> validColumnTypes = getValidColumnType(hiveColumn.getType());
-                if (!validColumnTypes.contains(column.getPrimitiveType())) {
-                    throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
-                            "starrocks type [" + column.getPrimitiveType() + "]");
-                }
-                if (!column.isAllowNull() && !isTypeRead) {
-                    throw new DdlException(
-                            "hive extern table not support no-nullable column: [" + hiveColumn.getName() + "]");
-                }
-            }
-            for (FieldSchema partHiveColumn : partHiveColumns) {
-                String columnName = partHiveColumn.getName();
-                Column partColumn = this.nameToColumn.get(columnName);
-                if (partColumn == null) {
-                    throw new DdlException("partition column [" + columnName + "] must exist in column list");
-                } else {
-                    this.partColumnNames.add(columnName);
-                }
-            }
-
-            for (FieldSchema s : unPartHiveColumns) {
-                this.dataColumnNames.add(s.getName());
-            }
-
-            // set hdfs path
-            // todo hdfs ip may change, store it in cache?
-            this.hdfsPath = hiveTable.getSd().getLocation();
+        copiedProps.remove(HIVE_RESOURCE);
+        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        if (resource == null) {
+            throw new DdlException("hive resource [" + resourceName + "] not exists");
         }
+        if (resource.getType() != ResourceType.HIVE) {
+            throw new DdlException("resource [" + resourceName + "] is not hive resource");
+        }
+        HiveResource hiveResource = (HiveResource) resource;
+        hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
+        this.resourceName = resourceName;
+
+        // check column
+        // 1. check column exists in hive table
+        // 2. check column type mapping
+        // 3. check hive partition column exists in table column list
+        org.apache.hadoop.hive.metastore.api.Table hiveTable = Catalog.getCurrentCatalog().getHiveRepository()
+                .getTable(resourceName, this.hiveDb, this.hiveTable);
+        String hiveTableType = hiveTable.getTableType();
+        if (hiveTableType == null) {
+            throw new DdlException("Unknown hive table type.");
+        }
+        switch (hiveTableType) {
+            case "VIRTUAL_VIEW": // hive view table not supported
+                throw new DdlException("Hive view table is not supported.");
+            case "EXTERNAL_TABLE": // hive external table supported
+            case "MANAGED_TABLE": // basic hive table supported
+                break;
+            default:
+                throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
+        }
+        List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
+        List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
+        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
+                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
+        for (FieldSchema hiveColumn : partHiveColumns) {
+            allHiveColumns.put(hiveColumn.getName(), hiveColumn);
+        }
+        for (Column column : this.fullSchema) {
+            FieldSchema hiveColumn = allHiveColumns.get(column.getName());
+            if (hiveColumn == null) {
+                throw new DdlException("column [" + column.getName() + "] not exists in hive");
+            }
+            Set<PrimitiveType> validColumnTypes = getValidColumnType(hiveColumn.getType());
+            if (!validColumnTypes.contains(column.getPrimitiveType())) {
+                throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
+                        "starrocks type [" + column.getPrimitiveType() + "]");
+            }
+            if (!column.isAllowNull() && !isTypeRead) {
+                throw new DdlException(
+                        "hive extern table not support no-nullable column: [" + hiveColumn.getName() + "]");
+            }
+        }
+        for (FieldSchema partHiveColumn : partHiveColumns) {
+            String columnName = partHiveColumn.getName();
+            Column partColumn = this.nameToColumn.get(columnName);
+            if (partColumn == null) {
+                throw new DdlException("partition column [" + columnName + "] must exist in column list");
+            } else {
+                this.partColumnNames.add(columnName);
+            }
+        }
+
+        for (FieldSchema s : unPartHiveColumns) {
+            this.dataColumnNames.add(s.getName());
+        }
+
+        // set hdfs path
+        // todo hdfs ip may change, store it in cache?
+        this.hdfsPath = hiveTable.getSd().getLocation();
 
         if (!copiedProps.isEmpty()) {
             throw new DdlException("Unknown table properties: " + copiedProps.toString());
@@ -467,6 +469,7 @@ public class HiveTable extends Table {
         Set<String> partitionColumnNames = Sets.newHashSet();
         List<TColumn> tPartitionColumns = Lists.newArrayList();
         List<TColumn> tColumns = Lists.newArrayList();
+
         for (Column column : getPartitionColumns()) {
             tPartitionColumns.add(column.toThrift());
             partitionColumnNames.add(column.getName());
@@ -504,7 +507,6 @@ public class HiveTable extends Table {
             tPartition.setFile_format(hivePartitions.get(i).getFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
-            keys.forEach(v -> v.setUseVectorized(true));
             tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();

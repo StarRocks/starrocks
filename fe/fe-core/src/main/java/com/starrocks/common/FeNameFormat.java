@@ -74,6 +74,9 @@ public class FeNameFormat {
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
+        if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        }
     }
 
     public static void checkLabel(String label) throws AnalysisException {

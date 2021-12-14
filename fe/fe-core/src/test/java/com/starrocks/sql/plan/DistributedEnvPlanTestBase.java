@@ -114,6 +114,9 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
         OlapTable t7 = (OlapTable) catalog.getDb("default_cluster:test").getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
 
+        OlapTable t8 = (OlapTable) catalog.getDb("default_cluster:test").getTable("lineitem_partition");
+        setTableStatistics(t8, 6000000 * scale);
+
         OlapTable test_all_type = (OlapTable) catalog.getDb("default_cluster:test").getTable("test_all_type");
         setTableStatistics(test_all_type, 6000000);
 

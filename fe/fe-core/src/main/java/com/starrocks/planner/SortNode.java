@@ -33,6 +33,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -41,6 +42,7 @@ import com.starrocks.thrift.TSortNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -56,6 +58,10 @@ public class SortNode extends PlanNode {
     private long offset;
     // if true, the output of this node feeds an AnalyticNode
     private boolean isAnalyticSort;
+    // if SortNode(TopNNode in BE) is followed by AnalyticNode with partition_exprs, this partition_exprs is
+    // also added to TopNNode to hint that local shuffle operator is prepended to TopNNode in
+    // order to eliminate merging operation in pipeline execution engine.
+    private List<Expr> analyticPartitionExprs = Collections.emptyList();
 
     // info_.sortTupleSlotExprs_ substituted with the outputSmap_ for materialized slots in init().
     public List<Expr> resolvedTupleExprs;
@@ -66,6 +72,14 @@ public class SortNode extends PlanNode {
 
     public boolean isAnalyticSort() {
         return isAnalyticSort;
+    }
+
+    public List<Expr> getAnalyticPartitionExprs() {
+        return this.analyticPartitionExprs;
+    }
+
+    public void setAnalyticPartitionExprs(List<Expr> exprs) {
+        this.analyticPartitionExprs = exprs;
     }
 
     private DataPartition inputPartition;
@@ -85,7 +99,6 @@ public class SortNode extends PlanNode {
         this.useTopN = useTopN;
         this.isDefaultLimit = isDefaultLimit;
         this.tupleIds.addAll(Lists.newArrayList(info.getSortTupleDescriptor().getId()));
-        this.tblRefIds.addAll(Lists.newArrayList(info.getSortTupleDescriptor().getId()));
         this.nullableTupleIds.addAll(input.getNullableTupleIds());
         this.children.add(input);
         this.offset = offset;
@@ -164,6 +177,7 @@ public class SortNode extends PlanNode {
         msg.sort_node.setOrdering_exprs(Expr.treesToThrift(info.getOrderingExprs()));
         msg.sort_node.setIs_asc_order(info.getIsAscOrder());
         msg.sort_node.setNulls_first(info.getNullsFirst());
+        msg.sort_node.setAnalytic_partition_exprs(Expr.treesToThrift(analyticPartitionExprs));
         if (info.getSortTupleSlotExprs() != null) {
             msg.sort_node.setSort_tuple_slot_exprs(Expr.treesToThrift(info.getSortTupleSlotExprs()));
         }
@@ -256,41 +270,6 @@ public class SortNode extends PlanNode {
                     + outputSmap.debugString());
             LOG.debug("sort input exprs: " + Expr.debugString(resolvedTupleExprs));
         }
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : resolvedTupleExprs) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : info.getOrderingExprs()) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : info.getSortTupleSlotExprs()) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     @Override

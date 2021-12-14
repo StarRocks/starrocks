@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -52,7 +53,8 @@ public class DistributionPruneRule extends TransformationRule {
         }
 
         // prune hint tablet
-        if (null != olapScanOperator.getHintsTabletIds() && !olapScanOperator.getHintsTabletIds().isEmpty()) {
+        Preconditions.checkState(olapScanOperator.getHintsTabletIds() != null);
+        if (!olapScanOperator.getHintsTabletIds().isEmpty()) {
             result.retainAll(olapScanOperator.getHintsTabletIds());
         }
 

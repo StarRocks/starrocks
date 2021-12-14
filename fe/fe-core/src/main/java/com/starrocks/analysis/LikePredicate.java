@@ -95,6 +95,12 @@ public class LikePredicate extends Predicate {
     }
 
     @Override
+    public String toDigestImpl() {
+        return getChild(0).toDigest() + " " + op.toString().toLowerCase() + " " + getChild(1).toDigest();
+    }
+
+
+    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.FUNCTION_CALL;
     }
@@ -128,16 +134,6 @@ public class LikePredicate extends Predicate {
     @Override
     public int hashCode() {
         return 31 * super.hashCode() + Objects.hashCode(op);
-    }
-
-    @Override
-    public boolean isVectorized() {
-        return fn.isVectorized();
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        return getChild(0).unwrapSlotRef() != null;
     }
 
     @Override

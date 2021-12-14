@@ -50,14 +50,6 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
-    // get row ranges by zone map
-    // - cond_column is user's query predicate
-    // - delete_condition is delete predicate of one version
-    Status get_row_ranges_by_zone_map(CondColumn* cond_column, CondColumn* delete_condition,
-                                      RowRanges* row_ranges) override;
-
-    Status get_row_ranges_by_bloom_filter(CondColumn* cond_column, RowRanges* row_ranges) override;
-
     Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicate,
                                       const vectorized::ColumnPredicate* del_predicate,
                                       vectorized::SparseRange* range) override;

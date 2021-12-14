@@ -20,7 +20,8 @@ namespace vectorized {
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
-class HashJoinNode : public ExecNode {
+static constexpr size_t kHashJoinKeyColumnOffset = 1;
+class HashJoinNode final : public ExecNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~HashJoinNode() override = default;
@@ -28,7 +29,6 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
@@ -105,6 +105,7 @@ private:
     bool _right_table_has_remain = false;
     bool _build_eos = false;
     bool _probe_eos = false; // probe table scan finished;
+    size_t _runtime_join_filter_pushdown_limit = 1024000;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _build_ht_timer = nullptr;

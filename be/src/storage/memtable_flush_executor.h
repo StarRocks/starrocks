@@ -31,9 +31,7 @@
 namespace starrocks {
 
 class DataDir;
-class DeltaWriter;
 class ExecEnv;
-class MemTable;
 
 namespace vectorized {
 class MemTable;
@@ -62,9 +60,7 @@ public:
     explicit FlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
             : _flush_token(std::move(flush_pool_token)), _flush_status(OLAP_SUCCESS) {}
 
-    OLAPStatus submit(const std::shared_ptr<MemTable>& mem_table);
-
-    Status submit(const std::shared_ptr<vectorized::MemTable>& mem_table);
+    Status submit(std::unique_ptr<vectorized::MemTable> mem_table);
 
     // error has happpens, so we cancel this token
     // And remove all tasks in the queue.
@@ -77,9 +73,9 @@ public:
     const FlushStatistic& get_stats() const { return _stats; }
 
 private:
-    void _flush_memtable(std::shared_ptr<MemTable> mem_table);
+    friend class MemtableFlushTask;
 
-    void _flush_vectorized_memtable(std::shared_ptr<vectorized::MemTable> mem_table);
+    void _flush_memtable(vectorized::MemTable* mem_table);
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 
@@ -108,8 +104,9 @@ public:
     // because it needs path hash of each data dir.
     Status init(const std::vector<DataDir*>& data_dirs);
 
-    OLAPStatus create_flush_token(std::unique_ptr<FlushToken>* flush_token,
-                                  ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::SERIAL);
+    // NOTE: we use SERIAL mode here to ensure all mem-tables from one tablet are flushed in order.
+    std::unique_ptr<FlushToken> create_flush_token(
+            ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::SERIAL);
 
 private:
     std::unique_ptr<ThreadPool> _flush_pool;

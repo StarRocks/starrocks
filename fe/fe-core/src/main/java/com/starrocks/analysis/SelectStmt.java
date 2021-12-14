@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 import com.google.common.base.Strings;
 import com.google.common.collect.Iterables;
@@ -521,15 +522,6 @@ public class SelectStmt extends QueryStmt {
             sqlString_ = toSql();
         }
 
-        tryConvertOuterJoinToInnerJoin(analyzer);
-
-        // 1. If disable_join_reorder is set, disable join reorder
-        // 2. If we are analyzing with clause, disable join reorder, because which is unnecessary.
-        if (!analyzer.getContext().getSessionVariable().isDisableJoinReorder() &&
-                !analyzer.isParentHasWithClause()) {
-            reorderTable(analyzer);
-        }
-
         resolveInlineViewRefs(analyzer);
 
         if (analyzer.hasEmptySpjResultSet() && aggInfo == null) {
@@ -582,19 +574,6 @@ public class SelectStmt extends QueryStmt {
         List<TupleId> result = Lists.newArrayList();
 
         for (TableRef ref : fromClause_) {
-            result.add(ref.getId());
-        }
-
-        return result;
-    }
-
-    public List<TupleId> getTableRefIdsWithoutInlineView() {
-        List<TupleId> result = Lists.newArrayList();
-
-        for (TableRef ref : fromClause_) {
-            if (ref instanceof InlineViewRef) {
-                continue;
-            }
             result.add(ref.getId());
         }
 
@@ -1246,7 +1225,8 @@ public class SelectStmt extends QueryStmt {
         if (groupByClause == null && !selectList.isDistinct()
                 && !TreeNode.contains(resultExprs, Expr.isAggregatePredicate())
                 &&
-                (havingClauseAfterAnaylzed == null || !havingClauseAfterAnaylzed.contains(Expr.isAggregatePredicate()))
+                (havingClauseAfterAnaylzed == null || !havingClauseAfterAnaylzed.contains(
+                        Expr.isAggregatePredicate()))
                 && (sortInfo == null || !TreeNode.contains(sortInfo.getOrderingExprs(),
                 Expr.isAggregatePredicate()))) {
             // We're not computing aggregates but we still need to register the HAVING
@@ -1353,7 +1333,7 @@ public class SelectStmt extends QueryStmt {
         List<Expr> substitutedAggs =
                 Expr.substituteList(aggExprs, countAllMap, analyzer, false);
         aggExprs.clear();
-        TreeNode.collect(substitutedAggs, Expr.isAggregatePredicate(), aggExprs);
+        TreeNode.collect(substitutedAggs, Expr.isAggregatePredicate()::apply, aggExprs);
 
         // 3 create agg info
         createAggInfo(groupingExprs, aggExprs, analyzer);
@@ -1519,8 +1499,8 @@ public class SelectStmt extends QueryStmt {
             return scalarCountAllMap;
         }
 
-        com.google.common.base.Predicate<FunctionCallExpr> isNotDistinctPred =
-                new com.google.common.base.Predicate<FunctionCallExpr>() {
+        Predicate<FunctionCallExpr> isNotDistinctPred =
+                new Predicate<FunctionCallExpr>() {
                     public boolean apply(FunctionCallExpr expr) {
                         return !expr.isDistinct();
                     }
@@ -1530,8 +1510,8 @@ public class SelectStmt extends QueryStmt {
             return scalarCountAllMap;
         }
 
-        com.google.common.base.Predicate<FunctionCallExpr> isCountPred =
-                new com.google.common.base.Predicate<FunctionCallExpr>() {
+        Predicate<FunctionCallExpr> isCountPred =
+                new Predicate<FunctionCallExpr>() {
                     public boolean apply(FunctionCallExpr expr) {
                         return expr.getFnName().getFunction().equals(FunctionSet.COUNT);
                     }
@@ -1826,6 +1806,81 @@ public class SelectStmt extends QueryStmt {
         return strBuilder.toString();
     }
 
+
+    @Override
+    public String toDigest() {
+        StringBuilder strBuilder = new StringBuilder();
+        if (withClause_ != null) {
+            strBuilder.append(withClause_.toDigest());
+            strBuilder.append(" ");
+        }
+
+        // Select list
+        strBuilder.append("select ");
+        if (selectList.isDistinct()) {
+            strBuilder.append("distinct ");
+        }
+
+        if (originalExpr == null) {
+            originalExpr = Expr.cloneList(resultExprs);
+        }
+
+        if (resultExprs.isEmpty()) {
+            for (int i = 0; i < selectList.getItems().size(); ++i) {
+                if (i != 0) {
+                    strBuilder.append(", ");
+                }
+                strBuilder.append(selectList.getItems().get(i).toDigest());
+            }
+        } else {
+            for (int i = 0; i < originalExpr.size(); ++i) {
+                if (i != 0) {
+                    strBuilder.append(", ");
+                }
+                strBuilder.append(originalExpr.get(i).toDigest());
+                strBuilder.append(" as ").append(SqlUtils.getIdentSql(colLabels.get(i)));
+            }
+        }
+
+        // From clause
+        if (!fromClause_.isEmpty()) {
+            strBuilder.append(fromClause_.toDigest());
+        }
+
+        // Where clause
+        if (whereClause != null) {
+            strBuilder.append(" where ");
+            strBuilder.append(whereClause.toDigest());
+        }
+        // Group By clause
+        if (groupByClause != null) {
+            strBuilder.append(" group by ");
+            strBuilder.append(groupByClause.toSql());
+        }
+        // Having clause
+        if (havingClause != null) {
+            strBuilder.append(" having ");
+            strBuilder.append(havingClause.toDigest());
+        }
+        // Order By clause
+        if (orderByElements != null) {
+            strBuilder.append(" order by ");
+            for (int i = 0; i < orderByElements.size(); ++i) {
+                strBuilder.append(orderByElements.get(i).getExpr().toDigest());
+                if (sortInfo != null) {
+                    strBuilder.append((sortInfo.getIsAscOrder().get(i)) ? " asc" : " desc");
+                }
+                strBuilder.append((i + 1 != orderByElements.size()) ? ", " : "");
+            }
+        }
+        // Limit clause.
+        if (hasLimitClause()) {
+            strBuilder.append(limitElement.toDigest());
+        }
+
+        return strBuilder.toString();
+    }
+
     /**
      * If the select statement has a sort/top that is evaluated, then the sort tuple
      * is materialized. Else, if there is aggregation then the aggregate tuple id is
@@ -2011,53 +2066,6 @@ public class SelectStmt extends QueryStmt {
             }
         }
         // @TODO: should check the parameter of grouping function isn't grouping set column
-    }
-
-    // Convert outer join to inner join if the where conjuncts is strict
-    private void tryConvertOuterJoinToInnerJoin(Analyzer analyzer) {
-        List<TableRef> tables = getTableRefs();
-        int tableSize = tables.size();
-        if (tableSize < 2) {
-            return;
-        }
-        for (int i = tableSize - 1; i > 0; i--) {
-            TableRef table = tables.get(i);
-            if (table.getJoinOp().isLeftOuterJoin()) {
-                List<Expr> whereConjuncts = analyzer.getWhereConjuncts(Lists.newArrayList(table.getDesc().getId()));
-                if (couldConvertOuterToInner(whereConjuncts)) {
-                    analyzer.migrateOuterJoinConjunctsToInner(table);
-                    table.setJoinOp(JoinOperator.INNER_JOIN);
-                }
-            } else if (table.getJoinOp().isRightOuterJoin()) {
-                List<Expr> whereConjuncts = analyzer.getWhereConjuncts(table.getLeftTblRef().getAllTupleIds());
-                if (couldConvertOuterToInner(whereConjuncts)) {
-                    analyzer.migrateOuterJoinConjunctsToInner(table);
-                    table.setJoinOp(JoinOperator.INNER_JOIN);
-                }
-            } else if (table.getJoinOp().isFullOuterJoin()) {
-                boolean couldConvertLeft = couldConvertOuterToInner(
-                        analyzer.getWhereConjuncts(table.getLeftTblRef().getAllTupleIds()));
-                boolean couldConvertRight = couldConvertOuterToInner(
-                        analyzer.getWhereConjuncts(Lists.newArrayList(table.getDesc().getId())));
-                if (couldConvertLeft && couldConvertRight) {
-                    analyzer.migrateOuterJoinConjunctsToInner(table);
-                    table.setJoinOp(JoinOperator.INNER_JOIN);
-                } else if (couldConvertLeft) {
-                    table.setJoinOp(JoinOperator.LEFT_OUTER_JOIN);
-                } else if (couldConvertRight) {
-                    table.setJoinOp(JoinOperator.RIGHT_OUTER_JOIN);
-                }
-            }
-        }
-    }
-
-    private boolean couldConvertOuterToInner(List<Expr> whereConjuncts) {
-        for (Expr e : whereConjuncts) {
-            if (e.isStrictPredicate()) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Override

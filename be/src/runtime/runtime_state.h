@@ -110,6 +110,7 @@ public:
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
+    const bool& cancelled_ref() const { return _is_cancelled; }
 
     void set_fragment_root_id(PlanNodeId id) {
         DCHECK(_root_node_id == -1) << "Should not set this twice.";
@@ -268,14 +269,20 @@ public:
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
 
-    const vectorized::GlobalDictMaps& get_global_dict_map() const;
-    vectorized::GlobalDictMaps* mutable_global_dict_map();
+    const vectorized::GlobalDictMaps& get_query_global_dict_map() const;
+    // for query global dict
+    vectorized::GlobalDictMaps* mutable_query_global_dict_map();
+
+    const vectorized::GlobalDictMaps& get_load_global_dict_map() const;
 
     using GlobalDictLists = std::vector<TGlobalDict>;
-    Status init_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
 
 private:
     Status create_error_log_file();
+
+    Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
 
     static const int DEFAULT_BATCH_SIZE = 2048;
 
@@ -372,7 +379,8 @@ private:
 
     RuntimeFilterPort* _runtime_filter_port;
 
-    vectorized::GlobalDictMaps _global_dicts;
+    vectorized::GlobalDictMaps _query_global_dicts;
+    vectorized::GlobalDictMaps _load_global_dicts;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                       \

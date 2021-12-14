@@ -20,17 +20,10 @@ public class Statistics {
     // this causes the table row count stored in FE to be inaccurate.
     private boolean tableRowCountMayInaccurate;
 
-    public Statistics(double outputRowCount,
-                      Map<ColumnRefOperator, ColumnStatistic> columnStatistics) {
-        this(outputRowCount, columnStatistics, false);
-    }
-
-    public Statistics(double outputRowCount,
-                      Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
-                      boolean tableRowCountMayInaccurate) {
-        this.outputRowCount = outputRowCount;
-        this.columnStatistics = columnStatistics;
-        this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
+    private Statistics(Builder builder) {
+        this.outputRowCount = builder.outputRowCount;
+        this.columnStatistics = builder.columnStatistics;
+        this.tableRowCountMayInaccurate = builder.tableRowCountMayInaccurate;
     }
 
     public double getOutputRowCount() {
@@ -85,7 +78,7 @@ public class Statistics {
     }
 
     public static Builder buildFrom(Statistics other) {
-        return new Builder(other.getOutputRowCount(), other.columnStatistics);
+        return new Builder(other.getOutputRowCount(), other.columnStatistics, other.tableRowCountMayInaccurate);
     }
 
     public static Builder builder() {
@@ -95,15 +88,17 @@ public class Statistics {
     public static final class Builder {
         private double outputRowCount;
         private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
-        private boolean tableRowCountMayInaccurate = false;
+        private boolean tableRowCountMayInaccurate;
 
         public Builder() {
-            this(NaN, new HashMap<>());
+            this(NaN, new HashMap<>(), false);
         }
 
-        private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics) {
+        private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
+                        boolean tableRowCountMayInaccurate) {
             this.outputRowCount = outputRowCount;
             this.columnStatistics = new HashMap<>(columnStatistics);
+            this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
         }
 
         public Builder setOutputRowCount(double outputRowCount) {
@@ -132,7 +127,7 @@ public class Statistics {
         }
 
         public Statistics build() {
-            return new Statistics(outputRowCount, columnStatistics, tableRowCountMayInaccurate);
+            return new Statistics(this);
         }
     }
 }

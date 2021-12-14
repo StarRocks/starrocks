@@ -77,10 +77,6 @@ Status AnalyticNode::open(RuntimeState* state) {
     return _analytor->open(state);
 }
 
-Status AnalyticNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("Vector query engine don't support row_batch");
-}
-
 Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
@@ -315,7 +311,7 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
     size_t chunk_size = child_chunk->num_rows();
     _analytor->update_input_rows(chunk_size);
 
-    {
+    try {
         for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
             for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
                 ColumnPtr column = _analytor->agg_expr_ctxs()[i][j]->evaluate(child_chunk.get());
@@ -339,6 +335,9 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
             ColumnPtr column = _analytor->order_ctxs()[i]->evaluate(child_chunk.get());
             _analytor->append_column(chunk_size, _analytor->order_columns()[i].get(), column);
         }
+        RETURN_IF_ERROR(state->check_mem_limit("AnalyticNode"));
+    } catch (std::bad_alloc const&) {
+        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
     }
 
     _analytor->input_chunks().emplace_back(std::move(child_chunk));
@@ -349,21 +348,31 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
+    auto degree_of_parallelism =
+            down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
     // shared by sink operator and source operator
-    AnalytorPtr analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc);
+    AnalytorFactoryPtr analytor_factory =
+            std::make_shared<AnalytorFactory>(degree_of_parallelism, _tnode, child(0)->row_desc(), _result_tuple_desc);
+
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     operators_with_sink.emplace_back(
-            std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode, analytor));
+            std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode, analytor_factory));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operators_with_sink.back().get(), context, rc_rf_probe_collector);
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
-    auto source_operator = std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor);
+    auto source_operator =
+            std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor_factory);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
     // TODO(hcf) Currently, the shared data structure analytor does not support concurrency.
     // So the degree of parallism must set to 1, we'll fix it laterr
-    source_operator->set_degree_of_parallelism(1);
+    source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;
 }

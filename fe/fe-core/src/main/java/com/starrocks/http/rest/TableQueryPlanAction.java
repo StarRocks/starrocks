@@ -22,35 +22,31 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.InlineViewRef;
-import com.starrocks.analysis.SelectStmt;
+import com.starrocks.analysis.SqlParser;
+import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
+import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.planner.Planner;
-import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TMemoryScratchSink;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragment;
-import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryPlanInfo;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTabletVersionInfo;
@@ -65,6 +61,7 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -184,64 +181,34 @@ public class TableQueryPlanAction extends RestBaseAction {
      * @throws StarRocksHttpException
      */
     private void handleQuery(ConnectContext context, String requestDb, String requestTable, String sql,
-                             Map<String, Object> result) throws StarRocksHttpException {
-        // use SE to resolve sql
-        StmtExecutor stmtExecutor = new StmtExecutor(context, new OriginStatement(sql, 0), false);
+                             Map<String, Object> result) {
+        ExecPlan execPlan;
+        SqlScanner input =
+                new SqlScanner(new StringReader(sql), context.getSessionVariable().getSqlMode());
+        SqlParser parser = new SqlParser(input);
         try {
-            TQueryOptions tQueryOptions = context.getSessionVariable().toThrift();
-            // Conduct Planner create SingleNodePlan#createPlanFragments
-            tQueryOptions.num_nodes = 1;
-            // analyze sql
-            stmtExecutor.analyze(tQueryOptions);
+            StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+            execPlan = new StatementPlanner().plan(statementBase, context);
         } catch (Exception e) {
-            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, e.getMessage());
-        }
-        // the parsed logical statement
-        StatementBase query = stmtExecutor.getParsedStmt();
-        // only process select semantic
-        if (!(query instanceof SelectStmt)) {
-            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
-                    "Select statement needed, but found [" + sql + " ]");
-        }
-        SelectStmt stmt = (SelectStmt) query;
-        // just only process sql like `select * from table where <predicate>`, only support executing scan semantic
-        if (stmt.hasAggInfo() || stmt.hasAnalyticInfo()
-                || stmt.hasOrderByClause() || stmt.hasOffset() || stmt.hasLimit() || stmt.isExplain()) {
-            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
-                    "only support single table filter-prune-scan, but found [ " + sql + "]");
-        }
-        // process only one table by one http query
-        List<TableRef> fromTables = stmt.getTableRefs();
-        if (fromTables.size() != 1) {
-            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "Select statement must hava only one table");
+            throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "The Sql is invalid");
         }
 
-        TableRef fromTable = fromTables.get(0);
-        if (fromTable instanceof InlineViewRef) {
-            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
-                    "Select statement must not embed another statement");
-        }
-        // check consistent http requested resource with sql referenced
-        // if consistent in this way, can avoid check privilege
-        TableName tableAndDb = fromTables.get(0).getName();
-        if (!(tableAndDb.getDb().equals(requestDb) && tableAndDb.getTbl().equals(requestTable))) {
-            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
-                    "requested database and table must consistent with sql: request [ "
-                            + requestDb + "." + requestTable + "]" + "and sql [" + tableAndDb.toString() + "]");
+        if (execPlan == null) {
+            throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "The Sql is invalid");
         }
 
-        // acquired Planner to get PlanNode and fragment templates
-        Planner planner = stmtExecutor.planner();
         // acquire ScanNode to obtain pruned tablet
         // in this way, just retrieve only one scannode
-        List<ScanNode> scanNodes = planner.getScanNodes();
-        if (scanNodes.size() != 1) {
+        if (execPlan.getScanNodes().size() != 1) {
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                    "Planner should plan just only one ScanNode but found [ " + scanNodes.size() + "]");
+                    "Planner should plan just only one ScanNode but found [ " + execPlan.getScanNodes().size() + "]");
         }
-        List<TScanRangeLocations> scanRangeLocations = scanNodes.get(0).getScanRangeLocations(0);
+        List<TScanRangeLocations> scanRangeLocations =
+                execPlan.getScanNodes().get(0).getScanRangeLocations(0);
         // acquire the PlanFragment which the executable template
-        List<PlanFragment> fragments = planner.getFragments();
+        List<PlanFragment> fragments = execPlan.getFragments();
         if (fragments.size() != 1) {
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "Planner should plan just only one PlanFragment but found [ " + fragments.size() + "]");
@@ -258,7 +225,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         tPlanFragment.output_sink = tDataSink;
 
         tQueryPlanInfo.plan_fragment = tPlanFragment;
-        tQueryPlanInfo.desc_tbl = query.getAnalyzer().getDescTbl().toThrift();
+        tQueryPlanInfo.desc_tbl = execPlan.getDescTbl().toThrift();
         // set query_id
         UUID uuid = UUID.randomUUID();
         tQueryPlanInfo.query_id = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
@@ -268,7 +235,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         Map<String, Node> tabletRoutings = assemblePrunedPartitions(scanRangeLocations);
         tabletRoutings.forEach((tabletId, node) -> {
             long tablet = Long.parseLong(tabletId);
-            tabletInfo.put(tablet, new TTabletVersionInfo(tablet, node.version, node.versionHash, node.schemaHash));
+            tabletInfo.put(tablet, new TTabletVersionInfo(tablet, node.version, 0, node.schemaHash));
         });
         tQueryPlanInfo.tablet_info = tabletInfo;
 
@@ -298,8 +265,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         for (TScanRangeLocations scanRangeLocations : scanRangeLocationsList) {
             // only process starrocks scan range
             TInternalScanRange scanRange = scanRangeLocations.scan_range.internal_scan_range;
-            Node tabletRouting = new Node(Long.parseLong(scanRange.version),
-                    Long.parseLong(scanRange.version_hash), Integer.parseInt(scanRange.schema_hash));
+            Node tabletRouting = new Node(Long.parseLong(scanRange.version), Integer.parseInt(scanRange.schema_hash));
             for (TNetworkAddress address : scanRange.hosts) {
                 tabletRouting.addRouting(address.hostname + ":" + address.port);
             }
@@ -313,12 +279,10 @@ public class TableQueryPlanAction extends RestBaseAction {
         // ["host1:port1", "host2:port2", "host3:port3"]
         public List<String> routings = new ArrayList<>();
         public long version;
-        public long versionHash;
         public int schemaHash;
 
-        public Node(long version, long versionHash, int schemaHash) {
+        public Node(long version, int schemaHash) {
             this.version = version;
-            this.versionHash = versionHash;
             this.schemaHash = schemaHash;
         }
 

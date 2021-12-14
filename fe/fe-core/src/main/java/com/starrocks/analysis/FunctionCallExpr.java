@@ -222,6 +222,22 @@ public class FunctionCallExpr extends Expr {
     }
 
     @Override
+    public String toDigestImpl() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(fnName);
+
+        sb.append("(");
+        if (fnParams.isStar()) {
+            sb.append("*");
+        }
+        if (fnParams.isDistinct()) {
+            sb.append("distinct ");
+        }
+        sb.append(Joiner.on(", ").join(childrenToDigest())).append(")");
+        return sb.toString();
+    }
+
+    @Override
     public String explainImpl() {
         StringBuilder sb = new StringBuilder();
         sb.append(fnName);
@@ -896,25 +912,6 @@ public class FunctionCallExpr extends Expr {
         result = 31 * result + Objects.hashCode(fnName);
         result = 31 * result + Objects.hashCode(fnParams);
         return result;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        if (fn instanceof AggregateFunction) {
-            return true;
-        }
-
-        if (fn != null) {
-            return fn.isVectorized();
-        }
-
-        return false;
     }
 
     /**

@@ -7,6 +7,7 @@
 #include "column/type_traits.h"
 #include "common/statusor.h"
 #include "exec/olap_common.h"
+#include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/except_hash_set.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
@@ -24,7 +25,7 @@ class ExceptPartitionContextFactory;
 using ExceptPartitionContextFactoryPtr = std::shared_ptr<ExceptPartitionContextFactory>;
 
 // Used as the shared context for ExceptBuildSinkOperator, ExceptProbeSinkOperator, and ExceptOutputSourceOperator.
-class ExceptContext {
+class ExceptContext final : public ContextWithDependency {
 public:
     explicit ExceptContext(const int dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
 

@@ -28,7 +28,6 @@
 namespace starrocks {
 
 class TupleRow;
-class RowBatch;
 class ExprContext;
 class MysqlRowBuffer;
 class BufferControlBlock;
@@ -43,10 +42,6 @@ public:
     ~MysqlResultWriter() override;
 
     Status init(RuntimeState* state) override;
-
-    // convert one row batch to mysql result and
-    // append this batch to the result sink
-    Status append_row_batch(const RowBatch* batch) override;
 
     Status append_chunk(vectorized::Chunk* chunk) override;
 

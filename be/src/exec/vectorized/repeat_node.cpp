@@ -71,14 +71,10 @@ Status RepeatNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status RepeatNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
-}
-
 /*
  * for new chunk A.
  * It used as first time and non-first time:
- * 
+ *
  * first time(_repeat_times_last == 0):
  * step 1:
  * move A as curr_chunk
@@ -87,18 +83,18 @@ Status RepeatNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos)
  * step 2:
  * Extend multiple virtual columns for curr_chunk,
  * virtual columns is consist of gourping_id and grouping()/grouping_id() columns.
- * 
+ *
  * step 3:
  * update columns of curr_chunk for unneed columns,
  * and return reulst chunk to parent.
  *
- * 
+ *
  * non-first time, it measn _repeat_times_last in [1, _repeat_times_required):
  * step 1:
  * copy _curr_chunk as curr_chunk.
- * 
+ *
  * step 2/step 3 is the same as first time.
- * 
+ *
  */
 Status RepeatNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
@@ -149,6 +145,7 @@ Status RepeatNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     if ((*chunk) != nullptr) {
+        ExecNode::eval_join_runtime_filters(chunk);
         ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
         _num_rows_returned += (*chunk)->num_rows();
     }
@@ -203,8 +200,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > RepeatNode::decompose_t
             context->next_operator_id(), id(), std::move(_slot_id_set_list), std::move(_all_slot_ids),
             std::move(_null_slot_ids), std::move(_repeat_id_list), _repeat_times_required, _repeat_times_last,
             std::move(_column_null), std::move(_grouping_columns), std::move(_grouping_list),
-            std::move(_output_tuple_id), _tuple_desc));
-
+            std::move(_output_tuple_id), _tuple_desc, std::move(_conjunct_ctxs)));
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     return operators;
 }
 

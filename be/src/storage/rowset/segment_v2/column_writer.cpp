@@ -217,17 +217,6 @@ public:
         return _scalar_column_writer->append(data, null_flags, count, has_null);
     };
 
-    Status append(const RowCursorCell& cell) override {
-        if (!_is_speculated) {
-            _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
-            _is_speculated = true;
-        }
-        static const int128_t s_default_value = 0;
-        uint8_t is_null = cell.is_null();
-        auto* p = !is_null ? (const uint8_t*)cell.cell_ptr() : (const uint8_t*)&s_default_value;
-        return append(p, &is_null, 1, is_null);
-    }
-
     // Speculate char/varchar encoding and reset encoding
     void speculate_column_and_set_encoding(const vectorized::Column& column);
 
@@ -428,12 +417,8 @@ Status ScalarColumnWriter::finish() {
 }
 
 Status ScalarColumnWriter::write_data() {
-    Page* page = _pages.head;
-    while (page != nullptr) {
-        RETURN_IF_ERROR(_write_data_page(page));
-        page = page->next;
-    }
-    // write column dict
+    // dict will be load before data,
+    // so write column dict first
     if (_encoding_info->encoding() == DICT_ENCODING) {
         faststring* dict_body = _page_builder->get_dictionary_page();
         if (UNLIKELY(dict_body == nullptr)) {
@@ -459,6 +444,15 @@ Status ScalarColumnWriter::write_data() {
         }
     }
     _opts.meta->set_all_dict_encoded(_page_builder->all_dict_encoded());
+
+    Page* page = _pages.head;
+    while (page != nullptr) {
+        RETURN_IF_ERROR(_write_data_page(page));
+        Page* last_page = page;
+        page = page->next;
+        delete last_page;
+        _pages.head = page;
+    }
     return Status::OK();
 }
 

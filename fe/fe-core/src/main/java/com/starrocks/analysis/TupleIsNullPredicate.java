@@ -166,11 +166,6 @@ public class TupleIsNullPredicate extends Predicate {
     }
 
     @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
-    @Override
     public boolean isNullable() {
         return false;
     }

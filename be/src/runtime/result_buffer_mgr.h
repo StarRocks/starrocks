@@ -19,16 +19,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_RESULT_BUFFER_MGR_H
-#define STARROCKS_BE_RUNTIME_RESULT_BUFFER_MGR_H
+#pragma once
 
-#include <boost/thread/thread.hpp>
-#include <boost/unordered_map.hpp>
 #include <map>
+#include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
+#include "util/hash_util.hpp"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -61,7 +61,7 @@ public:
     Status cancel_at_time(time_t cancel_time, const TUniqueId& query_id);
 
 private:
-    typedef boost::unordered_map<TUniqueId, std::shared_ptr<BufferControlBlock>> BufferMap;
+    typedef std::unordered_map<TUniqueId, std::shared_ptr<BufferControlBlock>> BufferMap;
     typedef std::map<time_t, std::vector<TUniqueId>> TimeoutMap;
 
     std::shared_ptr<BufferControlBlock> find_control_block(const TUniqueId& query_id);
@@ -83,11 +83,6 @@ private:
     // cancel time maybe equal, so use one list
     TimeoutMap _timeout_map;
 
-    std::unique_ptr<boost::thread> _cancel_thread;
+    std::unique_ptr<std::thread> _cancel_thread;
 };
-
-// TUniqueId hash function used for boost::unordered_map
-std::size_t hash_value(const TUniqueId& fragment_id);
 } // namespace starrocks
-
-#endif

@@ -105,7 +105,7 @@ public class ConnectContext {
     // Command this connection is processing.
     protected volatile MysqlCommand command;
     // Timestamp in millisecond last command starts at
-    protected volatile long startTime;
+    protected volatile long startTime = System.currentTimeMillis();
     // Cache thread info for this connection.
     protected volatile ThreadInfo threadInfo;
 

@@ -12,14 +12,22 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+Status LocalMergeSortSourceOperator::close(RuntimeState* state) {
+    RETURN_IF_ERROR(_sort_context->unref(state));
+    return Operator::close(state);
+}
+
 StatusOr<vectorized::ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     return _sort_context->pull_chunk();
 }
 
 void LocalMergeSortSourceOperator::set_finishing(RuntimeState* state) {
-    if (!_is_finished) {
-        _is_finished = true;
-    }
+    _is_finished = true;
+}
+
+void LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
+    _sort_context->set_finished();
 }
 
 bool LocalMergeSortSourceOperator::has_output() const {
@@ -28,6 +36,10 @@ bool LocalMergeSortSourceOperator::has_output() const {
 
 bool LocalMergeSortSourceOperator::is_finished() const {
     return _sort_context->is_partition_sort_finished() && _sort_context->is_output_finished();
+}
+OperatorPtr LocalMergeSortSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    auto sort_context = _sort_context_factory->create(driver_sequence);
+    return std::make_shared<LocalMergeSortSourceOperator>(this, _id, _plan_node_id, sort_context.get());
 }
 
 } // namespace starrocks::pipeline

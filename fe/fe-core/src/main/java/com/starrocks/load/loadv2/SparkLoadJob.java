@@ -900,7 +900,7 @@ public class SparkLoadJob extends BulkLoadJob {
         public PushBrokerReaderParams() {
             this.tBrokerScanRange = new TBrokerScanRange();
             this.tDescriptorTable = null;
-            this.useVectorized = Config.enable_vectorized_file_load;
+            this.useVectorized = true;
         }
 
         public void init(List<Column> columns, BrokerDesc brokerDesc) throws UserException {
@@ -968,7 +968,6 @@ public class SparkLoadJob extends BulkLoadJob {
                 destSidToSrcSidWithoutTrans.put(destSlotDesc.getId().asInt(), srcSlotDesc.getId().asInt());
                 Expr expr = new SlotRef(srcSlotDesc);
                 expr = castToSlot(destSlotDesc, expr);
-                expr.setUseVectorized(useVectorized);
                 params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), expr.treeToThrift());
             }
             params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);

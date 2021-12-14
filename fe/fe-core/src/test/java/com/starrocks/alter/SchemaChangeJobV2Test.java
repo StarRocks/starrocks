@@ -28,9 +28,10 @@ import com.starrocks.analysis.AddColumnClause;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.ColumnDef.DefaultValue;
+import com.starrocks.analysis.ColumnDef.DefaultValueDef;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.AggregateType;
@@ -99,7 +100,7 @@ public class SchemaChangeJobV2Test {
 
     private static Analyzer analyzer;
     private static ColumnDef newCol = new ColumnDef("add_v", new TypeDef(ScalarType.createType(PrimitiveType.INT)),
-            false, AggregateType.MAX, false, new DefaultValue(true, "1"), "");
+            false, AggregateType.MAX, false, new DefaultValueDef(true, new StringLiteral("1")), "");
     private static AddColumnClause addColumnClause = new AddColumnClause(newCol, new ColumnPosition("v"), null, null);
 
     @Rule
@@ -214,7 +215,7 @@ public class SchemaChangeJobV2Test {
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
             for (Replica shadowReplica : shadowTablet.getReplicas()) {
                 shadowReplica
-                        .updateVersionInfo(testPartition.getVisibleVersion(), testPartition.getVisibleVersionHash(),
+                        .updateRowCount(testPartition.getVisibleVersion(),
                                 shadowReplica.getDataSize(), shadowReplica.getRowCount());
             }
         }
@@ -298,7 +299,7 @@ public class SchemaChangeJobV2Test {
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
             for (Replica shadowReplica : shadowTablet.getReplicas()) {
                 shadowReplica
-                        .updateVersionInfo(testPartition.getVisibleVersion(), testPartition.getVisibleVersionHash(),
+                        .updateRowCount(testPartition.getVisibleVersion(),
                                 shadowReplica.getDataSize(), shadowReplica.getRowCount());
             }
         }

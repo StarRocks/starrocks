@@ -12,20 +12,31 @@ namespace pipeline {
 using HashJoiner = starrocks::vectorized::HashJoiner;
 class HashJoinProbeOperator final : public OperatorWithDependency {
 public:
-    HashJoinProbeOperator(int32_t id, const string& name, int32_t plan_node_id, HashJoinerPtr hash_joiner);
+    HashJoinProbeOperator(OperatorFactory* factory, int32_t id, const string& name, int32_t plan_node_id,
+                          HashJoinerPtr hash_joiner);
     ~HashJoinProbeOperator() = default;
 
     Status prepare(RuntimeState* state) override { return OperatorWithDependency::prepare(state); }
 
-    Status close(RuntimeState* state) override { return OperatorWithDependency::close(state); }
+    Status close(RuntimeState* state) override {
+        RETURN_IF_ERROR(_hash_joiner->unref(state));
+        return OperatorWithDependency::close(state);
+    }
 
     bool has_output() const override;
     bool need_input() const override;
+
     bool is_finished() const override;
+    void set_finishing(RuntimeState* state) override;
+    void set_finished(RuntimeState* state) override;
+
+    bool is_ready() const override;
+    std::string get_name() const override {
+        return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _hash_joiner.get());
+    }
+
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk);
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
-    void set_finishing(RuntimeState* state) override;
-    bool is_ready() const override;
 
 private:
     HashJoinerPtr _hash_joiner;

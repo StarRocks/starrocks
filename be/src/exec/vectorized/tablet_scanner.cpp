@@ -29,6 +29,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
 
     RETURN_IF_ERROR(Expr::clone_if_not_exists(*params.conjunct_ctxs, runtime_state, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
+    RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
     RETURN_IF_ERROR(_init_return_columns());
     RETURN_IF_ERROR(_init_global_dicts());
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
@@ -48,6 +49,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
 
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
+    RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
 
     Status st = _reader->prepare();
     if (!st.ok()) {
@@ -118,7 +120,12 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = !config::disable_storage_page_cache;
-    _params.chunk_size = config::vector_chunk_size;
+    // Improve for select * from table limit x, x is small
+    if (_parent->_limit != -1 && _parent->_limit < config::vector_chunk_size) {
+        _params.chunk_size = _parent->_limit;
+    } else {
+        _params.chunk_size = config::vector_chunk_size;
+    }
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<vectorized::ColumnPredicate*> preds;
@@ -181,7 +188,9 @@ Status TabletScanner::_init_return_columns() {
             return Status::InternalError(ss.str());
         }
         _scanner_columns.push_back(index);
-        _query_slots.push_back(slot);
+        if (!_unused_output_column_ids.count(index)) {
+            _query_slots.push_back(slot);
+        }
     }
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
@@ -192,9 +201,24 @@ Status TabletScanner::_init_return_columns() {
     return Status::OK();
 }
 
+Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
+    for (const auto& col_name : unused_output_columns) {
+        int32_t index = _tablet->field_index(col_name);
+        if (index < 0) {
+            std::stringstream ss;
+            ss << "invalid field name: " << col_name;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+        _unused_output_column_ids.insert(index);
+    }
+    _params.unused_output_column_ids = &_unused_output_column_ids;
+    return Status::OK();
+}
+
 // mapping a slot-column-id to schema-columnid
 Status TabletScanner::_init_global_dicts() {
-    const auto& global_dict_map = _runtime_state->get_global_dict_map();
+    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
     auto global_dict = _parent->_obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     for (auto slot : _parent->_tuple_desc->slots()) {
@@ -223,6 +247,7 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
         if (Status status = _prj_iter->get_next(chunk); !status.ok()) {
             return status;
         }
+
         for (auto slot : _query_slots) {
             size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
             chunk->set_slot_id_to_index(slot->id(), column_index);
@@ -242,11 +267,12 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             DCHECK_CHUNK(chunk);
         }
     } while (chunk->num_rows() == 0);
-    _update_realtime_counter();
+
+    _update_realtime_counter(chunk);
     return Status::OK();
 }
 
-void TabletScanner::_update_realtime_counter() {
+void TabletScanner::_update_realtime_counter(Chunk* chunk) {
     COUNTER_UPDATE(_parent->_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;
     _reader->mutable_stats()->compressed_bytes_read = 0;
@@ -254,6 +280,7 @@ void TabletScanner::_update_realtime_counter() {
     COUNTER_UPDATE(_parent->_raw_rows_counter, _reader->stats().raw_rows_read);
     _raw_rows_read += _reader->stats().raw_rows_read;
     _reader->mutable_stats()->raw_rows_read = 0;
+    _num_rows_read += chunk->num_rows();
 }
 
 void TabletScanner::update_counter() {
@@ -290,12 +317,16 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
     COUNTER_UPDATE(_parent->_index_load_timer, _reader->stats().index_load_ns);
 
-    COUNTER_UPDATE(_parent->_total_pages_num_counter, _reader->stats().total_pages_num);
+    COUNTER_UPDATE(_parent->_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_parent->_cached_pages_num_counter, _reader->stats().cached_pages_num);
 
     COUNTER_UPDATE(_parent->_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_parent->_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_UPDATE(_parent->_rowsets_read_count, _reader->stats().rowsets_read_count);
+    COUNTER_UPDATE(_parent->_segments_read_count, _reader->stats().segments_read_count);
+    COUNTER_UPDATE(_parent->_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
     COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.predicates.size());
 

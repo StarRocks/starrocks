@@ -28,7 +28,6 @@ PARTITION: UNPARTITIONED
 RESULT SINK
 
 11:MERGING-EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -41,15 +40,12 @@ UNPARTITIONED
 10:SORT
 |  order by: <slot 6> 6: O_ORDERPRIORITY ASC
 |  offset: 0
-|  use vectorized: true
 |
 9:AGGREGATE (merge finalize)
 |  output: count(29: count)
 |  group by: 6: O_ORDERPRIORITY
-|  use vectorized: true
 |
 8:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -63,25 +59,20 @@ HASH_PARTITIONED: 6: O_ORDERPRIORITY
 |  STREAMING
 |  output: count(*)
 |  group by: 6: O_ORDERPRIORITY
-|  use vectorized: true
 |
 6:Project
 |  <slot 6> : 6: O_ORDERPRIORITY
-|  use vectorized: true
 |
 5:HASH JOIN
 |  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 11: L_ORDERKEY = 1: O_ORDERKEY
-|  use vectorized: true
 |
 |----4:EXCHANGE
-|       use vectorized: true
 |
 1:Project
 |  <slot 11> : 11: L_ORDERKEY
-|  use vectorized: true
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -94,7 +85,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=300000000
 avgRowSize=16.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -107,7 +97,6 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 1: O_ORDERKEY
 3:Project
 |  <slot 1> : 1: O_ORDERKEY
 |  <slot 6> : 6: O_ORDERPRIORITY
-|  use vectorized: true
 |
 2:OlapScanNode
 TABLE: orders
@@ -120,6 +109,5 @@ tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=5675676
 avgRowSize=27.0
 numNodes=0
-use vectorized: true
 [end]
 

@@ -7,12 +7,10 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/schema.h"
-#include "storage/schema_change.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/memtable.h"
-#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
@@ -151,21 +149,13 @@ Status DeltaWriter::_init() {
     _reset_mem_table();
 
     // create flush handler
-    OLAPStatus olap_status = _storage_engine->memtable_flush_executor()->create_flush_token(&_flush_token);
-    if (olap_status != OLAPStatus::OLAP_SUCCESS) {
-        std::stringstream ss;
-        ss << "Fail to create flush token. tablet_id=" << _req.tablet_id;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
-    }
-
+    _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
     _is_init = true;
     return Status::OK();
 }
 
 Status DeltaWriter::write(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();
@@ -174,7 +164,12 @@ Status DeltaWriter::write(Chunk* chunk, const uint32_t* indexes, uint32_t from, 
         RETURN_IF_ERROR(_init());
     }
 
-    bool flush = _mem_table->insert(chunk, indexes, from, size);
+    bool flush = false;
+    try {
+        flush = _mem_table->insert(*chunk, indexes, from, size);
+    } catch (std::bad_alloc const&) {
+        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+    }
 
     if (flush || _mem_table->is_full()) {
         RETURN_IF_ERROR(_flush_memtable_async());
@@ -187,12 +182,11 @@ Status DeltaWriter::write(Chunk* chunk, const uint32_t* indexes, uint32_t from, 
 
 Status DeltaWriter::_flush_memtable_async() {
     RETURN_IF_ERROR(_mem_table->finalize());
-    return _flush_token->submit(_mem_table);
+    return _flush_token->submit(std::move(_mem_table));
 }
 
 Status DeltaWriter::flush_memtable_async() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();
@@ -226,13 +220,12 @@ Status DeltaWriter::wait_memtable_flushed() {
 }
 
 void DeltaWriter::_reset_mem_table() {
-    _mem_table = std::make_shared<MemTable>(_tablet->tablet_id(), _tablet_schema, _req.slots, _rowset_writer.get(),
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _req.slots, _rowset_writer.get(),
                                             _mem_tracker.get());
 }
 
 Status DeltaWriter::close() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();
@@ -252,8 +245,7 @@ Status DeltaWriter::close() {
 }
 
 Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();
@@ -296,14 +288,12 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     }
     _delta_written_success = true;
 
-    const FlushStatistic& stat = _flush_token->get_stats();
-    LOG(INFO) << "Closed delta writer. tablet_id=" << _tablet->tablet_id() << " stats=" << stat;
+    LOG(INFO) << "Closed delta writer. tablet_id=" << _tablet->tablet_id() << " stats=" << _flush_token->get_stats();
     return Status::OK();
 }
 
 Status DeltaWriter::cancel() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     if (_is_cancelled) {
         return Status::OK();

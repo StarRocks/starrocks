@@ -351,35 +351,6 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : aggInfo.getAggregateExprs()) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : aggInfo.getGroupingExprs()) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
             if (probeExpr instanceof SlotRef) {
@@ -387,7 +358,6 @@ public class AggregationNode extends PlanNode {
                     // push down only when both of them are slot ref and slot id match.
                     if ((gexpr instanceof SlotRef) &&
                             (((SlotRef) gexpr).getSlotId().asInt() == ((SlotRef) probeExpr).getSlotId().asInt())) {
-                        gexpr.setUseVectorized(gexpr.isVectorized());
                         if (children.get(0).pushDownRuntimeFilters(description, gexpr)) {
                             return true;
                         }

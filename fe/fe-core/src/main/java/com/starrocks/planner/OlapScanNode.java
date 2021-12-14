@@ -72,7 +72,6 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.thrift.TStorageFormat;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -186,6 +185,19 @@ public class OlapScanNode extends ScanNode {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (appliedColumnIds.contains(slot.getId().asInt())) {
                 appliedDictStringColumns.add(slot.getColumn().getName());
+            }
+        }
+    }
+
+    private List<String> unUsedOutputStringColumns = new ArrayList<>();
+    
+    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (!slot.isMaterialized()) {
+                continue;
+            }
+            if (unUsedOutputColumnIds.contains(slot.getId().asInt())) {
+                unUsedOutputStringColumns.add(slot.getColumn().getName());
             }
         }
     }
@@ -384,9 +396,7 @@ public class OlapScanNode extends ScanNode {
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
-        long visibleVersionHash = partition.getVisibleVersionHash();
         String visibleVersionStr = String.valueOf(visibleVersion);
-        String visibleVersionHashStr = String.valueOf(partition.getVisibleVersionHash());
 
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
@@ -397,17 +407,17 @@ public class OlapScanNode extends ScanNode {
             internalRange.setDb_name("");
             internalRange.setSchema_hash(schemaHashStr);
             internalRange.setVersion(visibleVersionStr);
-            internalRange.setVersion_hash(visibleVersionHashStr);
+            internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                    visibleVersion, visibleVersionHash, localBeId, schemaHash);
+                    visibleVersion, localBeId, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
                 LOG.error("no queryable replica found in tablet {}. visible version {}-{}",
-                        tabletId, visibleVersion, visibleVersionHash);
+                        tabletId, visibleVersion);
                 if (LOG.isDebugEnabled()) {
                     for (Replica replica : tablet.getReplicas()) {
                         LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
@@ -662,9 +672,9 @@ public class OlapScanNode extends ScanNode {
         }
 
         output.append(prefix).append(String.format(
-                        "partitionsRatio=%s/%s",
-                        selectedPartitionNum,
-                        olapTable.getPartitions().size())).append(", ")
+                "partitionsRatio=%s/%s",
+                selectedPartitionNum,
+                olapTable.getPartitions().size())).append(", ")
                 .append(String.format("tabletsRatio=%s/%s", selectedTabletsNum, totalTabletsNum)).append("\n");
 
         if (scanTabletIds.size() > 10) {
@@ -676,9 +686,9 @@ public class OlapScanNode extends ScanNode {
         output.append("\n");
 
         output.append(prefix).append(String.format(
-                        "actualRows=%s", actualRows))
+                "actualRows=%s", actualRows))
                 .append(", ").append(String.format(
-                        "avgRowSize=%s", avgRowSize)).append("\n");
+                "avgRowSize=%s", avgRowSize)).append("\n");
         return output.toString();
     }
 
@@ -715,6 +725,10 @@ public class OlapScanNode extends ScanNode {
                     ConnectContext.get().getSessionVariable().getEnableColumnExprPredicate());
         }
         msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
+
+        if (!olapTable.hasDelete()) {
+            msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
+        }
     }
 
     // export some tablets
@@ -837,22 +851,6 @@ public class OlapScanNode extends ScanNode {
             expr = expr.getChild(0);
         }
         return expr instanceof SlotRef;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        // Vector query engine only support segment v2
-        if (olapTable.getStorageFormat() == TStorageFormat.V1) {
-            return false;
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     @Override

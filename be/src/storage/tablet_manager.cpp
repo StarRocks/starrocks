@@ -21,7 +21,10 @@
 
 #include "storage/tablet_manager.h"
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
+DIAGNOSTIC_POP
 #include <fmt/format.h>
 #include <re2/re2.h>
 #include <thrift/protocol/TDebugProtocol.h>
@@ -35,9 +38,9 @@
 #include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
-#include "storage/reader.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/schema_change.h"
+#include "storage/rowset/rowset_writer.h"
+#include "storage/rowset/rowset_writer_context.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -46,7 +49,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/defer_op.h"
 #include "util/file_utils.h"
 #include "util/path_util.h"
 #include "util/scoped_cleanup.h"
@@ -172,9 +174,6 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
         stores.clear();
         stores.push_back(base_tablet->data_dir());
     }
-
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     // set alter type to schema-change. it is useless
     tablet = _internal_create_tablet_unlocked(AlterTabletType::SCHEMA_CHANGE, request, is_schema_change,
@@ -323,7 +322,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             continue;
         }
 
-        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
+        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
         DCHECK(new_tablet != nullptr);
         return new_tablet;
     }
@@ -331,9 +330,6 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
 }
 
 Status TabletManager::drop_tablet(TTabletId tablet_id, bool keep_state) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     return _drop_tablet_unlocked(tablet_id, keep_state);
 }
@@ -376,7 +372,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, bool keep_state
     }
 
     // Check whether the tablet we want to delete is in schema-change state
-    bool is_schema_change_finished = (alter_state == ALTER_FINISHED || alter_state == ALTER_FAILED);
+    bool is_schema_change_finished = alter_state == ALTER_FINISHED || alter_state == ALTER_FAILED;
 
     // Check whether the tablet we want to delete is base-tablet
     bool is_dropping_base_tablet = false;
@@ -423,9 +419,6 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, bool keep_state
 }
 
 Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     if (tablet_info_vec.empty()) {
         return Status::OK();
     }
@@ -678,9 +671,6 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
 Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,
                                             const std::string& meta_binary, bool update_meta, bool force, bool restore,
                                             bool check_path) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     if (Status st = tablet_meta->deserialize(meta_binary); !st.ok()) {
@@ -715,7 +705,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         tablet_meta->set_tablet_state(TABLET_RUNNING);
     }
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet_id=" << tablet_id;
         return Status::InternalError("Fail to create tablet");
@@ -758,9 +748,6 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
 
 Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
                                            const string& schema_hash_path, bool force, bool restore) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     LOG(INFO) << "Loading tablet " << tablet_id << " from " << schema_hash_path << ". force=" << force
               << " restore=" << restore;
     // not add lock here, because load_tablet_from_meta already add lock
@@ -849,9 +836,6 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
 }
 
 Status TabletManager::start_trash_sweep() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     {
         // we use this vector to save all tablet ptr for saving lock time.
         std::vector<TabletSharedPtr> all_tablets;
@@ -966,18 +950,12 @@ Status TabletManager::start_trash_sweep() {
 }
 
 void TabletManager::register_clone_tablet(int64_t tablet_id) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     TabletsShard& shard = _get_tablets_shard(tablet_id);
     std::unique_lock wlock(shard.lock);
     shard.tablets_under_clone.insert(tablet_id);
 }
 
 void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     TabletsShard& shard = _get_tablets_shard(tablet_id);
     std::unique_lock wlock(shard.lock);
     shard.tablets_under_clone.erase(tablet_id);
@@ -985,9 +963,6 @@ void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
 
 void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
                                                   const std::string& tablet_id_path) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     // acquire the read lock, so that there is no creating tablet or load tablet from meta tasks
     // create tablet and load tablet task should check whether the dir exists
     TabletsShard& shard = _get_tablets_shard(tablet_id);
@@ -1057,9 +1032,6 @@ void TabletManager::get_partition_related_tablets(int64_t partition_id, std::set
 }
 
 void TabletManager::do_tablet_meta_checkpoint(DataDir* data_dir) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     std::vector<TabletSharedPtr> related_tablets;
     for (const auto& tablets_shard : _tablets_shards) {
         std::shared_lock rlock(tablets_shard.lock);
@@ -1098,7 +1070,7 @@ void TabletManager::_build_tablet_stat() {
 Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet) {
     Status st;
     if (request.version < 1) {
-        LOG(WARNING) << "init version of tablet should at least 1. req.ver=" << request.version;
+        LOG(WARNING) << "init version of tablet should at least 1. request.version=" << request.version;
         return Status::InvalidArgument("invalid version");
     } else {
         Version version(0, request.version);
@@ -1112,28 +1084,26 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.partition_id = tablet->partition_id();
             context.tablet_schema_hash = tablet->schema_hash();
             context.rowset_type = RowsetTypePB::BETA_ROWSET;
-
             context.rowset_path_prefix = tablet->schema_hash_path();
-            context.tablet_schema = &(tablet->tablet_schema());
+            context.tablet_schema = &tablet->tablet_schema();
             context.rowset_state = VISIBLE;
             context.version = version;
-            context.version_hash = request.version_hash;
             // there is no data in init rowset, so overlapping info is unknown.
             context.segments_overlap = OVERLAP_UNKNOWN;
 
-            std::unique_ptr<RowsetWriter> builder;
-            st = RowsetFactory::create_rowset_writer(context, &builder);
+            std::unique_ptr<RowsetWriter> rowset_writer;
+            st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
             if (!st.ok()) {
                 LOG(WARNING) << "failed to init rowset writer for tablet " << tablet->full_name() << ": " << st;
                 break;
             }
-            if (builder->flush() != OLAP_SUCCESS) {
+            if (rowset_writer->flush() != OLAP_SUCCESS) {
                 LOG(WARNING) << "failed to flush rowset writer for tablet " << tablet->full_name();
                 st = Status::InternalError("flush rowset failed");
                 break;
             }
 
-            new_rowset = builder->build();
+            new_rowset = rowset_writer->build();
             st = tablet->add_rowset(new_rowset, false);
             if (!st.ok()) {
                 LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name();
@@ -1192,16 +1162,14 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     }
     LOG(INFO) << "creating tablet meta. next_unique_id=" << next_unique_id;
 
-    // We generate a new tablet_uid for this new tablet.
     uint64_t shard_id = 0;
     if (store->get_shard(&shard_id) != OLAP_SUCCESS) {
         LOG(WARNING) << "Fail to get root path shard";
         return Status::InternalError("fail to get root path shard");
     }
-
-    RowsetTypePB rowset_type = RowsetTypePB::BETA_ROWSET;
-    return TabletMeta::create(request, TabletUid::gen_uid(), shard_id, next_unique_id, col_idx_to_unique_id,
-                              rowset_type, tablet_meta);
+    // We generate a new tablet_uid for this new tablet.
+    return TabletMeta::create(_mem_tracker, request, TabletUid::gen_uid(), shard_id, next_unique_id,
+                              col_idx_to_unique_id, RowsetTypePB::BETA_ROWSET, tablet_meta);
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_state) {
@@ -1267,9 +1235,6 @@ TabletManager::TabletsShard& TabletManager::_get_tablets_shard(TTabletId tabletI
 
 Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
                                                        const string& schema_hash_path, bool restore) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     LOG(INFO) << "Loading tablet " << tablet_id << " from snapshot " << schema_hash_path;
     auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
     auto shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));
@@ -1337,7 +1302,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         return Status::InternalError("tablet state is shutdown");
     }
     // DO NOT access tablet->updates() until tablet has been init()-ed.
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, store);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, store);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet " << tablet_id;
         return Status::InternalError("Fail to create tablet");

@@ -40,7 +40,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.task.StreamLoadTask;
@@ -123,12 +122,6 @@ public class StreamLoadScanNode extends LoadScanNode {
             }
             rangeDesc.setStrip_outer_array(streamLoadTask.isStripOuterArray());
         }
-        // csv/json/parquet load is controlled by Config::enable_vectorized_file_load
-        // if Config::enable_vectorized_file_load is set true,
-        // vectorized load will been enabled
-        if (rangeDesc.format_type != TFileFormatType.FORMAT_ORC && !Config.enable_vectorized_file_load) {
-            useVectorizedLoad = false;
-        }
         rangeDesc.setSplittable(false);
         switch (streamLoadTask.getFileType()) {
             case FILE_LOCAL:
@@ -151,7 +144,8 @@ public class StreamLoadScanNode extends LoadScanNode {
 
         Load.initColumns(dstTable, streamLoadTask.getColumnExprDescs(), null /* no hadoop function */,
                 exprsByName, analyzer, srcTupleDesc, slotDescByName,
-                params, true, useVectorizedLoad, Lists.newArrayList());
+                params, true, useVectorizedLoad, Lists.newArrayList(),
+                streamLoadTask.getFormatType() == TFileFormatType.FORMAT_JSON);
 
         rangeDesc.setNum_of_columns_from_file(srcTupleDesc.getSlots().size());
         brokerScanRange.addToRanges(rangeDesc);
@@ -215,9 +209,13 @@ public class StreamLoadScanNode extends LoadScanNode {
                     expr = new SlotRef(srcSlotDesc);
                 } else {
                     Column column = dstSlotDesc.getColumn();
-                    if (column.getDefaultValue() != null) {
-                        expr = new StringLiteral(dstSlotDesc.getColumn().getDefaultValue());
-                    } else {
+                    Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                    if (defaultValueType == Column.DefaultValueType.CONST) {
+                        expr = new StringLiteral(column.getCalculatedDefaultValue());
+                    } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                        throw new UserException("Column(" + column + ") has unsupported default value:"
+                                + column.getDefaultExpr().getExpr());
+                    } else if (defaultValueType == Column.DefaultValueType.NULL) {
                         if (column.isAllowNull()) {
                             expr = NullLiteral.create(column.getType());
                         } else {
@@ -250,15 +248,6 @@ public class StreamLoadScanNode extends LoadScanNode {
                 expr.analyze(analyzer);
             }
             expr = castToSlot(dstSlotDesc, expr);
-
-            // check expr is vectorized or not.
-            if (useVectorizedLoad) {
-                if (!expr.isVectorized()) {
-                    useVectorizedLoad = false;
-                } else {
-                    expr.setUseVectorized(true);
-                }
-            }
 
             brokerScanRange.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), expr.treeToThrift());
         }
@@ -295,17 +284,5 @@ public class StreamLoadScanNode extends LoadScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         return "StreamLoadScanNode";
-    }
-
-    @Override
-    public boolean isVectorized() {
-        // Column mapping expr already checked in finalizeParams function
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return useVectorizedLoad;
     }
 }

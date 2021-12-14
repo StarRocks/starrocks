@@ -22,6 +22,7 @@
 #include "storage/tablet_meta_manager.h"
 
 #include <boost/algorithm/string/trim.hpp>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -39,6 +40,7 @@
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
+#include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/url_coding.h"
 
@@ -674,19 +676,19 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);
     TabletMetaLogPB log;
-    auto op = log.add_ops();
-    op->set_type(TabletMetaOpType::OP_ROWSET_COMMIT);
-    op->set_allocated_commit(edit);
-    auto logv = log.SerializeAsString();
-    op->release_commit();
-    rocksdb::Status st = batch.Put(handle, logkey, logv);
+    auto ops = log.add_ops();
+    ops->set_type(TabletMetaOpType::OP_ROWSET_COMMIT);
+    ops->set_allocated_commit(edit);
+    auto logvalue = log.SerializeAsString();
+    ops->release_commit();
+    rocksdb::Status st = batch.Put(handle, logkey, logvalue);
     if (!st.ok()) {
         LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
         return to_status(st);
     }
     string rowsetkey = encode_meta_rowset_key(tablet_id, rowset.rowset_seg_id());
-    auto rowsetv = rowset.SerializeAsString();
-    st = batch.Put(handle, rowsetkey, rowsetv);
+    auto rowsetvalue = rowset.SerializeAsString();
+    st = batch.Put(handle, rowsetkey, rowsetvalue);
     if (!st.ok()) {
         LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
         return to_status(st);
@@ -744,15 +746,15 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
                                               vector<std::pair<uint32_t, DelVectorPtr>>& delvecs) {
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    string logkey = encode_meta_log_key(tablet_id, logid);
     TabletMetaLogPB log;
-    auto op = log.add_ops();
-    op->set_type(TabletMetaOpType::OP_APPLY);
-    auto version_pb = op->mutable_apply();
+    auto ops = log.add_ops();
+    ops->set_type(TabletMetaOpType::OP_APPLY);
+    auto version_pb = ops->mutable_apply();
     version_pb->set_major(version.major());
     version_pb->set_minor(version.minor());
-    string logkey = encode_meta_log_key(tablet_id, logid);
-    auto logv = log.SerializeAsString();
-    rocksdb::Status st = batch.Put(handle, logkey, logv);
+    auto logval = log.SerializeAsString();
+    rocksdb::Status st = batch.Put(handle, logkey, logval);
     if (!st.ok()) {
         LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
         return to_status(st);
@@ -778,23 +780,22 @@ Status TabletMetaManager::traverse_meta_logs(DataDir* store, TTabletId tablet_id
     std::string lower_bound = encode_meta_log_key(tablet_id, 0);
     std::string upper_bound = encode_meta_log_key(tablet_id, UINT64_MAX);
 
-    auto fn = [&](const std::string_view& key, const std::string_view& value) {
-        TTabletId tid;
-        uint64_t logid;
-        if (!decode_meta_log_key(key, &tid, &logid)) {
-            ret = Status::Corruption("corrupted key of meta log");
-            return false;
-        }
-        DCHECK_EQ(tablet_id, tid);
-        TabletMetaLogPB log;
-        if (!log.ParseFromArray(value.data(), value.size())) {
-            ret = Status::Corruption("corrupted value of meta log");
-            return false;
-        }
-        return func(logid, log);
-    };
-
-    auto st = store->get_meta()->iterate_range(META_COLUMN_FAMILY_INDEX, lower_bound, upper_bound, fn);
+    auto st = store->get_meta()->iterate_range(META_COLUMN_FAMILY_INDEX, lower_bound, upper_bound,
+                                               [&](const std::string_view& key, const std::string_view& value) {
+                                                   TTabletId tid;
+                                                   uint64_t logid;
+                                                   if (!decode_meta_log_key(key, &tid, &logid)) {
+                                                       ret = Status::Corruption("corrupted key of meta log");
+                                                       return false;
+                                                   }
+                                                   DCHECK_EQ(tablet_id, tid);
+                                                   TabletMetaLogPB log;
+                                                   if (!log.ParseFromArray(value.data(), value.size())) {
+                                                       ret = Status::Corruption("corrupted value of meta log");
+                                                       return false;
+                                                   }
+                                                   return func(logid, log);
+                                               });
     if (!st.ok()) {
         LOG(WARNING) << "Fail to iterate log, ret=" << st.to_string();
         ret = st;
@@ -885,9 +886,9 @@ Status TabletMetaManager::delete_del_vector_range(KVStore* meta, TTabletId table
     std::string end_key = encode_del_vector_key(tablet_id, segment_id, start_version - 1);
     auto cf_handle = meta->handle(META_COLUMN_FAMILY_INDEX);
     WriteBatch batch;
-    rocksdb::Status st1 = batch.DeleteRange(cf_handle, begin_key, end_key);
-    if (!st1.ok()) {
-        return to_status(st1);
+    rocksdb::Status st = batch.DeleteRange(cf_handle, begin_key, end_key);
+    if (!st.ok()) {
+        return to_status(st);
     }
     return meta->write_batch(&batch);
 }
@@ -1160,8 +1161,8 @@ Status TabletMetaManager::pending_rowset_commit(DataDir* store, TTabletId tablet
         }
     }
     auto pkey = encode_meta_pending_rowset_key(tablet_id, version);
-    auto pv = rowset.SerializeAsString();
-    auto st = batch.Put(handle, pkey, pv);
+    auto pvalue = rowset.SerializeAsString();
+    auto st = batch.Put(handle, pkey, pvalue);
     if (!st.ok()) {
         LOG(WARNING) << "pending_rowset_commit, rocksdb.batch.put failed";
         return to_status(st);

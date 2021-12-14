@@ -21,7 +21,6 @@
 
 #include "storage/rowset/segment_v2/scalar_column_iterator.h"
 
-#include "storage/olap_cond.h"
 #include "storage/rowset/segment_v2/binary_dict_page.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/encoding_info.h"
@@ -36,7 +35,8 @@ ScalarColumnIterator::~ScalarColumnIterator() = default;
 
 Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
-    RETURN_IF_ERROR(_reader->ensure_index_loaded(_opts.reader_type));
+    RETURN_IF_ERROR(_reader->load_ordinal_index_once());
+    _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
         return Status::OK();
@@ -248,15 +248,6 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
     return Status::OK();
 }
 
-Status ScalarColumnIterator::get_row_ranges_by_zone_map(CondColumn* cond_column, CondColumn* delete_condition,
-                                                        RowRanges* row_ranges) {
-    if (_reader->has_zone_map()) {
-        RETURN_IF_ERROR(_reader->get_row_ranges_by_zone_map(cond_column, delete_condition,
-                                                            &_delete_partial_satisfied_pages, row_ranges));
-    }
-    return Status::OK();
-}
-
 Status ScalarColumnIterator::get_row_ranges_by_zone_map(
         const std::vector<const vectorized::ColumnPredicate*>& predicates,
         const vectorized::ColumnPredicate* del_predicate, vectorized::SparseRange* row_ranges) {
@@ -266,13 +257,6 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(
                 _reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages, row_ranges));
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
-    }
-    return Status::OK();
-}
-
-Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(CondColumn* cond_column, RowRanges* row_ranges) {
-    if (cond_column != nullptr && cond_column->can_do_bloom_filter() && _reader->has_bloom_filter_index()) {
-        RETURN_IF_ERROR(_reader->get_row_ranges_by_bloom_filter(cond_column, row_ranges));
     }
     return Status::OK();
 }

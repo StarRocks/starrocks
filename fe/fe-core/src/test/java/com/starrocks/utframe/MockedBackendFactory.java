@@ -287,7 +287,7 @@ public class MockedBackendFactory {
         public PExecPlanFragmentResult exec_plan_fragment(PExecPlanFragmentRequest request) {
             PExecPlanFragmentResult result = new PExecPlanFragmentResult();
             PStatus pStatus = new PStatus();
-            pStatus.status_code = 0;
+            pStatus.statusCode = 0;
             result.status = pStatus;
             return result;
         }
@@ -296,7 +296,7 @@ public class MockedBackendFactory {
         public PCancelPlanFragmentResult cancel_plan_fragment(PCancelPlanFragmentRequest request) {
             PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
             PStatus pStatus = new PStatus();
-            pStatus.status_code = 0;
+            pStatus.statusCode = 0;
             result.status = pStatus;
             return result;
         }
@@ -305,15 +305,15 @@ public class MockedBackendFactory {
         public PFetchDataResult fetchDataAsync(PFetchDataRequest request) {
             PFetchDataResult result = new PFetchDataResult();
             PStatus pStatus = new PStatus();
-            pStatus.status_code = 0;
+            pStatus.statusCode = 0;
 
             PQueryStatistics pQueryStatistics = new PQueryStatistics();
-            pQueryStatistics.scan_rows = 0L;
-            pQueryStatistics.scan_bytes = 0L;
+            pQueryStatistics.scanRows = 0L;
+            pQueryStatistics.scanBytes = 0L;
 
             result.status = pStatus;
-            result.packet_seq = 0L;
-            result.query_statistics = pQueryStatistics;
+            result.packetSeq = 0L;
+            result.queryStatistics = pQueryStatistics;
             result.eos = true;
             return result;
         }

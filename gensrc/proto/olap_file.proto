@@ -56,6 +56,18 @@ enum SegmentsOverlapPB {
     NONOVERLAPPING = 2;
 }
 
+// some txn semantic information bind to a written rowset
+// i.e.
+//   1. partial update txn only provide and update a subset of columns,
+//      so it should add info about updated columns, whether to insert new
+//      rows if old row doesn't exists, and default values etc
+//   2. conditional update txn may add some meta to describe condition
+//   3. more general read-write txn may add complex expressions
+message RowsetTxnMetaPB {
+    repeated uint32 partial_update_column_ids = 1;
+    repeated uint32 partial_update_column_unique_ids = 2;
+}
+
 message RowsetMetaPB {
     required int64 rowset_id = 1;
     optional int64 partition_id = 2;
@@ -71,7 +83,7 @@ message RowsetMetaPB {
     // only for visible rowset.
     optional int64 end_version = 9;
     // only for visible rowset.
-    optional int64 version_hash = 10;
+    optional int64 version_hash = 10 [deprecated = true];
     // total number of rows.
     optional int64 num_rows = 11;
     // calculated by index + data
@@ -107,6 +119,8 @@ message RowsetMetaPB {
     optional uint32 num_delete_files = 53;
     // total row size in approximately
     optional int64 total_row_size = 54;
+    // some txn semantic information bind to this rowset
+    optional RowsetTxnMetaPB txn_meta = 55;
 }
 
 enum DataFileType {
@@ -274,7 +288,7 @@ message TabletMetaPB {
 message OLAPIndexHeaderMessage {
     required int32 start_version = 1;
     required int32 end_version = 2;
-    required int64 cumulative_version_hash = 3;
+    required int64 cumulative_version_hash = 3 [deprecated = true];
 
     required uint32 segment = 4;
     required uint32 num_rows_per_block = 5;

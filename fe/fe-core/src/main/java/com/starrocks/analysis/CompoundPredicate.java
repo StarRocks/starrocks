@@ -88,20 +88,19 @@ public class CompoundPredicate extends Predicate {
     }
 
     @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.COMPOUND_PRED;
-        msg.setOpcode(op.toThrift());
+    public String toDigestImpl() {
+        if (children.size() == 1) {
+            return "not " + getChild(0).toDigest();
+        } else {
+            return "(" + getChild(0).toDigest() + ")" + " " + op.toString().toLowerCase() + " " + "(" + getChild(
+                    1).toDigest() + ")";
+        }
     }
 
     @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
+    protected void toThrift(TExprNode msg) {
+        msg.node_type = TExprNodeType.COMPOUND_PRED;
+        msg.setOpcode(op.toThrift());
     }
 
     @Override
@@ -245,16 +244,6 @@ public class CompoundPredicate extends Predicate {
     @Override
     public int hashCode() {
         return 31 * super.hashCode() + Objects.hashCode(op);
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        if (op == Operator.NOT) {
-            return false; // Always return false for NOT
-        }
-        Expr left = getChild(0);
-        Expr right = getChild(1);
-        return left.isStrictPredicate() && right.isStrictPredicate();
     }
 
     /**

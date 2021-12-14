@@ -335,10 +335,16 @@ bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const Co
     TypeDescriptor type_desc = TypeDescriptor::from_primtive_type(TYPE_INT);
     column_ref._type = type_desc;
     Expr* probe_expr = &column_ref;
+
     // probe_expr will be copied into filter, so we don't need to allocate it.
-    ExprContext* filter =
-            RuntimeFilterHelper::create_runtime_in_filter(state, pool, probe_expr, eq_null, null_in_set, is_not_in);
-    DCHECK_IF_ERROR(RuntimeFilterHelper::fill_runtime_in_filter(used_values, probe_expr, filter, 0));
+    VectorizedInConstPredicateBuilder builder(state, pool, probe_expr);
+    builder.set_eq_null(eq_null);
+    builder.set_null_in_set(null_in_set);
+    builder.set_is_not_in(is_not_in);
+    builder.use_array_set(code_size);
+    DCHECK_IF_ERROR(builder.create());
+    builder.add_values(used_values, 0);
+    ExprContext* filter = builder.get_in_const_predicate();
 
     RowDescriptor row_desc; // I think we don't need to use it at all.
     DCHECK_IF_ERROR(filter->prepare(state, row_desc));

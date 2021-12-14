@@ -47,7 +47,6 @@ RESULT SINK
 
 27:MERGING-EXCHANGE
 limit: 100
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -61,15 +60,12 @@ UNPARTITIONED
 |  order by: <slot 77> 77: count DESC, <slot 2> 2: S_NAME ASC
 |  offset: 0
 |  limit: 100
-|  use vectorized: true
 |
 25:AGGREGATE (update finalize)
 |  output: count(*)
 |  group by: 2: S_NAME
-|  use vectorized: true
 |
 24:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -81,7 +77,6 @@ HASH_PARTITIONED: 2: S_NAME
 
 23:Project
 |  <slot 2> : 2: S_NAME
-|  use vectorized: true
 |
 22:HASH JOIN
 |  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
@@ -89,10 +84,8 @@ HASH_PARTITIONED: 2: S_NAME
 |  colocate: false, reason:
 |  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
 |  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
-|  use vectorized: true
 |
 |----21:EXCHANGE
-|       use vectorized: true
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -104,7 +97,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=12.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -118,21 +110,17 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 9: L_ORDERKEY
 |  <slot 2> : 2: S_NAME
 |  <slot 9> : 9: L_ORDERKEY
 |  <slot 11> : 11: L_SUPPKEY
-|  use vectorized: true
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 26: O_ORDERKEY = 9: L_ORDERKEY
-|  use vectorized: true
 |
 |----18:EXCHANGE
-|       use vectorized: true
 |
 2:Project
 |  <slot 26> : 26: O_ORDERKEY
-|  use vectorized: true
 |
 1:OlapScanNode
 TABLE: orders
@@ -145,7 +133,6 @@ tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=50000000
 avgRowSize=9.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -159,7 +146,6 @@ UNPARTITIONED
 |  <slot 2> : 2: S_NAME
 |  <slot 9> : 9: L_ORDERKEY
 |  <slot 11> : 11: L_SUPPKEY
-|  use vectorized: true
 |
 16:HASH JOIN
 |  join op: RIGHT ANTI JOIN (COLOCATE)
@@ -167,28 +153,23 @@ UNPARTITIONED
 |  colocate: true
 |  equal join conjunct: 59: L_ORDERKEY = 9: L_ORDERKEY
 |  other join predicates: 61: L_SUPPKEY != 11: L_SUPPKEY
-|  use vectorized: true
 |
 |----15:Project
 |    |  <slot 2> : 2: S_NAME
 |    |  <slot 9> : 9: L_ORDERKEY
 |    |  <slot 11> : 11: L_SUPPKEY
-|    |  use vectorized: true
 |    |
 |    14:HASH JOIN
 |    |  join op: INNER JOIN (BROADCAST)
 |    |  hash predicates:
 |    |  colocate: false, reason:
 |    |  equal join conjunct: 11: L_SUPPKEY = 1: S_SUPPKEY
-|    |  use vectorized: true
 |    |
 |    |----13:EXCHANGE
-|    |       use vectorized: true
 |    |
 |    6:Project
 |    |  <slot 9> : 9: L_ORDERKEY
 |    |  <slot 11> : 11: L_SUPPKEY
-|    |  use vectorized: true
 |    |
 |    5:OlapScanNode
 |       TABLE: lineitem
@@ -201,12 +182,10 @@ UNPARTITIONED
 |       cardinality=300000000
 |       avgRowSize=20.0
 |       numNodes=0
-|       use vectorized: true
 |
 4:Project
 |  <slot 59> : 59: L_ORDERKEY
 |  <slot 61> : 61: L_SUPPKEY
-|  use vectorized: true
 |
 3:OlapScanNode
 TABLE: lineitem
@@ -219,7 +198,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=300000000
 avgRowSize=20.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 5
 OUTPUT EXPRS:
@@ -232,17 +210,14 @@ UNPARTITIONED
 12:Project
 |  <slot 1> : 1: S_SUPPKEY
 |  <slot 2> : 2: S_NAME
-|  use vectorized: true
 |
 11:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 4: S_NATIONKEY = 36: N_NATIONKEY
-|  use vectorized: true
 |
 |----10:EXCHANGE
-|       use vectorized: true
 |
 7:OlapScanNode
 TABLE: supplier
@@ -254,7 +229,6 @@ tabletList=10111
 cardinality=1000000
 avgRowSize=33.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -266,7 +240,6 @@ UNPARTITIONED
 
 9:Project
 |  <slot 36> : 36: N_NATIONKEY
-|  use vectorized: true
 |
 8:OlapScanNode
 TABLE: nation
@@ -279,6 +252,5 @@ tabletList=10185
 cardinality=1
 avgRowSize=29.0
 numNodes=0
-use vectorized: true
 [end]
 

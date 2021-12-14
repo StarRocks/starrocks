@@ -58,8 +58,8 @@ Status DictDecodeNode::open(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(_children[0]->open(state));
 
-    const auto& global_dict = state->get_global_dict_map();
-    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
+    const auto& global_dict = state->get_query_global_dict_map();
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
 
     DCHECK_EQ(_encode_column_cids.size(), _decode_column_cids.size());
     int need_decode_size = _decode_column_cids.size();
@@ -160,7 +160,10 @@ pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBu
     operators.emplace_back(std::make_shared<DictDecodeOperatorFactory>(
             context->next_operator_id(), id(), std::move(_encode_column_cids), std::move(_decode_column_cids),
             std::move(_expr_ctxs), std::move(_string_functions)));
-
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     return operators;
 }
 

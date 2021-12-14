@@ -3,6 +3,7 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 
 #include "env/env.h"
 #include "exec/scan_node.h"
@@ -15,14 +16,15 @@ namespace starrocks::vectorized {
 
 struct HdfsFileDesc {
     hdfsFS hdfs_fs;
-    hdfsFile hdfs_file;
     THdfsFileFormat::type hdfs_file_format;
-    std::shared_ptr<RandomAccessFile> fs = nullptr;
+    std::shared_ptr<RandomAccessFile> fs;
 
     int partition_id = 0;
     std::string path;
     int64_t file_length = 0;
     std::vector<const THdfsScanRange*> splits;
+
+    std::atomic<int32_t>* open_limit = nullptr;
 };
 
 class HdfsScanNode final : public starrocks::ScanNode {
@@ -33,7 +35,6 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
 
@@ -43,7 +44,7 @@ private:
     friend HdfsScanner;
     friend HdfsParquetScanner;
     friend HdfsOrcScanner;
-    constexpr static const int kMaxConcurrency = 50;
+    int kMaxConcurrency = config::max_hdfs_scanner_num;
 
     template <typename T>
     class Stack {
@@ -145,6 +146,8 @@ private:
     Status _status;
     RuntimeState* _runtime_state = nullptr;
     bool _is_hdfs_fs = true;
+
+    std::atomic_bool _pending_token = true;
 
     std::atomic<int32_t> _scanner_submit_count = 0;
     std::atomic<int32_t> _running_threads = 0;
