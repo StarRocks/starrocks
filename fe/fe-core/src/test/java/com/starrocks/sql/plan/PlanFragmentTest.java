@@ -4944,6 +4944,7 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testFullOuterJoinOutputRowCount() throws Exception {
+        Config.enable_decimal_v3 = true;
         String sql = "SELECT\n" +
                 "    (NOT(FALSE))\n" +
                 "FROM (\n" +
