@@ -214,6 +214,25 @@ TEST_F(VectorizedArithmeticExprTest, divExpr) {
             ASSERT_FALSE(v->is_null(j));
         }
     }
+    {
+        // when left value is 0 and right value is negative number
+        expr->_children.clear();
+        MockVectorizedExpr<TYPE_INT> int_col1(expr_node, 1, 0);
+        MockVectorizedExpr<TYPE_INT> int_col2(expr_node, 1, -5);
+
+        expr->_children.push_back(&int_col1);
+        expr->_children.push_back(&int_col1);
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        auto v = std::static_pointer_cast<NullableColumn>(ptr);
+        ASSERT_TRUE(v->is_nullable());
+        ASSERT_EQ(1, v->size());
+
+        auto nums = std::static_pointer_cast<Int32Column>(v->data_column());
+
+        ASSERT_EQ(nums->size(), 1);
+        ASSERT_EQ(nums->get_data()[0], 0);
+    }
 }
 
 TEST_F(VectorizedArithmeticExprTest, produceNullModExpr) {
