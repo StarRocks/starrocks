@@ -4899,4 +4899,32 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  <slot 11> : CAST(5: v5 AS DECIMAL128(37,18))"));
         Config.enable_decimal_v3 = false;
     }
+
+    @Test
+    public void testPredicateOnThreeTables() throws Exception {
+        String sql = "SELECT \n" +
+                "  DISTINCT t1.v4 \n" +
+                "FROM \n" +
+                "  t1, \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t3.v1, \n" +
+                "      t3.v2, \n" +
+                "      t3.v3\n" +
+                "    FROM \n" +
+                "      t3\n" +
+                "  ) subt3 FULL \n" +
+                "  JOIN t0 ON subt3.v3 != t0.v1 \n" +
+                "  AND subt3.v3 = t0.v1 \n" +
+                "WHERE \n" +
+                "  (\n" +
+                "    (t0.v2) BETWEEN (\n" +
+                "      CAST(subt3.v2 AS STRING)\n" +
+                "    ) \n" +
+                "    AND (t0.v2)\n" +
+                "  ) = (t1.v4);";
+        String plan = getFragmentPlan(sql);
+        // check no exception
+        Assert.assertTrue(plan.contains(" 3:CROSS JOIN"));
+    }
 }

@@ -23,24 +23,6 @@ public class PhysicalFilterOperator extends PhysicalOperator {
     }
 
     @Override
-    public int hashCode() {
-        return predicate.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalFilterOperator)) {
-            return false;
-        }
-        PhysicalFilterOperator rhs = (PhysicalFilterOperator) obj;
-        if (this == rhs) {
-            return true;
-        }
-
-        return predicate.equals(rhs.getPredicate());
-    }
-
-    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalFilter(this, context);
     }

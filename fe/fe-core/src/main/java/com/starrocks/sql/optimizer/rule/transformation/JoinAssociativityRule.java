@@ -100,6 +100,22 @@ public class JoinAssociativityRule extends TransformationRule {
 
         OptExpression leftChild1 = leftChild.inputAt(0);
         OptExpression leftChild2 = leftChild.inputAt(1);
+        // todo
+        //          join (b+c=a)                    join (b+c=a)
+        //        /      \                          /   \
+        //      join      C           ->           A    join
+        //      /  \                                    /   \
+        //     A    B                                  B     C
+        // cross join on predicate b+c=a transform to inner join predicate, and it's equals on predicate, but it need to
+        // generate projection xx = b+c on the new right join which we could not do now. so we just forbidden this
+        // transform easily.
+        for (ScalarOperator parentConjunct : parentConjuncts) {
+            if (parentConjunct.getUsedColumns().isIntersect(leftChild1.getOutputColumns()) &&
+                    parentConjunct.getUsedColumns().isIntersect(leftChild2.getOutputColumns()) &&
+                    parentConjunct.getUsedColumns().isIntersect(rightChild.getOutputColumns())) {
+                return Collections.emptyList();
+            }
+        }
 
         ColumnRefSet newRightChildColumns = new ColumnRefSet();
         newRightChildColumns.union(rightChild.getOutputColumns());
