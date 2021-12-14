@@ -651,7 +651,7 @@ Status OlapScanConjunctsManager::build_olap_filters() {
     for (auto iter : column_value_ranges) {
         std::vector<TCondition> filters;
         boost::apply_visitor([&](auto&& range) { range.to_olap_filter(filters); }, iter.second);
-        bool empty_range = boost::apply_visitor([](auto&& range) { return range.empty_range(); }, iter.second);
+        bool empty_range = boost::apply_visitor([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
         if (empty_range) {
             return Status::EndOfFile("EOF, Filter by always false condition");
         }
