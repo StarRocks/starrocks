@@ -256,20 +256,20 @@ public abstract class JoinOrder {
             // If entry.getValue is Constant, then this ColumnRef does not belong to any child.
             // Then you can add this constant mapping on any child
             if (predicates.first != null && predicates.first.getUsedColumns().contains(entry.getKey())) {
-                if (leftExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                if (leftExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
                         || entry.getValue() instanceof ConstantOperator) {
                     leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                } else if (rightExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
                         || entry.getValue() instanceof ConstantOperator) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 }
             }
 
             if (predicates.second != null && predicates.second.getUsedColumns().contains(entry.getKey())) {
-                if (leftExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                if (leftExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
                         || entry.getValue() instanceof ConstantOperator) {
                     leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                } else if (rightExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
                         || entry.getValue() instanceof ConstantOperator) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 }
