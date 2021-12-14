@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
+#include "column/column_hash.h"
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
@@ -213,6 +214,27 @@ TEST_F(VectorizedArithmeticExprTest, divExpr) {
         for (int j = 0; j < nums->size(); ++j) {
             ASSERT_FALSE(v->is_null(j));
         }
+    }
+    {
+        // when left value is 0 and right value is negative number
+        expr->_children.clear();
+        MockVectorizedExpr<TYPE_INT> int_col1(expr_node, 1, 0);
+        MockVectorizedExpr<TYPE_INT> int_col2(expr_node, 1, -5);
+
+        expr->_children.push_back(&int_col1);
+        expr->_children.push_back(&int_col1);
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        auto v = std::static_pointer_cast<NullableColumn>(ptr);
+        ASSERT_TRUE(v->is_nullable());
+        ASSERT_EQ(1, v->size());
+
+        auto nums = std::static_pointer_cast<Int32Column>(v->data_column());
+
+        ASSERT_EQ(nums->size(), 1);
+        int32_t zero = 0;
+        ASSERT_EQ(crc_hash_32(&nums->get_data()[0], sizeof(int32_t), 0x811C9DC5),
+                  crc_hash_32(&zero, sizeof(int32_t), 0x811C9DC5));
     }
 }
 
