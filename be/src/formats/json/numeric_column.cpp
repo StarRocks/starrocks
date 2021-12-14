@@ -112,11 +112,6 @@ Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const
     try {
         simdjson::ondemand::json_type tp = value.type();
         switch (tp) {
-        case simdjson::ondemand::json_type::null: {
-            numeric_column->append_nulls(1);
-            return Status::OK();
-        }
-
         case simdjson::ondemand::json_type::number: {
             return add_column_with_numeric_value(numeric_column, type_desc, name, value);
         }
@@ -131,7 +126,8 @@ Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const
         }
         }
     } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value as number, column=$0", name);
+        auto err_msg = strings::Substitute("Failed to parse value as number, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
 }
@@ -145,10 +141,10 @@ template Status add_numeric_column<int32_t>(Column* column, const TypeDescriptor
 template Status add_numeric_column<int16_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                             simdjson::ondemand::value& value);
 template Status add_numeric_column<int8_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                            simdjson::ondemand::value& value);
+                                           simdjson::ondemand::value& value);
 template Status add_numeric_column<double>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                            simdjson::ondemand::value& value);
+                                           simdjson::ondemand::value& value);
 template Status add_numeric_column<float>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                            simdjson::ondemand::value& value);
+                                          simdjson::ondemand::value& value);
 
 } // namespace starrocks::vectorized

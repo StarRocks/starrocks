@@ -59,11 +59,6 @@ Status add_binary_column(Column* column, const TypeDescriptor& type_desc, const 
     try {
         simdjson::ondemand::json_type tp = value.type();
         switch (tp) {
-        case simdjson::ondemand::json_type::null: {
-            binary_column->append_nulls(1);
-            return Status::OK();
-        }
-
         case simdjson::ondemand::json_type::number: {
             return add_column_with_numeric_value(binary_column, type_desc, name, value);
         }
@@ -87,7 +82,8 @@ Status add_binary_column(Column* column, const TypeDescriptor& type_desc, const 
         }
         }
     } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value as string, column=$0", name);
+        auto err_msg = strings::Substitute("Failed to parse value as string, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
 }

@@ -44,7 +44,8 @@ Status add_boolean_column(Column* column, const TypeDescriptor& type_desc, const
         }
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value as boolean, column=$0", name);
+        auto err_msg = strings::Substitute("Failed to parse value as boolean, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
 }

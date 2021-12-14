@@ -12,43 +12,55 @@ template <typename T>
 Status add_nullable_numeric_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                    simdjson::ondemand::value& value, bool invalid_as_null) {
     auto nullable_column = down_cast<NullableColumn*>(column);
+    try {
+        auto& null_column = nullable_column->null_column();
+        auto& data_column = nullable_column->data_column();
 
-    auto& null_column = nullable_column->null_column();
-    auto& data_column = nullable_column->data_column();
-
-    if (value.is_null()) {
-        null_column->append(1);
-        return Status::OK();
-    }
-
-    auto st = add_numeric_column<T>(data_column.get(), type_desc, name, value);
-    if (!st.ok()) {
-        if (st.is_invalid_argument() && invalid_as_null) {
+        if (value.is_null()) {
             null_column->append(1);
             return Status::OK();
         }
-        return st;
-    }
 
-    null_column->append(0);
-    return Status::OK();
+        auto st = add_numeric_column<T>(data_column.get(), type_desc, name, value);
+        if (!st.ok()) {
+            if (st.is_invalid_argument() && invalid_as_null) {
+                null_column->append(1);
+                return Status::OK();
+            }
+            return st;
+        }
+
+        null_column->append(0);
+        return Status::OK();
+
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("Failed to parse value as number, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
+    }
 }
 
-template Status add_nullable_numeric_column<int128_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                   simdjson::ondemand::value& value, bool invalid_as_null);
-template Status add_nullable_numeric_column<int64_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                   simdjson::ondemand::value& value, bool invalid_as_null);
-template Status add_nullable_numeric_column<int32_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                   simdjson::ondemand::value& value, bool invalid_as_null);
-template Status add_nullable_numeric_column<int16_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                   simdjson::ondemand::value& value, bool invalid_as_null);
-template Status add_nullable_numeric_column<int8_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                   simdjson::ondemand::value& value, bool invalid_as_null);
-template Status add_nullable_numeric_column<double>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                   simdjson::ondemand::value& value, bool invalid_as_null);
-template Status add_nullable_numeric_column<float>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                   simdjson::ondemand::value& value, bool invalid_as_null);
-
+template Status add_nullable_numeric_column<int128_t>(Column* column, const TypeDescriptor& type_desc,
+                                                      const std::string& name, simdjson::ondemand::value& value,
+                                                      bool invalid_as_null);
+template Status add_nullable_numeric_column<int64_t>(Column* column, const TypeDescriptor& type_desc,
+                                                     const std::string& name, simdjson::ondemand::value& value,
+                                                     bool invalid_as_null);
+template Status add_nullable_numeric_column<int32_t>(Column* column, const TypeDescriptor& type_desc,
+                                                     const std::string& name, simdjson::ondemand::value& value,
+                                                     bool invalid_as_null);
+template Status add_nullable_numeric_column<int16_t>(Column* column, const TypeDescriptor& type_desc,
+                                                     const std::string& name, simdjson::ondemand::value& value,
+                                                     bool invalid_as_null);
+template Status add_nullable_numeric_column<int8_t>(Column* column, const TypeDescriptor& type_desc,
+                                                    const std::string& name, simdjson::ondemand::value& value,
+                                                    bool invalid_as_null);
+template Status add_nullable_numeric_column<double>(Column* column, const TypeDescriptor& type_desc,
+                                                    const std::string& name, simdjson::ondemand::value& value,
+                                                    bool invalid_as_null);
+template Status add_nullable_numeric_column<float>(Column* column, const TypeDescriptor& type_desc,
+                                                   const std::string& name, simdjson::ondemand::value& value,
+                                                   bool invalid_as_null);
 
 Status add_nullable_binary_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                   simdjson::ondemand::value& value, bool invalid_as_null) {
@@ -57,22 +69,28 @@ Status add_nullable_binary_column(Column* column, const TypeDescriptor& type_des
     auto& null_column = nullable_column->null_column();
     auto& data_column = nullable_column->data_column();
 
-    if (value.is_null()) {
-        null_column->append(1);
-        return Status::OK();
-    }
-
-    auto st = add_binary_column(data_column.get(), type_desc, name, value);
-    if (!st.ok()) {
-        if (st.is_invalid_argument() && invalid_as_null) {
+    try {
+        if (value.is_null()) {
             null_column->append(1);
             return Status::OK();
         }
-        return st;
-    }
 
-    null_column->append(0);
-    return Status::OK();
+        auto st = add_binary_column(data_column.get(), type_desc, name, value);
+        if (!st.ok()) {
+            if (st.is_invalid_argument() && invalid_as_null) {
+                null_column->append(1);
+                return Status::OK();
+            }
+            return st;
+        }
+
+        null_column->append(0);
+        return Status::OK();
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("Failed to parse value as binary type, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
+    }
 }
 
 Status add_nullable_boolean_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
@@ -82,22 +100,28 @@ Status add_nullable_boolean_column(Column* column, const TypeDescriptor& type_de
     auto& null_column = nullable_column->null_column();
     auto& data_column = nullable_column->data_column();
 
-    if (value.is_null()) {
-        null_column->append(1);
-        return Status::OK();
-    }
-
-    auto st = add_boolean_column(data_column.get(), type_desc, name, value);
-    if (!st.ok()) {
-        if (st.is_invalid_argument() && invalid_as_null) {
+    try {
+        if (value.is_null()) {
             null_column->append(1);
             return Status::OK();
         }
-        return st;
-    }
 
-    null_column->append(0);
-    return Status::OK();
+        auto st = add_boolean_column(data_column.get(), type_desc, name, value);
+        if (!st.ok()) {
+            if (st.is_invalid_argument() && invalid_as_null) {
+                null_column->append(1);
+                return Status::OK();
+            }
+            return st;
+        }
+
+        null_column->append(0);
+        return Status::OK();
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("Failed to parse value as boolean, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
+    }
 }
 
 Status add_nullable_array_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
@@ -126,7 +150,8 @@ Status add_nullable_array_column(Column* column, const TypeDescriptor& type_desc
             return Status::OK();
         }
     } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value as array, column=$0", name);
+        auto err_msg = strings::Substitute("Failed to parse value as array, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
 }
