@@ -572,6 +572,12 @@ public class SchemaChangeHandler extends AlterHandler {
                                    Map<Long, LinkedList<Column>> indexSchemaMap,
                                    Set<String> newColNameSet) throws DdlException {
 
+        Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
+        // expr like now() or uuid() will support later
+        if (defaultValueType == Column.DefaultValueType.CONST && newColumn.getDefaultExpr() != null) {
+            throw new DdlException("Schema change currently not supported default expr:"
+                    + newColumn.getDefaultExpr().getExpr());
+        }
         String newColName = newColumn.getName();
         // check the validation of aggregation method on column.
         // also fill the default aggregation method if not specified.
