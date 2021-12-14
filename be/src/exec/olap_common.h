@@ -128,6 +128,10 @@ inline void increase(vectorized::TimestampValue& value) {
 
 } // namespace helper
 
+// There are two types of value range: Fixed Value Range and Range Value Range
+// I know "Range Value Range" sounds bad, but it's hard to turn over the de facto.
+// Fixed Value Range means discrete values in the set, like "IN (1,2,3)"
+// Range Value Range means range values like ">= 10 && <= 20"
 /**
  * @brief Column's value range
  **/
@@ -187,8 +191,6 @@ public:
     size_t get_fixed_value_size() const { return _fixed_values.size(); }
 
     void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
-
-    bool empty_range() { return _empty_range; }
 
     void to_olap_filter(std::vector<TCondition>& filters) {
         // If we have fixed range value, we generate in/not-in predicates.
@@ -467,9 +469,12 @@ template <class T>
 inline bool ColumnValueRange<T>::is_empty_value_range() const {
     if (INVALID_TYPE == _column_type) {
         return true;
-    } else {
-        return _fixed_values.empty() && _high_value <= _low_value;
     }
+    // TODO(yan): sometimes we don't have Fixed Value Range, but have
+    // following value range like > 10 && < 5, which is also empty value range.
+    // Maybe we can add that check later. Without that check, there is no correctness problem
+    // but only performance performance.
+    return _fixed_values.empty() && _empty_range;
 }
 
 template <class T>
@@ -662,8 +667,6 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
         if (FILTER_LARGER_OR_EQUAL == _low_op && FILTER_LESS_OR_EQUAL == _high_op && _high_value == _low_value) {
             _fixed_values.insert(_high_value);
             _fixed_op = FILTER_IN;
-            _high_value = _type_min;
-            _low_value = _type_max;
         }
     }
     _is_init_state = false;
