@@ -72,6 +72,8 @@ public:
 
     int64_t num_rows() override { return _num_rows_written; }
 
+    int num_segment() override { return _num_segment; }
+
     int64_t total_data_size() override { return _total_data_size; }
 
     RowsetId rowset_id() override { return _context.rowset_id; }
