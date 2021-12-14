@@ -54,7 +54,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -156,14 +155,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 @Override
                 public boolean apply(Expr arg) {
                     return BinaryPredicate.getEqSlots(arg) != null;
-                }
-            };
-
-    public static final com.google.common.base.Predicate<Expr> IS_BINARY_PREDICATE =
-            new com.google.common.base.Predicate<Expr>() {
-                @Override
-                public boolean apply(Expr arg) {
-                    return arg instanceof BinaryPredicate;
                 }
             };
 
@@ -590,14 +581,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
     }
 
-    public static <C extends Expr> void collectAggregateExprs(List<? extends Expr> input,
-                                                              List<C> output) {
-        Preconditions.checkNotNull(input);
-        for (Expr e : input) {
-            e.collectAggregateExprs(output);
-        }
-    }
-
     /**
      * get the expr which in l1 and l2 in the same time.
      * Return the intersection of l1 and l2
@@ -801,12 +784,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         for (Expr e : exprs) {
             e.getIds(tupleIds, slotIds);
-        }
-    }
-
-    public void markAgg() {
-        for (Expr child : children) {
-            child.markAgg();
         }
     }
 
@@ -1086,17 +1063,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return result;
     }
 
-    // Identical behavior to TreeNode.collect() except it matches expr that are aggregates
-    public <C extends Expr> void collectAggregateExprs(List<C> output) {
-        if (isAggregate() && !output.contains((C) this)) {
-            output.add((C) this);
-            return;
-        }
-        for (Expr child : children) {
-            child.collectAggregateExprs(output);
-        }
-    }
-
     public boolean containsAggregate() {
         if (isAggregate()) {
             return true;
@@ -1166,13 +1132,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public void getIds(List<TupleId> tupleIds, List<SlotId> slotIds) {
         for (Expr child : children) {
             child.getIds(tupleIds, slotIds);
-        }
-    }
-
-    public void getTableIdToColumnNames(Map<Long, Set<String>> tableIdToColumnNames) {
-        Preconditions.checkState(tableIdToColumnNames != null);
-        for (Expr child : children) {
-            child.getTableIdToColumnNames(tableIdToColumnNames);
         }
     }
 
@@ -1720,11 +1679,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         recursiveResetChildrenResult();
         final Expr newExpr = ExpressionFunctions.INSTANCE.evalExpr(this);
         return newExpr != null ? newExpr : this;
-    }
-
-    // For a predicate, if input is Null, output is Null or false, we call it is strict.
-    public boolean isStrictPredicate() {
-        return false;
     }
 
     /**

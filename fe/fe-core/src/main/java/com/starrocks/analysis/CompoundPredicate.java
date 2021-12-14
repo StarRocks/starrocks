@@ -246,16 +246,6 @@ public class CompoundPredicate extends Predicate {
         return 31 * super.hashCode() + Objects.hashCode(op);
     }
 
-    @Override
-    public boolean isStrictPredicate() {
-        if (op == Operator.NOT) {
-            return false; // Always return false for NOT
-        }
-        Expr left = getChild(0);
-        Expr right = getChild(1);
-        return left.isStrictPredicate() && right.isStrictPredicate();
-    }
-
     /**
      * Below function ia added by new analyzer
      */
