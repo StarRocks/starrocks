@@ -70,6 +70,8 @@ import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.InternalServiceVersion;
@@ -843,6 +845,11 @@ public class Coordinator {
                         params.instanceExecParams.size());
             }
 
+            if (params.fragment.getSink() instanceof ResultSink && params.instanceExecParams.size() > 1) {
+                throw new StarRocksPlannerException("This sql plan has multi result sinks",
+                        ErrorType.INTERNAL_ERROR);
+            }
+
             for (int j = 0; j < params.instanceExecParams.size(); ++j) {
                 // we add instance_num to query_id.lo to create a
                 // globally-unique instance id
@@ -1165,10 +1172,6 @@ public class Coordinator {
             }
 
             int parallelExecInstanceNum = fragment.getParallelExecNum();
-            // The instance num for result sink fragment must be 1
-            if (fragment.getSink() instanceof ResultSink) {
-                parallelExecInstanceNum = 1;
-            }
             boolean hasColocate = (isColocateFragment(fragment.getPlanRoot()) &&
                     fragmentIdToSeqToAddressMap.containsKey(fragment.getFragmentId())
                     && fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()).size() > 0);
