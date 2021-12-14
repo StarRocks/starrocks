@@ -51,9 +51,6 @@ import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
@@ -139,12 +136,6 @@ public class GsonUtils {
             .of(LoadJobStateUpdateInfo.class, "clazz")
             .registerSubtype(SparkLoadJobStateUpdateInfo.class, SparkLoadJobStateUpdateInfo.class.getSimpleName());
 
-    // runtime adapter for class "Expr"
-    private static final RuntimeTypeAdapterFactory<Expr> exprFactory = RuntimeTypeAdapterFactory
-            .of(Expr.class, "clazz")
-            .registerSubtype(StringLiteral.class, StringLiteral.class.getSimpleName())
-            .registerSubtype(FunctionCallExpr.class, FunctionCallExpr.class.getSimpleName());
-
     private static final JsonSerializer<LocalDateTime> localDateTimeTypeSerializer =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -169,7 +160,6 @@ public class GsonUtils {
             .registerTypeAdapterFactory(resourceTypeAdapterFactory)
             .registerTypeAdapterFactory(alterJobV2TypeAdapterFactory)
             .registerTypeAdapterFactory(loadJobStateUpdateInfoTypeAdapterFactory)
-            .registerTypeAdapterFactory(exprFactory)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeSerializer)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)
