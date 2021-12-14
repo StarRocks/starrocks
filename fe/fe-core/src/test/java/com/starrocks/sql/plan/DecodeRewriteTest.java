@@ -600,4 +600,28 @@ public class DecodeRewriteTest extends PlanTestBase{
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
     }
+
+    @Test
+    public void testDecodeOnExchange() throws Exception {
+        String sql = " SELECT \n" +
+                "  DISTINCT * \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      DISTINCT t1.v4 \n" +
+                "    FROM \n" +
+                "      t1, \n" +
+                "      test_all_type as t2, \n" +
+                "      test_all_type as t0 \n" +
+                "    WHERE \n" +
+                "      NOT (\n" +
+                "        (t2.t1a) != (\n" +
+                "          concat(t0.t1a, \"ji\")\n" +
+                "        )\n" +
+                "      ) \n" +
+                "  ) t;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("8:HASH JOIN"));
+        Assert.assertTrue(plan.contains("7:Decode"));
+    }
 }
