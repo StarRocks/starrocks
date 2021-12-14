@@ -63,19 +63,16 @@ private:
     // because TUniqueId::hi is exactly the same in one query
 
     phmap::flat_hash_map<int64_t, int64_t> _num_sinkers;
-    phmap::flat_hash_map<int64_t, int64_t> _request_sequences;
-    // distribution of received response sequence numbers:
-    // part1: { seq | 1 <= seq <= _max_processed_sequence }
-    // part2: { seq | seq = _max_processed_sequence + i, i > 1 }
+    phmap::flat_hash_map<int64_t, int64_t> _request_seqs;
     // Considering the following situation
     // 1. sending request 1, 2, 3 in order
     // 2. one possible order of response is 1, 3, 2
     // 3. field transformation
-    //      a. receive response-1, _max_processed_sequences[x]->1, _unprocessed_sequences[x]->()
-    //      b. receive response-2, _max_processed_sequences[x]->1, _unprocessed_sequences[x]->(2)
-    //      c. receive response-3, _max_processed_sequences[x]->3, _unprocessed_sequences[x]->()
-    phmap::flat_hash_map<int64_t, int64_t> _max_processed_sequences;
-    phmap::flat_hash_map<int64_t, std::unordered_set<int64_t>> _unprocessed_sequences;
+    //      a. receive response-1, _max_continuous_acked_seqs[x]->1, _discontinuous_acked_seqs[x]->()
+    //      b. receive response-2, _max_continuous_acked_seqs[x]->1, _discontinuous_acked_seqs[x]->(2)
+    //      c. receive response-3, _max_continuous_acked_seqs[x]->3, _discontinuous_acked_seqs[x]->()
+    phmap::flat_hash_map<int64_t, int64_t> _max_continuous_acked_seqs;
+    phmap::flat_hash_map<int64_t, std::unordered_set<int64_t>> _discontinuous_acked_seqs;
     std::atomic<int32_t> _total_in_flight_rpc = 0;
     std::atomic<int32_t> _num_uncancelled_sinkers;
     std::atomic<int32_t> _num_remaining_eos = 0;

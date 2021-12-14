@@ -18,9 +18,9 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
         } else {
             _num_sinkers[instance_id.lo] = num_sinkers;
 
-            _request_sequences[instance_id.lo] = 0;
-            _max_processed_sequences[instance_id.lo] = -1;
-            _unprocessed_sequences[instance_id.lo] = std::unordered_set<int64_t>();
+            _request_seqs[instance_id.lo] = 0;
+            _max_continuous_acked_seqs[instance_id.lo] = -1;
+            _discontinuous_acked_seqs[instance_id.lo] = std::unordered_set<int64_t>();
             _buffers[instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
@@ -94,13 +94,13 @@ void SinkBuffer::cancel_one_sinker() {
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {
-    auto& sequences = _unprocessed_sequences[instance_id.lo];
-    sequences.insert(sequence);
-    auto& max_processed_sequence = _max_processed_sequences[instance_id.lo];
+    auto& seqs = _discontinuous_acked_seqs[instance_id.lo];
+    seqs.insert(sequence);
+    auto& max_continuous_acked_seq = _max_continuous_acked_seqs[instance_id.lo];
     std::unordered_set<int64_t>::iterator it;
-    while ((it = sequences.find(max_processed_sequence + 1)) != sequences.end()) {
-        sequences.erase(it);
-        ++max_processed_sequence;
+    while ((it = seqs.find(max_continuous_acked_seq + 1)) != seqs.end()) {
+        seqs.erase(it);
+        ++max_continuous_acked_seq;
     }
 }
 
@@ -114,7 +114,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         }
 
         auto& buffer = _buffers[instance_id.lo];
-        int64_t unprocessed_window_size = _request_sequences[instance_id.lo] - _max_processed_sequences[instance_id.lo];
+        int64_t unprocessed_window_size = _request_seqs[instance_id.lo] - _max_continuous_acked_seqs[instance_id.lo];
         if (buffer.empty() || unprocessed_window_size >= config::pipeline_sink_brpc_dop) {
             return;
         }
@@ -167,7 +167,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         }
 
         request.params->set_allocated_finst_id(&_instance_id2finst_id[instance_id.lo]);
-        request.params->set_sequence(_request_sequences[instance_id.lo]++);
+        request.params->set_sequence(_request_seqs[instance_id.lo]++);
 
         auto* closure =
                 new DisposableClosure<PTransmitChunkResult, ClosureContext>({instance_id, request.params->sequence()});
