@@ -189,7 +189,10 @@ public class PlanFragmentBuilder {
         execPlan.getOutputExprs().addAll(outputExprs);
 
         // Single tablet direct output
-        if (execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
+        // Note: If the fragment has right or full join and the join is local bucket shuffle join,
+        // We shouldn't set result sink directly to top fragment, because we will hash multi reslt sink.
+        if (!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
+                && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
                 .reduce(Integer::sum).orElse(2) <= 1) {
             inputFragment.setOutputExprs(outputExprs);
