@@ -125,7 +125,7 @@ public:
     Status load();
 
     const TabletSchema& schema() const { return *_schema; }
-    inline void set_full_tablet_schema(const TabletSchema* full_tablet_schema) { _schema = full_tablet_schema; }
+    inline void set_schema(const TabletSchema* full_tablet_schema) { _schema = full_tablet_schema; }
 
     virtual StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                                 const vectorized::RowsetReadOptions& options) = 0;

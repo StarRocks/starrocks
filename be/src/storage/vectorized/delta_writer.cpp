@@ -125,25 +125,13 @@ Status DeltaWriter::_init() {
 
     RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
 
-    const std::vector<SlotDescriptor*> req_slot_descriptors_without_op_col(
-            (*_req.slots).begin(), (*_req.slots).end() - ((*_req.slots).back()->col_name() == "__op"));
-
     // maybe partial update, change to partial tablet schema
-    if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
-        req_slot_descriptors_without_op_col.size() < _tablet->tablet_schema().num_columns()) {
-        TabletSchemaPB partial_tablet_schema_pb;
-        partial_tablet_schema_pb.set_id(_tablet->tablet_schema().id());
-        partial_tablet_schema_pb.set_next_column_unique_id(_tablet->tablet_schema().next_column_unique_id());
-        partial_tablet_schema_pb.set_compress_kind(_tablet->tablet_schema().compress_kind());
-        partial_tablet_schema_pb.set_num_rows_per_row_block(_tablet->tablet_schema().num_rows_per_row_block());
-        partial_tablet_schema_pb.set_num_short_key_columns(_tablet->tablet_schema().num_short_key_columns());
-        partial_tablet_schema_pb.set_keys_type(_tablet->tablet_schema().keys_type());
-        partial_tablet_schema_pb.set_bf_fpp(_tablet->tablet_schema().bf_fpp());
-        if (_tablet->tablet_schema().has_bf_fpp()) {
-            partial_tablet_schema_pb.set_bf_fpp(_tablet->tablet_schema().bf_fpp());
-        }
-        for (const auto* slot_descriptor : req_slot_descriptors_without_op_col) {
-            const auto& slot_col_name = slot_descriptor->col_name();
+    if (auto begin = (*_req.slots).begin(), end = (*_req.slots).end() - ((*_req.slots).back()->col_name() == "__op");
+        _tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
+        (end - begin) < _tablet->tablet_schema().num_columns()) {
+        std::vector<std::size_t> column_indexes;
+        for (; begin != end; ++begin) {
+            const auto& slot_col_name = (*begin)->col_name();
             std::size_t index = _tablet->field_index(slot_col_name);
             if (index < 0) {
                 std::stringstream ss;
@@ -151,10 +139,9 @@ Status DeltaWriter::_init() {
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
-            _tablet->tablet_schema().column(index).to_schema_pb(partial_tablet_schema_pb.add_column());
+            column_indexes.push_back(index);
         }
-        writer_context.partial_update_tablet_schema = std::make_shared<TabletSchema>();
-        writer_context.partial_update_tablet_schema->init_from_pb(partial_tablet_schema_pb);
+        writer_context.partial_update_tablet_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
@@ -299,14 +286,12 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
         return Status::InternalError("Fail to flush memtable");
     }
 
-    LOG(WARNING) << "close_wait: ";
-
     // use rowset meta manager to save meta
     _cur_rowset = _rowset_writer->build();
     if (_cur_rowset == nullptr) {
         return Status::InternalError("Fail to build rowset");
     }
-    _cur_rowset->set_full_tablet_schema(&_tablet->tablet_schema());
+    _cur_rowset->set_schema(&_tablet->tablet_schema());
     OLAPStatus res = _storage_engine->txn_manager()->commit_txn(_req.partition_id, _tablet, _req.txn_id, _req.load_id,
                                                                 _cur_rowset, false);
     if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
