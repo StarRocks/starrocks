@@ -25,7 +25,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks::vectorized {
 
@@ -547,7 +546,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             if (err) {
                 if (col_name == "__op") {
                     // special treatment for __op column, fill default value '0' rather than null
-                    column->append_strings(std::vector{literal_0_slice});
+                    column->append_strings(std::vector{Slice{"0"}});
                 } else {
                     // Column name not found, fill column with null.
                     column->append_nulls(1);

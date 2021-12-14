@@ -15,6 +15,17 @@ add_library(Formats STATIC
         csv/float_converter.cpp
         csv/numeric_converter.cpp
         csv/nullable_converter.cpp
+        json/nullable_column.cpp
+        json/numeric_column.cpp
+        json/binary_column.cpp
+        json/boolean_column.cpp
         )
+
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+set_source_files_properties(json/nullable_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+set_source_files_properties(json/binary_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+set_source_files_properties(json/boolean_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+set_source_files_properties(json/numeric_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
 
 add_subdirectory(orc/apache-orc)
