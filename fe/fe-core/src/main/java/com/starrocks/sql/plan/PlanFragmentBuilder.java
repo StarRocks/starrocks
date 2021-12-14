@@ -1279,33 +1279,42 @@ public class PlanFragmentBuilder {
             } else {
                 JoinOperator joinOperator = node.getJoinType();
 
+                PlanNode leftFragmentPlanRoot = leftFragment.getPlanRoot();
+                PlanNode rightFragmentPlanRoot = rightFragment.getPlanRoot();
+                // skip decode node
+                if (leftFragmentPlanRoot instanceof DecodeNode) {
+                    leftFragmentPlanRoot = leftFragmentPlanRoot.getChild(0);
+                }
+                if (rightFragmentPlanRoot instanceof DecodeNode) {
+                    rightFragmentPlanRoot = rightFragmentPlanRoot.getChild(0);
+                }
                 // 1. Get distributionMode
                 HashJoinNode.DistributionMode distributionMode;
-                if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
-                        ((ExchangeNode) leftFragment.getPlanRoot()).getDistributionType()
+                if (leftFragmentPlanRoot instanceof ExchangeNode &&
+                        ((ExchangeNode) leftFragmentPlanRoot).getDistributionType()
                                 .equals(DistributionSpec.DistributionType.SHUFFLE) &&
-                        rightFragment.getPlanRoot() instanceof ExchangeNode &&
-                        ((ExchangeNode) rightFragment.getPlanRoot()).getDistributionType()
+                        rightFragmentPlanRoot instanceof ExchangeNode &&
+                        ((ExchangeNode) rightFragmentPlanRoot).getDistributionType()
                                 .equals(DistributionSpec.DistributionType.SHUFFLE)) {
                     distributionMode = HashJoinNode.DistributionMode.PARTITIONED;
-                } else if (rightFragment.getPlanRoot() instanceof ExchangeNode &&
-                        ((ExchangeNode) rightFragment.getPlanRoot()).getDistributionType()
+                } else if (rightFragmentPlanRoot instanceof ExchangeNode &&
+                        ((ExchangeNode) rightFragmentPlanRoot).getDistributionType()
                                 .equals(DistributionSpec.DistributionType.BROADCAST)) {
                     distributionMode = HashJoinNode.DistributionMode.BROADCAST;
-                } else if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
-                        !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                    if (isColocateJoin(optExpr, context, leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                } else if (!(leftFragmentPlanRoot instanceof ExchangeNode) &&
+                        !(rightFragmentPlanRoot instanceof ExchangeNode)) {
+                    if (isColocateJoin(optExpr, context, leftFragmentPlanRoot, rightFragmentPlanRoot)) {
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
                     } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
-                            rightFragment.getPlanRoot().canDoReplicatedJoin()) {
+                            rightFragmentPlanRoot.canDoReplicatedJoin()) {
                         distributionMode = HashJoinNode.DistributionMode.REPLICATED;
-                    } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                    } else if (isShuffleHashBucket(leftFragmentPlanRoot, rightFragmentPlanRoot)) {
                         distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                     } else {
                         Preconditions.checkState(false, "Must be replicate join or colocate join");
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
                     }
-                } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                } else if (isShuffleHashBucket(leftFragmentPlanRoot, rightFragmentPlanRoot)) {
                     distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
                     distributionMode = HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET;
