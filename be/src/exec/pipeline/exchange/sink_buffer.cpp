@@ -19,6 +19,7 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
             _num_sinkers[instance_id.lo] = num_sinkers;
 
             _request_seqs[instance_id.lo] = 0;
+            // request_seq starts from 0, so the max_continuous_acked_seq should be -1
             _max_continuous_acked_seqs[instance_id.lo] = -1;
             _discontinuous_acked_seqs[instance_id.lo] = std::unordered_set<int64_t>();
             _buffers[instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
@@ -45,6 +46,8 @@ SinkBuffer::~SinkBuffer() {
     for (auto& [_, buffer] : _buffers) {
         while (!buffer.empty()) {
             auto& request = buffer.front();
+            // Once the request is added to SinkBuffer, its ownership will also be transferred,
+            // so SinkBuffer needs to be responsible for the release of resources
             request.params->release_finst_id();
             buffer.pop();
         }
@@ -54,6 +57,8 @@ SinkBuffer::~SinkBuffer() {
 void SinkBuffer::add_request(const TransmitChunkInfo& request) {
     DCHECK(_num_remaining_eos > 0);
     if (_is_finishing) {
+        // Once the request is added to SinkBuffer, its ownership will also be transferred,
+        // so SinkBuffer needs to be responsible for the release of resources
         request.params->release_finst_id();
         return;
     }
@@ -114,8 +119,13 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         }
 
         auto& buffer = _buffers[instance_id.lo];
-        int64_t unprocessed_window_size = _request_seqs[instance_id.lo] - _max_continuous_acked_seqs[instance_id.lo];
-        if (buffer.empty() || unprocessed_window_size >= config::pipeline_sink_brpc_dop) {
+
+        // discontinuous_acked_window_size means that we are not received all the ack
+        // with sequence from _max_continuous_acked_seqs[x] to _request_seqs[x]
+        // Limit the size of the window to avoid buffering too much out-of-order data at the receiving side
+        int64_t discontinuous_acked_window_size =
+                _request_seqs[instance_id.lo] - _max_continuous_acked_seqs[instance_id.lo];
+        if (buffer.empty() || discontinuous_acked_window_size >= config::pipeline_sink_brpc_dop) {
             return;
         }
 
@@ -150,6 +160,8 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (_num_sinkers[instance_id.lo] > 1) {
                 if (request.params->chunks_size() == 0) {
+                    // Once the request is added to SinkBuffer, its ownership will also be transferred,
+                    // so SinkBuffer needs to be responsible for the release of resources
                     request.params->release_finst_id();
                     continue;
                 } else {
@@ -208,6 +220,8 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         closure->cntl.request_attachment().append(request.attachment);
         request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
 
+        // Once the request is added to SinkBuffer, its ownership will also be transferred,
+        // so SinkBuffer needs to be responsible for the release of resources
         request.params->release_finst_id();
         return;
     }

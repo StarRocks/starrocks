@@ -52,6 +52,10 @@ public:
     void cancel_one_sinker();
 
 private:
+    // Update the discontinuous acked window, here are the invariants:
+    // all acks received with sequence from [0, _max_continuous_acked_seqs[x]]
+    // not all the acks received with sequence from [_max_continuous_acked_seqs[x]+1, _request_seqs[x]]
+    // _discontinuous_acked_seqs[x] stored the received discontinuous acks
     void _process_send_window(const TUniqueId& instance_id, const int64_t sequence);
     void _try_to_send_rpc(const TUniqueId& instance_id);
 
