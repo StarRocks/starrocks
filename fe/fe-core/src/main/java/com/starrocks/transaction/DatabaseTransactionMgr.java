@@ -605,7 +605,7 @@ public class DatabaseTransactionMgr {
     // check whether transaction can be finished or not
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
-    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas) {
+    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends) {
         Database db = catalog.getDb(txn.getDbId());
         if (db == null) {
             return true;
@@ -645,6 +645,9 @@ public class DatabaseTransactionMgr {
                                 if (!errReplicas.contains(replica.getId()) && replica.getLastFailedVersion() < 0) {
                                     if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
                                         ++healthReplicaNum;
+                                    } else if (unfinishedBackends != null
+                                            && unfinishedBackends.contains(replica.getBackendId())) {
+                                        errReplicas.add(replica.getId());
                                     }
                                 }
                             }
