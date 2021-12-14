@@ -28,7 +28,15 @@ Status add_nullable_numeric_column(Column* column, const TypeDescriptor& type_de
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(add_numeric_column<T>(data_column.get(), type_desc, name, value));
+    auto st = add_numeric_column<T>(data_column.get(), type_desc, name, value);
+    if (!st.ok()) {
+        if (st.is_invalid_argument() && invalid_as_null) {
+            null_column->append(1);
+            return Status::OK();
+        }
+        return st;
+    }
+
     null_column->append(0);
     return Status::OK();
 }
@@ -45,7 +53,15 @@ Status add_nullable_binary_column(Column* column, const TypeDescriptor& type_des
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(add_binary_column(data_column.get(), type_desc, name, value));
+    auto st = add_binary_column(data_column.get(), type_desc, name, value);
+    if (!st.ok()) {
+        if (st.is_invalid_argument() && invalid_as_null) {
+            null_column->append(1);
+            return Status::OK();
+        }
+        return st;
+    }
+
     null_column->append(0);
     return Status::OK();
 }
@@ -62,7 +78,15 @@ Status add_nullable_boolean_column(Column* column, const TypeDescriptor& type_de
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(add_boolean_column(data_column.get(), type_desc, name, value));
+    auto st = add_boolean_column(data_column.get(), type_desc, name, value);
+    if (!st.ok()) {
+        if (st.is_invalid_argument() && invalid_as_null) {
+            null_column->append(1);
+            return Status::OK();
+        }
+        return st;
+    }
+
     null_column->append(0);
     return Status::OK();
 }

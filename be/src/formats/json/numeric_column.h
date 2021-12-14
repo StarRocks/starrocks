@@ -38,7 +38,7 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
             column->append_numbers(&out, sizeof(out));
         } else {
             auto err_msg = strings::Substitute("Value is overflow. column=$0, value=$1", name, in);
-            return Status::DataQualityError(err_msg);
+            return Status::InvalidArgument(err_msg);
         }
         return Status::OK();
     }
@@ -51,7 +51,7 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
             column->append_numbers(&out, sizeof(out));
         } else {
             auto err_msg = strings::Substitute("Value is overflow. column=$0, value=$1", name, in);
-            return Status::DataQualityError(err_msg);
+            return Status::InvalidArgument(err_msg);
         }
         return Status::OK();
     }
@@ -64,7 +64,7 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
             column->append_numbers(&out, sizeof(out));
         } else {
             auto err_msg = strings::Substitute("Value is overflow. column=$0, value=$1", name, in);
-            return Status::DataQualityError(err_msg);
+            return Status::InvalidArgument(err_msg);
         }
         return Status::OK();
     }
@@ -99,13 +99,13 @@ static Status add_column_with_string_value(FixedLengthColumn<T>* column, const T
                 return Status::OK();
             } else {
                 auto err_msg = strings::Substitute("Value is overflow. column=$0, value=$1", name, d);
-                return Status::DataQualityError(err_msg);
+                return Status::InvalidArgument(err_msg);
             }
         }
 
         std::string err_msg = strings::Substitute("Unable to cast string value to BIGINT. value=$0, column=$1",
                                                   std::string(sv.data(), sv.size()), name);
-        return Status::DataQualityError(err_msg.c_str());
+        return Status::InvalidArgument(err_msg);
     }
 }
 
@@ -132,7 +132,7 @@ Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const
 
         default: {
             auto err_msg = strings::Substitute("Unsupported value type. Numeric type is required. column=$0", name);
-            return Status::DataQualityError(err_msg);
+            return Status::InvalidArgument(err_msg);
         }
         }
     } catch (simdjson::simdjson_error& e) {

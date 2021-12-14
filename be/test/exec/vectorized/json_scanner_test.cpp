@@ -212,6 +212,7 @@ TEST_F(JsonScannerTest, test_two_level_array) {
     EXPECT_EQ("[[[10, 20], [30, 40]]]", chunk->debug_row(0));
 }
 
+/*
 TEST_F(JsonScannerTest, test_invalid_column_in_array) {
     std::vector<TypeDescriptor> types;
     TypeDescriptor t1(TYPE_ARRAY);
@@ -303,6 +304,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
 
     EXPECT_EQ("[[NULL, NULL]]", chunk->debug_row(0));
 }
+*/
 
 TEST_F(JsonScannerTest, test_json_with_long_string) {
     std::vector<TypeDescriptor> types;
