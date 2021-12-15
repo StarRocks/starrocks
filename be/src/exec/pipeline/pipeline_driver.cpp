@@ -15,15 +15,17 @@ namespace starrocks::pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
 
-    _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
-    _active_timer = ADD_TIMER(_runtime_profile, "DriverActiveTime");
-    _pending_timer = ADD_TIMER(_runtime_profile, "DriverPendingTime");
-    _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverPreconditionBlockTime", "DriverPendingTime");
-    _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverInputEmptyTime", "DriverPendingTime");
-    _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverFirstInputEmptyTime", "DriverInputEmptyTime");
-    _followup_input_empty_timer =
-            ADD_CHILD_TIMER(_runtime_profile, "DriverFollowupInputEmptyTime", "DriverInputEmptyTime");
-    _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverOutputFullTime", "DriverPendingTime");
+    // TotalTime is reserved name
+    _total_timer = ADD_TIMER(_runtime_profile, "OverallTime");
+    _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
+    _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
+    _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
+    _pending_timer = ADD_TIMER(_runtime_profile, "PendingTime");
+    _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "PreconditionBlockTime", "PendingTime");
+    _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "InputEmptyTime", "PendingTime");
+    _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime");
+    _followup_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime");
+    _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
     _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
 
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
@@ -286,13 +288,14 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     _state = state;
 
-    // Calculate total time before report profile
-    _total_timer->update(_total_timer_sw->elapsed_time());
-
+    COUNTER_UPDATE(_total_timer, _total_timer_sw->elapsed_time());
+    COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
     COUNTER_UPDATE(_schedule_counter, driver_acct().get_schedule_times());
     COUNTER_UPDATE(_schedule_effective_counter, driver_acct().get_schedule_effective_times());
     COUNTER_UPDATE(_schedule_rows_per_chunk, driver_acct().get_rows_per_chunk());
     COUNTER_UPDATE(_schedule_accumulated_chunk_moved, driver_acct().get_accumulated_chunk_moved());
+    _update_overhead_timer();
+
     // last root driver cancel the all drivers' execution and notify FE the
     // fragment's completion but do not unregister the FragmentContext because
     // some non-root drivers maybe has pending io io tasks hold the reference to
@@ -312,6 +315,35 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         auto fragment_id = _fragment_ctx->fragment_instance_id();
         _query_ctx->count_down_fragments();
     }
+}
+
+void PipelineDriver::_update_overhead_timer() {
+    int64_t overhead_time = _active_timer->value();
+    RuntimeProfile* profile = _runtime_profile.get();
+    for (;;) {
+        std::vector<RuntimeProfile*> children;
+        profile->get_children(&children);
+
+        if (children.empty()) {
+            break;
+        }
+
+        DCHECK_EQ(children.size(), 1);
+        RuntimeProfile* child_profile = children[0];
+
+        auto* pull_total_timer = child_profile->get_counter("PullTotalTime");
+        auto* push_total_timer = child_profile->get_counter("PushTotalTime");
+        if (pull_total_timer != nullptr) {
+            overhead_time -= pull_total_timer->value();
+        }
+        if (push_total_timer != nullptr) {
+            overhead_time -= push_total_timer->value();
+        }
+
+        profile = child_profile;
+    }
+
+    COUNTER_UPDATE(_overhead_timer, overhead_time);
 }
 
 std::string PipelineDriver::to_readable_string() const {
