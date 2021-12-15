@@ -25,6 +25,7 @@ set(EXEC_FILES
         ./env/output_stream_wrapper_test.cpp
         ./exec/buffered_reader_test.cpp
         ./exec/es_query_builder_test.cpp
+        ./exec/column_value_range_test.cpp
         ./exec/plain_text_line_reader_bzip_test.cpp
         ./exec/plain_text_line_reader_gzip_test.cpp
         ./exec/plain_text_line_reader_lz4frame_test.cpp
