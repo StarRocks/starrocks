@@ -13,7 +13,6 @@
 #include "simdjson.h"
 
 namespace starrocks::vectorized {
-
 template <typename T>
 Status add_nullable_numeric_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                    simdjson::ondemand::value& value, bool invalid_as_null);
@@ -27,4 +26,6 @@ Status add_nullable_boolean_column(Column* column, const TypeDescriptor& type_de
 Status add_nullable_array_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                  simdjson::ondemand::value& value, bool invalid_as_null);
 
+Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                           simdjson::ondemand::value& value, bool invalid_as_null);
 } // namespace starrocks::vectorized
