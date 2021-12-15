@@ -11,6 +11,13 @@ namespace starrocks::vectorized {
 static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDescriptor& type_desc,
                                             const std::string& name, simdjson::ondemand::value* value) {
     std::string_view sv = value->raw_json_token();
+
+    if (type_desc.len < sv.size()) {
+        auto err_msg =
+                strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$2", name, type_desc.len);
+        return Status::InvalidArgument(err_msg);
+    }
+
     column->append(Slice{sv.data(), sv.size()});
     return Status::OK();
 }
@@ -20,6 +27,13 @@ static Status add_column_with_string_value(BinaryColumn* column, const TypeDescr
                                            const std::string& name, simdjson::ondemand::value* value) {
     // simdjson::value::get_string() returns string without quotes.
     std::string_view sv = value->get_string();
+
+    if (type_desc.len < sv.size()) {
+        auto err_msg =
+                strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$2", name, type_desc.len);
+        return Status::InvalidArgument(err_msg);
+    }
+
     column->append(Slice{sv.data(), sv.size()});
     return Status::OK();
 }
@@ -48,6 +62,13 @@ static Status add_column_with_array_object_value(BinaryColumn* column, const Typ
                                            simdjson::error_message(err));
         return Status::DataQualityError(err_msg);
     }
+
+    if (type_desc.len < new_length) {
+        auto err_msg =
+                strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$1", name, type_desc.len);
+        return Status::InvalidArgument(err_msg);
+    }
+
     column->append(Slice{buf.get(), new_length});
     return Status::OK();
 }

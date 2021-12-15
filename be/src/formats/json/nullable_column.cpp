@@ -134,6 +134,7 @@ Status add_nullable_boolean_column(Column* column, const TypeDescriptor& type_de
 
 Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                            simdjson::ondemand::value* value, bool invalid_as_null) {
+    // The type mappint should be in accord with JsonScanner::_construct_json_types();
     switch (type_desc.type) {
     case TYPE_BIGINT:
         return add_nullable_numeric_column<int64_t>(column, type_desc, name, value, invalid_as_null);
