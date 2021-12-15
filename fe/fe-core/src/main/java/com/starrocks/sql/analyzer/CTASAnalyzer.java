@@ -21,6 +21,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
 import com.starrocks.sql.analyzer.relation.Relation;
@@ -52,7 +53,8 @@ public class CTASAnalyzer {
         QueryRelation queryRelation = new QueryAnalyzer(catalog, session)
                 .transformQueryStmt(queryStmt, new Scope(RelationId.anonymous(), new RelationFields()));
 
-        Map<String, Table> columnNameToTable = Maps.newHashMap();
+        // Pair<TableName, ColumnName>
+        Map<Pair<String, String>, Table> columnNameToTable = Maps.newHashMap();
         Map<String, Table> tableRefToTable = Maps.newHashMap();
 
         // For replication_num, we select the maximum value of all tables replication_num
@@ -103,7 +105,7 @@ public class CTASAnalyzer {
                 SlotRef slotRef = (SlotRef) originExpression;
                 String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
                 Table table = tableRefToTable.get(tableName);
-                columnNameToTable.put(tableName + "." + slotRef.getColumnName(), table);
+                columnNameToTable.put(new Pair<>(tableName, slotRef.getColumnName()), table);
             }
         }
 
@@ -124,8 +126,8 @@ public class CTASAnalyzer {
             double candidateDistinctCountCount = 1.0;
             StatisticStorage currentStatisticStorage = Catalog.getCurrentStatisticStorage();
 
-            for (Map.Entry<String, Table> columnEntry : columnNameToTable.entrySet()) {
-                String columnName = columnEntry.getKey().substring(columnEntry.getKey().indexOf(".") + 1);
+            for (Map.Entry<Pair<String, String>, Table> columnEntry : columnNameToTable.entrySet()) {
+                String columnName = columnEntry.getKey().second;
                 ColumnStatistic columnStatistic = currentStatisticStorage.getColumnStatistic(
                         columnEntry.getValue(), columnName);
                 double curDistinctValuesCount = columnStatistic.getDistinctValuesCount();
