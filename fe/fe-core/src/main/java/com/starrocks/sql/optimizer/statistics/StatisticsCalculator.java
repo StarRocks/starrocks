@@ -172,7 +172,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                 // derive stats from child
                 // use clone here because it will be rewrite later
-                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator).clone();
+                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                 pruneBuilder.addColumnStatistic(columnRefOperator,
                         ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
             }
@@ -559,7 +559,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
             // derive stats from child
             // use clone here because it will be rewrite later
-            ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator).clone();
+            ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator);
             ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
             builder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
             allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
