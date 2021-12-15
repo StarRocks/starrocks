@@ -156,6 +156,7 @@ void PipelineDriverPoller::run_internal() {
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(this->_mutex);
+    this->_blocked_drivers.push_back(driver);
     driver->_pending_timer_sw->reset();
     switch (driver->driver_state()) {
     case DriverState::INPUT_EMPTY:
@@ -170,7 +171,6 @@ void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     default:
         break;
     }
-    this->_blocked_drivers.push_back(driver);
     this->_cond.notify_one();
 }
 

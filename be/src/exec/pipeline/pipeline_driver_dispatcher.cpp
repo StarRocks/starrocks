@@ -191,7 +191,7 @@ void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ct
         int64_t max_active_time = 0;
         RuntimeProfile* pipeline_driver_profile_with_max_active_time = nullptr;
         for (auto* pipeline_driver_profile : pipeline_driver_profiles) {
-            auto* active_timer = pipeline_driver_profile->get_counter("DriverActiveTime");
+            auto* active_timer = pipeline_driver_profile->get_counter("ActiveTime");
             if (active_timer == nullptr) {
                 continue;
             }
