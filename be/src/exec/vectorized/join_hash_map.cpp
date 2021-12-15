@@ -47,9 +47,7 @@ Status SerializedJoinBuildFunc::construct_hash_table(JoinHashTableItems* table_i
         serialize_size += data_column->serialize_size();
     }
     uint8_t* ptr = table_items->build_pool->allocate(serialize_size);
-    if (UNLIKELY(ptr == nullptr)) {
-        return Status::InternalError("Mem usage has exceed the limit of BE");
-    }
+    RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join build failed"));
 
     // serialize and build hash table
     uint32_t quo = row_count / config::vector_chunk_size;
@@ -143,9 +141,7 @@ Status SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_item
         serialize_size += data_column->serialize_size();
     }
     uint8_t* ptr = table_items.probe_pool->allocate(serialize_size);
-    if (UNLIKELY(ptr == nullptr)) {
-        return Status::InternalError("Mem usage has exceed the limit of BE");
-    }
+    RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join probe failed"));
 
     // serialize and init search
     if (!null_columns.empty()) {

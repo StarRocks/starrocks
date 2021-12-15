@@ -48,9 +48,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         starRocksAssert.withTable("create table test.colocate1\n" +
-                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                "properties(\"replication_num\" = \"1\"," +
-                "\"colocate_with\" = \"group1\");")
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                        "properties(\"replication_num\" = \"1\"," +
+                        "\"colocate_with\" = \"group1\");")
                 .withTable("create table test.colocate2\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
                         "properties(\"replication_num\" = \"1\"," +
@@ -4898,5 +4898,72 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  common expressions:\n" +
                 "  |  <slot 11> : CAST(5: v5 AS DECIMAL128(37,18))"));
         Config.enable_decimal_v3 = false;
+    }
+
+    @Test
+    public void testPredicateOnThreeTables() throws Exception {
+        String sql = "SELECT \n" +
+                "  DISTINCT t1.v4 \n" +
+                "FROM \n" +
+                "  t1, \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t3.v1, \n" +
+                "      t3.v2, \n" +
+                "      t3.v3\n" +
+                "    FROM \n" +
+                "      t3\n" +
+                "  ) subt3 FULL \n" +
+                "  JOIN t0 ON subt3.v3 != t0.v1 \n" +
+                "  AND subt3.v3 = t0.v1 \n" +
+                "WHERE \n" +
+                "  (\n" +
+                "    (t0.v2) BETWEEN (\n" +
+                "      CAST(subt3.v2 AS STRING)\n" +
+                "    ) \n" +
+                "    AND (t0.v2)\n" +
+                "  ) = (t1.v4);";
+        String plan = getFragmentPlan(sql);
+        // check no exception
+        Assert.assertTrue(plan.contains(" 3:CROSS JOIN"));
+    }
+
+    @Test
+    public void testDecimalCast() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "select * from baseall where cast(k5 as decimal32(4,3)) = 1.234";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: CAST(5: k5 AS DECIMAL32(4,3)) = 1.234"));
+
+        sql = "SELECT k5 FROM baseall WHERE (CAST(k5 AS DECIMAL32 ) ) IN (0.006) " +
+                "GROUP BY k5 HAVING (k5) IN (0.005, 0.006)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: 5: k5 IN (0.005, 0.006), CAST(5: k5 AS DECIMAL32(9,9)) = 0.006"));
+        Config.enable_decimal_v3 = false;
+    }
+
+    @Test
+    public void testFullOuterJoinOutputRowCount() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "SELECT\n" +
+                "    (NOT(FALSE))\n" +
+                "FROM (\n" +
+                "    SELECT t0.v1,t0.v2,t0.v3 \n" +
+                "    FROM t0\n" +
+                "    WHERE (t0.v1) BETWEEN(CAST(t0.v2 AS DECIMAL64)) AND(t0.v1)) subt0\n" +
+                "    FULL OUTER JOIN (\n" +
+                "    SELECT t1.v4, t1.v5, t1.v6\n" +
+                "    FROM t1\n" +
+                "    WHERE TRUE) subt1 ON subt0.v3 = subt1.v6\n" +
+                "    AND subt0.v1 > ((1808124905) % (1336789350))\n" +
+                "WHERE\n" +
+                "    BITMAP_CONTAINS (bitmap_hash (\"dWyMZ\"), ((- 817000778) - (- 809159836)))\n" +
+                "GROUP BY\n" +
+                "    1.38432132E8, \"1969-12-20 10:26:22\"\n" +
+                "HAVING (COUNT(NULL))\n" +
+                "IN(- 1210205071)\n";
+        String plan = getFragmentPlan(sql);
+        // Just make sure we can get the final plan, and not crashed because of stats calculator error.
+        System.out.println(sql);
     }
 }

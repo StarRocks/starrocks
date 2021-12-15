@@ -88,22 +88,6 @@ public class DescriptorTable {
     }
 
     /**
-     * Create copy of src with new id. The returned descriptor has its mem layout
-     * computed.
-     */
-    public TupleDescriptor copyTupleDescriptor(TupleId srcId, String debugName) {
-        TupleDescriptor d = new TupleDescriptor(tupleIdGenerator_.getNextId(), debugName);
-        tupleDescs.put(d.getId(), d);
-        // create copies of slots
-        TupleDescriptor src = tupleDescs.get(srcId);
-        for (SlotDescriptor slot : src.getSlots()) {
-            copySlotDescriptor(d, slot);
-        }
-        d.computeMemLayout();
-        return d;
-    }
-
-    /**
      * Append copy of src to dest.
      */
     public SlotDescriptor copySlotDescriptor(TupleDescriptor dest, SlotDescriptor src) {

@@ -182,6 +182,9 @@ TEST_F(VectorizedCaseExprTest, whenDecimalCase) {
         ASSERT_TRUE(ptr->is_decimal());
 
         auto v = ColumnHelper::cast_to_raw<TYPE_DECIMAL64>(ptr);
+        ASSERT_EQ(v->precision(), type_desc.precision);
+        ASSERT_EQ(v->scale(), type_desc.scale);
+
         for (int i = 0; i < ptr->size(); ++i) {
             ASSERT_EQ(v->get_data()[i], then_decimal1);
         }

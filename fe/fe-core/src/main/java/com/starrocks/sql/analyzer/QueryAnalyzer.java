@@ -810,6 +810,10 @@ public class QueryAnalyzer {
             for (int i = 0; i < child.size(); ++i) {
                 analyzeExpression(child.get(i), analyzeState, scope);
                 argTypes[i] = child.get(i).getType();
+
+                verifyNoAggregateFunctions(child.get(i), "UNNEST");
+                verifyNoWindowFunctions(child.get(i), "UNNEST");
+                verifyNoGroupingFunctions(child.get(i), "UNNEST");
             }
 
             TableFunction fn =

@@ -88,6 +88,7 @@ Status IndexedColumnReader::read_page(fs::ReadableBlock* rblock, const PagePoint
     opts.stats = &tmp_stats;
     opts.use_page_cache = _use_page_cache;
     opts.kept_in_memory = _kept_in_memory;
+    opts.encoding_type = _encoding_info->encoding();
 
     return PageIO::read_and_decompress_page(opts, handle, body, footer);
 }

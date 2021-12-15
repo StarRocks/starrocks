@@ -11,7 +11,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
@@ -339,32 +338,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                                   DecodeContext context) {
             Map<Integer, Integer> newStringToDicts = Maps.newHashMap();
 
-            Map<ColumnRefOperator, ScalarOperator> newCommonProjectMap =
-                    Maps.newHashMap(projectOperator.getCommonSubOperatorMap());
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getCommonSubOperatorMap()
-                    .entrySet()) {
-                rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
-                        newCommonProjectMap, newStringToDicts);
-            }
-
             context.stringColumnIdToDictColumnIds.putAll(newStringToDicts);
 
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap(projectOperator.getColumnRefMap());
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
                 if (kv.getValue() instanceof ColumnRefOperator) {
-                    ColumnRefOperator stringColumn = (ColumnRefOperator) kv.getValue();
-                    // If we rewrite the common project map, we need to change the value in project map
-                    if (projectOperator.getCommonSubOperatorMap().containsKey(stringColumn) &&
-                            !newCommonProjectMap.containsKey(stringColumn)) {
-                        int dictColumnId = newStringToDicts.get(stringColumn.getId());
-                        ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(dictColumnId);
-                        newProjectMap.put(dictColumn, dictColumn);
-                        newProjectMap.remove(kv.getKey());
-                        newStringToDicts.put(kv.getKey().getId(), dictColumnId);
-                    } else {
-                        rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
-                                newProjectMap, newStringToDicts);
-                    }
+                    rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
+                            newProjectMap, newStringToDicts);
                 } else {
                     rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
                             newProjectMap, newStringToDicts);
@@ -375,7 +355,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (newStringToDicts.isEmpty()) {
                 context.hasEncoded = false;
             }
-            return new Projection(newProjectMap, newCommonProjectMap);
+            return new Projection(newProjectMap, projectOperator.getCommonSubOperatorMap());
         }
 
         private void rewriteOneScalarOperatorForProjection(ColumnRefOperator oldStringColumn,
@@ -447,11 +427,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             exchangeOperator.setGlobalDicts(context.globalDicts);
             return exchangeOperator;
         }
-
-        private static Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
-                FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN
-        );
-
+        
         private PhysicalHashAggregateOperator rewriteAggOperator(PhysicalHashAggregateOperator aggOperator,
                                                                  DecodeContext context) {
             Map<Integer, Integer> newStringToDicts = Maps.newHashMap();
@@ -459,7 +435,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap(aggOperator.getAggregations());
             for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggOperator.getAggregations().entrySet()) {
                 boolean canApplyDictDecodeOpt = (kv.getValue().getUsedColumns().cardinality() > 0) &&
-                        (couldApplyLowCardAggregateFunction.contains(kv.getValue().getFnName()));
+                        (PhysicalHashAggregateOperator.couldApplyLowCardAggregateFunction.contains(kv.getValue().getFnName()));
                 if (canApplyDictDecodeOpt) {
                     CallOperator oldCall = kv.getValue();
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
@@ -574,14 +550,19 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public OptExpression visitPhysicalHashAggregate(OptExpression aggExpr, DecodeContext context) {
             visitProjectionBefore(aggExpr, context);
-            context.needEncode = true;
+
+            PhysicalHashAggregateOperator aggOperator = (PhysicalHashAggregateOperator) aggExpr.getOp();
+            context.needEncode = aggOperator.couldApplyStringDict(context.allStringColumnIds);
+            if (context.needEncode) {
+                aggOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns,
+                        context.allStringColumnIds);
+            }
 
             OptExpression childExpr = aggExpr.inputAt(0);
             context.hasEncoded = false;
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
             if (context.hasEncoded) {
-                PhysicalHashAggregateOperator aggOperator = (PhysicalHashAggregateOperator) aggExpr.getOp();
                 if (aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
                     PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator,
                             context);
@@ -700,15 +681,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         Map<Integer, Integer> dictToStrings = Maps.newHashMap();
         for (Integer id : context.stringColumnIdToDictColumnIds.keySet()) {
             int dictId = context.stringColumnIdToDictColumnIds.get(id);
-            // For SQL: select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*)
-            // from supplier group by S_ADDRESS
-            // The project map is: 11::upper -> 12:upper
-            // The project common map is: 12::upper -> upper(2:S_ADDRESS)
-            // So the string column 11 and 12 will refer to the same int column
-            // So we need check duplicate here
-            if (!dictToStrings.containsKey(dictId)) {
-                dictToStrings.put(dictId, id);
-            }
+            dictToStrings.put(dictId, id);
         }
         PhysicalDecodeOperator decodeOperator = new PhysicalDecodeOperator(ImmutableMap.copyOf(dictToStrings),
                 Maps.newHashMap(context.stringFunctions));

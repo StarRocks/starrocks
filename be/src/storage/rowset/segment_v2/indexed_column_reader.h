@@ -128,6 +128,9 @@ public:
         return size;
     }
 
+    bool use_page_cache() const { return _use_page_cache; }
+    bool kept_in_memory() const { return _kept_in_memory; }
+
 private:
     Status load_index_page(fs::ReadableBlock* rblock, const PagePointerPB& pp, PageHandle* handle,
                            IndexPageReader* reader);

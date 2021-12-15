@@ -191,6 +191,13 @@ public class Memo {
         for (GroupExpression groupExpression : needReinsertedExpressions) {
             if (!groupExpressions.containsKey(groupExpression)) {
                 groupExpressions.put(groupExpression, groupExpression);
+            } else {
+                // group expression is already in the Memo's groupExpressions, this indicates that
+                // this is a redundant group Expression, it's should be remove.
+                // And the redundant group expression may be already in the TaskScheduler stack, so it should be
+                // set unused.
+                groupExpression.getGroup().removeGroupExpression(groupExpression);
+                groupExpression.setUnused(true);
             }
         }
 

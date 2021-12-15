@@ -164,9 +164,7 @@ Status ParquetReaderWrap::fill_slot(Tuple* tuple, SlotDescriptor* slot_desc, Mem
     void* slot = tuple->get_slot(slot_desc->tuple_offset());
     StringValue* str_slot = reinterpret_cast<StringValue*>(slot);
     str_slot->ptr = reinterpret_cast<char*>(mem_pool->allocate(len));
-    if (UNLIKELY(str_slot->ptr == nullptr)) {
-        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
-    }
+    RETURN_IF_UNLIKELY_NULL(str_slot->ptr, Status::MemoryAllocFailed("alloc mem for parquet reader failed"));
     memcpy(str_slot->ptr, value, len);
     str_slot->len = len;
     return Status::OK();
