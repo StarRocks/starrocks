@@ -106,6 +106,8 @@ public:
     bool is_done() const { return _phase == HashJoinPhase::EOS; }
 
     void enter_probe_phase() {
+        _short_circuit_break();
+
         auto old_phase = HashJoinPhase::BUILD;
         _phase.compare_exchange_strong(old_phase, HashJoinPhase::PROBE);
     }

@@ -137,7 +137,6 @@ Status HashJoiner::build_ht(RuntimeState* state) {
         RETURN_IF_ERROR(_build(state));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
-        _short_circuit_break();
     }
 
     return Status::OK();
@@ -224,6 +223,10 @@ Status HashJoiner::close(RuntimeState* state) {
 }
 
 Status HashJoiner::create_runtime_filters(RuntimeState* state) {
+    if (_phase != HashJoinPhase::BUILD) {
+        return Status::OK();
+    }
+
     uint64_t runtime_join_filter_pushdown_limit = 1024000;
     if (state->query_options().__isset.runtime_join_filter_pushdown_limit) {
         runtime_join_filter_pushdown_limit = state->query_options().runtime_join_filter_pushdown_limit;
