@@ -232,7 +232,7 @@ public:
         size_t nread =
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
         vectorized::SparseRangeIterator iter = range.new_iterator();
-        while (iter.has_more()) {
+        while (nread > 0) {
             seek_to_position_in_page(iter.begin());
             vectorized::Range r = iter.next(nread);
             for (size_t i = 0; i < r.span_size(); ++i) {
@@ -243,6 +243,7 @@ public:
                 DCHECK_EQ(1, p);
             }
             _cur_index += r.span_size();
+            nread -= r.span_size();
         }
         return Status::OK();
     }

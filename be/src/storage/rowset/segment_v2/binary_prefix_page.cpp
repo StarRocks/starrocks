@@ -321,7 +321,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& 
 
     vectorized::SparseRangeIterator iter = range.new_iterator();
     if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
-        while (iter.has_more() && nread > 0) {
+        while (nread > 0) {
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
             DCHECK(ok);
@@ -334,7 +334,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& 
             nread -= r.span_size();
         }
     } else {
-        while (iter.has_more() && nread > 0) {
+        while (nread > 0) {
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
             DCHECK(ok);

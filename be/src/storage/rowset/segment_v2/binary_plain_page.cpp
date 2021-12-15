@@ -26,7 +26,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& r
     strs.reserve(nread);
     vectorized::SparseRangeIterator iter = range.new_iterator();
     if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
-        while (iter.has_more() && nread > 0) {
+        while (nread > 0) {
             _cur_idx = iter.begin();
             vectorized::Range r = iter.next(nread);
             size_t end = _cur_idx + r.span_size();
@@ -41,7 +41,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& r
             return Status::OK();
         }
     } else {
-        while (iter.has_more() && nread > 0) {
+        while (nread > 0) {
             _cur_idx = iter.begin();
             vectorized::Range r = iter.next(nread);
             size_t end = _cur_idx + r.span_size();
