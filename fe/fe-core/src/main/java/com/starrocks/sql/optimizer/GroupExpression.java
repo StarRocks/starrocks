@@ -41,6 +41,7 @@ public class GroupExpression {
     private final Map<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> lowestCostTable;
     private final Set<OutputInputProperty> validOutputInputProperties;
     private Map<OutputInputProperty, Integer> propertiesPlanCountMap;
+    private boolean isUnused = false;
 
     public GroupExpression(Operator op, List<Group> inputs) {
         this.op = op;
@@ -79,7 +80,7 @@ public class GroupExpression {
     }
 
     public boolean isUnused() {
-        return hasEmptyRootGroup() || hasEmptyChildGroup();
+        return hasEmptyRootGroup() || hasEmptyChildGroup() || isUnused;
     }
 
     private boolean hasEmptyChildGroup() {
@@ -96,6 +97,10 @@ public class GroupExpression {
 
     public void setRuleExplored(Rule rule) {
         ruleMasks.set(rule.type().ordinal());
+    }
+
+    public void setUnused(boolean isUnused) {
+        this.isUnused = isUnused;
     }
 
     public boolean hasRuleExplored(Rule rule) {
