@@ -7,7 +7,7 @@
 
 namespace starrocks::vectorized {
 
-static auto literal_0_slice{Slice{"0"}};
+static Slice literal_0_slice{"0"};
 static auto literal_1_slice{Slice{"1"}};
 
 Status add_boolean_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
