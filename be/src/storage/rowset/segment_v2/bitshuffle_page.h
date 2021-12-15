@@ -404,15 +404,15 @@ inline Status BitShufflePageDecoder<Type>::next_batch(const vectorized::SparseRa
         return Status::OK();
     }
 
-    size_t nread = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
+    size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
     vectorized::SparseRangeIterator iter = range.new_iterator();
-    while (iter.has_more() && nread > 0) {
+    while (iter.has_more() && to_read > 0) {
         _cur_index = iter.begin();
-        vectorized::Range r = iter.next(nread);
+        vectorized::Range r = iter.next(to_read);
         int n = dst->append_numbers(get_data(_cur_index * SIZE_OF_TYPE), r.span_size() * SIZE_OF_TYPE);
         DCHECK_EQ(r.span_size(), n);
         _cur_index += r.span_size();
-        nread -= r.span_size();
+        to_read -= r.span_size();
     }
     return Status::OK();
 }

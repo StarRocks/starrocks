@@ -194,8 +194,8 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
     size_t end_ord = _page->first_ordinal() + _page->num_rows();
     bool contain_deleted_row = (dst->delete_state() != DEL_NOT_SATISFIED);
     vectorized::SparseRange read_range;
-
     DCHECK_EQ(range.begin(), _current_ordinal);
+
     while (iter.has_more()) {
         if (_page->remaining() == 0 && iter.begin() == end_ord) {
             _opts.stats->block_seek_num += 1;

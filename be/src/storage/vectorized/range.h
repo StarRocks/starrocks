@@ -102,6 +102,9 @@ public:
     // `has_more` must be checked before calling this method.
     Range next(size_t size);
 
+    // Return the next discontiguous range contains at most |size| rows
+    void next_range(size_t size, SparseRange* range);
+
     size_t covered_ranges(size_t size) const;
 
     size_t convert_to_bitmap(uint8_t* bitmap, size_t max_size) const;
@@ -305,6 +308,15 @@ inline Range SparseRangeIterator::next(size_t size) {
         }
     }
     return ret;
+}
+
+inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
+    while (size > 0 && has_more()) {
+        Range r = next(size);
+        range->add(r);
+        size -= r.span_size();
+    }
+    return;
 }
 
 inline size_t SparseRangeIterator::covered_ranges(size_t size) const {

@@ -119,7 +119,7 @@ public:
         return Status::OK();
     }
 
-    Status read(vectorized::Column* column, vectorized::SparseRange& range) override {
+    Status read(vectorized::Column* column, const vectorized::SparseRange& range) override {
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
             vectorized::SparseRangeIterator iter = range.new_iterator();
@@ -202,7 +202,7 @@ public:
         return Status::OK();
     }
 
-    Status read_dict_codes(vectorized::Column* column, vectorized::SparseRange& range) override {
+    Status read_dict_codes(vectorized::Column* column, const vectorized::SparseRange& range) override {
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
             size_t nread = range.span_size();
@@ -255,7 +255,7 @@ public:
         return Status::OK();
     }
 
-    Status read(vectorized::Column* column, vectorized::SparseRange& range) override {
+    Status read(vectorized::Column* column, const vectorized::SparseRange& range) override {
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
         if (_null_flags.size() == 0) {
@@ -271,6 +271,7 @@ public:
                 vectorized::Range r = iter.next(size);
                 nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
+                size -= r.span_size();
             }
             nc->update_has_null();
         }
@@ -310,7 +311,7 @@ public:
         return Status::OK();
     }
 
-    Status read_dict_codes(vectorized::Column* column, vectorized::SparseRange& range) override {
+    Status read_dict_codes(vectorized::Column* column, const vectorized::SparseRange& range) override {
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
 
