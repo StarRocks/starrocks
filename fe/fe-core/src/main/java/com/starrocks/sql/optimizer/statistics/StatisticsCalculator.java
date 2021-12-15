@@ -918,12 +918,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
-        return computeTableFunctionNode(context, node.getOutputColumns(null));
+        ColumnRefSet columnRefSet = new ColumnRefSet();
+        columnRefSet.union(node.getFnResultColumnRefSet());
+        columnRefSet.union(node.getOuterColumnRefSet());
+        return computeTableFunctionNode(context, columnRefSet);
     }
 
     @Override
     public Void visitPhysicalTableFunction(PhysicalTableFunctionOperator node, ExpressionContext context) {
-        return computeTableFunctionNode(context, node.getOutputColumns());
+        ColumnRefSet columnRefSet = new ColumnRefSet();
+        columnRefSet.union(node.getFnResultColumnRefSet());
+        columnRefSet.union(node.getOuterColumnRefSet());
+        return computeTableFunctionNode(context, columnRefSet);
     }
 
     private Void computeTableFunctionNode(ExpressionContext context, ColumnRefSet outputColumns) {

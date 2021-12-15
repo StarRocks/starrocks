@@ -393,7 +393,7 @@ public class Explain {
                                                       OperatorPrinter.ExplainContext context) {
             PhysicalTableFunctionOperator tableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- TABLE FUNCTION [" + tableFunction.getFn().functionName() + "]");
-            sb.append(buildOutputColumns(tableFunction, ""));
+            sb.append(buildOutputColumns(tableFunction, "[" + tableFunction.getOutputColumns() + "]"));
             sb.append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);
