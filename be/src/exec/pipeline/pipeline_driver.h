@@ -273,6 +273,7 @@ private:
     void _close_operators(RuntimeState* runtime_state);
 
     RuntimeState* _runtime_state = nullptr;
+    void _update_overhead_timer();
 
     Operators _operators;
 
@@ -306,6 +307,8 @@ private:
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
+    RuntimeProfile::Counter* _overhead_timer = nullptr;
+    RuntimeProfile::Counter* _schedule_timer = nullptr;
     RuntimeProfile::Counter* _pending_timer = nullptr;
     RuntimeProfile::Counter* _precondition_block_timer = nullptr;
     RuntimeProfile::Counter* _input_empty_timer = nullptr;
