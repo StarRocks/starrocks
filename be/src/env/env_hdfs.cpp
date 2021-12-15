@@ -40,23 +40,23 @@ void HdfsRandomAccessFile::close() noexcept {
 
 static Status read_at_internal(hdfsFS fs, hdfsFile file, const std::string& file_name, int64_t offset, Slice* res,
                                bool usePread) {
-    auto cur_offset = hdfsTell(fs, file);
-    if (cur_offset == -1) {
-        return Status::IOError(
-                strings::Substitute("fail to get offset, file=$0, error=$1", file_name, get_hdfs_err_msg()));
-    }
-    if (cur_offset != offset) {
-        if (hdfsSeek(fs, file, offset)) {
-            return Status::IOError(strings::Substitute("fail to seek offset, file=$0, offset=$1, error=$2", file_name,
-                                                       offset, get_hdfs_err_msg()));
-        }
-    }
     if (usePread) {
         if (hdfsPreadFully(fs, file, offset, res->data, res->size) == -1) {
             return Status::IOError(strings::Substitute("fail to hdfsPreadFully file, file=$0, error=$1", file_name,
                                                        get_hdfs_err_msg()));
         }
     } else {
+        auto cur_offset = hdfsTell(fs, file);
+        if (cur_offset == -1) {
+            return Status::IOError(
+                    strings::Substitute("fail to get offset, file=$0, error=$1", file_name, get_hdfs_err_msg()));
+        }
+        if (cur_offset != offset) {
+            if (hdfsSeek(fs, file, offset)) {
+                return Status::IOError(strings::Substitute("fail to seek offset, file=$0, offset=$1, error=$2", file_name,
+                                                           offset, get_hdfs_err_msg()));
+            }
+        }
         size_t bytes_read = 0;
         while (bytes_read < res->size) {
             size_t to_read = res->size - bytes_read;
