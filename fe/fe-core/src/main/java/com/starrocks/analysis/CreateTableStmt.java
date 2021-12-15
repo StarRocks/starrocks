@@ -59,7 +59,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 
 public class CreateTableStmt extends DdlStmt {
-    private static final Logger LOG = LogManager.getLogger(CreateTableStmt.class);
 
     private static final String DEFAULT_ENGINE_NAME = "olap";
 
@@ -454,6 +453,26 @@ public class CreateTableStmt extends DdlStmt {
                 throw new AnalysisException("same index columns have multiple index name is not allowed.");
             }
         }
+    }
+
+    public List<ColumnDef> getColumnDefs() {
+        return columnDefs;
+    }
+
+    public List<IndexDef> getIndexDefs() {
+        return indexDefs;
+    }
+
+    public void setKeysDesc(KeysDesc keysDesc) {
+        this.keysDesc = keysDesc;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
+    public void setDistributionDesc(DistributionDesc distributionDesc) {
+        this.distributionDesc = distributionDesc;
     }
 
     private void analyzeEngineName() throws AnalysisException {
