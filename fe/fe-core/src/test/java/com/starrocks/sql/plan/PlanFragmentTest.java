@@ -5065,4 +5065,21 @@ public class PlanFragmentTest extends PlanTestBase {
         // Just make sure we can get the final plan, and not crashed because of stats calculator error.
         System.out.println(sql);
     }
+
+    @Test
+    public void testShuffleBucketErrorJoinPredicateOrder() throws Exception {
+        String sql = "select * from t0 left join[shuffle] (\n" +
+                "    select t1.* from t1 left join[shuffle] t2 \n" +
+                "    on t1.v4 = t2.v7 \n" +
+                "    and t1.v6 = t2.v9 \n" +
+                "    and t1.v5 = t2.v8) as j2\n" +
+                "on t0.v3 = j2.v6\n" +
+                "  and t0.v1 = j2.v4\n" +
+                "  and t0.v2 = j2.v5;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  9:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)"));
+        Assert.assertTrue(plan.contains("  6:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)"));
+    }
 }
