@@ -104,6 +104,11 @@ public:
     bool has_output() const;
     bool is_build_done() const { return _phase != HashJoinPhase::BUILD; }
     bool is_done() const { return _phase == HashJoinPhase::EOS; }
+
+    void enter_probe_phase() {
+        auto old_phase = HashJoinPhase::BUILD;
+        _phase.compare_exchange_strong(old_phase, HashJoinPhase::PROBE);
+    }
     void enter_post_probe_phase() {
         HashJoinPhase old_phase = HashJoinPhase::PROBE;
         if (!_phase.compare_exchange_strong(old_phase, HashJoinPhase::POST_PROBE)) {
@@ -129,6 +134,8 @@ public:
         return _runtime_bloom_filter_build_params;
     }
     size_t get_ht_row_count() { return _ht.get_row_count(); }
+
+    Status create_runtime_filters(RuntimeState* state);
 
 private:
     static bool _has_null(const ColumnPtr& column);

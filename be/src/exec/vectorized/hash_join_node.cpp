@@ -398,10 +398,16 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // In default query engine, we only build one hash table for join right child.
     // But for pipeline query engine, we will build `num_partitions` hash tables, so we need to enlarge the limit
-    auto&& partial_rf_merger = std::make_unique<pipeline::PartialRuntimeFilterMerger>(
-            pool, _runtime_join_filter_pushdown_limit * num_partitions, num_partitions);
+    std::unique_ptr<pipeline::PartialRuntimeFilterMerger> partial_rf_merger;
+    if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
+        partial_rf_merger =
+                std::make_unique<pipeline::PartialRuntimeFilterMerger>(pool, _runtime_join_filter_pushdown_limit, 1);
+    } else {
+        partial_rf_merger = std::make_unique<pipeline::PartialRuntimeFilterMerger>(
+                pool, _runtime_join_filter_pushdown_limit * num_partitions, num_partitions);
+    }
     auto build_op = std::make_shared<pipeline::HashJoinBuildOperatorFactory>(
-            context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger));
+            context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger), _distribution_mode);
 
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(build_op.get(), context, rc_rf_probe_collector);
