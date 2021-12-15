@@ -62,12 +62,9 @@ public class CreateTableAnalyzer {
     public Relation transformCreateTableStmt(CreateTableStmt createTableStmt) {
         createTableStmt.setClusterName(session.getClusterName());
         TableName tableName = createTableStmt.getDbTbl();
-        String tableNameStr = tableName.getTbl();
         analyzeTableName(tableName);
 
-        if (Strings.isNullOrEmpty(tableNameStr) || !tableNameStr.matches(FeNameFormat.COMMON_NAME_REGEX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-        }
+        FeNameFormat.verifyTableName(tableName.getTbl());
 
         if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
                 tableName.getTbl(), PrivPredicate.CREATE)) {

@@ -57,6 +57,12 @@ public class FeNameFormat {
         }
     }
 
+    public static void verifyTableName(String tableName) {
+        if (Strings.isNullOrEmpty(tableName) || !tableName.matches(COMMON_NAME_REGEX)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
+        }
+    }
+
     public static void checkPartitionName(String partitionName) throws AnalysisException {
         if (Strings.isNullOrEmpty(partitionName) || !partitionName.matches(COMMON_NAME_REGEX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
