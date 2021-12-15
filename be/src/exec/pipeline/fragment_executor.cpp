@@ -19,6 +19,7 @@
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
+#include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -122,6 +123,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         exec_env->runtime_filter_worker()->open_query(query_id, request.query_options, params.runtime_filter_params,
                                                       true);
     }
+    exec_env->stream_mgr()->open_query(query_id);
 
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();
@@ -176,7 +178,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     std::unique_ptr<DataSink> sink;
     if (fragment.__isset.output_sink) {
         RowDescriptor row_desc;
-        RETURN_IF_ERROR(DataSink::create_data_sink(obj_pool, fragment.output_sink, fragment.output_exprs, params,
+        RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, fragment.output_sink, fragment.output_exprs, params,
                                                    row_desc, &sink));
         RuntimeProfile* sink_profile = sink->profile();
         if (sink_profile != nullptr) {

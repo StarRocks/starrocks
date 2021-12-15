@@ -26,6 +26,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
+#include "runtime/data_stream_common.h"
 #include "runtime/descriptors.h"
 #include "runtime/query_statistics.h"
 #include "util/tuple_row_compare.h"
@@ -113,7 +114,8 @@ private:
     DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
                     int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
-                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline);
+                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
+                    const PassThroughChunkBufferPtr& pass_through_chunk_buffer, bool is_pipeline);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
@@ -186,6 +188,7 @@ private:
 
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
+    PassThroughChunkBufferPtr _pass_through_chunk_buffer;
 
     bool _is_pipeline;
 };

@@ -26,10 +26,12 @@
 #include <mutex>
 #include <set>
 
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/doris_internal_service.pb.h"
+#include "runtime/data_stream_common.h"
 #include "runtime/descriptors.h" // for PlanNodeId
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
@@ -65,6 +67,7 @@ class PTransmitChunkParams;
 //
 // TODO: The recv buffers used in DataStreamRecvr should count against
 // per-query memory limits.
+
 class DataStreamMgr {
 public:
     DataStreamMgr();
@@ -87,6 +90,10 @@ public:
     Status transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
     // Closes all receivers registered for fragment_instance_id immediately.
     void cancel(const TUniqueId& fragment_instance_id);
+
+    void open_query(const TUniqueId& query_id);
+    void close_query(const TUniqueId& query_id);
+    PassThroughChunkBufferPtr get_pass_through_chunk_buffer(const TUniqueId& query_id);
 
 private:
     friend class DataStreamRecvr;
@@ -133,6 +140,10 @@ private:
     Status deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
     inline uint32_t get_hash_value(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
+
+    // query_id <-> PassThroughChunkBufferPtr
+    std::mutex _pass_through_chunk_lock;
+    std::unordered_map<TUniqueId, PassThroughChunkBufferPtr> _pass_through_chunk_buffer_manager{};
 };
 
 } // namespace starrocks

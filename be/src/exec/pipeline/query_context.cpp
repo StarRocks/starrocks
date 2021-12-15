@@ -2,6 +2,7 @@
 #include "exec/pipeline/query_context.h"
 
 #include "exec/pipeline/fragment_context.h"
+#include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
@@ -12,6 +13,7 @@ QueryContext::~QueryContext() {
     if (_is_runtime_filter_coordinator) {
         _exec_env->runtime_filter_worker()->close_query(_query_id);
     }
+    _exec_env->stream_mgr()->close_query(_query_id);
 }
 FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();

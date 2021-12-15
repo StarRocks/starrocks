@@ -5,7 +5,7 @@ namespace starrocks {
 
 static Status kOnlyPipelinedEngine = Status::NotSupported("Don't support non-pipelined query engine");
 
-MultiCastDataStreamSink::MultiCastDataStreamSink(ObjectPool* pool) : _pool(pool), _sinks() {}
+MultiCastDataStreamSink::MultiCastDataStreamSink(RuntimeState* state) : _state(state), _sinks() {}
 
 void MultiCastDataStreamSink::add_data_stream_sink(std::unique_ptr<DataStreamSender> data_stream_sink) {
     _sinks.emplace_back(std::move(data_stream_sink));

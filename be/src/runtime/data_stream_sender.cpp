@@ -37,6 +37,7 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
+#include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
@@ -44,6 +45,7 @@
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/tuple_row.h"
+#include "service/backend_options.h"
 #include "service/brpc.h"
 #include "util/block_compression.h"
 #include "util/brpc_stub_cache.h"
@@ -72,7 +74,7 @@ public:
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(DataStreamSender* parent, const RowDescriptor& row_desc, const TNetworkAddress& brpc_dest,
             const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
-            bool send_query_statistics_with_every_batch)
+            bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through)
             : _parent(parent),
               _row_desc(row_desc),
               _fragment_instance_id(fragment_instance_id),
@@ -82,7 +84,10 @@ public:
               _need_close(false),
               _brpc_dest_addr(brpc_dest),
               _is_transfer_chain(is_transfer_chain),
-              _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch) {}
+              _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch),
+              _enable_exchange_pass_through(enable_exchange_pass_through) {
+        _can_pass_through = _check_can_pass_through();
+    }
 
     virtual ~Channel() {
         if (_closure != nullptr && _closure->unref()) {
@@ -135,6 +140,8 @@ public:
 
     TUniqueId get_fragment_instance_id() { return _fragment_instance_id; }
 
+    bool can_pass_through() const { return _can_pass_through; }
+
 private:
     inline Status _wait_prev_request() {
         SCOPED_TIMER(_parent->_wait_response_timer);
@@ -157,6 +164,8 @@ private:
     Status _do_send_chunk_rpc(PTransmitChunkParams* request, const butil::IOBuf& attachment);
 
     Status close_internal();
+
+    bool _check_can_pass_through();
 
     DataStreamSender* _parent;
 
@@ -195,6 +204,8 @@ private:
     // whether the dest can be treated as query statistics transfer chain.
     bool _is_transfer_chain;
     bool _send_query_statistics_with_every_batch;
+    bool _enable_exchange_pass_through;
+    bool _can_pass_through = false;
     bool _is_inited = false;
 };
 
@@ -371,13 +382,28 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     _chunk.reset();
 }
 
-DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sender_id, const RowDescriptor& row_desc,
-                                   const TDataStreamSink& sink,
+bool DataStreamSender::Channel::_check_can_pass_through() {
+    if (!_enable_exchange_pass_through) {
+        return false;
+    }
+    if (BackendOptions::get_localhost() != _brpc_dest_addr.hostname) {
+        return false;
+    }
+    if (config::brpc_port != _brpc_dest_addr.port) {
+        return false;
+    }
+    return true;
+}
+
+DataStreamSender::DataStreamSender(RuntimeState* state, bool is_vectorized, int sender_id,
+                                   const RowDescriptor& row_desc, const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
-                                   int per_channel_buffer_size, bool send_query_statistics_with_every_batch)
+                                   int per_channel_buffer_size, bool send_query_statistics_with_every_batch,
+                                   bool enable_exchange_pass_through)
         : _is_vectorized(true),
           _sender_id(sender_id),
-          _pool(pool),
+          _state(state),
+          _pool(state->obj_pool()),
           _row_desc(row_desc),
           _current_channel_idx(0),
           _part_type(sink.output_partition.type),
@@ -396,6 +422,7 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
     // TODO: use something like google3's linked_ptr here (std::unique_ptr isn't copyable
 
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
+    auto pass_through_chunk_buffer = state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
     for (int i = 0; i < destinations.size(); ++i) {
         // Select first dest as transfer chain.
         bool is_transfer_chain = (i == 0);
@@ -403,7 +430,8 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
         if (fragment_id_to_channel_index.find(fragment_instance_id.lo) == fragment_id_to_channel_index.end()) {
             _channel_shared_ptrs.emplace_back(
                     new Channel(this, row_desc, destinations[i].brpc_server, fragment_instance_id, sink.dest_node_id,
-                                per_channel_buffer_size, is_transfer_chain, send_query_statistics_with_every_batch));
+                                per_channel_buffer_size, is_transfer_chain, send_query_statistics_with_every_batch,
+                                enable_exchange_pass_through));
             fragment_id_to_channel_index.insert({fragment_instance_id.lo, _channel_shared_ptrs.size() - 1});
             _channels.push_back(_channel_shared_ptrs.back().get());
         } else {
@@ -550,22 +578,40 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
     }
     // Unpartition or _channel size
     if (_part_type == TPartitionType::UNPARTITIONED || _channels.size() == 1) {
-        // We use sender request to avoid serialize chunk many times.
-        // 1. create a new chunk PB to serialize
-        ChunkPB* pchunk = _chunk_request.add_chunks();
-        // 2. serialize input chunk to pchunk
-        RETURN_IF_ERROR(serialize_chunk(chunk, pchunk, &_is_first_chunk, _channels.size()));
-        _current_request_bytes += pchunk->data().size();
-        // 3. if request bytes exceede the threshold, send current request
-        if (_current_request_bytes > _request_bytes_threshold) {
-            butil::IOBuf attachment;
-            construct_brpc_attachment(&_chunk_request, &attachment);
-            for (auto idx : _channel_indices) {
-                RETURN_IF_ERROR(_channels[idx]->send_chunk_request(&_chunk_request, attachment));
+        // If we have any channel which can pass through chunks, we use `send_one_chunk`(without serialization)
+        int has_not_pass_through = false;
+        for (auto idx : _channel_indices) {
+            if (_channels[idx]->can_pass_through()) {
+                bool is_real_sent = false;
+                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk, false, &is_real_sent));
+            } else {
+                has_not_pass_through = true;
             }
-            _current_request_bytes = 0;
-            _chunk_request.clear_chunks();
         }
+
+        // And if we find if there are other channels can not pass through, we have to use old way.
+        // Do serialization once, and send serialized data.
+        if (has_not_pass_through) {
+            // We use sender request to avoid serialize chunk many times.
+            // 1. create a new chunk PB to serialize
+            ChunkPB* pchunk = _chunk_request.add_chunks();
+            // 2. serialize input chunk to pchunk
+            RETURN_IF_ERROR(serialize_chunk(chunk, pchunk, &_is_first_chunk, _channels.size()));
+            _current_request_bytes += pchunk->data().size();
+            // 3. if request bytes exceede the threshold, send current request
+            if (_current_request_bytes > _request_bytes_threshold) {
+                butil::IOBuf attachment;
+                construct_brpc_attachment(&_chunk_request, &attachment);
+                for (auto idx : _channel_indices) {
+                    if (!_channels[idx]->can_pass_through()) {
+                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(&_chunk_request, attachment));
+                    }
+                }
+                _current_request_bytes = 0;
+                _chunk_request.clear_chunks();
+            }
+        }
+
     } else if (_part_type == TPartitionType::RANDOM) {
         // Round-robin batches among channels. Wait for the current channel to finish its
         // rpc before overwriting its batch.
