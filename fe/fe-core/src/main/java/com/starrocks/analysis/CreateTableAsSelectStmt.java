@@ -21,11 +21,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 
@@ -53,7 +50,7 @@ public class CreateTableAsSelectStmt extends StatementBase {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws UserException {
+    public void analyze(Analyzer analyzer) throws AnalysisException {
         throw new AnalysisException("old planner does not support CTAS statement");
     }
 

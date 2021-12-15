@@ -61,14 +61,14 @@ public class CTASAnalyzer {
         for (TableRef tableRef : tableRefs) {
             String[] aliases = tableRef.getAliases();
             Table table = catalog.getDb(tableRef.getName().getDb()).getTable(tableRef.getName().getTbl());
-            for (String alias : aliases) {
-                if (table instanceof OlapTable) {
-                    OlapTable olapTable = (OlapTable) table;
-                    Short replicationNum = olapTable.getDefaultReplicationNum();
-                    if (replicationNum > defaultReplicationNum) {
-                        defaultReplicationNum = replicationNum;
-                    }
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                Short replicationNum = olapTable.getDefaultReplicationNum();
+                if (replicationNum > defaultReplicationNum) {
+                    defaultReplicationNum = replicationNum;
                 }
+            }
+            for (String alias : aliases) {
                 tableRefToTable.put(alias, table);
             }
         }
@@ -96,20 +96,24 @@ public class CTASAnalyzer {
                 type = stringType;
             }
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
-                    null, true, ColumnDef.DefaultValue.NOT_SET, "");
+                    null, true, ColumnDef.DefaultValueDef.NOT_SET, "");
             createTableStmt.addColumnDef(columnDef);
             Expr originExpression = allFields.get(i).getOriginExpression();
             if (originExpression instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) originExpression;
-                Table table = tableRefToTable.get(slotRef.getTblNameWithoutAnalyzed().getTbl());
-                columnNameToTable.put(slotRef.getTblNameWithoutAnalyzed().getTbl() + "." + slotRef.getColumnName(), table);
+                String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
+                Table table = tableRefToTable.get(tableName);
+                columnNameToTable.put(tableName + "." + slotRef.getColumnName(), table);
             }
         }
 
-        if (null == createTableStmt.getProperties()) {
+        Map<String, String> stmtProperties = createTableStmt.getProperties();
+        if (null == stmtProperties) {
             Map<String, String> properties = Maps.newHashMap();
             properties.put("replication_num", String.valueOf(defaultReplicationNum));
             createTableStmt.setProperties(properties);
+        } else if (!stmtProperties.containsKey("replication_num")) {
+            stmtProperties.put("replication_num", String.valueOf(defaultReplicationNum));
         }
 
         // For HashDistributionDesc key
