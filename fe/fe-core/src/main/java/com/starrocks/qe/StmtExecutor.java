@@ -398,7 +398,11 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof UseStmt) {
                 handleUseStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
-                // handleInsertStmt(uuid);
+                if (execPlanBuildByNewPlanner) {
+                    handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
+                } else {
+                    throw new AnalysisException("old planner does not support CTAS statement");
+                }
             } else if (parsedStmt instanceof InsertStmt) { // Must ahead of DdlStmt because InsertStmt is its subclass
                 try {
                     handleInsertStmtWithNewPlanner(execPlan, (InsertStmt) parsedStmt);
@@ -476,6 +480,31 @@ public class StmtExecutor {
                 }
             }
             context.setSessionVariable(sessionVariableBackup);
+        }
+    }
+
+    private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
+        CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) parsedStmt;
+
+        // if create table failed should not drop table. because table may already exists,
+        // and for other cases the exception will throw and the rest of the code will not be executed.
+        createTableAsSelectStmt.createTable(context);
+        try {
+            InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
+            ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
+            handleInsertStmtWithNewPlanner(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
+            if (context.getSessionVariable().isReportSucc()) {
+                writeProfile(beginTimeInNanoSecond);
+            }
+            if (context.getState().getStateType() == MysqlStateType.ERR) {
+                ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
+            }
+        } catch (Throwable t) {
+            LOG.warn("handle create table as select stmt fail", t);
+            ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
+            throw t;
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
     }
 
@@ -946,7 +975,7 @@ public class StmtExecutor {
     }
 
     private boolean supportedByNewPlanner(StatementBase statement, ConnectContext context) {
-        return statement instanceof QueryStmt || statement instanceof InsertStmt;
+        return statement instanceof QueryStmt || statement instanceof InsertStmt || statement instanceof CreateTableAsSelectStmt;
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {
