@@ -38,12 +38,10 @@ namespace starrocks {
 static int64_t calc_job_max_load_memory(int64_t mem_limit_in_req, int64_t total_mem_limit) {
     // mem_limit_in_req == -1 means no limit for single load.
     // total_mem_limit according to load_process_max_memory_limit_percent calculation
-    if (mem_limit_in_req == -1) {
-        return std::max<int64_t>(total_mem_limit, config::write_buffer_size);
+    if (mem_limit_in_req <= 0) {
+        return total_mem_limit;
     }
-
-    int64_t load_mem_limit = std::max<int64_t>(mem_limit_in_req, config::write_buffer_size);
-    return std::min<int64_t>(load_mem_limit, total_mem_limit);
+    return std::min<int64_t>(mem_limit_in_req, total_mem_limit);
 }
 
 static int64_t calc_job_timeout_s(int64_t timeout_in_req_s) {
@@ -78,6 +76,13 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
 
 Status LoadChannelMgr::open(const PTabletWriterOpenRequest& params) {
     UniqueId load_id(params.id());
+    int64_t mem_limit_in_req = params.has_load_mem_limit() ? params.load_mem_limit() : -1;
+    int64_t job_max_memory = calc_job_max_load_memory(mem_limit_in_req, _mem_tracker->limit());
+
+    int64_t timeout_in_req_s = params.has_load_channel_timeout_s() ? params.load_channel_timeout_s() : -1;
+    int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
+    auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
+
     std::shared_ptr<LoadChannel> channel;
     {
         std::lock_guard<std::mutex> l(_lock);
@@ -85,14 +90,7 @@ Status LoadChannelMgr::open(const PTabletWriterOpenRequest& params) {
         if (it != _load_channels.end()) {
             channel = it->second;
         } else {
-            // create a new load channel
-            int64_t mem_limit_in_req = params.has_load_mem_limit() ? params.load_mem_limit() : -1;
-            int64_t job_max_memory = calc_job_max_load_memory(mem_limit_in_req, _mem_tracker->limit());
-
-            int64_t timeout_in_req_s = params.has_load_channel_timeout_s() ? params.load_channel_timeout_s() : -1;
-            int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
-
-            channel.reset(new LoadChannel(load_id, job_max_memory, job_timeout_s, _mem_tracker));
+            channel.reset(new LoadChannel(load_id, job_timeout_s, std::move(job_mem_tracker)));
             _load_channels.insert({load_id, channel});
         }
     }
@@ -127,9 +125,6 @@ Status LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request,
         channel = it->second;
     }
 
-    // 2. check if mem consumption exceed limit
-    _handle_mem_exceed_limit(channel);
-
     // 3. add batch to load channel
     // batch may not exist in request(eg: eos request without batch),
     // this case will be handled in load channel's add batch method.
@@ -148,95 +143,6 @@ Status LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request,
     }
 
     return Status::OK();
-}
-
-void LoadChannelMgr::_handle_mem_exceed_limit(const std::shared_ptr<LoadChannel>& data_channel) {
-    // lock so that only one thread can check mem limit
-    std::lock_guard<std::mutex> l(_lock);
-    if (!_mem_tracker->any_limit_exceeded()) {
-        return;
-    }
-
-    LOG(INFO) << "Reducing memory because total load mem consumption=" << _mem_tracker->consumption()
-              << " has exceeded limit=" << _mem_tracker->limit();
-
-    // TODO: ancestors exceeded?
-    int64_t exceeded_mem = _mem_tracker->consumption() - _mem_tracker->limit();
-    std::vector<FlushTablet> flush_tablets;
-    std::set<int64_t> flush_tablet_ids;
-    int64_t tablet_mem_consumption;
-    do {
-        std::shared_ptr<LoadChannel> load_channel;
-        std::shared_ptr<TabletsChannel> tablets_channel;
-        int64_t tablet_id = -1;
-        if (!_find_candidate_load_channel(data_channel, &load_channel)) {
-            // should not happen, add log to observe
-            LOG(WARNING) << "Fail to find suitable load channel when total load mem limit exceed";
-            break;
-        }
-        DCHECK(load_channel.get() != nullptr);
-
-        // reduce mem usage of the selected load channel
-        load_channel->reduce_mem_usage_async(flush_tablet_ids, &tablets_channel, &tablet_id, &tablet_mem_consumption);
-        if (tablet_id != -1) {
-            flush_tablets.emplace_back(load_channel.get(), tablets_channel.get(), tablet_id);
-            flush_tablet_ids.insert(tablet_id);
-            exceeded_mem -= tablet_mem_consumption;
-            VLOG(3) << "Flush " << *load_channel << ", tablet id=" << tablet_id
-                    << ", mem consumption=" << tablet_mem_consumption;
-        } else {
-            break;
-        }
-    } while (exceeded_mem > 0);
-
-    // wait flush finish
-    for (const FlushTablet& flush_tablet : flush_tablets) {
-        Status st = flush_tablet.tablets_channel->wait_mem_usage_reduced(flush_tablet.tablet_id);
-        if (!st.ok()) {
-            // wait may return failed, but no need to handle it here, just log.
-            // tablet_vec will only contains success tablet, and then let FE judge it.
-            LOG(WARNING) << "Fail to wait memory reduced. err=" << st.to_string();
-        }
-    }
-    LOG(INFO) << "Reduce memory finish. flush tablets num=" << flush_tablet_ids.size()
-              << ", current mem consumption=" << _mem_tracker->consumption() << ", limit=" << _mem_tracker->limit();
-}
-
-bool LoadChannelMgr::_find_candidate_load_channel(const std::shared_ptr<LoadChannel>& data_channel,
-                                                  std::shared_ptr<LoadChannel>* candidate_channel) {
-    // 1. select the load channel that consume this batch data if limit exceeded.
-    if (data_channel->mem_limit_exceeded()) {
-        *candidate_channel = data_channel;
-        return true;
-    }
-
-    int64_t max_consume = 0;
-    int64_t max_exceeded_consume = 0;
-    std::shared_ptr<LoadChannel> max_channel;
-    std::shared_ptr<LoadChannel> max_exceeded_channel;
-    for (auto& kv : _load_channels) {
-        if (kv.second->mem_consumption() > max_consume) {
-            max_consume = kv.second->mem_consumption();
-            max_channel = kv.second;
-        }
-
-        if (kv.second->mem_limit_exceeded() && kv.second->mem_consumption() > max_exceeded_consume) {
-            max_exceeded_consume = kv.second->mem_consumption();
-            max_exceeded_channel = kv.second;
-        }
-    }
-
-    // 2. select the largest limit exceeded load channel.
-    if (max_exceeded_consume > 0) {
-        *candidate_channel = max_exceeded_channel;
-        return true;
-    }
-    // 3. select the largest consumption load channel.
-    if (max_consume > 0) {
-        *candidate_channel = max_channel;
-        return true;
-    }
-    return false;
 }
 
 Status LoadChannelMgr::cancel(const PTabletWriterCancelRequest& params) {
