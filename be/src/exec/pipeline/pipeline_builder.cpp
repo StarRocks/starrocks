@@ -13,7 +13,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(O
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size * num_receivers);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto local_exchange = std::make_shared<BroadcastExchanger>(mem_mgr, local_exchange_source.get());
