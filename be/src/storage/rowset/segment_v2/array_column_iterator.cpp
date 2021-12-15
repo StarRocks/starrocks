@@ -122,7 +122,7 @@ Status ArrayColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     return Status::OK();
 }
 
-Status ArrayColumnIterator::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+Status ArrayColumnIterator::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     vectorized::ArrayColumn* array_column = nullptr;
     vectorized::NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
@@ -133,6 +133,9 @@ Status ArrayColumnIterator::next_batch(vectorized::SparseRange& range, vectorize
     } else {
         array_column = down_cast<vectorized::ArrayColumn*>(dst);
     }
+
+    CHECK((_null_iterator == nullptr && null_column == nullptr) ||
+          (_null_iterator != nullptr && null_column != nullptr));
 
     // 1. Read null column
     if (_null_iterator != nullptr) {

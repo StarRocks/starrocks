@@ -355,7 +355,7 @@ public:
 
     Status next_batch(size_t* count, vectorized::Column* dst) override;
 
-    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
     size_t count() const override { return _num_elements; }
 
@@ -398,7 +398,7 @@ inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized:
 }
 
 template <FieldType Type>
-inline Status BitShufflePageDecoder<Type>::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+inline Status BitShufflePageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_index >= _num_elements)) {
         return Status::OK();

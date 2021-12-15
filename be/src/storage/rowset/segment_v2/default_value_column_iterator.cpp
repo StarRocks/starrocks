@@ -125,7 +125,7 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, vectorized::Column* dst
     return Status::OK();
 }
 
-Status DefaultValueColumnIterator::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+Status DefaultValueColumnIterator::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     size_t nread = range.span_size();
     if (_is_default_value_null) {
         [[maybe_unused]] bool ok = dst->append_nulls(nread);

@@ -312,7 +312,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* 
 }
 
 template <FieldType Type>
-Status BinaryPrefixPageDecoder<Type>::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_pos >= _num_values)) {
         return Status::OK();

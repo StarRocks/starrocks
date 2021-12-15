@@ -28,7 +28,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
 
-    Status next_batch(vectorized::SparseRange& range, Column* dst) override {
+    Status next_batch(const vectorized::SparseRange& range, Column* dst) override {
         return _col_iter->next_dict_codes(range, dst);
     }
 
@@ -87,7 +87,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
 
-    Status next_batch(vectorized::SparseRange& range, Column* dst) override {
+    Status next_batch(const vectorized::SparseRange& range, Column* dst) override {
         return _col_iter->next_dict_codes(range, dst);
     }
 

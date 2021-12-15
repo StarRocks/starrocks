@@ -258,7 +258,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* ds
 }
 
 template <FieldType Type>
-Status BinaryDictPageDecoder<Type>::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     if (_encoding_type == PLAIN_ENCODING) {
         return _data_page_decoder->next_batch(range, dst);
     }
@@ -302,7 +302,7 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, vectorized::Colum
 }
 
 template <FieldType Type>
-Status BinaryDictPageDecoder<Type>::next_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst) {
+Status BinaryDictPageDecoder<Type>::next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(range, dst);

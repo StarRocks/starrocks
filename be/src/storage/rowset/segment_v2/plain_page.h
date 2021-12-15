@@ -214,7 +214,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override {
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override {
         DCHECK(_parsed);
 
         size_t nread = range.span_size();

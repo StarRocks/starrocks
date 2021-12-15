@@ -188,7 +188,7 @@ Status ScalarColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     return Status::OK();
 }
 
-Status ScalarColumnIterator::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     size_t prev_bytes = dst->byte_size();
     vectorized::SparseRangeIterator iter = range.new_iterator();
     size_t end_ord = _page->first_ordinal() + _page->num_rows();
@@ -332,7 +332,7 @@ Status ScalarColumnIterator::next_dict_codes(size_t* n, vectorized::Column* dst)
     return (this->*_next_dict_codes_func)(n, dst);
 }
 
-Status ScalarColumnIterator::next_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst) {
+Status ScalarColumnIterator::next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(all_page_dict_encoded());
     return (this->*_next_batch_dict_codes_func)(range, dst);
 }
@@ -398,7 +398,7 @@ Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, vectorized::Column* 
 }
 
 template <FieldType Type>
-Status ScalarColumnIterator::_do_next_batch_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst) {
+Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
     bool contain_deleted_row = false;
     vectorized::SparseRangeIterator iter = range.new_iterator();
     size_t end_ord = _page->first_ordinal() + _page->num_rows();

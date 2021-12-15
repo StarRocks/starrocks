@@ -51,7 +51,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override {
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override {
         vectorized::SparseRangeIterator iter = range.new_iterator();
         size_t nread = range.span_size();
         while (iter.has_more()) {

@@ -63,7 +63,7 @@ public:
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
-    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 

@@ -15,7 +15,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(size_t* count, vectorized::Colum
 }
 
 template <FieldType Type>
-Status BinaryPlainPageDecoder<Type>::next_batch(vectorized::SparseRange& range, vectorized::Column* dst) {
+Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_idx >= _num_elems)) {
         return Status::OK();

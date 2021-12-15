@@ -49,7 +49,7 @@ public:
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
-    Status next_batch(vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
@@ -68,7 +68,7 @@ public:
 
     Status next_dict_codes(size_t* n, vectorized::Column* dst) override;
 
-    Status next_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
     Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override;
 
@@ -98,7 +98,7 @@ private:
     Status _do_next_dict_codes(size_t* n, vectorized::Column* dst);
 
     template <FieldType Type>
-    Status _do_next_batch_dict_codes(vectorized::SparseRange& range, vectorized::Column* dst);
+    Status _do_next_batch_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst);
 
     template <FieldType Type>
     Status _do_decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words);
@@ -142,7 +142,7 @@ private:
 
     int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
     Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, vectorized::Column* dst) = nullptr;
-    Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(vectorized::SparseRange& range,
+    Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(const vectorized::SparseRange& range,
                                                                 vectorized::Column* dst) = nullptr;
     Status (ScalarColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size,
                                                             vectorized::Column* words) = nullptr;
