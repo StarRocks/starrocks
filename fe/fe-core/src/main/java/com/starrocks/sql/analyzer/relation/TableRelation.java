@@ -13,18 +13,20 @@ import java.util.Map;
 public class TableRelation extends Relation {
     private final TableName name;
     private final Table table;
-    private Map<Field, Column> columns;
+    private final Map<Field, Column> columns;
     // Support temporary partition
     private final PartitionNames partitionNames;
     private final List<Long> tabletIds;
     private final boolean isMetaQuery;
 
     public TableRelation(TableName name, Table table,
+                         Map<Field, Column> columns,
                          PartitionNames partitionNames,
                          List<Long> tabletIds,
                          boolean isMetaQuery) {
         this.name = name;
         this.table = table;
+        this.columns = columns;
         this.partitionNames = partitionNames;
         this.tabletIds = tabletIds;
         this.isMetaQuery = isMetaQuery;
@@ -52,10 +54,6 @@ public class TableRelation extends Relation {
 
     public Map<Field, Column> getColumns() {
         return columns;
-    }
-
-    public void setColumns(Map<Field, Column> columns) {
-        this.columns = columns;
     }
 
     public boolean isMetaQuery() {

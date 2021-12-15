@@ -138,7 +138,7 @@ public class QueryAnalyzer {
 
                 List<Field> fields = new ArrayList<>();
                 for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
-                    fields.add(new Field("column_" + fieldIdx, outputTypes[fieldIdx], null, null));
+                    fields.add(new Field("column_" + fieldIdx, outputTypes[fieldIdx], null, rows.get(0).get(fieldIdx)));
                 }
 
                 queryRelation = new ValuesRelation(rows,
@@ -257,7 +257,7 @@ public class QueryAnalyzer {
 
             List<Field> sourceForOrderFields = orderSourceExpressions.stream()
                     .map(expression ->
-                            new Field("anonymous", expression.getType(), null, RelationId.anonymous()))
+                            new Field("anonymous", expression.getType(), null, expression))
                     .collect(Collectors.toList());
 
             Scope sourceScopeForOrder = new Scope(RelationId.anonymous(), new RelationFields(sourceForOrderFields));
@@ -347,9 +347,9 @@ public class QueryAnalyzer {
         for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
             Field oldField = setOpRelation.getRelationFields().getFieldByIndex(fieldIdx);
             fields.add(new Field(oldField.getName(), outputTypes[fieldIdx],
-                    oldField.getTableName(), oldField.getOriginRelationId()));
+                    oldField.getRelationAlias(), oldField.getOriginExpression()));
 
-            SlotRef s = new SlotRef(oldField.getTableName(), oldField.getName());
+            SlotRef s = new SlotRef(oldField.getRelationAlias(), oldField.getName());
             s.setType(outputTypes[fieldIdx]);
             outputExpressions.add(s);
         }
@@ -421,14 +421,15 @@ public class QueryAnalyzer {
                     ++fieldIdx) {
                 Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
 
-                String database = originField.getTableName() == null ? session.getDatabase() :
-                        originField.getTableName().getDb();
+                String database = originField.getRelationAlias() == null ? session.getDatabase() :
+                        originField.getRelationAlias().getDb();
                 TableName tableName = new TableName(database, withQuery.getName());
                 outputFields.add(new Field(
                         withQuery.getColLabels() == null ? originField.getName() :
                                 withQuery.getColLabels().get(fieldIdx),
                         originField.getType(),
-                        tableName, originField.getOriginRelationId()));
+                        tableName,
+                        originField.getOriginExpression()));
             }
 
             CTERelation cteRelation = new CTERelation(
@@ -575,12 +576,12 @@ public class QueryAnalyzer {
             if (item.isStar()) {
                 if (item.getTblName() == null) {
                     outputFields.addAll(scope.getRelationFields().getAllFields().stream().map(f ->
-                            new Field(f.getName(), f.getType(), f.getTableName(), f.getOriginRelationId(),
-                                    f.isVisible())).collect(Collectors.toList()));
+                            new Field(f.getName(), f.getType(), f.getRelationAlias(),
+                                    f.getOriginExpression(), f.isVisible())).collect(Collectors.toList()));
                 } else {
                     outputFields.addAll(scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName())
-                            .stream().map(f -> new Field(f.getName(), f.getType(), f.getTableName(),
-                                    f.getOriginRelationId(), f.isVisible())).collect(Collectors.toList()));
+                            .stream().map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
+                                    f.getOriginExpression(), f.isVisible())).collect(Collectors.toList()));
                 }
             } else {
                 String name;
@@ -594,7 +595,7 @@ public class QueryAnalyzer {
                     name = item.getExpr().toColumnLabel();
                 }
 
-                outputFields.add(new Field(name, item.getExpr().getType(), relationAlias, RelationId.anonymous()));
+                outputFields.add(new Field(name, item.getExpr().getType(), relationAlias, item.getExpr()));
             }
         }
         Scope outputScope = new Scope(RelationId.anonymous(), new RelationFields(outputFields.build()));
@@ -607,9 +608,9 @@ public class QueryAnalyzer {
         Expr joinEqual = null;
         for (String colName : usingColNames) {
             TableName leftTableName =
-                    left.resolveField(new SlotRef(null, colName)).getField().getTableName();
+                    left.resolveField(new SlotRef(null, colName)).getField().getRelationAlias();
             TableName rightTableName =
-                    right.resolveField(new SlotRef(null, colName)).getField().getTableName();
+                    right.resolveField(new SlotRef(null, colName)).getField().getRelationAlias();
 
             // create predicate "<left>.colName = <right>.colName"
             BinaryPredicate resolvedUsing = new BinaryPredicate(BinaryPredicate.Operator.EQ,
@@ -766,7 +767,7 @@ public class QueryAnalyzer {
                     Field originField = withRelationFields.getAllFields().get(fieldIdx);
                     outputFields.add(new Field(
                             originField.getName(), originField.getType(), tableName,
-                            originField.getOriginRelationId()));
+                            originField.getOriginExpression()));
                 }
 
                 // The CTERelation stored in the Scope is not used directly here, but a new Relation is copied.
@@ -793,7 +794,7 @@ public class QueryAnalyzer {
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (Field field : query.getRelationFields().getAllFields()) {
                 outputFields.add(new Field(field.getName(), field.getType(),
-                        tableName, field.getOriginRelationId()));
+                        tableName, field.getOriginExpression()));
             }
 
             SubqueryRelation subqueryRelation = new SubqueryRelation(tableRef.getAlias(), query);
@@ -846,7 +847,7 @@ public class QueryAnalyzer {
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (Field field : query.getRelationFields().getAllFields()) {
                 outputFields.add(new Field(field.getName(), field.getType(),
-                        tableName, field.getOriginRelationId()));
+                        tableName, field.getOriginExpression()));
             }
 
             SubqueryRelation subqueryRelation = new SubqueryRelation(tableRef.getAlias(), query);
@@ -855,21 +856,18 @@ public class QueryAnalyzer {
             return subqueryRelation;
         } else {
             if (isSupportedTable(table)) {
-                TableRelation tableRelation = new TableRelation(tableName, table,
-                        tableRef.getPartitionNames(), tableRef.getTabletIds(), tableRef.isMetaQuery());
                 ImmutableList.Builder<Field> fields = ImmutableList.builder();
                 ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
                 for (Column column : table.getFullSchema()) {
                     Field field = table.getBaseSchema().contains(column) ?
-                            new Field(column.getName(), column.getType(), tableName,
-                                    RelationId.of(tableRelation), true) :
-                            new Field(column.getName(), column.getType(), tableName,
-                                    RelationId.of(tableRelation), false);
+                            new Field(column.getName(), column.getType(), tableName, null, true) :
+                            new Field(column.getName(), column.getType(), tableName, null, false);
                     columns.put(field, column);
                     fields.add(field);
                 }
+                TableRelation tableRelation = new TableRelation(tableName, table, columns.build(),
+                        tableRef.getPartitionNames(), tableRef.getTabletIds(), tableRef.isMetaQuery());
                 tableRelation.setScope(new Scope(RelationId.of(tableRelation), new RelationFields(fields.build())));
-                tableRelation.setColumns(columns.build());
 
                 session.getDumpInfo().addTable(tableRef.getName().getDb().split(":")[1], tableRelation.getTable());
                 return tableRelation;
@@ -1115,7 +1113,23 @@ public class QueryAnalyzer {
     }
 
     private Scope computeAndAssignOrderScope(AnalyzeState analyzeState, Scope sourceScope, Scope outputScope) {
-        Scope orderScope = new Scope(outputScope.getRelationId(), outputScope.getRelationFields());
+        // The Scope used by order by allows parsing of the same column,
+        // such as 'select v1 as v, v1 as v from t0 order by v'
+        // but normal parsing does not allow it. So add a de-duplication operation here.
+        List<Field> allFields = new ArrayList<>();
+        for (Field field : outputScope.getRelationFields().getAllFields()) {
+            if (field.getName() != null && field.getOriginExpression() != null &&
+                    allFields.stream().anyMatch(f ->
+                            f.getOriginExpression() != null &&
+                                    f.getName() != null &&
+                                    field.getName().equals(f.getName()) &&
+                                    field.getOriginExpression().equals(f.getOriginExpression()))) {
+                continue;
+            }
+            allFields.add(field);
+        }
+
+        Scope orderScope = new Scope(outputScope.getRelationId(), new RelationFields(allFields));
         /*
          * ORDER BY or HAVING should "see" both output and FROM fields
          * Because output scope and source scope may contain the same columns,

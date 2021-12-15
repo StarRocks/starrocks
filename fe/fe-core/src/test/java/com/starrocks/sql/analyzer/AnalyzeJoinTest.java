@@ -104,6 +104,12 @@ public class AnalyzeJoinTest {
 
         query = analyzeSuccess("select t1.*,v1,t0.* from t0 join t1 on t0.v1=t1.v4");
         Assert.assertEquals("v4,v5,v6,v1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess("select a.v1 as v, a.v2 as v, b.v1 as v from t0 a,t0 b");
+        Assert.assertEquals("v,v,v", String.join(",", query.getColumnOutputNames()));
+        analyzeFail("select a.v1 as v, a.v2 as v, b.v1 as v from t0 a,t0 b order by v", "Column 'v' is ambiguous");
+        analyzeFail("select v1 from (select * from t0 a,t0 b) t", "Column 'v1' is ambiguous");
+        analyzeFail("select v from (select a.v1 as v, b.v1 as v from t0 a,t0 b) t", "Column 'v' is ambiguous");
     }
 
     @Test
