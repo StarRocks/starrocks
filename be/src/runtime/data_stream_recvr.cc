@@ -84,7 +84,7 @@ public:
     // blocks if this will make the stream exceed its buffer limit.
     // If the total size of the chunks in this queue would exceed the allowed buffer size,
     // the queue is considered full and the call blocks until a chunk is dequeued.
-    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done, bool is_pipeline);
 
     // add_chunks_and_keep_order is almost the same like add_chunks except that it didn't
     // notify compute thread to grab chunks, compute thread is notified by pipeline's dispatch thread.
@@ -142,7 +142,8 @@ private:
     ChunkQueue _chunk_queue;
     vectorized::RuntimeChunkMeta _chunk_meta;
 
-    std::unordered_set<int> _sender_eos_set; // sender_id
+    std::unordered_set<int> _sender_eos_set;          // sender_id
+    std::unordered_map<int, int64_t> _packet_seq_map; // be_number => packet_seq
 
     // distribution of received sequence numbers:
     // part1: { sequence | 1 <= sequence <= _max_processed_sequence }
@@ -303,17 +304,32 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request,
-                                                ::google::protobuf::Closure** done) {
+Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
+                                                bool is_pipeline) {
     DCHECK(request.chunks_size() > 0);
 
     int32_t be_number = request.be_number();
+    int64_t sequence = request.sequence();
     ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
     {
         std::unique_lock<std::mutex> l(_lock);
         wait_timer.stop();
         if (_is_cancelled) {
             return Status::OK();
+        }
+        // TODO(zc): Do we really need this check?
+        auto iter = _packet_seq_map.find(be_number);
+        if (iter != _packet_seq_map.end()) {
+            if (iter->second >= sequence) {
+                if (!is_pipeline) {
+                    LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
+                                 << " receive_packet_id=" << sequence << "]";
+                    return Status::OK();
+                }
+            }
+            iter->second = sequence;
+        } else {
+            _packet_seq_map.emplace(be_number, sequence);
         }
 
         // Following situation will match the following condition.
@@ -647,7 +663,8 @@ Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, c
 DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
-                                 std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool keep_order)
+                                 std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
+                                 bool is_pipeline, bool keep_order)
         : _mgr(stream_mgr),
           _fragment_instance_id(fragment_instance_id),
           _dest_node_id(dest_node_id),
@@ -660,6 +677,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
           _query_mem_tracker(runtime_state->query_mem_tracker_ptr()),
           _instance_mem_tracker(runtime_state->instance_mem_tracker_ptr()),
           _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
+          _is_pipeline(is_pipeline),
           _keep_order(keep_order) {
     // Create one queue per sender if is_merging is true.
 
@@ -704,9 +722,10 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google
     // Add all batches to the same queue if _is_merging is false.
 
     if (_keep_order) {
+        DCHECK(_is_pipeline);
         return _sender_queues[use_sender_id]->add_chunks_and_keep_order(request, done);
     } else {
-        return _sender_queues[use_sender_id]->add_chunks(request, done);
+        return _sender_queues[use_sender_id]->add_chunks(request, done, _is_pipeline);
     }
 }
 
