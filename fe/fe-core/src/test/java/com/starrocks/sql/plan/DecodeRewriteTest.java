@@ -215,10 +215,9 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, " +
                 "count(*) from supplier group by a,b) as t ";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(12: count), multi_distinct_count(13: count)"));
+                "  |  output: multi_distinct_count(16: upper), multi_distinct_count(15: lower)"));
 
         sql = "select count(distinct S_ADDRESS), count(distinct S_COMMENT) from supplier;";
         plan = getFragmentPlan(sql);
