@@ -33,6 +33,13 @@ public class SelectRelation extends QueryRelation {
     private final Scope orderScope;
 
     /**
+     * out fields is different with output expr
+     * output fields is represent externally visible resolved names
+     * such as "k+1 as alias_name", k+1 is ArithmericExpr, alias_name is the output field
+     */
+    private List<Expr> outputExpr;
+
+    /**
      * order by expression resolve source expression,
      * column ref map will build in project operator when aggregation present
      */
@@ -56,6 +63,7 @@ public class SelectRelation extends QueryRelation {
                           Map<Expr, FieldId> columnReferences) {
         super(outputExpr, columnOutputNames);
 
+        this.outputExpr = outputExpr;
         this.isDistinct = isDistinct;
         this.orderScope = orderScope;
         this.relation = relation;
@@ -75,6 +83,10 @@ public class SelectRelation extends QueryRelation {
         this.orderByAnalytic = orderByAnalytic;
 
         this.columnReferences = columnReferences;
+    }
+
+    public List<Expr> getOutputExpr() {
+        return outputExpr;
     }
 
     public Expr getPredicate() {

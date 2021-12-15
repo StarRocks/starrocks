@@ -285,27 +285,26 @@ public class QueryAnalyzer {
             throw new StarRocksPlannerException("Set operation must have multi operand", INTERNAL_ERROR);
         }
 
-        List<QueryRelation> relations = stmt.getOperands().stream()
+        List<QueryRelation> setOpRelations = stmt.getOperands().stream()
                 .map(setOperand -> transformQueryStmt(setOperand.getQueryStmt(), parent))
                 .collect(Collectors.toList());
 
-        QueryRelation setOpRelation = relations.get(0);
-        Type[] outputTypes =
-                setOpRelation.getRelationFields().getAllFields().stream().map(Field::getType).toArray(Type[]::new);
-        int outputSize = setOpRelation.getRelationFields().size();
+        QueryRelation setOpRelation = setOpRelations.get(0);
+        for (int i = 1; i < setOpRelations.size(); ++i) {
+            Type[] outputTypes =
+                    setOpRelation.getRelationFields().getAllFields().stream().map(Field::getType).toArray(Type[]::new);
+            int outputSize = setOpRelation.getRelationFields().size();
 
-        for (int i = 1; i < relations.size(); ++i) {
-            QueryRelation relation = relations.get(i);
-            SetOperationStmt.SetOperand operation = stmt.getOperands().get(i);
+            SetOperationStmt.SetOperand setOperand = stmt.getOperands().get(i);
+            QueryRelation relation = setOpRelations.get(i);
             if (relation.getRelationFields().size() != outputSize) {
                 throw new SemanticException("Operands have unequal number of columns");
             }
-
-            for (int fieldIdx = 0; fieldIdx < relation.getOutputExpr().size(); ++fieldIdx) {
-                Type fieldType = relation.getOutputExpr().get(fieldIdx).getType();
+            for (int fieldIdx = 0; fieldIdx < relation.getRelationFields().size(); ++fieldIdx) {
+                Type fieldType = relation.getRelationFields().getAllFields().get(fieldIdx).getType();
                 if (fieldType.isOnlyMetricType() &&
-                        !((operation.getOperation().equals(SetOperationStmt.Operation.UNION)) &&
-                                (operation.getQualifier().equals(SetOperationStmt.Qualifier.ALL)))) {
+                        !((setOperand.getOperation().equals(SetOperationStmt.Operation.UNION)) &&
+                                (setOperand.getQualifier().equals(SetOperationStmt.Qualifier.ALL)))) {
                     throw new SemanticException("%s not support set operation", fieldType);
                 }
 
@@ -318,77 +317,47 @@ public class QueryAnalyzer {
                 }
                 outputTypes[fieldIdx] = commonType;
             }
-        }
 
-        for (QueryRelation relation : relations) {
-            List<Expr> childOutputExpressions = new ArrayList<>();
-            for (int fieldIdx = 0; fieldIdx < relation.getOutputExpr().size(); ++fieldIdx) {
-                try {
-                    Type fieldType = relation.getOutputExpr().get(fieldIdx).getType();
-
-                    if (!fieldType.equals(outputTypes[fieldIdx])) {
-                        relation.getScope().getRelationFields().getFieldByIndex(fieldIdx)
-                                .setType(outputTypes[fieldIdx]);
-                        childOutputExpressions
-                                .add(relation.getOutputExpr().get(fieldIdx).castTo(outputTypes[fieldIdx]));
-                    } else {
-                        childOutputExpressions.add(relation.getOutputExpr().get(fieldIdx));
-                    }
-                } catch (AnalysisException exception) {
-                    throw new SemanticException(exception.getMessage());
-                }
-            }
-
-            relation.setOutputExpr(childOutputExpressions);
-        }
-
-        List<Expr> outputExpressions = new ArrayList<>();
-        ArrayList<Field> fields = new ArrayList<>();
-        for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
-            Field oldField = setOpRelation.getRelationFields().getFieldByIndex(fieldIdx);
-            fields.add(new Field(oldField.getName(), outputTypes[fieldIdx],
-                    oldField.getRelationAlias(), oldField.getOriginExpression()));
-
-            SlotRef s = new SlotRef(oldField.getRelationAlias(), oldField.getName());
-            s.setType(outputTypes[fieldIdx]);
-            outputExpressions.add(s);
-        }
-
-        for (int i = 1; i < relations.size(); ++i) {
-            SetOperationStmt.SetOperand operation = stmt.getOperands().get(i);
-            if (operation.getOperation().equals(SetOperationStmt.Operation.UNION)) {
+            if (setOperand.getOperation().equals(SetOperationStmt.Operation.UNION)) {
                 if (setOpRelation instanceof UnionRelation) {
-                    ((UnionRelation) setOpRelation).addRelation(relations.get(i));
+                    ((UnionRelation) setOpRelation).addRelation(relation);
                 } else {
-                    setOpRelation = new UnionRelation(Arrays.asList(setOpRelation, relations.get(i)),
-                            SetQualifier.convert(operation.getQualifier()), outputExpressions);
+                    setOpRelation = new UnionRelation(Arrays.asList(setOpRelation, relation),
+                            SetQualifier.convert(setOperand.getQualifier()));
                 }
-            } else if (operation.getOperation().equals(SetOperationStmt.Operation.EXCEPT)) {
-                if (operation.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
+            } else if (setOperand.getOperation().equals(SetOperationStmt.Operation.EXCEPT)) {
+                if (setOperand.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
                     throw new SemanticException("EXCEPT does not support ALL qualifier");
                 }
 
                 if (setOpRelation instanceof ExceptRelation) {
-                    ((ExceptRelation) setOpRelation).addRelation(relations.get(i));
+                    ((ExceptRelation) setOpRelation).addRelation(relation);
                 } else {
-                    setOpRelation = new ExceptRelation(Arrays.asList(setOpRelation, relations.get(i)),
-                            SetQualifier.convert(operation.getQualifier()), outputExpressions);
+                    setOpRelation = new ExceptRelation(Arrays.asList(setOpRelation, relation),
+                            SetQualifier.convert(setOperand.getQualifier()));
                 }
-            } else if (operation.getOperation().equals(SetOperationStmt.Operation.INTERSECT)) {
-                if (operation.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
+            } else if (setOperand.getOperation().equals(SetOperationStmt.Operation.INTERSECT)) {
+                if (setOperand.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
                     throw new SemanticException("INTERSECT does not support ALL qualifier");
                 }
 
                 if (setOpRelation instanceof IntersectRelation) {
-                    ((IntersectRelation) setOpRelation).addRelation(relations.get(i));
+                    ((IntersectRelation) setOpRelation).addRelation(relation);
                 } else {
-                    setOpRelation = new IntersectRelation(Arrays.asList(setOpRelation, relations.get(i)),
-                            SetQualifier.convert(operation.getQualifier()), outputExpressions);
+                    setOpRelation = new IntersectRelation(Arrays.asList(setOpRelation, relation),
+                            SetQualifier.convert(setOperand.getQualifier()));
                 }
             } else {
                 throw new StarRocksPlannerException(
                         "Unsupported set operation " + stmt.getOperands().get(i).getOperation(),
                         INTERNAL_ERROR);
+            }
+
+            ArrayList<Field> fields = new ArrayList<>();
+            for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
+                Field oldField = setOpRelation.getRelationFields().getFieldByIndex(fieldIdx);
+                fields.add(new Field(oldField.getName(), outputTypes[fieldIdx],
+                        oldField.getRelationAlias(), oldField.getOriginExpression()));
             }
             setOpRelation.setScope(new Scope(RelationId.of(setOpRelation), new RelationFields(fields)));
         }
