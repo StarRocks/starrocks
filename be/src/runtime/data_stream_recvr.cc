@@ -86,9 +86,10 @@ public:
     // the queue is considered full and the call blocks until a chunk is dequeued.
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
-    // add_chunks_for_pipeline is almost the same like add_chunks except that it didn't
+    // add_chunks_and_keep_order is almost the same like add_chunks except that it didn't
     // notify compute thread to grab chunks, compute thread is notified by pipeline's dispatch thread.
-    Status add_chunks_for_pipeline(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+    // Process data in strict accordance with the order of the sequence
+    Status add_chunks_and_keep_order(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     // Decrement the number of remaining senders for this queue and signal eos ("new data")
     // if the count drops to 0. The number of senders will be 1 for a merging
@@ -118,12 +119,6 @@ private:
     };
 
     Status _do_get_chunk(vectorized::Chunk** chunk);
-
-    Status _add_chunks_internal(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
-                                const std::function<void()>& cb);
-
-    Status _add_chunks_internal_for_pipeline(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
-
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, faststring* uncompressed_buffer);
 
@@ -147,8 +142,7 @@ private:
     ChunkQueue _chunk_queue;
     vectorized::RuntimeChunkMeta _chunk_meta;
 
-    std::unordered_set<int> _sender_eos_set;          // sender_id
-    std::unordered_map<int, int64_t> _packet_seq_map; // be_number => packet_seq
+    std::unordered_set<int> _sender_eos_set; // sender_id
 
     // distribution of received sequence numbers:
     // part1: { sequence | 1 <= sequence <= _max_processed_sequence }
@@ -309,31 +303,17 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkParams& request,
-                                                          ::google::protobuf::Closure** done,
-                                                          const std::function<void()>& cb) {
+Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request,
+                                                ::google::protobuf::Closure** done) {
     DCHECK(request.chunks_size() > 0);
 
     int32_t be_number = request.be_number();
-    int64_t sequence = request.sequence();
     ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
     {
         std::unique_lock<std::mutex> l(_lock);
         wait_timer.stop();
         if (_is_cancelled) {
             return Status::OK();
-        }
-        // TODO(zc): Do we really need this check?
-        auto iter = _packet_seq_map.find(be_number);
-        if (iter != _packet_seq_map.end()) {
-            if (iter->second >= sequence) {
-                LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
-                             << " receive_packet_id=" << sequence << "]";
-                return Status::OK();
-            }
-            iter->second = sequence;
-        } else {
-            _packet_seq_map.emplace(be_number, sequence);
         }
 
         // Following situation will match the following condition.
@@ -391,12 +371,12 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
 
         _recvr->_num_buffered_bytes += total_chunk_bytes;
     }
-    cb();
+    _data_arrival_cv.notify_one();
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::_add_chunks_internal_for_pipeline(const PTransmitChunkParams& request,
-                                                                       ::google::protobuf::Closure** done) {
+Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
+                                                               ::google::protobuf::Closure** done) {
     DCHECK(request.chunks_size() > 0);
 
     const int32_t be_number = request.be_number();
@@ -504,17 +484,6 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal_for_pipeline(const PTr
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request,
-                                                ::google::protobuf::Closure** done) {
-    auto& condition = _data_arrival_cv;
-    return _add_chunks_internal(request, done, [&condition]() -> void { condition.notify_one(); });
-}
-
-Status DataStreamRecvr::SenderQueue::add_chunks_for_pipeline(const PTransmitChunkParams& request,
-                                                             ::google::protobuf::Closure** done) {
-    return _add_chunks_internal_for_pipeline(request, done);
-}
-
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
                                                         faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
@@ -620,7 +589,7 @@ void DataStreamRecvr::SenderQueue::close() {
 Status DataStreamRecvr::create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(_is_pipeline);
+    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(_keep_order);
     vectorized::ChunkSuppliers chunk_suppliers;
     for (SenderQueue* q : _sender_queues) {
         // we use chunk_supplier in non-pipeline.
@@ -649,7 +618,7 @@ Status DataStreamRecvr::create_merger(const SortExecExprs* exprs, const std::vec
 Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                                    const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(_is_pipeline);
+    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(_keep_order);
     vectorized::ChunkSuppliers chunk_suppliers;
     for (SenderQueue* q : _sender_queues) {
         // we willn't use chunk_supplier in pipeline.
@@ -678,8 +647,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, c
 DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
-                                 std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
-                                 bool is_pipeline)
+                                 std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool keep_order)
         : _mgr(stream_mgr),
           _fragment_instance_id(fragment_instance_id),
           _dest_node_id(dest_node_id),
@@ -692,7 +660,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
           _query_mem_tracker(runtime_state->query_mem_tracker_ptr()),
           _instance_mem_tracker(runtime_state->instance_mem_tracker_ptr()),
           _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
-          _is_pipeline(is_pipeline) {
+          _keep_order(keep_order) {
     // Create one queue per sender if is_merging is true.
 
     int num_queues = is_merging ? num_senders : 1;
@@ -735,10 +703,10 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google
     int use_sender_id = _is_merging ? request.sender_id() : 0;
     // Add all batches to the same queue if _is_merging is false.
 
-    if (!_is_pipeline) {
-        return _sender_queues[use_sender_id]->add_chunks(request, done);
+    if (_keep_order) {
+        return _sender_queues[use_sender_id]->add_chunks_and_keep_order(request, done);
     } else {
-        return _sender_queues[use_sender_id]->add_chunks_for_pipeline(request, done);
+        return _sender_queues[use_sender_id]->add_chunks(request, done);
     }
 }
 
