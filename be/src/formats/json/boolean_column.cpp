@@ -11,14 +11,14 @@ static auto literal_0_slice{Slice{"0"}};
 static auto literal_1_slice{Slice{"1"}};
 
 Status add_boolean_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                          simdjson::ondemand::value& value) {
+                          simdjson::ondemand::value* value) {
     auto binary_column = down_cast<BinaryColumn*>(column);
 
     try {
-        simdjson::ondemand::json_type tp = value.type();
+        simdjson::ondemand::json_type tp = value->type();
         switch (tp) {
         case simdjson::ondemand::json_type::boolean: {
-            bool ok = value.get_bool();
+            bool ok = value->get_bool();
             if (ok) {
                 binary_column->append(literal_1_slice);
             } else {
@@ -28,7 +28,7 @@ Status add_boolean_column(Column* column, const TypeDescriptor& type_desc, const
         }
 
         case simdjson::ondemand::json_type::number: {
-            int64_t ok = value.get_int64();
+            int64_t ok = value->get_int64();
             if (ok) {
                 binary_column->append(literal_1_slice);
             } else {

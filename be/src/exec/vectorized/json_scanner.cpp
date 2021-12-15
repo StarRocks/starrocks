@@ -692,7 +692,7 @@ Status JsonReader::_read_and_parse_json() {
 // _construct_column constructs column based on no value.
 Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                                      const std::string& col_name) {
-    return add_nullable_column(column, type_desc, col_name, value, !_strict_mode);
+    return add_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
 }
 
 } // namespace starrocks::vectorized

@@ -9,25 +9,25 @@ namespace starrocks::vectorized {
 
 // The value must be in type simdjson::ondemand::json_type::number;
 static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDescriptor& type_desc,
-                                            const std::string& name, simdjson::ondemand::value& value) {
-    std::string_view sv = value.raw_json_token();
+                                            const std::string& name, simdjson::ondemand::value* value) {
+    std::string_view sv = value->raw_json_token();
     column->append(Slice{sv.data(), sv.size()});
     return Status::OK();
 }
 
 // The value must be in type simdjson::ondemand::json_type::string;
 static Status add_column_with_string_value(BinaryColumn* column, const TypeDescriptor& type_desc,
-                                           const std::string& name, simdjson::ondemand::value& value) {
+                                           const std::string& name, simdjson::ondemand::value* value) {
     // simdjson::value::get_string() returns string without quotes.
-    std::string_view sv = value.get_string();
+    std::string_view sv = value->get_string();
     column->append(Slice{sv.data(), sv.size()});
     return Status::OK();
 }
 
 // The value must be in type simdjson::ondemand::json_type::number;
 static Status add_column_with_boolean_value(BinaryColumn* column, const TypeDescriptor& type_desc,
-                                            const std::string& name, simdjson::ondemand::value& value) {
-    bool ok = value.get_bool();
+                                            const std::string& name, simdjson::ondemand::value* value) {
+    bool ok = value->get_bool();
     if (ok) {
         column->append(Slice{"1"});
     } else {
@@ -38,8 +38,8 @@ static Status add_column_with_boolean_value(BinaryColumn* column, const TypeDesc
 
 // The value must be in type simdjson::ondemand::json_type::string;
 static Status add_column_with_array_object_value(BinaryColumn* column, const TypeDescriptor& type_desc,
-                                                 const std::string& name, simdjson::ondemand::value& value) {
-    std::string_view sv = simdjson::to_json_string(value);
+                                                 const std::string& name, simdjson::ondemand::value* value) {
+    std::string_view sv = simdjson::to_json_string(*value);
     std::unique_ptr<char[]> buf{new char[sv.size()]};
     size_t new_length{};
     auto err = simdjson::minify(sv.data(), sv.size(), buf.get(), new_length);
@@ -53,11 +53,11 @@ static Status add_column_with_array_object_value(BinaryColumn* column, const Typ
 }
 
 Status add_binary_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                         simdjson::ondemand::value& value) {
+                         simdjson::ondemand::value* value) {
     auto binary_column = down_cast<BinaryColumn*>(column);
 
     try {
-        simdjson::ondemand::json_type tp = value.type();
+        simdjson::ondemand::json_type tp = value->type();
         switch (tp) {
         case simdjson::ondemand::json_type::number: {
             return add_column_with_numeric_value(binary_column, type_desc, name, value);
