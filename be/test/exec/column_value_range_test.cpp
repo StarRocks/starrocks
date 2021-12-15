@@ -35,6 +35,53 @@ TEST(NormalizeRangeTest, RangeTest) {
         range.add_range(SQLFilterOp::FILTER_LARGER, 2);
         ASSERT_TRUE(range.is_empty_value_range());
     }
+    {
+        // where range in (1, 2) and range = 3
+        // return empty
+        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
+                                        std::numeric_limits<CppType>::max());
+        range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2});
+        range.add_fixed_values(SQLFilterOp::FILTER_IN, {3});
+        ASSERT_TRUE(range.is_empty_value_range());
+    }
+    {
+        // where range in (1, 3) and range not in (3)
+        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
+                                        std::numeric_limits<CppType>::max());
+        range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 3});
+        range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {3});
+        ASSERT_EQ(range._fixed_values.size(), 1);
+        ASSERT_TRUE(range._fixed_values.count(1));
+    }
+    {
+        // where range in (1, 2) and range not in (3)
+        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
+                                        std::numeric_limits<CppType>::max());
+        range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2});
+        range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {3});
+        ASSERT_EQ(range._fixed_values.size(), 2);
+        ASSERT_TRUE(range._fixed_values.count(1));
+        ASSERT_TRUE(range._fixed_values.count(2));
+    }
+    {
+        // where range >= -limit and range in (1, 2, 3)
+        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
+                                        std::numeric_limits<CppType>::max());
+        range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::lowest());
+        range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2, 3});
+        ASSERT_EQ(range._fixed_values.size(), 3);
+        ASSERT_TRUE(range._fixed_values.count(1));
+        ASSERT_TRUE(range._fixed_values.count(2));
+        ASSERT_TRUE(range._fixed_values.count(3));
+    }
+    {
+        // where range >= -limit and range not in (1, 2, 3)
+        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
+                                        std::numeric_limits<CppType>::max());
+        range.add_range(SQLFilterOp::FILTER_LESS, std::numeric_limits<CppType>::lowest());
+        bool ok = range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {3}).ok();
+        ASSERT_FALSE(ok);
+    }
 }
 
 TEST(NormalizeRangeTest, BoolRangeTest) {

@@ -398,6 +398,7 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
         } else if (is_fixed_value_range()) {
             DCHECK_EQ(FILTER_IN, _fixed_op);
             _fixed_values = STLSetIntersection(_fixed_values, values);
+            _empty_range = _fixed_values.empty();
             _fixed_op = op;
         } else if (!values.empty()) {
             _fixed_values = values;
