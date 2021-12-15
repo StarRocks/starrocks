@@ -191,6 +191,7 @@ Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta
     _tuple_id_to_index = meta.tuple_id_to_index;
     _columns.resize(_slot_id_to_index.size() + _tuple_id_to_index.size());
 
+    const uint8_t* data_start = src;
     uint32_t version = decode_fixed32_le(src);
     DCHECK_EQ(version, 1);
     src += sizeof(uint32_t);
@@ -205,11 +206,12 @@ Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta
     for (const auto& column : _columns) {
         src = column->deserialize_column(src);
     }
+    const uint8_t* data_end = src;
+    size_t read_size = (data_end - data_start);
 
-    size_t except = serialize_size();
-    if (UNLIKELY(len != except)) {
+    if (UNLIKELY(len != read_size)) {
         return Status::InternalError(
-                strings::Substitute("deserialize chunk data failed. len: $0, except: $1", len, except));
+                strings::Substitute("deserialize chunk data failed. len: $0, read: $1", len, read_size));
     }
     DCHECK_EQ(rows, num_rows());
     return Status::OK();
