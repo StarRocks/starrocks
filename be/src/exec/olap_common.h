@@ -220,10 +220,7 @@ public:
             if (can_push) {
                 filters.push_back(condition);
             }
-        }
-
-        // To generate binary predicates.
-        {
+        } else {
             TCondition low;
             low.__set_is_index_filter_only(_is_index_filter_only);
             if (_type_min != _low_value || FILTER_LARGER_OR_EQUAL != _low_op) {
@@ -443,7 +440,8 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
                 _empty_range = true;
                 _fixed_op = FILTER_IN;
             }
-        } else if (is_low_value_mininum() && is_high_value_maximum()) {
+        } else if (is_low_value_mininum() && _low_op == FILTER_LARGER_OR_EQUAL && is_high_value_maximum() &&
+                   _high_op == FILTER_LESS_OR_EQUAL) {
             if (!values.empty()) {
                 _fixed_values = values;
                 _fixed_op = FILTER_NOT_IN;
@@ -581,7 +579,10 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
     }
 
     // If we already have IN value range, we can put `value` into it.
-    if (is_fixed_value_range() && _fixed_op == FILTER_IN) {
+    if (is_fixed_value_range()) {
+        if (_fixed_op != FILTER_IN) {
+            return Status::InternalError(strings::Substitute("Add Range Fail! Unsupport SQLFilterOp $0", op));
+        }
         std::pair<iterator_type, iterator_type> bound_pair = _fixed_values.equal_range(value);
 
         switch (op) {
@@ -609,6 +610,8 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
             return Status::InternalError(strings::Substitute("Add Range Fail! Unsupport SQLFilterOp $0", op));
         }
         }
+
+        _empty_range = _fixed_values.empty();
 
     } else {
         // Otherwise we can put `value` into normal value range.
