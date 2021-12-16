@@ -420,6 +420,40 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testLeftJoinWithUnion() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "SELECT subt1.S_ADDRESS\n" +
+                "FROM (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt1 LEFT ANTI\n" +
+                "    JOIN (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt0 ON subt1.S_NATIONKEY = subt0.S_NATIONKEY  \n" +
+                "WHERE true\n" +
+                "UNION ALL\n" +
+                "SELECT subt1.S_ADDRESS\n" +
+                "FROM (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt1 LEFT ANTI\n" +
+                "    JOIN (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt0 ON subt1.S_NATIONKEY = subt0.S_NATIONKEY\n" +
+                "WHERE (NOT (true));";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 34> : <string id 17>\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 34> : 34: S_ADDRESS"));
+    }
+
+    @Test
     public void testScanFilter() throws Exception {
         String sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
         String plan = getFragmentPlan(sql);
