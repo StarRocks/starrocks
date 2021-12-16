@@ -49,7 +49,7 @@ TOP-N (order by [[77: count DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[9]
                             INNER JOIN (join-predicate [26: O_ORDERKEY = 9: L_ORDERKEY] post-join-predicate [null])
                                 SCAN (columns[26: O_ORDERKEY, 28: O_ORDERSTATUS] predicate[28: O_ORDERSTATUS = F])
-                                EXCHANGE SHUFFLE[9]
+                                EXCHANGE BROADCAST
                                     RIGHT SEMI JOIN (join-predicate [41: L_ORDERKEY = 9: L_ORDERKEY AND 43: L_SUPPKEY != 11: L_SUPPKEY] post-join-predicate [null])
                                         SCAN (columns[41: L_ORDERKEY, 43: L_SUPPKEY] predicate[null])
                                         INNER JOIN (join-predicate [11: L_SUPPKEY = 1: S_SUPPKEY] post-join-predicate [null])
