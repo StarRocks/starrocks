@@ -177,9 +177,13 @@ Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, cons
 
                 return Status::OK();
             } else {
-                std::string_view sv = value->raw_json_token();
-                column->append_strings(std::vector<Slice>{Slice{sv.data(), sv.size()}});
-                return Status::OK();
+                if (invalid_as_null) {
+                    column->append_nulls(1);
+                    return Status::OK();
+                } else {
+                    auto err_msg = strings::Substitute("Failed to parse value as array, column=$0", name);
+                    return Status::InvalidArgument(err_msg);
+                }
             }
         } catch (simdjson::simdjson_error& e) {
             auto err_msg = strings::Substitute("Failed to parse value as array, column=$0, error=$1", name,
