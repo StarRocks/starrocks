@@ -390,15 +390,6 @@ public class SelectStmtTest {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         String selectStmtStr =
                 "SELECT db1.tbl1.k1, any_value(db1.tbl1.k2) FROM db1.tbl1 GROUP BY db1.tbl1.k1";
-        try {
-            UtFrameUtils.parseAndAnalyzeStmt(selectStmtStr, ctx);
-        } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains(
-                    "Function `any_value` is not supported when ONLY_FULL_GROUP_BY is enable."));
-        }
-        ctx.getSessionVariable().disableOnlyFullGroupBy();
-        selectStmtStr =
-                "SELECT db1.tbl1.k1, any_value(db1.tbl1.k2) FROM db1.tbl1 GROUP BY db1.tbl1.k1";
         UtFrameUtils.parseAndAnalyzeStmt(selectStmtStr, ctx);
     }
 }

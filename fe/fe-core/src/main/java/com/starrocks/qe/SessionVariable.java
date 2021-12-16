@@ -409,10 +409,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
 
-    @VariableMgr.VarAttr(name = "ONLY_FULL_GROUP_BY", flag = VariableMgr.INVISIBLE)
-    @Deprecated
-    private boolean onlyFullGroupBy = true;
-
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
 
@@ -554,14 +550,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableInsertStrict() {
         return enableInsertStrict;
-    }
-
-    public boolean getOnlyFullGroupBy() {
-        return onlyFullGroupBy;
-    }
-
-    public void disableOnlyFullGroupBy() {
-        this.onlyFullGroupBy = false;
     }
 
     public void setEnableInsertStrict(boolean enableInsertStrict) {
