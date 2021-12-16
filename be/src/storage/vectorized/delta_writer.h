@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include <bthread/execution_queue.h>
-
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
