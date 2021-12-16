@@ -71,7 +71,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _all_local_rf_ready = _local_rf_holders.empty();
     // Driver has no global rf to wait for completion always sets _all_global_rf_ready_or_timeout to true;
     _all_global_rf_ready_or_timeout = _global_rf_descriptors.empty();
-    _state = DriverState::READY;
+    set_driver_state(DriverState::READY);
 
     _total_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _pending_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
@@ -89,7 +89,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     SCOPED_TIMER(_active_timer);
-    _state = DriverState::RUNNING;
+    set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
     int64_t time_spent = 0;
@@ -192,7 +192,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
-            _state = is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
+            set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
             return _state;
         }
 
@@ -206,13 +206,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             driver_acct().update_accumulated_rows_moved(total_rows_moved);
             driver_acct().update_last_time_spent(time_spent);
             if (is_precondition_block()) {
-                _state = DriverState::PRECONDITION_BLOCK;
+                set_driver_state(DriverState::PRECONDITION_BLOCK);
             } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
-                _state = DriverState::OUTPUT_FULL;
+                set_driver_state(DriverState::OUTPUT_FULL);
             } else if (!source_operator()->is_finished() && !source_operator()->has_output()) {
-                _state = DriverState::INPUT_EMPTY;
+                set_driver_state(DriverState::INPUT_EMPTY);
             } else {
-                _state = DriverState::READY;
+                set_driver_state(DriverState::READY);
             }
             return _state;
         }
@@ -239,7 +239,7 @@ void PipelineDriver::check_short_circuit() {
 
     if (sink_operator()->is_finished()) {
         finish_operators(_runtime_state);
-        _state = is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
+        set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
     }
 }
 
@@ -286,7 +286,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     _close_operators(runtime_state);
 
-    _state = state;
+    set_driver_state(state);
 
     COUNTER_UPDATE(_total_timer, _total_timer_sw->elapsed_time());
     COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
@@ -366,9 +366,9 @@ bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
         // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
         // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
         if (is_still_pending_finish()) {
-            _state = DriverState::PENDING_FINISH;
+            set_driver_state(DriverState::PENDING_FINISH);
         } else {
-            _state = _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
+            set_driver_state(_fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED);
         }
 
         return true;
