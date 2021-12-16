@@ -462,8 +462,6 @@ Status JsonReader::_get_row_from_document_stream(simdjson::ondemand::object* row
     case simdjson::ondemand::json_type::array: {
         if (!_scanner->_strip_outer_array) {
             std::string err_msg("JSON data is an array, strip_outer_array must be set true");
-            _state->append_error_msg_to_file("", err_msg);
-            _counter->num_rows_filtered++;
             return Status::DataQualityError(err_msg.c_str());
         }
 
@@ -509,8 +507,6 @@ Status JsonReader::_get_row_from_document_stream(simdjson::ondemand::object* row
     case simdjson::ondemand::json_type::object: {
         if (_scanner->_strip_outer_array) {
             std::string err_msg("JSON data is an object, strip_outer_array must be set false");
-            _state->append_error_msg_to_file("", err_msg);
-            _counter->num_rows_filtered++;
             return Status::DataQualityError(err_msg.c_str());
         }
 
