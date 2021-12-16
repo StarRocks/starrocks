@@ -53,8 +53,8 @@ static Status read_at_internal(hdfsFS fs, hdfsFile file, const std::string& file
         }
         if (cur_offset != offset) {
             if (hdfsSeek(fs, file, offset)) {
-                return Status::IOError(strings::Substitute("fail to seek offset, file=$0, offset=$1, error=$2", file_name,
-                                                           offset, get_hdfs_err_msg()));
+                return Status::IOError(strings::Substitute("fail to seek offset, file=$0, offset=$1, error=$2",
+                                                           file_name, offset, get_hdfs_err_msg()));
             }
         }
         size_t bytes_read = 0;
