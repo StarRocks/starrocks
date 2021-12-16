@@ -290,7 +290,7 @@ PROPERTIES("replication_num" = "3");
 
 1. 主键列仅支持类型: boolean, tinyint, smallint, int, bigint, largeint, string/varchar, date, datetime, 不允许NULL
 2. 分区列(partition)、分桶列(bucket)必须在主键列中
-3. 和更新模型不同，主键模型允许为非主键列创建bitmap等索引，注意需要建表是指定
+3. 和更新模型不同，主键模型允许为非主键列创建bitmap等索引，注意需要建表时指定
 4. 由于其列值可能会更新，主键模型目前还不支持rollup index和物化视图
 5. Alter table目前仅支持添加/删除列，还不支持更改列类型和添加删除索引等操作
 6. 在设计表时应尽量减少主键的列数和大小以节约内存，建议使用int/bigint等占用空间少的类型。暂时不建议使用varchar。建议提前根据表的行数和主键列类型来预估内存使用量，避免出现OOM。内存估算举例：  
