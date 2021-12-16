@@ -382,7 +382,7 @@ protected:
 
             // check num
             ASSERT_EQ(2, reader->num_rows());
-            ASSERT_EQ(36, reader->total_raw_size());
+            ASSERT_EQ(36, reader->total_mem_footprint());
         }
     }
 
@@ -612,7 +612,7 @@ TEST_F(ColumnReaderWriterTest, test_array_int) {
     test_int_array<2>("1");
 }
 
-TEST_F(ColumnReaderWriterTest, test_scalar_column_total_raw_size) {
+TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     auto col = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, true);
     size_t count = 1024;
     col->reserve(count);
@@ -628,7 +628,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_raw_size) {
     auto env = std::make_unique<EnvMemory>();
     auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
     ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
-    const std::string fname = strings::Substitute("$0/test_scalar_column_total_raw_size.data", TEST_DIR);
+    const std::string fname = strings::Substitute("$0/test_scalar_column_total_mem_footprint.data", TEST_DIR);
 
     // write data
     {
@@ -677,7 +677,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_raw_size) {
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
         ASSERT_EQ(1024, reader->num_rows());
-        ASSERT_EQ(1024 * 4 + 1024, reader->total_raw_size());
+        ASSERT_EQ(1024 * 4 + 1024, reader->total_mem_footprint());
     }
 }
 

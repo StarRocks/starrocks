@@ -61,7 +61,7 @@ public:
 
     static uint32_t get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size);
     static int32_t get_read_chunk_size(int64_t mem_limit, int32_t config_chunk_size, int64_t num_rows,
-                                       int64_t total_row_size, size_t source_num);
+                                       int64_t total_mem_footprint, size_t source_num);
 
     static void split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
                                          std::vector<std::vector<uint32_t>>* column_groups);

@@ -170,7 +170,7 @@ message ColumnMetaPB {
     // whether all data pages are encoded by dict encoding.
     optional bool all_dict_encoded = 30;
     // used to calculate reader chunk size in vertical compaction
-    optional uint64 total_raw_size = 31;
+    optional uint64 total_mem_footprint = 31;
 }
 
 message SegmentFooterPB {

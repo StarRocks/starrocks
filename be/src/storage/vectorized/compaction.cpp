@@ -77,10 +77,10 @@ uint32_t Compaction::get_segment_max_rows(int64_t max_segment_file_size, int64_t
 }
 
 int32_t Compaction::get_read_chunk_size(int64_t mem_limit, int32_t config_chunk_size, int64_t total_num_rows,
-                                        int64_t total_row_size, size_t source_num) {
+                                        int64_t total_mem_footprint, size_t source_num) {
     uint64_t chunk_size = config_chunk_size;
     if (mem_limit > 0) {
-        int64_t avg_row_size = (total_row_size + 1) / (total_num_rows + 1);
+        int64_t avg_row_size = (total_mem_footprint + 1) / (total_num_rows + 1);
         // The result of the division operation be zero, so added one
         chunk_size = 1 + mem_limit / (source_num * avg_row_size + 1);
     }
@@ -275,13 +275,13 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
 
     int64_t total_num_rows = 0;
-    int64_t total_row_size = 0;
+    int64_t total_mem_footprint = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
-        total_row_size += rowset->total_row_size();
+        total_mem_footprint += rowset->total_row_size();
     }
     int32_t chunk_size = get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
-                                             total_num_rows, total_row_size, segment_iterator_num);
+                                             total_num_rows, total_mem_footprint, segment_iterator_num);
     VLOG(1) << "tablet=" << _tablet->tablet_id() << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.prepare());
@@ -363,7 +363,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         reader_params.profile = _runtime_profile.create_child("merge_rowsets");
 
         int64_t total_num_rows = 0;
-        int64_t total_row_size = 0;
+        int64_t total_mem_footprint = 0;
         for (auto& rowset : _input_rowsets) {
             if (rowset->rowset_meta()->rowset_type() != BETA_ROWSET) {
                 continue;
@@ -377,12 +377,12 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
                     if (column_reader == nullptr) {
                         continue;
                     }
-                    total_row_size += column_reader->total_raw_size();
+                    total_mem_footprint += column_reader->total_mem_footprint();
                 }
             }
         }
         int32_t chunk_size = get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
-                                                 total_num_rows, total_row_size, segment_iterator_num);
+                                                 total_num_rows, total_mem_footprint, segment_iterator_num);
         VLOG(1) << "tablet=" << _tablet->tablet_id() << ", column group=" << i << ", reader chunk size=" << chunk_size;
         reader_params.chunk_size = chunk_size;
         RETURN_IF_ERROR(reader.prepare());

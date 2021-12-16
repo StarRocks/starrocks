@@ -240,7 +240,7 @@ public:
 
     bool is_global_dict_valid() override { return _scalar_column_writer->is_global_dict_valid(); }
 
-    uint64_t total_raw_size() const override { return _scalar_column_writer->total_raw_size(); }
+    uint64_t total_mem_footprint() const override { return _scalar_column_writer->total_mem_footprint(); }
 
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
@@ -415,7 +415,7 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
 Status ScalarColumnWriter::finish() {
     RETURN_IF_ERROR(finish_current_page());
     _opts.meta->set_num_rows(_next_rowid);
-    _opts.meta->set_total_raw_size(_total_raw_size);
+    _opts.meta->set_total_mem_footprint(_total_mem_footprint);
     return Status::OK();
 }
 
@@ -603,7 +603,7 @@ Status ScalarColumnWriter::finish_current_page() {
 }
 
 Status ScalarColumnWriter::append(const vectorized::Column& column) {
-    _total_raw_size += column.byte_size();
+    _total_mem_footprint += column.byte_size();
 
     const uint8_t* ptr = column.raw_data();
     const uint8_t* null =
@@ -612,7 +612,7 @@ Status ScalarColumnWriter::append(const vectorized::Column& column) {
 }
 
 Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column) {
-    _total_raw_size += column.byte_size();
+    _total_mem_footprint += column.byte_size();
 
     // Write offset column, it's only used in ArrayColumn
     // [1, 2, 3], [4, 5, 6]
@@ -845,18 +845,18 @@ Status ArrayColumnWriter::finish() {
     RETURN_IF_ERROR(_element_writer->finish());
 
     _opts.meta->set_num_rows(get_next_rowid());
-    _opts.meta->set_total_raw_size(total_raw_size());
+    _opts.meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();
 }
 
-uint64_t ArrayColumnWriter::total_raw_size() const {
-    uint64_t total_raw_size = 0;
+uint64_t ArrayColumnWriter::total_mem_footprint() const {
+    uint64_t total_mem_footprint = 0;
     if (is_nullable()) {
-        total_raw_size += _null_writer->total_raw_size();
+        total_mem_footprint += _null_writer->total_mem_footprint();
     }
-    total_raw_size += _array_size_writer->total_raw_size();
-    total_raw_size += _element_writer->total_raw_size();
-    return total_raw_size;
+    total_mem_footprint += _array_size_writer->total_mem_footprint();
+    total_mem_footprint += _element_writer->total_mem_footprint();
+    return total_mem_footprint;
 }
 
 Status ArrayColumnWriter::write_data() {
