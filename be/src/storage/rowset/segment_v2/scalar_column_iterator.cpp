@@ -197,6 +197,8 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
     DCHECK_EQ(range.begin(), _current_ordinal);
 
     while (iter.has_more()) {
+        // next row is the first row of next page
+        // do _load_next_page directly to avoid seek_page
         if (_page->remaining() == 0 && iter.begin() == end_ord) {
             _opts.stats->block_seek_num += 1;
             bool eos = false;
@@ -220,6 +222,8 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
             _current_ordinal += r.span_size();
         }
 
+        // next row is not in current page
+        // read current page data first
         if (iter.begin() >= end_ord) {
             RETURN_IF_ERROR(_page->read(dst, read_range));
             read_range.clear();
