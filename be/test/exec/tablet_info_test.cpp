@@ -84,15 +84,6 @@ TEST_F(OlapTablePartitionParamTest, to_protobuf) {
     }
 }
 
-TEST_F(OlapTablePartitionParamTest, unknown_index_column) {
-    TDescriptorTable t_desc_tbl;
-    auto tschema = get_schema(&t_desc_tbl);
-    std::shared_ptr<OlapTableSchemaParam> schema(new OlapTableSchemaParam());
-    tschema.indexes[0].columns.push_back("unknown_col");
-    auto st = schema->init(tschema);
-    ASSERT_FALSE(st.ok());
-}
-
 TEST_F(OlapTablePartitionParamTest, unknown_partition_column) {
     TDescriptorTable t_desc_tbl;
     auto t_schema = get_schema(&t_desc_tbl);
