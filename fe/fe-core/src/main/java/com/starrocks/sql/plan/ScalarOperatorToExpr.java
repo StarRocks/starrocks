@@ -95,6 +95,7 @@ public class ScalarOperatorToExpr {
                 return expr;
             }
 
+            Preconditions.checkState(context.colRefToExpr.containsKey(node));
             return context.colRefToExpr.get(node);
         }
 

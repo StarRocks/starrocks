@@ -168,7 +168,51 @@ public:
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
-    void set_driver_state(DriverState state) { _state = state; }
+
+    void set_driver_state(DriverState state) {
+        if (state == _state) {
+            return;
+        }
+
+        switch (_state) {
+        case DriverState::INPUT_EMPTY: {
+            auto elapsed_time = _input_empty_timer_sw->elapsed_time();
+            if (_first_input_empty_timer->value() == 0) {
+                _first_input_empty_timer->update(elapsed_time);
+            } else {
+                _followup_input_empty_timer->update(elapsed_time);
+            }
+            _input_empty_timer->update(elapsed_time);
+            break;
+        }
+        case DriverState::OUTPUT_FULL:
+            _output_full_timer->update(_output_full_timer_sw->elapsed_time());
+            break;
+        case DriverState::PRECONDITION_BLOCK: {
+            _precondition_block_timer->update(_precondition_block_timer_sw->elapsed_time());
+            break;
+        }
+        default:
+            break;
+        }
+
+        switch (state) {
+        case DriverState::INPUT_EMPTY:
+            _input_empty_timer_sw->reset();
+            break;
+        case DriverState::OUTPUT_FULL:
+            _output_full_timer_sw->reset();
+            break;
+        case DriverState::PRECONDITION_BLOCK:
+            _precondition_block_timer_sw->reset();
+            break;
+        default:
+            break;
+        }
+
+        _state = state;
+    }
+
     Operators& operators() { return _operators; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
@@ -236,18 +280,40 @@ public:
         }
 
         // PRECONDITION_BLOCK
-        if (is_precondition_block()) {
-            return false;
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            if (is_precondition_block()) {
+                return false;
+            }
+
+            // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
+            //  This writing method is a bit tricky, and when there is a better way, replace it
+            mark_precondition_ready(_runtime_state);
+
+            check_short_circuit();
+            if (_state == DriverState::PENDING_FINISH) {
+                return false;
+            }
+            // Driver state must be set to a state different from PRECONDITION_BLOCK bellow,
+            // to avoid call mark_precondition_ready() and check_short_circuit() multiple times.
         }
 
         // OUTPUT_FULL
         if (!sink_operator()->need_input()) {
+            set_driver_state(DriverState::OUTPUT_FULL);
             return false;
         }
 
         // INPUT_EMPTY
-        return source_operator()->is_finished() || source_operator()->has_output();
+        if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+            set_driver_state(DriverState::INPUT_EMPTY);
+            return false;
+        }
+
+        return true;
     }
+
+    // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
+    void check_short_circuit();
 
     bool is_root() const { return _is_root; }
 
@@ -261,6 +327,9 @@ private:
     void _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
     void _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
+
+    RuntimeState* _runtime_state = nullptr;
+    void _update_overhead_timer();
 
     Operators _operators;
 
@@ -284,6 +353,7 @@ private:
     DriverAcct _driver_acct;
     // The first one is source operator
     MorselQueue* _morsel_queue = nullptr;
+    // _state must be set by set_driver_state() to record state timer.
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     const size_t _yield_max_chunks_moved;
@@ -294,8 +364,14 @@ private:
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
+    RuntimeProfile::Counter* _overhead_timer = nullptr;
+    RuntimeProfile::Counter* _schedule_timer = nullptr;
     RuntimeProfile::Counter* _pending_timer = nullptr;
     RuntimeProfile::Counter* _precondition_block_timer = nullptr;
+    RuntimeProfile::Counter* _input_empty_timer = nullptr;
+    RuntimeProfile::Counter* _first_input_empty_timer = nullptr;
+    RuntimeProfile::Counter* _followup_input_empty_timer = nullptr;
+    RuntimeProfile::Counter* _output_full_timer = nullptr;
     RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
 
     RuntimeProfile::Counter* _schedule_counter = nullptr;
@@ -306,6 +382,8 @@ private:
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
     MonotonicStopWatch* _precondition_block_timer_sw = nullptr;
+    MonotonicStopWatch* _input_empty_timer_sw = nullptr;
+    MonotonicStopWatch* _output_full_timer_sw = nullptr;
 };
 
 } // namespace pipeline

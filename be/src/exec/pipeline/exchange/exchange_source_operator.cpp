@@ -10,7 +10,7 @@
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    SourceOperator::prepare(state);
     _stream_recvr = std::move(
             static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state, _runtime_profile));
     return Status::OK();
@@ -43,13 +43,12 @@ std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_re
     }
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
-            config::exchg_node_buffer_size_bytes, profile, false, nullptr);
+            config::exchg_node_buffer_size_bytes, profile, false, nullptr, true, false);
     return _stream_recvr;
 }
 
 void ExchangeSourceOperatorFactory::close_stream_recvr() {
-    // The remain two references are hold by DataStreamMgr and ExchangeSourceOperatorFactory
-    if (++_stream_recvr_close_cnt == _stream_recvr.use_count() - 2) {
+    if (--_stream_recvr_cnt == 0) {
         _stream_recvr->close();
     }
 }

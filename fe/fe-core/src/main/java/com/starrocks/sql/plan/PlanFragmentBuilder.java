@@ -192,7 +192,10 @@ public class PlanFragmentBuilder {
         execPlan.getOutputExprs().addAll(outputExprs);
 
         // Single tablet direct output
-        if (execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
+        // Note: If the fragment has right or full join and the join is local bucket shuffle join,
+        // We shouldn't set result sink directly to top fragment, because we will hash multi reslt sink.
+        if (!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
+                && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
                 .reduce(Integer::sum).orElse(2) <= 1) {
             inputFragment.setOutputExprs(outputExprs);
@@ -415,6 +418,8 @@ public class PlanFragmentBuilder {
                 projectMap.put(new SlotId(entry.getKey().getId()), expr);
                 Preconditions.checkState(context.getColRefToExpr().containsKey(entry.getKey()));
             }
+
+            tupleDescriptor.computeMemLayout();
 
             DecodeNode decodeNode = new DecodeNode(context.getPlanCtx().getNextNodeId(),
                     tupleDescriptor,
@@ -1316,33 +1321,42 @@ public class PlanFragmentBuilder {
             } else {
                 JoinOperator joinOperator = node.getJoinType();
 
+                PlanNode leftFragmentPlanRoot = leftFragment.getPlanRoot();
+                PlanNode rightFragmentPlanRoot = rightFragment.getPlanRoot();
+                // skip decode node
+                if (leftFragmentPlanRoot instanceof DecodeNode) {
+                    leftFragmentPlanRoot = leftFragmentPlanRoot.getChild(0);
+                }
+                if (rightFragmentPlanRoot instanceof DecodeNode) {
+                    rightFragmentPlanRoot = rightFragmentPlanRoot.getChild(0);
+                }
                 // 1. Get distributionMode
                 HashJoinNode.DistributionMode distributionMode;
-                if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
-                        ((ExchangeNode) leftFragment.getPlanRoot()).getDistributionType()
+                if (leftFragmentPlanRoot instanceof ExchangeNode &&
+                        ((ExchangeNode) leftFragmentPlanRoot).getDistributionType()
                                 .equals(DistributionSpec.DistributionType.SHUFFLE) &&
-                        rightFragment.getPlanRoot() instanceof ExchangeNode &&
-                        ((ExchangeNode) rightFragment.getPlanRoot()).getDistributionType()
+                        rightFragmentPlanRoot instanceof ExchangeNode &&
+                        ((ExchangeNode) rightFragmentPlanRoot).getDistributionType()
                                 .equals(DistributionSpec.DistributionType.SHUFFLE)) {
                     distributionMode = HashJoinNode.DistributionMode.PARTITIONED;
-                } else if (rightFragment.getPlanRoot() instanceof ExchangeNode &&
-                        ((ExchangeNode) rightFragment.getPlanRoot()).getDistributionType()
+                } else if (rightFragmentPlanRoot instanceof ExchangeNode &&
+                        ((ExchangeNode) rightFragmentPlanRoot).getDistributionType()
                                 .equals(DistributionSpec.DistributionType.BROADCAST)) {
                     distributionMode = HashJoinNode.DistributionMode.BROADCAST;
-                } else if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
-                        !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                    if (isColocateJoin(optExpr, context, leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                } else if (!(leftFragmentPlanRoot instanceof ExchangeNode) &&
+                        !(rightFragmentPlanRoot instanceof ExchangeNode)) {
+                    if (isColocateJoin(optExpr, context, leftFragmentPlanRoot, rightFragmentPlanRoot)) {
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
                     } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
-                            rightFragment.getPlanRoot().canDoReplicatedJoin()) {
+                            rightFragmentPlanRoot.canDoReplicatedJoin()) {
                         distributionMode = HashJoinNode.DistributionMode.REPLICATED;
-                    } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                    } else if (isShuffleHashBucket(leftFragmentPlanRoot, rightFragmentPlanRoot)) {
                         distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                     } else {
                         Preconditions.checkState(false, "Must be replicate join or colocate join");
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
                     }
-                } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                } else if (isShuffleHashBucket(leftFragmentPlanRoot, rightFragmentPlanRoot)) {
                     distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
                     distributionMode = HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET;
@@ -1350,7 +1364,7 @@ public class PlanFragmentBuilder {
 
                 for (BinaryPredicateOperator s : eqOnPredicates) {
                     if (!optExpr.inputAt(0).getLogicalProperty().getOutputColumns()
-                            .contains(s.getChild(0).getUsedColumns())) {
+                            .containsAll(s.getChild(0).getUsedColumns())) {
                         s.swap();
                     }
                 }

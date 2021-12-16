@@ -29,12 +29,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Tablet;
@@ -148,7 +148,7 @@ abstract public class StarRocksHttpTestCase {
         tablet.addReplica(replica3);
 
         // partition
-        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(2);
+        HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
         partition.updateVisibleVersion(testStartVersion);
         partition.setNextVersion(testStartVersion + 1);

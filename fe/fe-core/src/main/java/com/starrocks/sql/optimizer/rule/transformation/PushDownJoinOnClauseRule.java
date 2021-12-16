@@ -69,13 +69,13 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
             return Utils.compoundAnd(on, derivedPredicate);
         } else if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (rightOutputColumns.contains(p.getUsedColumns())) {
+                if (rightOutputColumns.containsAll(p.getUsedColumns())) {
                     pushDown.add(p);
                 }
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (leftOutputColumns.contains(p.getUsedColumns())) {
+                if (leftOutputColumns.containsAll(p.getUsedColumns())) {
                     pushDown.add(p);
                 }
             }

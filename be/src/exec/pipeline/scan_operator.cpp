@@ -13,7 +13,7 @@
 namespace starrocks::pipeline {
 
 Status ScanOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    SourceOperator::prepare(state);
     DCHECK(_io_threads != nullptr);
     _state = state;
     auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);

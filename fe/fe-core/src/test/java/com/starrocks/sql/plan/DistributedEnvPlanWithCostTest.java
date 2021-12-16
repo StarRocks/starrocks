@@ -567,7 +567,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  column statistics: \n" +
                 "  |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
                 "  |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
-                "  |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE\n" +
+                "  |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
                 "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
                 "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE"));
     }
@@ -862,13 +862,14 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testCastDatePredicate() throws Exception {
-        String sql = "select L_PARTKEY from lineitem where year(L_PARTKEY) = 1998";
-
         OlapTable lineitem = (OlapTable) connectContext.getCatalog().getDb("default_cluster:test").getTable("lineitem");
 
         MockTpchStatisticStorage mock = new MockTpchStatisticStorage(100);
         connectContext.getCatalog().setStatisticStorage(mock);
 
+        // ===========================
+        // To handle cast(int) in normal range
+        String sql = "select L_PARTKEY from lineitem where year(L_PARTKEY) = 1998";
         new Expectations(mock) {
             {
                 mock.getColumnStatistic(lineitem, "L_PARTKEY");
@@ -877,11 +878,53 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         };
 
         String plan = getCostExplain(sql);
-
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("     cardinality: 85714286\n" +
-                "     column statistics: \n" +
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
                 "     * L_PARTKEY-->[1.9921212E7, 1.9980202E7, 0.0, 8.0, 20000.0] ESTIMATE"));
+
+        // ===========================
+        // To handle cast(int) in infinity range
+        sql = "select L_PARTKEY from lineitem where year(L_PARTKEY) = 1998";
+        new Expectations(mock) {
+            {
+                mock.getColumnStatistic(lineitem, "L_PARTKEY");
+                result = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 8, 20000);
+            }
+        };
+
+        plan = getCostExplain(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
+                "     * L_PARTKEY-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE"));
+
+        // ===========================
+        // To handle cast(date) in normal range
+        sql = "select L_SHIPDATE from lineitem where year(L_SHIPDATE) = 1998";
+        new Expectations(mock) {
+            {
+                mock.getColumnStatistic(lineitem, "L_SHIPDATE");
+                result = new ColumnStatistic(19921212, 19980202, 0, 8, 20000);
+            }
+        };
+
+        plan = getCostExplain(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
+                "     * L_SHIPDATE-->[1.9921212E7, 1.9980202E7, 0.0, 8.0, 1.0] ESTIMATE"));
+
+        // ===========================
+        // To handle cast(date) in infinity range
+        new Expectations(mock) {
+            {
+                mock.getColumnStatistic(lineitem, "L_SHIPDATE");
+                result = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 8, 20000);
+            }
+        };
+
+        plan = getCostExplain(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
+                "     * L_SHIPDATE-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE"));
 
         connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(100));
     }

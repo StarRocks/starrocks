@@ -172,6 +172,13 @@ public:
     void push_down_join_runtime_filter_to_children(RuntimeState* state,
                                                    vectorized::RuntimeFilterProbeCollector* collector);
 
+    void push_down_join_runtime_filter_recursively(RuntimeState* state) {
+        push_down_join_runtime_filter(state, &_runtime_filter_collector);
+        for (auto* child : _children) {
+            child->push_down_join_runtime_filter_recursively(state);
+        }
+    }
+
     // recursive helper method for generating a string for Debug_string().
     // implementations should call debug_string(int, std::stringstream) on their children.
     // Input parameters:

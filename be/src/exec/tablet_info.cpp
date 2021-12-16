@@ -57,16 +57,9 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
         index->schema_hash = p_index.schema_hash();
         for (auto& col : p_index.columns()) {
             auto it = slots_map.find(col);
-            if (it == std::end(slots_map)) {
-                if (col == LOAD_OP_COLUMN) {
-                    // no op slot, so all op is insert, skip op column
-                    continue;
-                }
-                std::stringstream ss;
-                ss << "unknown index column, column=" << col;
-                return Status::InternalError(ss.str());
+            if (it != std::end(slots_map)) {
+                index->slots.emplace_back(it->second);
             }
-            index->slots.emplace_back(it->second);
         }
         _indexes.emplace_back(index);
     }
@@ -94,16 +87,9 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
         index->schema_hash = t_index.schema_hash;
         for (auto& col : t_index.columns) {
             auto it = slots_map.find(col);
-            if (it == std::end(slots_map)) {
-                if (col == LOAD_OP_COLUMN) {
-                    // no op slot, so all op is insert, skip op column
-                    continue;
-                }
-                std::stringstream ss;
-                ss << "unknown index column, column=" << col;
-                return Status::InternalError(ss.str());
+            if (it != std::end(slots_map)) {
+                index->slots.emplace_back(it->second);
             }
-            index->slots.emplace_back(it->second);
         }
         _indexes.emplace_back(index);
     }
@@ -264,10 +250,8 @@ bool OlapTablePartitionParam::find_tablet(Tuple* tuple, const OlapTablePartition
 }
 
 Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNode>& t_exprs, Tuple** part_key) {
-    Tuple* tuple = (Tuple*)_mem_pool->allocate(_schema->tuple_desc()->byte_size());
-    if (UNLIKELY(tuple == nullptr)) {
-        return Status::InternalError("Mem usage has exceed the limit of BE");
-    }
+    auto* tuple = (Tuple*)_mem_pool->allocate(_schema->tuple_desc()->byte_size());
+    RETURN_IF_UNLIKELY_NULL(tuple, Status::MemoryAllocFailed("alloc mem for partition keys failed"));
     for (int i = 0; i < t_exprs.size(); i++) {
         const TExprNode& t_expr = t_exprs[i];
         RETURN_IF_ERROR(_create_partition_key(t_expr, tuple, _partition_slot_descs[i]));

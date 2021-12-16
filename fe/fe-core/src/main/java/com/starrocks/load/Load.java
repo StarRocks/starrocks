@@ -66,10 +66,12 @@ import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
@@ -182,7 +184,7 @@ public class Load {
             List<String> columnsFromPath) throws UserException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, false);
+                columnsFromPath, false, false);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
@@ -190,7 +192,8 @@ public class Load {
                                    Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-                                   List<String> columnsFromPath, boolean isStreamLoadJson) throws UserException {
+                                   List<String> columnsFromPath, boolean isStreamLoadJson,
+                                   boolean partialUpdate) throws UserException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -290,16 +293,19 @@ public class Load {
             }
         }
 
-        // check default value
-        for (Column column : tbl.getBaseSchema()) {
-            String columnName = column.getName();
-            if (columnExprMap.containsKey(columnName)) {
-                continue;
+        // partial update do not check default value
+        if (!partialUpdate) {
+            // check default value
+            for (Column column : tbl.getBaseSchema()) {
+                String columnName = column.getName();
+                if (columnExprMap.containsKey(columnName)) {
+                    continue;
+                }
+                Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull()) {
+                    throw new DdlException("Column has no default value. column: " + columnName);
+                }
             }
-            if (column.getDefaultValue() != null || column.isAllowNull()) {
-                continue;
-            }
-            throw new DdlException("Column has no default value. column: " + columnName);
         }
 
         // get shadow column desc when table schema change
@@ -487,6 +493,19 @@ public class Load {
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs) throws UserException {
+        Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
+        List<Column> ret = new ArrayList<>();
+        for (Column col : tbl.getBaseSchema()) {
+            if (specified.contains(col.getName())) {
+                ret.add(col);
+            } else if (col.isKey()) {
+                throw new DdlException("key column " + col.getName() + " not in partial update columns");
+            }
+        }
+        return ret;
+    }
+
     /**
      * @param excludedColumns: columns that the type should not be inferred from expr.
      *                         Such as, the type of column from path is VARCHAR, whether it is in expr args or not,
@@ -635,9 +654,13 @@ public class Load {
                     if (funcExpr.hasChild(1)) {
                         exprs.add(funcExpr.getChild(1));
                     } else {
-                        if (column.getDefaultValue() != null) {
-                            exprs.add(new StringLiteral(column.getDefaultValue()));
-                        } else {
+                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                        if (defaultValueType == Column.DefaultValueType.CONST) {
+                            exprs.add(new StringLiteral(column.getCalculatedDefaultValue()));
+                        } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                            throw new UserException("Column(" + columnName + ") has unsupported default value:"
+                                    + column.getDefaultExpr().getExpr());
+                        } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 exprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {
@@ -654,9 +677,13 @@ public class Load {
                     if (funcExpr.hasChild(1)) {
                         innerIfExprs.add(funcExpr.getChild(1));
                     } else {
-                        if (column.getDefaultValue() != null) {
-                            innerIfExprs.add(new StringLiteral(column.getDefaultValue()));
-                        } else {
+                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                        if (defaultValueType == Column.DefaultValueType.CONST) {
+                            innerIfExprs.add(new StringLiteral(column.getCalculatedDefaultValue()));
+                        } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                            throw new UserException("Column(" + columnName + ") has unsupported default value:"
+                                    + column.getDefaultExpr().getExpr());
+                        } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 innerIfExprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {

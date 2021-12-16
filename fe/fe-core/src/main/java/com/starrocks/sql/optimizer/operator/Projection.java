@@ -119,6 +119,28 @@ public class Projection {
         }
     }
 
+    public boolean hasUnsupportedDictOperator(Set<Integer> stringColumnIds) {
+        ColumnRefSet stringColumnRefSet = new ColumnRefSet();
+        for (Integer stringColumnId : stringColumnIds) {
+            stringColumnRefSet.union(stringColumnId);
+        }
+
+        // It may appear that the value of the project is ColumnRef and the column in stringColumnIds.
+        // In this case, we need to insert Decode
+        // eg. stringColumnIds (20), project is (30, 20)
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : columnRefMap.entrySet()) {
+            if (kv.getValue() instanceof ColumnRefOperator
+                    && !kv.getKey().equals(kv.getValue())
+                    && stringColumnIds.contains(((ColumnRefOperator) kv.getValue()).getId())) {
+                return true;
+            }
+        }
+
+        ColumnRefSet columnRefSet = new ColumnRefSet();
+        this.fillDisableDictOptimizeColumns(columnRefSet);
+        return columnRefSet.isIntersect(stringColumnRefSet);
+    }
+
     private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet) {
         if (!couldApplyDictOptimize(operator)) {
             columnRefSet.union(operator.getUsedColumns());

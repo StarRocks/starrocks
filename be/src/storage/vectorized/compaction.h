@@ -18,6 +18,15 @@ namespace starrocks::vectorized {
 
 class DataDir;
 
+enum CompactionAlgorithm {
+    // compaction by all columns together.
+    kHorizontal = 0,
+    // compaction by column group, for tablet with many columns.
+    kVertical = 1
+};
+
+const char* compaction_algorithm_to_string(CompactionAlgorithm algorithm);
+
 // This class is a base class for compaction.
 // The entrance of this class is compact()
 // Any compaction should go through four procedures.
@@ -44,6 +53,17 @@ public:
 
     static Status init(int concurreny);
 
+    // choose compaction algorithm according to tablet schema, max columns per group and segment iterator num.
+    // 1. if the number of columns in the schema is less than or equal to max_columns_per_group, use kHorizontal.
+    // 2. if source_num is less than or equal to 1, or is more than MAX_SOURCES, use kHorizontal.
+    static CompactionAlgorithm choose_compaction_algorithm(size_t num_columns, int64_t max_columns_per_group,
+                                                           size_t source_num);
+
+    static uint32_t get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size);
+
+    static void split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
+                                         std::vector<std::vector<uint32_t>>* column_groups);
+
 protected:
     virtual Status pick_rowsets_to_compact() = 0;
     virtual std::string compaction_name() const = 0;
@@ -52,14 +72,9 @@ protected:
     Status do_compaction();
     Status do_compaction_impl();
 
-    // merge rows from vectorized reader and write into `_output_rs_writer`.
-    // return Status::OK() and set statistics into `*stats_output`.
-    // return others on error
-    Status merge_rowsets(int64_t mem_limit, Statistics* stats_output);
-
     Status modify_rowsets();
 
-    Status construct_output_rowset_writer();
+    Status construct_output_rowset_writer(uint32_t max_rows_per_segment, CompactionAlgorithm algorithm);
 
     Status check_version_continuity(const std::vector<RowsetSharedPtr>& rowsets);
     Status check_correctness(const Statistics& stats);
@@ -67,9 +82,11 @@ protected:
     // semaphore used to limit the concurrency of running compaction tasks
     static Semaphore _concurrency_sem;
 
-protected:
     MemTracker* _mem_tracker = nullptr;
     TabletSharedPtr _tablet;
+    // used for vertical compaction
+    // the first group is key columns
+    std::vector<std::vector<uint32_t>> _column_groups;
 
     std::vector<RowsetSharedPtr> _input_rowsets;
     int64_t _input_rowsets_size;
@@ -84,6 +101,15 @@ protected:
     Version _output_version;
 
     RuntimeProfile _runtime_profile;
+
+private:
+    StatusOr<size_t> _get_segment_iterator_num();
+
+    // merge rows from vectorized reader and write into `_output_rs_writer`.
+    // return Status::OK() and set statistics into `*stats_output`.
+    // return others on error
+    Status _merge_rowsets_horizontally(int64_t mem_limit, Statistics* stats_output);
+    Status _merge_rowsets_vertically(Statistics* stats_output);
 };
 
 } // namespace starrocks::vectorized

@@ -40,8 +40,6 @@
 namespace starrocks {
 namespace segment_v2 {
 
-enum { BINARY_DICT_PAGE_HEADER_SIZE = 4 };
-
 // This type of page use dictionary encoding for strings.
 // There is only one dictionary page for all the data pages within a column.
 //

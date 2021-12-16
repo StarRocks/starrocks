@@ -214,6 +214,8 @@ public:
     static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb);
     static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
                                                 TabletSchemaMap* schema_map);
+    static std::shared_ptr<TabletSchema> create(const TabletSchema& tablet_schema,
+                                                const std::vector<std::size_t>& column_indexes);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
@@ -244,6 +246,8 @@ public:
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
     CompressKind compress_kind() const { return static_cast<CompressKind>(_compress_kind); }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
+    bool has_bf_fpp() const { return _has_bf_fpp; }
+    double bf_fpp() const { return _bf_fpp; }
 
     // The in-memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.

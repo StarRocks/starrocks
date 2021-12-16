@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer.relation;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
@@ -12,10 +11,9 @@ public abstract class SetOperationRelation extends QueryRelation {
     private final List<QueryRelation> relations;
     private final SetQualifier qualifier;
 
-    public SetOperationRelation(List<QueryRelation> relations, SetQualifier qualifier, List<Expr> outputExpressions,
-                                Scope outputScope) {
+    public SetOperationRelation(List<QueryRelation> relations, SetQualifier qualifier, List<Expr> outputExpressions) {
         //Use the first column names as the column name of the set-operation
-        super(outputExpressions, outputScope, relations.get(0).getColumnOutputNames());
+        super(outputExpressions, relations.get(0).getColumnOutputNames());
         this.relations = new ArrayList<>(relations);
         this.qualifier = qualifier;
     }

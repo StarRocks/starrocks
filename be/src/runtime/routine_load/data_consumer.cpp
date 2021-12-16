@@ -236,6 +236,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
 Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_ids,
                                                std::vector<int64_t>* beginning_offsets,
                                                std::vector<int64_t>* latest_offsets) {
+    _last_visit_time = time(nullptr);
     beginning_offsets->reserve(partition_ids->size());
     latest_offsets->reserve(partition_ids->size());
     for (auto p_id : *partition_ids) {
@@ -256,6 +257,7 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
 }
 
 Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids) {
+    _last_visit_time = time(nullptr);
     // create topic conf
     RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
     auto conf_deleter = [tconf]() { delete tconf; };
@@ -329,6 +331,7 @@ Status KafkaDataConsumer::cancel(StreamLoadContext* ctx) {
 Status KafkaDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
+    _k_consumer->unassign();
     return Status::OK();
 }
 

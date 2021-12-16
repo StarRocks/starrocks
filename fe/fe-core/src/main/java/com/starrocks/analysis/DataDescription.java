@@ -509,7 +509,7 @@ public class DataDescription {
         }
 
         if (args.get(0) != null) {
-            ColumnDef.validateDefaultValue(column.getType(), args.get(0));
+            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(args.get(0)));
         }
     }
 
@@ -527,9 +527,14 @@ public class DataDescription {
     private static void validateReplaceValue(List<String> args, Column column) throws AnalysisException {
         String replaceValue = null;
         if (args.size() == 1) {
-            replaceValue = column.getDefaultValue();
-            if (replaceValue == null) {
+            Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+            if (defaultValueType == Column.DefaultValueType.NULL) {
                 throw new AnalysisException("Column " + column.getName() + " has no default value");
+            } else if (defaultValueType == Column.DefaultValueType.CONST) {
+                replaceValue = column.getCalculatedDefaultValue();
+            } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                throw new AnalysisException("Column " + column.getName() + " has unsupported default value:" +
+                        column.getDefaultExpr().getExpr());
             }
 
             args.add(replaceValue);
@@ -544,7 +549,7 @@ public class DataDescription {
         }
 
         if (replaceValue != null) {
-            ColumnDef.validateDefaultValue(column.getType(), replaceValue);
+            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(replaceValue));
         }
     }
 
