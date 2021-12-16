@@ -274,7 +274,7 @@ public class ReplayFromDumpTest {
                 "  |  * inv_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
                 "  |  * inv_item_sk-->[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE\n" +
                 "  |  * inv_quantity_on_hand-->[0.0, 1000.0, 0.05000724964315228, 4.0, 1006.0] ESTIMATE\n" +
-                "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 334.80791666666664] ESTIMATE\n" +
+                "  |  * d_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |       cardinality: 335"));
