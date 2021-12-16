@@ -44,6 +44,9 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeMinAggregateFunction();
 
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeAnyValueAggregateFunction();
+
     template <typename NestedState>
     static AggregateFunctionPtr MakeNullableAggregateFunctionUnary(AggregateFunctionPtr nested_function);
 
