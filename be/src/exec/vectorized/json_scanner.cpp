@@ -139,6 +139,18 @@ Status JsonScanner::_construct_json_types() {
             break;
         }
 
+        case TYPE_CHAR: {
+            auto varchar_type = TypeDescriptor::create_char_type(slot_desc->type().len);
+            _json_types[column_pos] = std::move(varchar_type);
+            break;
+        }
+
+        case TYPE_VARCHAR:{
+            auto varchar_type = TypeDescriptor::create_varchar_type(slot_desc->type().len);
+            _json_types[column_pos] = std::move(varchar_type);
+            break;
+        }
+
         // Treat other types as VARCHAR.
         default: {
             auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
