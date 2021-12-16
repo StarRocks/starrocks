@@ -125,8 +125,8 @@ Status DeltaWriter::_init() {
 
     RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
 
-    std::size_t partial_col_num = (*_req.slots).size();
-    if (partial_col_num > 0 && (*_req.slots).back()->col_name() == "__op") {
+    std::size_t partial_col_num = _req.slots->size();
+    if (partial_col_num > 0 && _req.slots->back()->col_name() == "__op") {
         --partial_col_num;
     }
     // maybe partial update, change to partial tablet schema
