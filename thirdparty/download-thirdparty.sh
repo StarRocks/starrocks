@@ -239,6 +239,7 @@ if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch 
     touch $PATCHED_MARK
 fi
 cd -
