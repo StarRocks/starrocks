@@ -74,31 +74,6 @@ static Status add_nullable_binary_column(Column* column, const TypeDescriptor& t
     }
 }
 
-static Status add_nullable_boolean_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                          simdjson::ondemand::value* value) {
-    auto nullable_column = down_cast<NullableColumn*>(column);
-
-    auto& null_column = nullable_column->null_column();
-    auto& data_column = nullable_column->data_column();
-
-    try {
-        if (value->is_null()) {
-            data_column->append_default(1);
-            null_column->append(1);
-            return Status::OK();
-        }
-
-        RETURN_IF_ERROR(add_boolean_column(data_column.get(), type_desc, name, value));
-
-        null_column->append(0);
-        return Status::OK();
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value as boolean, column=$0, error=$1", name,
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
-    }
-}
-
 static Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                   simdjson::ondemand::value* value) {
     // The type mappint should be in accord with JsonScanner::_construct_json_types();
@@ -115,8 +90,6 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
         return add_nullable_numeric_column<double>(column, type_desc, name, value);
     case TYPE_FLOAT:
         return add_nullable_numeric_column<float>(column, type_desc, name, value);
-    case TYPE_BOOLEAN:
-        return add_nullable_boolean_column(column, type_desc, name, value);
     case TYPE_ARRAY: {
         try {
             if (value->type() == simdjson::ondemand::json_type::array) {
