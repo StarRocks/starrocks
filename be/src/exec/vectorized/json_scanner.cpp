@@ -112,11 +112,16 @@ Status JsonScanner::_construct_json_types() {
                 child_type->children.emplace_back(TYPE_ARRAY);
                 child_type = &(child_type->children[0]);
             }
-            if (slot_type->type == TYPE_VARCHAR) {
+
+            if (slot_type->type == TYPE_FLOAT || slot_type->type == TYPE_DOUBLE || slot_type->type == TYPE_BIGINT ||
+                slot_type->type == TYPE_BIGINT || slot_type->type == TYPE_INT || slot_type->type == TYPE_SMALLINT ||
+                slot_type->type == TYPE_TINYINT) {
+                // Treat these types as what they are.
+                child_type->children.emplace_back(slot_type->type);
+            } else {
+                // Treat other types as VARCHAR.
                 auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
                 child_type->children.emplace_back(varchar_type);
-            } else {
-                child_type->children.emplace_back(slot_type->type);
             }
 
             _json_types[column_pos] = std::move(json_type);
