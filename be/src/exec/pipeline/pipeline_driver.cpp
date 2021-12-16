@@ -16,7 +16,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
 
     // TotalTime is reserved name
-    _total_timer = ADD_TIMER(_runtime_profile, "OverallTime");
+    _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
     _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
@@ -331,13 +331,9 @@ void PipelineDriver::_update_overhead_timer() {
         DCHECK_EQ(children.size(), 1);
         RuntimeProfile* child_profile = children[0];
 
-        auto* pull_total_timer = child_profile->get_counter("PullTotalTime");
-        auto* push_total_timer = child_profile->get_counter("PushTotalTime");
-        if (pull_total_timer != nullptr) {
-            overhead_time -= pull_total_timer->value();
-        }
-        if (push_total_timer != nullptr) {
-            overhead_time -= push_total_timer->value();
+        auto* total_timer = child_profile->get_counter("OperatorTotalTime");
+        if (total_timer != nullptr) {
+            overhead_time -= total_timer->value();
         }
 
         profile = child_profile;
@@ -385,7 +381,10 @@ void PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* sta
 
     VLOG_ROW << strings::Substitute("[Driver] finishing operator [driver=$0] [operator=$1]", to_readable_string(),
                                     op->get_name());
-    op->set_finishing(state);
+    {
+        SCOPED_TIMER(op->_finishing_timer);
+        op->set_finishing(state);
+    }
     op_state = OperatorStage::FINISHING;
 }
 
@@ -398,7 +397,10 @@ void PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* stat
 
     VLOG_ROW << strings::Substitute("[Driver] finished operator [driver=$0] [operator=$1]", to_readable_string(),
                                     op->get_name());
-    op->set_finished(state);
+    {
+        SCOPED_TIMER(op->_finished_timer);
+        op->set_finished(state);
+    }
     op_state = OperatorStage::FINISHED;
 }
 
@@ -429,7 +431,13 @@ void PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state)
 
     VLOG_ROW << strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
                                     op->get_name());
-    op->close(state);
+    {
+        SCOPED_TIMER(op->_close_timer);
+        op->close(state);
+    }
+    COUNTER_UPDATE(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
+                                             op->_finishing_timer->value() + op->_finished_timer->value() +
+                                             op->_close_timer->value());
     op_state = OperatorStage::CLOSED;
 }
 
