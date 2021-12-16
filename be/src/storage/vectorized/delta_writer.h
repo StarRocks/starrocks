@@ -55,7 +55,7 @@ public:
     [[nodiscard]] Status close();
 
     // Wait until all data have been flushed to disk, then create a new Rowset.
-    // REQUIRE: The DeltaWriter has been successfully `close()`d.
+    // Prerequite: the DeltaWriter has been successfully `close()`d.
     // [NOT thread-safe]
     [[nodiscard]] Status commit();
 
@@ -73,7 +73,7 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker; };
 
-    // REQUIRE: has successfully `commit()`ed
+    // Return the rowset created by `commit()`, or nullptr if `commit()` not been called or failed.
     const Rowset* committed_rowset() const { return _cur_rowset.get(); }
 
     // REQUIRE: has successfully `commit()`ed
