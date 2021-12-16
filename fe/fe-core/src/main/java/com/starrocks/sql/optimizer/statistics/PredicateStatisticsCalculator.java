@@ -88,7 +88,6 @@ public class PredicateStatisticsCalculator {
                 return statistics;
             }
             double selectivity;
-            int inValueSize = predicate.getChildren().size() - 1;
 
             ScalarOperator firstChild = getChildForCastOperator(predicate.getChild(0));
             List<ScalarOperator> otherChildrenList =
@@ -125,13 +124,8 @@ public class PredicateStatisticsCalculator {
                 selectivity = predicate.isNotIn() ?
                         1 - StatisticsEstimateCoefficient.IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT :
                         StatisticsEstimateCoefficient.IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT;
-            } else if (otherChildrenList.stream().allMatch(ScalarOperator::isConstantRef)) {
-                // if in value is all constant, use in value size as distinct values size.
-                selectivity =
-                        hasOverlap ? Math.min(1.0, inValueSize / inColumnStatistic.getDistinctValuesCount()) : 0.0;
-                selectivity = predicate.isNotIn() ? 1 - selectivity : selectivity;
             } else {
-                // children are variables and children column statistics are not unknown.
+                // children column statistics are not unknown.
                 selectivity = hasOverlap ?
                         Math.min(1.0, otherChildrenDistinctValues / inColumnStatistic.getDistinctValuesCount()) : 0.0;
                 selectivity = predicate.isNotIn() ? 1 - selectivity : selectivity;
