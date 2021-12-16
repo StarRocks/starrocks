@@ -105,7 +105,6 @@ set(EXEC_FILES
         ./formats/csv/numeric_converter_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
-        ./formats/json/boolean_column_test.cpp
         ./formats/json/nullable_column_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
@@ -251,7 +250,6 @@ set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIE
 set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
 set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
 set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-set_source_files_properties(./formats/json/boolean_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
 set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
         
 if (USE_AVX2)

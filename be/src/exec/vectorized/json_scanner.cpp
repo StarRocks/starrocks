@@ -28,6 +28,8 @@
 
 namespace starrocks::vectorized {
 
+const int64_t MAX_ERROR_LINES_IN_FILE = 10;
+
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
@@ -382,12 +384,13 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         st = _construct_row(&row, chunk, reordered_slot_descs);
         if (!st.ok()) {
             chunk->set_num_rows(n);
-            _counter->num_rows_filtered++;
-            row.reset();
-            std::string_view sv;
-            (void)!row.raw_json().get(sv);
-            _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
-            return st;
+            if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
+                row.reset();
+                std::string_view sv;
+                (void)!row.raw_json().get(sv);
+                _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
+            }
+            continue;
         }
     }
     return st;

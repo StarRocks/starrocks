@@ -5,7 +5,6 @@
 #include <string>
 
 #include "binary_column.h"
-#include "boolean_column.h"
 #include "column/column.h"
 #include "common/status.h"
 #include "numeric_column.h"
