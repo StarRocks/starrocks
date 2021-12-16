@@ -4,6 +4,7 @@
 
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/vectorized/compaction.h"
 
 namespace starrocks {
 
@@ -11,6 +12,7 @@ namespace vectorized {
 
 struct MergeConfig {
     size_t chunk_size;
+    CompactionAlgorithm algorithm = kHorizontal;
 };
 
 // heap based rowset merger used for updatable tablet's compaction
