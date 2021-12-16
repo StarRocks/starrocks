@@ -301,11 +301,6 @@ public class InPredicate extends Predicate {
         return false;
     }
 
-    @Override
-    public boolean isStrictPredicate() {
-        return getChild(0).unwrapSlotRef() != null;
-    }
-
     public void setOpcode(TExprOpcode opcode) {
         this.opcode = opcode;
     }

@@ -221,9 +221,6 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
 }
 
 Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_scan_timer);
-#endif
     Status status = _reader->get_next(chunk);
     return status;
 }

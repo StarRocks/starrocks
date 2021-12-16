@@ -13,15 +13,19 @@
 
 namespace starrocks::pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
-    _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
-    _active_timer = ADD_TIMER(_runtime_profile, "DriverActiveTime");
-    _pending_timer = ADD_TIMER(_runtime_profile, "DriverPendingTime");
-    _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverPreconditionBlockTime", "DriverPendingTime");
-    _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverInputEmptyTime", "DriverPendingTime");
-    _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverFirstInputEmptyTime", "DriverInputEmptyTime");
-    _followup_input_empty_timer =
-            ADD_CHILD_TIMER(_runtime_profile, "DriverFollowupInputEmptyTime", "DriverInputEmptyTime");
-    _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "DriverOutputFullTime", "DriverPendingTime");
+    _runtime_state = runtime_state;
+
+    // TotalTime is reserved name
+    _total_timer = ADD_TIMER(_runtime_profile, "OverallTime");
+    _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
+    _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
+    _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
+    _pending_timer = ADD_TIMER(_runtime_profile, "PendingTime");
+    _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "PreconditionBlockTime", "PendingTime");
+    _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "InputEmptyTime", "PendingTime");
+    _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime");
+    _followup_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime");
+    _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
     _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
 
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
@@ -67,7 +71,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _all_local_rf_ready = _local_rf_holders.empty();
     // Driver has no global rf to wait for completion always sets _all_global_rf_ready_or_timeout to true;
     _all_global_rf_ready_or_timeout = _global_rf_descriptors.empty();
-    _state = DriverState::READY;
+    set_driver_state(DriverState::READY);
 
     _total_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _pending_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
@@ -85,7 +89,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     SCOPED_TIMER(_active_timer);
-    _state = DriverState::RUNNING;
+    set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
     int64_t time_spent = 0;
@@ -188,7 +192,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
-            _state = is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
+            set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
             return _state;
         }
 
@@ -202,16 +206,40 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             driver_acct().update_accumulated_rows_moved(total_rows_moved);
             driver_acct().update_last_time_spent(time_spent);
             if (is_precondition_block()) {
-                _state = DriverState::PRECONDITION_BLOCK;
+                set_driver_state(DriverState::PRECONDITION_BLOCK);
             } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
-                _state = DriverState::OUTPUT_FULL;
+                set_driver_state(DriverState::OUTPUT_FULL);
             } else if (!source_operator()->is_finished() && !source_operator()->has_output()) {
-                _state = DriverState::INPUT_EMPTY;
+                set_driver_state(DriverState::INPUT_EMPTY);
             } else {
-                _state = DriverState::READY;
+                set_driver_state(DriverState::READY);
             }
             return _state;
         }
+    }
+}
+
+void PipelineDriver::check_short_circuit() {
+    int last_finished = -1;
+    for (int i = _first_unfinished; i < _operators.size() - 1; i++) {
+        if (_operators[i]->is_finished()) {
+            last_finished = i;
+        }
+    }
+
+    if (last_finished == -1) {
+        return;
+    }
+
+    _mark_operator_finishing(_operators[last_finished + 1], _runtime_state);
+    for (auto i = _first_unfinished; i <= last_finished; ++i) {
+        _mark_operator_finished(_operators[i], _runtime_state);
+    }
+    _first_unfinished = last_finished + 1;
+
+    if (sink_operator()->is_finished()) {
+        finish_operators(_runtime_state);
+        set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
     }
 }
 
@@ -258,15 +286,16 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     _close_operators(runtime_state);
 
-    _state = state;
+    set_driver_state(state);
 
-    // Calculate total time before report profile
-    _total_timer->update(_total_timer_sw->elapsed_time());
-
+    COUNTER_UPDATE(_total_timer, _total_timer_sw->elapsed_time());
+    COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
     COUNTER_UPDATE(_schedule_counter, driver_acct().get_schedule_times());
     COUNTER_UPDATE(_schedule_effective_counter, driver_acct().get_schedule_effective_times());
     COUNTER_UPDATE(_schedule_rows_per_chunk, driver_acct().get_rows_per_chunk());
     COUNTER_UPDATE(_schedule_accumulated_chunk_moved, driver_acct().get_accumulated_chunk_moved());
+    _update_overhead_timer();
+
     // last root driver cancel the all drivers' execution and notify FE the
     // fragment's completion but do not unregister the FragmentContext because
     // some non-root drivers maybe has pending io io tasks hold the reference to
@@ -286,6 +315,35 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         auto fragment_id = _fragment_ctx->fragment_instance_id();
         _query_ctx->count_down_fragments();
     }
+}
+
+void PipelineDriver::_update_overhead_timer() {
+    int64_t overhead_time = _active_timer->value();
+    RuntimeProfile* profile = _runtime_profile.get();
+    for (;;) {
+        std::vector<RuntimeProfile*> children;
+        profile->get_children(&children);
+
+        if (children.empty()) {
+            break;
+        }
+
+        DCHECK_EQ(children.size(), 1);
+        RuntimeProfile* child_profile = children[0];
+
+        auto* pull_total_timer = child_profile->get_counter("PullTotalTime");
+        auto* push_total_timer = child_profile->get_counter("PushTotalTime");
+        if (pull_total_timer != nullptr) {
+            overhead_time -= pull_total_timer->value();
+        }
+        if (push_total_timer != nullptr) {
+            overhead_time -= push_total_timer->value();
+        }
+
+        profile = child_profile;
+    }
+
+    COUNTER_UPDATE(_overhead_timer, overhead_time);
 }
 
 std::string PipelineDriver::to_readable_string() const {
@@ -308,9 +366,9 @@ bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
         // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
         // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
         if (is_still_pending_finish()) {
-            _state = DriverState::PENDING_FINISH;
+            set_driver_state(DriverState::PENDING_FINISH);
         } else {
-            _state = _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
+            set_driver_state(_fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED);
         }
 
         return true;

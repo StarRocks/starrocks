@@ -14,13 +14,13 @@
 
 namespace starrocks::vectorized {
 
-Status DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, DeltaWriter** writer) {
-    *writer = new DeltaWriter(req, mem_tracker, StorageEngine::instance());
+Status DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker, DeltaWriter** writer) {
+    *writer = new DeltaWriter(opt, mem_tracker, StorageEngine::instance());
     return Status::OK();
 }
 
-DeltaWriter::DeltaWriter(WriteRequest* req, MemTracker* parent, StorageEngine* storage_engine)
-        : _req(*req),
+DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* parent, StorageEngine* storage_engine)
+        : _opt(opt),
           _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
@@ -51,7 +51,7 @@ void DeltaWriter::_garbage_collection() {
     OLAPStatus rollback_status = OLAP_SUCCESS;
     TxnManager* txn_mgr = _storage_engine->txn_manager();
     if (_tablet != nullptr) {
-        rollback_status = txn_mgr->rollback_txn(_req.partition_id, _tablet, _req.txn_id);
+        rollback_status = txn_mgr->rollback_txn(_opt.partition_id, _tablet, _opt.txn_id);
     }
     // has to check rollback status, because the rowset maybe committed in this thread and
     // published in another thread, then rollback will failed.
@@ -63,10 +63,10 @@ void DeltaWriter::_garbage_collection() {
 
 Status DeltaWriter::_init() {
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    _tablet = tablet_mgr->get_tablet(_req.tablet_id, false);
+    _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
         std::stringstream ss;
-        ss << "Fail to get tablet. tablet_id=" << _req.tablet_id;
+        ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -98,10 +98,10 @@ Status DeltaWriter::_init() {
         TabletSharedPtr new_tablet;
         if (!_tablet->is_migrating()) {
             // maybe migration just finish, get the tablet again
-            new_tablet = tablet_mgr->get_tablet(_req.tablet_id, _req.schema_hash);
+            new_tablet = tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash);
             if (new_tablet == nullptr) {
                 std::stringstream ss;
-                ss << "Fail to get tablet. tablet_id=" << _req.tablet_id;
+                ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
@@ -113,10 +113,10 @@ Status DeltaWriter::_init() {
 
         std::lock_guard push_lock(_tablet->get_push_lock());
         OLAPStatus olap_status =
-                _storage_engine->txn_manager()->prepare_txn(_req.partition_id, _tablet, _req.txn_id, _req.load_id);
+                _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
         if (olap_status != OLAPStatus::OLAP_SUCCESS) {
             std::stringstream ss;
-            ss << "Fail to prepare transaction. tablet_id=" << _req.tablet_id << " err=" << olap_status;
+            ss << "Fail to prepare transaction. tablet_id=" << _opt.tablet_id << " err=" << olap_status;
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -152,20 +152,20 @@ Status DeltaWriter::_init() {
 
     writer_context.rowset_id = _storage_engine->next_rowset_id();
     writer_context.tablet_uid = _tablet->tablet_uid();
-    writer_context.tablet_id = _req.tablet_id;
-    writer_context.partition_id = _req.partition_id;
-    writer_context.tablet_schema_hash = _req.schema_hash;
+    writer_context.tablet_id = _opt.tablet_id;
+    writer_context.partition_id = _opt.partition_id;
+    writer_context.tablet_schema_hash = _opt.schema_hash;
     writer_context.rowset_type = BETA_ROWSET;
     writer_context.rowset_path_prefix = _tablet->schema_hash_path();
     writer_context.rowset_state = PREPARED;
-    writer_context.txn_id = _req.txn_id;
-    writer_context.load_id = _req.load_id;
+    writer_context.txn_id = _opt.txn_id;
+    writer_context.load_id = _opt.load_id;
     writer_context.segments_overlap = OVERLAPPING;
-    writer_context.global_dicts = _req.global_dicts;
+    writer_context.global_dicts = _opt.global_dicts;
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         std::stringstream ss;
-        ss << "Fail to create rowset writer. tablet_id=" << _req.tablet_id << " err=" << st;
+        ss << "Fail to create rowset writer. tablet_id=" << _opt.tablet_id << " err=" << st;
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -220,7 +220,7 @@ Status DeltaWriter::flush_memtable_async() {
     if (_flush_token->get_stats().cur_flush_count < 1) {
         // equal means there is no memtable in flush queue, just flush this memtable
         VLOG(3) << "flush memtable to reduce mem consumption. memtable size: " << _mem_table->memory_usage()
-                << ", tablet: " << _req.tablet_id << ", load id: " << print_id(_req.load_id);
+                << ", tablet: " << _opt.tablet_id << ", load id: " << print_id(_opt.load_id);
         RETURN_IF_ERROR(_flush_memtable_async());
         _reset_mem_table();
     } else {
@@ -245,7 +245,7 @@ Status DeltaWriter::wait_memtable_flushed() {
 }
 
 void DeltaWriter::_reset_mem_table() {
-    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _req.slots, _rowset_writer.get(),
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _opt.slots, _rowset_writer.get(),
                                             _mem_tracker.get());
 }
 
@@ -288,7 +288,7 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
         return Status::InternalError("Fail to build rowset");
     }
     _cur_rowset->set_schema(&_tablet->tablet_schema());
-    OLAPStatus res = _storage_engine->txn_manager()->commit_txn(_req.partition_id, _tablet, _req.txn_id, _req.load_id,
+    OLAPStatus res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                                 _cur_rowset, false);
     if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
         return Status::InternalError("Fail to commit transaction");
@@ -341,7 +341,7 @@ int64_t DeltaWriter::mem_consumption() const {
 }
 
 int64_t DeltaWriter::partition_id() const {
-    return _req.partition_id;
+    return _opt.partition_id;
 }
 
 } // namespace starrocks::vectorized

@@ -4901,6 +4901,16 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testIfTimediff() throws Exception {
+        String sql = "SELECT COUNT(*) FROM t0 WHERE (CASE WHEN CAST(t0.v1 AS BOOLEAN ) THEN " +
+                "TIMEDIFF(\"1970-01-08\", \"1970-01-12\") END) BETWEEN (1341067345) AND " +
+                "(((CASE WHEN false THEN -843579223 ELSE -1859488192 END)+(((-406527105)+(540481936))))) ;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "PREDICATES: CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) >= 1.341067345E9, CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) <= -1.725533361E9"));
+    }
+
+    @Test
     public void testPredicateOnThreeTables() throws Exception {
         String sql = "SELECT \n" +
                 "  DISTINCT t1.v4 \n" +
@@ -4940,5 +4950,69 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PREDICATES: 5: k5 IN (0.005, 0.006), CAST(5: k5 AS DECIMAL32(9,9)) = 0.006"));
         Config.enable_decimal_v3 = false;
+    }
+
+    @Test
+    public void testFullOuterJoinOutputRowCount() throws Exception {
+        Config.enable_decimal_v3 = true;
+        String sql = "SELECT\n" +
+                "    (NOT(FALSE))\n" +
+                "FROM (\n" +
+                "    SELECT t0.v1,t0.v2,t0.v3 \n" +
+                "    FROM t0\n" +
+                "    WHERE (t0.v1) BETWEEN(CAST(t0.v2 AS DECIMAL64)) AND(t0.v1)) subt0\n" +
+                "    FULL OUTER JOIN (\n" +
+                "    SELECT t1.v4, t1.v5, t1.v6\n" +
+                "    FROM t1\n" +
+                "    WHERE TRUE) subt1 ON subt0.v3 = subt1.v6\n" +
+                "    AND subt0.v1 > ((1808124905) % (1336789350))\n" +
+                "WHERE\n" +
+                "    BITMAP_CONTAINS (bitmap_hash (\"dWyMZ\"), ((- 817000778) - (- 809159836)))\n" +
+                "GROUP BY\n" +
+                "    1.38432132E8, \"1969-12-20 10:26:22\"\n" +
+                "HAVING (COUNT(NULL))\n" +
+                "IN(- 1210205071)\n";
+        String plan = getFragmentPlan(sql);
+        // Just make sure we can get the final plan, and not crashed because of stats calculator error.
+        System.out.println(sql);
+    }
+
+    @Test
+    public void testDeriveOutputColumns() throws Exception {
+        String sql = "select \n" +
+                "  rand() as c0, \n" +
+                "  round(\n" +
+                "    cast(\n" +
+                "      rand() as DOUBLE\n" +
+                "    )\n" +
+                "  ) as c1 \n" +
+                "from \n" +
+                "  (\n" +
+                "    select \n" +
+                "      subq_0.v1 as c0 \n" +
+                "    from \n" +
+                "      (\n" +
+                "        select \n" +
+                "          v1,v2,v3\n" +
+                "        from \n" +
+                "          t0 as ref_0 \n" +
+                "        where \n" +
+                "          ref_0.v1 = ref_0.v2 \n" +
+                "        limit \n" +
+                "          72\n" +
+                "      ) as subq_0 \n" +
+                "      right join t1 as ref_1 on (subq_0.v3 = ref_1.v5) \n" +
+                "    where \n" +
+                "      subq_0.v2 <> subq_0.v3 \n" +
+                "    limit \n" +
+                "      126\n" +
+                "  ) as subq_1 \n" +
+                "where \n" +
+                "  66 <= unix_timestamp() \n" +
+                "limit \n" +
+                "  155;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("6:Project\n" +
+                "  |  <slot 2> : 2: v2"));
     }
 }

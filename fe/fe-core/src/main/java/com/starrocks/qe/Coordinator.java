@@ -29,7 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
@@ -59,7 +58,6 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
-import com.starrocks.planner.Planner;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
@@ -70,6 +68,8 @@ import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.InternalServiceVersion;
@@ -201,37 +201,6 @@ public class Coordinator {
     private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap = Maps.newHashMap();
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
-
-    // Used for query/insert
-    public Coordinator(ConnectContext context, Analyzer analyzer, Planner planner) {
-        this.isBlockQuery = planner.isBlockQuery();
-        this.queryId = context.getExecutionId();
-        this.fragments = planner.getFragments();
-        this.scanNodes = planner.getScanNodes();
-        this.descTable = analyzer.getDescTbl().toThrift();
-        this.returnedAllResults = false;
-        this.queryOptions = context.getSessionVariable().toThrift();
-        long startTime = context.getStartTime();
-        if (context.getSessionVariable().getTimeZone().equals("CST")) {
-            this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
-        } else {
-            this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
-        }
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
-        if (context.getLastQueryId() != null) {
-            this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
-        }
-        this.tResourceInfo = new TResourceInfo(context.getQualifiedUser(),
-                context.getSessionVariable().getResourceGroup());
-        this.needReport = context.getSessionVariable().isReportSucc();
-        this.clusterName = context.getClusterName();
-        this.nextInstanceId = new TUniqueId();
-        nextInstanceId.setHi(queryId.hi);
-        nextInstanceId.setLo(queryId.lo + 1);
-        this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
-    }
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -843,6 +812,11 @@ public class Coordinator {
                         params.instanceExecParams.size());
             }
 
+            if (params.fragment.getSink() instanceof ResultSink && params.instanceExecParams.size() > 1) {
+                throw new StarRocksPlannerException("This sql plan has multi result sinks",
+                        ErrorType.INTERNAL_ERROR);
+            }
+
             for (int j = 0; j < params.instanceExecParams.size(); ++j) {
                 // we add instance_num to query_id.lo to create a
                 // globally-unique instance id
@@ -1165,10 +1139,6 @@ public class Coordinator {
             }
 
             int parallelExecInstanceNum = fragment.getParallelExecNum();
-            // The instance num for result sink fragment must be 1
-            if (fragment.getSink() instanceof ResultSink) {
-                parallelExecInstanceNum = 1;
-            }
             boolean hasColocate = (isColocateFragment(fragment.getPlanRoot()) &&
                     fragmentIdToSeqToAddressMap.containsKey(fragment.getFragmentId())
                     && fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()).size() > 0);

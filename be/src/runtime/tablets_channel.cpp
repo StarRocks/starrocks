@@ -341,19 +341,19 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     for (auto& tablet : params.tablets()) {
-        vectorized::WriteRequest request;
-        request.tablet_id = tablet.tablet_id();
-        request.schema_hash = schema_hash;
-        request.write_type = vectorized::WriteType::LOAD;
-        request.txn_id = _txn_id;
-        request.partition_id = tablet.partition_id();
-        request.load_id = params.id();
-        request.tuple_desc = _tuple_desc;
-        request.slots = index_slots;
-        request.global_dicts = &_global_dicts;
+        vectorized::DeltaWriterOptions options;
+        options.tablet_id = tablet.tablet_id();
+        options.schema_hash = schema_hash;
+        options.write_type = vectorized::WriteType::LOAD;
+        options.txn_id = _txn_id;
+        options.partition_id = tablet.partition_id();
+        options.load_id = params.id();
+        options.tuple_desc = _tuple_desc;
+        options.slots = index_slots;
+        options.global_dicts = &_global_dicts;
 
         vectorized::DeltaWriter* writer = nullptr;
-        auto st = vectorized::DeltaWriter::open(&request, _mem_tracker.get(), &writer);
+        auto st = vectorized::DeltaWriter::open(options, _mem_tracker.get(), &writer);
         if (!st.ok()) {
             std::stringstream ss;
             ss << "open delta writer failed, tablet_id=" << tablet.tablet_id() << ", txn_id=" << _txn_id

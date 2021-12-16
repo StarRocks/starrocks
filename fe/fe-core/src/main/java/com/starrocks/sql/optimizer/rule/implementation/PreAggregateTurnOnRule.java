@@ -74,19 +74,17 @@ public class PreAggregateTurnOnRule {
         void rewriteProject(OptExpression opt, PreAggregationContext context) {
             Projection projection = opt.getOp().getProjection();
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
-            ReplaceColumnRefRewriter subRewriter =
-                    new ReplaceColumnRefRewriter(projection.getCommonSubOperatorMap(), true);
 
             context.aggregations = context.aggregations.stream()
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                    .map(d -> d.accept(rewriter, null))
                     .collect(Collectors.toList());
 
             context.groupings = context.groupings.stream()
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                    .map(d -> d.accept(rewriter, null))
                     .collect(Collectors.toList());
 
             context.joinPredicates = context.joinPredicates.stream().filter(Objects::nonNull)
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                    .map(d -> d.accept(rewriter, null))
                     .collect(Collectors.toList());
         }
 

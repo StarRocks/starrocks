@@ -137,11 +137,6 @@ public class LikePredicate extends Predicate {
     }
 
     @Override
-    public boolean isStrictPredicate() {
-        return getChild(0).unwrapSlotRef() != null;
-    }
-
-    @Override
     public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitLikePredicate(this, context);
     }
