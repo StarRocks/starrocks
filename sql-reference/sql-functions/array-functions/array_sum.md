@@ -8,7 +8,7 @@
 array_sum(array(type))
 ```
 
-对一个ARRAY中的所有数据做和，返回这个结果.
+对一个ARRAY中的所有数据做和，返回这个结果。
 
 ## example
 

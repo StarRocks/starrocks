@@ -2,7 +2,7 @@
 
 ## description
 
-  GROUP BY `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` 是对 GROUP BY 子句的扩展，它能够在一个 GROUP BY 子句中实现多个集合的分组的聚合。其结果等价于将多个相应 GROUP BY 子句进行 UNION 操作.
+  GROUP BY `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` 是对 GROUP BY 子句的扩展，它能够在一个 GROUP BY 子句中实现多个集合的分组的聚合。其结果等价于将多个相应 GROUP BY 子句进行 UNION 操作。
 
   GROUP BY 子句是只含有一个元素的 GROUP BY GROUPING SETS 的特例。
   例如，GROUPING SETS 语句：

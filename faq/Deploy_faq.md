@@ -98,7 +98,7 @@ Flink导入报错，定位原为磁盘不足，扩容磁盘后，不能对数据
 
  `Failed to get scan range, no queryable replica found in tablet: 11903`，
 
- 解决方法是把这张表11903 在truncate 一下之后即可.
+ 解决方法是把这张表11903 在truncate 一下之后即可。
 
 ## 集群重启时，fe启动失败报错：Fe type:unknown ,is ready :false
 

@@ -16,7 +16,7 @@ Bitmap是元素为bit的， 取值为0、1两种情形的, 可对某一位bit进
 
 ![Bitmap索引](../assets/3.6.1-1.png)
 
-Bitmap只能表示取值为两种情形的列数组, 当列的取值为多种取值情形枚举类型时, 例如季度(Q1, Q2, Q3, Q4),  系统平台(Linux, Windows, FreeBSD, MacOS), 则无法用一个Bitmap编码; 此时可以为每个取值各自建立一个Bitmap的来表示这组数据; 同时为实际枚举取值建立词典.
+Bitmap只能表示取值为两种情形的列数组, 当列的取值为多种取值情形枚举类型时, 例如季度(Q1, Q2, Q3, Q4),  系统平台(Linux, Windows, FreeBSD, MacOS), 则无法用一个Bitmap编码; 此时可以为每个取值各自建立一个Bitmap的来表示这组数据; 同时为实际枚举取值建立词典。
 
 如上图所示，Platform列有4行数据，可能的取值有Android、Ios。StarRocks中会首先针对Platform列构建一个字典，将Android和Ios映射为int，然后就可以对Android和Ios分别构建Bitmap。具体来说，我们分别将Android、Ios 编码为0和1，因为Android出现在第1，2，3行，所以Bitmap是0111，因为Ios出现在第4行，所以Bitmap是1000。
 
@@ -61,6 +61,6 @@ DROP INDEX index_name ON [db_name.]table_name;
 ## 注意事项
 
 1. 对于明细模型，所有列都可以建Bitmap 索引；对于聚合模型，只有Key列可以建Bitmap 索引。
-2. Bitmap索引, 应该在取值为枚举型, 取值大量重复, 较低基数, 并且用作等值条件查询或者可转化为等值条件查询的列上创建.
+2. Bitmap索引, 应该在取值为枚举型, 取值大量重复, 较低基数, 并且用作等值条件查询或者可转化为等值条件查询的列上创建。
 3. 不支持对Float、Double、Decimal 类型的列建Bitmap 索引。
 4. 如果要查看某个查询是否命中了Bitmap索引，可以通过查询的[Profile](https://docs.starrocks.com/zh-cn/main/administration/Query_planning#profile%E5%88%86%E6%9E%90)信息查看。

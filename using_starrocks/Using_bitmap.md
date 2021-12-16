@@ -53,7 +53,7 @@ Roaring Bitmap实现，细节可以参考：[具体论文和实现](https://gith
 ## 如何使用Bitmap
 
 1. 首先， 用户需要注意bitmap index和bitmap去重二者都是用bitmap技术， 但引入动机和解决的问题完全不同， 前者用于低基数的枚举型列的等值条件过滤， 后者用于计算一组数据行的指标列的不重复元素的个数。
-2. 目前Bitmap列只能存在于用聚合表， 明细表和更新不支持BITMAP列.
+2. 目前Bitmap列只能存在于用聚合表， 明细表和更新不支持BITMAP列。
 3. 创建表时指定指标列的数据类型为BITMAP，  聚合函数为BITMAP_UNION。
 4. 当在Bitmap类型列上使用count distinct时，StarRocks会自动转化为BITMAP_UNION_COUNT计算。
 

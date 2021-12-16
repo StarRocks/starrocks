@@ -20,9 +20,9 @@ StarRocks的建表时, 可通过PROPERTIES{"bloom\_filter\_columns"="c1,c2,c3"}�
 
 满足以下几个条件时可以考虑对某列建立Bloom Filter 索引：
 
-1. 首先BloomFilter也适用于非前缀过滤.
-2. 查询会根据该列高频过滤，而且查询条件大多是in和=.
-3. 不同于Bitmap, BloomFilter适用于高基数列.
+1. 首先BloomFilter也适用于非前缀过滤。
+2. 查询会根据该列高频过滤，而且查询条件大多是in和=。
+3. 不同于Bitmap, BloomFilter适用于高基数列。
 
 ## 如何使用
 

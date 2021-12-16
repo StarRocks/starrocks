@@ -8,7 +8,7 @@
 array_avg(array(type))
 ```
 
-求取一个ARRAY中的所有数据的平均数，返回这个结果.
+求取一个ARRAY中的所有数据的平均数，返回这个结果。
 
 ## example
 

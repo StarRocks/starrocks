@@ -1,10 +1,10 @@
 # 手动部署
 
-手动部署可以让用户快速体验StarRocks, 积累StarRocks的系统运维经验.  生产环境部署, 请使用管理平台和自动部署.
+手动部署可以让用户快速体验StarRocks, 积累StarRocks的系统运维经验.  生产环境部署, 请使用管理平台和自动部署。
 
 ## 获取二进制产品包
 
-请您联系StarRocks的技术支持或者销售人员获取最新稳定版的StarRocks二进制产品包.
+请您联系StarRocks的技术支持或者销售人员获取最新稳定版的StarRocks二进制产品包。
 
 比如您获得的产品包为starrocks-1.0.0.tar.gz, 解压(tar -xzvf starrocks-1.0.0.tar.gz)后内容如下:
 
@@ -48,7 +48,7 @@ CPU需要支持AVX2指令集，cat /proc/cpuinfo |grep avx2有结果输出表明
 
 ### FE的基本配置
 
-FE的配置文件为StarRocks-XX-1.0.0/fe/conf/fe.conf, 默认配置已经足以启动集群, 有经验的用户可以查看手册的系统配置章节, 为生产环境定制配置，为了让用户更好的理解集群的工作原理, 此处只列出基础配置.
+FE的配置文件为StarRocks-XX-1.0.0/fe/conf/fe.conf, 默认配置已经足以启动集群, 有经验的用户可以查看手册的系统配置章节, 为生产环境定制配置，为了让用户更好的理解集群的工作原理, 此处只列出基础配置。
 
 ### FE单实例部署
 
@@ -81,9 +81,9 @@ bin/start_fe.sh --daemon
 
 <br/>
 
-第四步: 确认启动FE启动成功.
+第四步: 确认启动FE启动成功。
 
-* 查看日志log/fe.log确认.
+* 查看日志log/fe.log确认。
 
 ```Plain Text
 2020-03-16 20:32:14,686 INFO 1 [FeServer.start():46] thrift server started.
@@ -98,8 +98,8 @@ bin/start_fe.sh --daemon
 ```
 
 * 如果FE启动失败，可能是由于端口号被占用，修改配置文件conf/fe.conf中的端口号http_port。
-* 使用jps命令查看java进程确认"StarRocksFe"存在.
-* 使用浏览器访问8030端口, 打开StarRocks的WebUI, 用户名为root, 密码为空.
+* 使用jps命令查看java进程确认"StarRocksFe"存在。
+* 使用浏览器访问8030端口, 打开StarRocks的WebUI, 用户名为root, 密码为空。
 
 ### 使用MySQL客户端访问FE
 
@@ -154,20 +154,20 @@ Role为FOLLOWER说明这是一个能参与选主的FE；IsMaster为true，说明
 
 ### FE的高可用集群部署
 
-FE的高可用集群采用主从复制架构, 可避免FE单点故障. FE采用了类raft的bdbje协议完成选主, 日志复制和故障切换. 在FE集群中, 多实例分为两种角色: follower和observer; 前者为复制协议的可投票成员, 参与选主和提交日志, 一般数量为奇数(2n+1), 使用多数派(n+1)确认, 可容忍少数派(n)故障; 而后者属于非投票成员, 用于异步订阅复制日志, observer的状态落后于follower, 类似其他复制协议中的learner角色.
+FE的高可用集群采用主从复制架构, 可避免FE单点故障. FE采用了类raft的bdbje协议完成选主, 日志复制和故障切换. 在FE集群中, 多实例分为两种角色: follower和observer; 前者为复制协议的可投票成员, 参与选主和提交日志, 一般数量为奇数(2n+1), 使用多数派(n+1)确认, 可容忍少数派(n)故障; 而后者属于非投票成员, 用于异步订阅复制日志, observer的状态落后于follower, 类似其他复制协议中的learner角色。
 <br/>
 
-FE集群从follower中自动选出master节点, 所有更改状态操作都由master节点执行, 从FE的master节点可以读到最新的状态. 更改操作可以从非master节点发起, 继而转发给master节点执行,  非master节点记录最近一次更改操作在复制日志中的LSN, 读操作可以直接在非master节点上执行, 但需要等待非master节点的状态已经同步到最近一次更改操作的LSN, 因此读写非Master节点满足顺序一致性. Observer节点能够增加FE集群的读负载能力, 时效性要求放宽的非紧要用户可以读observer节点.
+FE集群从follower中自动选出master节点, 所有更改状态操作都由master节点执行, 从FE的master节点可以读到最新的状态. 更改操作可以从非master节点发起, 继而转发给master节点执行,  非master节点记录最近一次更改操作在复制日志中的LSN, 读操作可以直接在非master节点上执行, 但需要等待非master节点的状态已经同步到最近一次更改操作的LSN, 因此读写非Master节点满足顺序一致性. Observer节点能够增加FE集群的读负载能力, 时效性要求放宽的非紧要用户可以读observer节点。
 <br/>
 
-FE节点之间的时钟相差不能超过5s, 使用NTP协议校准时间.
+FE节点之间的时钟相差不能超过5s, 使用NTP协议校准时间。
 
 一台机器上只可以部署单个FE节点。所有FE节点的http\_port需要相同。
 <br/>
 
-集群部署按照下列步骤逐个增加FE实例.
+集群部署按照下列步骤逐个增加FE实例。
 
-第一步: 分发二进制和配置文件, 配置文件和单实例情形相同.
+第一步: 分发二进制和配置文件, 配置文件和单实例情形相同。
 <br/>
 
 第二步: 使用MySQL客户端连接已有的FE,  添加新实例的信息，信息包括角色、ip、port：
@@ -260,11 +260,11 @@ IsMaster: false
 
 ### BE的基本配置
 
-BE的配置文件为StarRocks-XX-1.0.0/be/conf/be.conf, 默认配置已经足以启动集群, 不建议初尝用户修改配置, 有经验的用户可以查看手册的系统配置章节, 为生产环境定制配置. 为了让用户更好的理解集群的工作原理, 此处只列出基础配置.
+BE的配置文件为StarRocks-XX-1.0.0/be/conf/be.conf, 默认配置已经足以启动集群, 不建议初尝用户修改配置, 有经验的用户可以查看手册的系统配置章节, 为生产环境定制配置. 为了让用户更好的理解集群的工作原理, 此处只列出基础配置。
 
 ### BE部署
 
-用户可使用下面命令添加BE到StarRocks集群, 一般至少部署3个BE实例, 每个实例的添加步骤相同.
+用户可使用下面命令添加BE到StarRocks集群, 一般至少部署3个BE实例, 每个实例的添加步骤相同。
 
 ```shell
 cd StarRocks-XX-1.0.0/be

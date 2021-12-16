@@ -120,7 +120,7 @@ FROM KAFKA
     SHOW ALL ROUTINE LOAD;
     ~~~
 
-* 显示 [database] 下，名称为 job_name 的当前正在运行的例行导入作业.
+* 显示 [database] 下，名称为 job_name 的当前正在运行的例行导入作业。
 
     ~~~SQL
     SHOW ROUTINE LOAD FOR [database.][job_name];

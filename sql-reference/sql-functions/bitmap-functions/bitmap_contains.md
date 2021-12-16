@@ -6,7 +6,7 @@
 
 `B00LEAN BITMAP_CONTAINS(BITMAP bitmap, BIGINT input)`
 
-计算输入值是否在Bitmap列中，返回值是Boolean值.
+计算输入值是否在Bitmap列中，返回值是Boolean值。
 
 ## example
 

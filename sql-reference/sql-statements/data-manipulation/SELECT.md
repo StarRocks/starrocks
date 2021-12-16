@@ -321,9 +321,9 @@ mysql> select varchar_column from big_table order by varchar_column limit 1 offs
 1 row in set (0.02 sec)
 ```
 
-注：在没有order by的情况下使用offset语法是允许的，但是此时offset无意义.
+注：在没有order by的情况下使用offset语法是允许的，但是此时offset无意义。
 
-这种情况只取limit的值，忽略掉offset的值。因此在没有order by的情况下.
+这种情况只取limit的值，忽略掉offset的值。因此在没有order by的情况下。
 
 offset超过结果集的最大行数依然是有结果的。建议用户使用offset时一定要带上order by。
 

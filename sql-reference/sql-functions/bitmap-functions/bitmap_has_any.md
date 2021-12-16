@@ -6,7 +6,7 @@
 
 `B00LEAN BITMAP_HAS_ANY(BITMAP lhs, BITMAP rhs)`
 
-计算两个Bitmap列是否存在相交元素，返回值是Boolean值.
+计算两个Bitmap列是否存在相交元素，返回值是Boolean值。
 
 ## example
 
