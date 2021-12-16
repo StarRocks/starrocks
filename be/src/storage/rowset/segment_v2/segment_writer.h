@@ -26,7 +26,7 @@
 #include <string>
 #include <vector>
 
-#include "common/status.h" // Status
+#include "common/status.h"
 #include "gen_cpp/segment_v2.pb.h"
 #include "gutil/macros.h"
 #include "runtime/global_dicts.h"

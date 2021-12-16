@@ -39,22 +39,6 @@
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
-using apache::thrift::ThriftDebugString;
-
-using std::back_inserter;
-using std::copy;
-using std::inserter;
-using std::list;
-using std::map;
-using std::nothrow;
-using std::pair;
-using std::priority_queue;
-using std::set;
-using std::set_difference;
-using std::string;
-using std::stringstream;
-using std::vector;
-
 namespace starrocks {
 
 TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
