@@ -45,10 +45,10 @@ RESULT SINK
 25:MERGING-EXCHANGE
 cardinality: 1561188
 column statistics:
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
 
 PLAN FRAGMENT 1(F13)
 
@@ -61,10 +61,10 @@ OutPut Exchange Id: 25
 |  offset: 0
 |  cardinality: 1561188
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
 |
 23:Project
 |  output columns:
@@ -72,7 +72,7 @@ OutPut Exchange Id: 25
 |  3 <-> [3: S_ADDRESS, VARCHAR, false]
 |  cardinality: 1561188
 |  column statistics:
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |
 22:HASH JOIN
@@ -82,10 +82,10 @@ OutPut Exchange Id: 25
 |  - filter_id = 4, build_expr = (1: S_SUPPKEY), remote = true
 |  cardinality: 1561188
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
 |
 |----21:EXCHANGE
 |       cardinality: 40000
@@ -106,8 +106,8 @@ OutPut Exchange Id: 21
 |  3 <-> [3: S_ADDRESS, VARCHAR, false]
 |  cardinality: 40000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |
 19:HASH JOIN
@@ -117,10 +117,10 @@ OutPut Exchange Id: 21
 |  - filter_id = 3, build_expr = (9: N_NATIONKEY), remote = false
 |  cardinality: 40000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----18:EXCHANGE
@@ -186,10 +186,10 @@ OutPut Exchange Id: 14
 |  other join predicates: cast([16: PS_AVAILQTY, INT, false] as DOUBLE) > 0.5 * [48: sum, DOUBLE, true]
 |  cardinality: 39029703
 |  column statistics:
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
-|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |
@@ -212,7 +212,7 @@ OutPut Exchange Id: 11
 |  16 <-> [16: PS_AVAILQTY, INT, false]
 |  cardinality: 20000000
 |  column statistics:
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |
@@ -223,7 +223,7 @@ OutPut Exchange Id: 11
 |  - filter_id = 0, build_expr = (20: P_PARTKEY), remote = false
 |  cardinality: 20000000
 |  column statistics:
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
