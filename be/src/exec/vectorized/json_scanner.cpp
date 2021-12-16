@@ -120,6 +120,15 @@ Status JsonScanner::_construct_json_types() {
                 slot_type->type == TYPE_TINYINT) {
                 // Treat these types as what they are.
                 child_type->children.emplace_back(slot_type->type);
+
+            } else if (slot_type->type == TYPE_VARCHAR) {
+                auto varchar_type = TypeDescriptor::create_varchar_type(slot_type->len);
+                child_type->children.emplace_back(varchar_type);
+
+            } else if (slot_type->type == TYPE_CHAR) {
+                auto char_type = TypeDescriptor::create_char_type(slot_type->len);
+                child_type->children.emplace_back(char_type);
+
             } else {
                 // Treat other types as VARCHAR.
                 auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
@@ -142,8 +151,8 @@ Status JsonScanner::_construct_json_types() {
         }
 
         case TYPE_CHAR: {
-            auto varchar_type = TypeDescriptor::create_char_type(slot_desc->type().len);
-            _json_types[column_pos] = std::move(varchar_type);
+            auto char_type = TypeDescriptor::create_char_type(slot_desc->type().len);
+            _json_types[column_pos] = std::move(char_type);
             break;
         }
 
