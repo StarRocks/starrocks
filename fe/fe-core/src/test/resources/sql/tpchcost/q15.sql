@@ -233,12 +233,12 @@ RESULT SINK
 22:MERGING-EXCHANGE
 cardinality: 1
 column statistics:
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
-* S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-* S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
-* L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
+* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
+* S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
+* S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
+* L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
+* sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
 
@@ -251,12 +251,12 @@ OutPut Exchange Id: 22
 |  offset: 0
 |  cardinality: 1
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
+|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 20:Project
 |  output columns:
@@ -267,11 +267,11 @@ OutPut Exchange Id: 22
 |  27 <-> [27: sum, DOUBLE, true]
 |  cardinality: 1
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
+|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -280,12 +280,12 @@ OutPut Exchange Id: 22
 |  - filter_id = 1, build_expr = (11: L_SUPPKEY), remote = false
 |  cardinality: 1
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
+|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----18:EXCHANGE
 |       cardinality: 1
@@ -317,8 +317,8 @@ OutPut Exchange Id: 18
 |  27 <-> [27: sum, DOUBLE, true]
 |  cardinality: 1
 |  column statistics:
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
+|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 16:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -327,8 +327,8 @@ OutPut Exchange Id: 18
 |  - filter_id = 0, build_expr = (47: max), remote = false
 |  cardinality: 1
 |  column statistics:
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
+|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |  * max-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----15:EXCHANGE
