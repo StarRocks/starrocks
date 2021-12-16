@@ -73,6 +73,7 @@ public class FunctionSet {
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
     public static final String DICT_MERGE = "dict_merge";
+    public static final String ANY_VALUE = "any_value";
 
     // Window functions:
     public static final String LEAD = "lead";
@@ -436,6 +437,10 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin("ndv",
                     Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
                     true, false, true));
+
+            // ANY_VALUE
+            addBuiltin(AggregateFunction.createBuiltin("any_value",
+                    Lists.newArrayList(t), t, t, true, false, false));
 
             //APPROX_COUNT_DISTINCT
             //alias of ndv, compute approx count distinct use HyperLogLog
