@@ -257,9 +257,14 @@ message PKafkaOffsetProxyRequest {
     repeated int32 partition_ids = 2;
 }
 
+message PKafkaOffsetBatchProxyRequest {
+    repeated PKafkaOffsetProxyRequest requests = 1;
+}
+
 message PProxyRequest {
     optional PKafkaMetaProxyRequest kafka_meta_request = 1;
     optional PKafkaOffsetProxyRequest kafka_offset_request = 101;
+    optional PKafkaOffsetBatchProxyRequest kafka_offset_batch_request = 102;
 };
 
 message PKafkaMetaProxyResult {
@@ -273,10 +278,15 @@ message PKafkaOffsetProxyResult {
     repeated int64 latest_offsets = 3;
 }
 
+message PKafkaOffsetBatchProxyResult {
+    repeated PKafkaOffsetProxyResult results = 1;
+}
+
 message PProxyResult {
     required PStatus status = 1;
     optional PKafkaMetaProxyResult kafka_meta_result = 2;
     optional PKafkaOffsetProxyResult kafka_offset_result = 101;
+    optional PKafkaOffsetBatchProxyResult kafka_offset_batch_result = 102;
 };
 
 // NOTE(zc): If you want to add new method here,

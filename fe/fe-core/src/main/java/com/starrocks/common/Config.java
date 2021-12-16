@@ -1305,7 +1305,20 @@ public class Config extends ConfigBase {
     /**
      * connection and socket timeout for broker client
      */
-    @ConfField()
+    @ConfField
     public static int broker_client_timeout_ms = 10000;
-}
 
+    /**
+     * Whether to collect routine load process metrics.
+     * Be careful to turn this on, because this will call kafka api to get the partition's latest offset.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_routine_load_lag_metrics = false;
+
+    /**
+     * Min lag of routine load job to show in metrics
+     * Only show the routine load job whose lag is larger than min_routine_load_lag_for_metrics
+     */
+    @ConfField(mutable = true)
+    public static long min_routine_load_lag_for_metrics = 10000;
+}

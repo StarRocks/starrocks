@@ -124,7 +124,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties);
     }
 
-    private void convertCustomProperties(boolean rebuild) throws DdlException {
+    public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
         if (customProperties.isEmpty()) {
             return;
         }
@@ -535,6 +535,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         } finally {
             writeUnlock();
         }
+    }
+
+    @Override
+    public void updateState(JobState jobState, ErrorReason reason, boolean isReplay) throws UserException {
+        super.updateState(jobState, reason, isReplay);
+        customProperties.clear();
     }
 
     private void modifyPropertiesInternal(Map<String, String> jobProperties,

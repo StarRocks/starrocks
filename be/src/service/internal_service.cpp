@@ -372,6 +372,26 @@ void PInternalServiceImpl<T>::get_info(google::protobuf::RpcController* controll
         st.to_protobuf(response->mutable_status());
         return;
     }
+    if (request->has_kafka_offset_batch_request()) {
+        for (auto offset_req : request->kafka_offset_batch_request().requests()) {
+            std::vector<int64_t> beginning_offsets;
+            std::vector<int64_t> latest_offsets;
+            Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
+                    offset_req, &beginning_offsets, &latest_offsets);
+            auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
+            if (st.ok()) {
+                for (int i = 0; i < beginning_offsets.size(); i++) {
+                    offset_result->add_partition_ids(offset_req.partition_ids(i));
+                    offset_result->add_beginning_offsets(beginning_offsets[i]);
+                    offset_result->add_latest_offsets(latest_offsets[i]);
+                }
+            } else {
+                response->clear_kafka_offset_batch_result();
+                st.to_protobuf(response->mutable_status());
+                return;
+            }
+        }
+    }
     Status::OK().to_protobuf(response->mutable_status());
 }
 
