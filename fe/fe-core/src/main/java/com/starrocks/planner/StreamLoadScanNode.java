@@ -145,7 +145,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         Load.initColumns(dstTable, streamLoadTask.getColumnExprDescs(), null /* no hadoop function */,
                 exprsByName, analyzer, srcTupleDesc, slotDescByName,
                 params, true, useVectorizedLoad, Lists.newArrayList(),
-                streamLoadTask.getFormatType() == TFileFormatType.FORMAT_JSON);
+                streamLoadTask.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadTask.isPartialUpdate());
 
         rangeDesc.setNum_of_columns_from_file(srcTupleDesc.getSlots().size());
         brokerScanRange.addToRanges(rangeDesc);
