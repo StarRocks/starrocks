@@ -89,8 +89,6 @@ public class KafkaUtil {
             }
             kafkaLoadInfo.properties.add(pair);
         }
-        PKafkaOffsetProxyRequest offsetRequest = new PKafkaOffsetProxyRequest();
-        offsetRequest.kafkaInfo = kafkaLoadInfo;
         return kafkaLoadInfo;
     }
 

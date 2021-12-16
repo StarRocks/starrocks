@@ -371,8 +371,6 @@ void PInternalServiceImpl<T>::get_info(google::protobuf::RpcController* controll
                 return;
             }
         }
-        Status::OK().to_protobuf(response->mutable_status());
-        return;
     }
     Status::OK().to_protobuf(response->mutable_status());
 }
