@@ -344,13 +344,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap(projectOperator.getColumnRefMap());
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
-                if (kv.getValue() instanceof ColumnRefOperator) {
-                    rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
-                            newProjectMap, newStringToDicts);
-                } else {
-                    rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
-                            newProjectMap, newStringToDicts);
-                }
+                rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
+                        newProjectMap, newStringToDicts);
             }
 
             context.stringColumnIdToDictColumnIds = newStringToDicts;
@@ -360,52 +355,52 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return new Projection(newProjectMap, projectOperator.getCommonSubOperatorMap());
         }
 
-        private void rewriteOneScalarOperatorForProjection(ColumnRefOperator oldStringColumn,
-                                                           ScalarOperator operator,
+        private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn,
+                                                           ScalarOperator valueOperator,
                                                            DecodeContext context,
                                                            Map<ColumnRefOperator, ScalarOperator> newProjectMap,
                                                            Map<Integer, Integer> newStringToDicts) {
-            if (operator instanceof ColumnRefOperator) {
-                ColumnRefOperator stringColumn = (ColumnRefOperator) operator;
+            if (valueOperator instanceof ColumnRefOperator) {
+                ColumnRefOperator stringColumn = (ColumnRefOperator) valueOperator;
                 if (context.stringColumnIdToDictColumnIds.containsKey(stringColumn.getId())) {
                     Integer columnId = context.stringColumnIdToDictColumnIds.get(stringColumn.getId());
                     ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
 
                     newProjectMap.put(dictColumn, dictColumn);
-                    newProjectMap.remove(stringColumn);
+                    newProjectMap.remove(keyColumn);
 
-                    newStringToDicts.put(stringColumn.getId(), dictColumn.getId());
+                    newStringToDicts.put(keyColumn.getId(), dictColumn.getId());
                 }
                 return;
             }
 
-            if (!Projection.couldApplyDictOptimize(operator)) {
+            if (!Projection.couldApplyDictOptimize(valueOperator)) {
                 return;
             }
 
-            int stringColumnId = operator.getUsedColumns().getFirstId();
+            int stringColumnId = valueOperator.getUsedColumns().getFirstId();
             if (context.stringColumnIdToDictColumnIds.containsKey(stringColumnId)) {
                 ColumnRefOperator oldStringArgColumn = context.columnRefFactory.getColumnRef(stringColumnId);
                 Integer columnId =
-                        context.stringColumnIdToDictColumnIds.get(operator.getUsedColumns().getFirstId());
+                        context.stringColumnIdToDictColumnIds.get(valueOperator.getUsedColumns().getFirstId());
                 ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
 
                 ColumnRefOperator newDictColumn = context.columnRefFactory.create(
-                        oldStringColumn.getName(), ID_TYPE, oldStringColumn.isNullable());
+                        keyColumn.getName(), ID_TYPE, keyColumn.isNullable());
 
                 Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMapWithExpectedSize(1);
                 rewriteMap.put(oldStringArgColumn, dictColumn);
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
                 // Will modify the operator, must use clone
-                ScalarOperator newCallOperator = operator.clone().accept(rewriter, null);
+                ScalarOperator newCallOperator = valueOperator.clone().accept(rewriter, null);
                 newCallOperator.setType(ID_TYPE);
 
                 newProjectMap.put(newDictColumn, newCallOperator);
-                newProjectMap.remove(oldStringColumn);
+                newProjectMap.remove(keyColumn);
 
                 context.stringFunctions.put(newDictColumn, newCallOperator);
 
-                newStringToDicts.put(oldStringColumn.getId(), newDictColumn.getId());
+                newStringToDicts.put(keyColumn.getId(), newDictColumn.getId());
             }
         }
 

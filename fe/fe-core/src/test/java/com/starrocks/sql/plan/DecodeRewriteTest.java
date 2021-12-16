@@ -8,7 +8,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class DecodeRewriteTest extends PlanTestBase{
+public class DecodeRewriteTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
@@ -54,7 +54,6 @@ public class DecodeRewriteTest extends PlanTestBase{
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
     }
-
 
     @Test
     public void testDecodeNodeRewrite() throws Exception {
@@ -400,6 +399,40 @@ public class DecodeRewriteTest extends PlanTestBase{
     }
 
     @Test
+    public void testLeftJoinWithUnion() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "SELECT subt1.S_ADDRESS\n" +
+                "FROM (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt1 LEFT ANTI\n" +
+                "    JOIN (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt0 ON subt1.S_NATIONKEY = subt0.S_NATIONKEY  \n" +
+                "WHERE true\n" +
+                "UNION ALL\n" +
+                "SELECT subt1.S_ADDRESS\n" +
+                "FROM (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt1 LEFT ANTI\n" +
+                "    JOIN (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt0 ON subt1.S_NATIONKEY = subt0.S_NATIONKEY\n" +
+                "WHERE (NOT (true));";
+        plan = getFragmentPlan(sql);
+        System.out.println("plan = " + plan);
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 34> : <string id 17>\n"));
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 34> : 34: S_ADDRESS"));
+    }
+
+    @Test
     public void testScanFilter() throws Exception {
         String sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
         String plan = getFragmentPlan(sql);
@@ -432,7 +465,6 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <dict id 7> : <string id 3>\n" +
                 "  |  <dict id 8> : <string id 6>"));
 
-
         sql = "SELECT * \n" +
                 "FROM   emp \n" +
                 "WHERE  EXISTS (SELECT dept.dept_id \n" +
@@ -455,7 +487,8 @@ public class DecodeRewriteTest extends PlanTestBase{
 
     @Test
     public void testJoinGlobalDict() throws Exception {
-        String sql = "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
+        String sql =
+                "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("enable_column_expr_predicate:false, dict_string_id_to_int_ids:{}"));
         Assert.assertTrue(plan.contains("P_MFGR IN ('MFGR#1', 'MFGR#2'), enable_column_expr_predicate:false, " +
@@ -592,10 +625,11 @@ public class DecodeRewriteTest extends PlanTestBase{
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
 
-        sql = "SELECT SUM(count) FROM (SELECT CAST((CAST((s_address) BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) " +
-                "AND (s_address) AS BOOLEAN) = true) AND (CAST((s_address) " +
-                "BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) AND (s_address) AS BOOLEAN) IS NOT NULL) AS INT) " +
-                "as count FROM supplier ) t;";
+        sql =
+                "SELECT SUM(count) FROM (SELECT CAST((CAST((s_address) BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) " +
+                        "AND (s_address) AS BOOLEAN) = true) AND (CAST((s_address) " +
+                        "BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) AND (s_address) AS BOOLEAN) IS NOT NULL) AS INT) " +
+                        "as count FROM supplier ) t;";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
     }
