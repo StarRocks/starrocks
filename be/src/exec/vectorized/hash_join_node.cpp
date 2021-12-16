@@ -360,9 +360,10 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
     size_t num_partitions;
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-        num_partitions = down_cast<pipeline::SourceOperatorFactory*>(lhs_operators[0].get())->degree_of_parallelism();
+        num_partitions = context->degree_of_parallelism();
 
         rhs_operators = context->maybe_interpolate_local_broadcast_exchange(rhs_operators, num_partitions);
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(lhs_operators, num_partitions);
     } else {
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple
