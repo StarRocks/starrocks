@@ -82,6 +82,14 @@ TEST(NormalizeRangeTest, RangeTest) {
         bool ok = range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {3}).ok();
         ASSERT_FALSE(ok);
     }
+    {
+        // where range > 1000 and range < 2000
+        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
+                                        std::numeric_limits<CppType>::max());
+        range.add_range(SQLFilterOp::FILTER_LESS, 1000);
+        range.add_range(SQLFilterOp::FILTER_LARGER, 2000);
+        ASSERT_TRUE(range.is_empty_value_range());
+    }
 }
 
 TEST(NormalizeRangeTest, BoolRangeTest) {

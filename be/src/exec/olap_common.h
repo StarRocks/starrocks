@@ -671,6 +671,8 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
         if (FILTER_LARGER_OR_EQUAL == _low_op && FILTER_LESS_OR_EQUAL == _high_op && _high_value == _low_value) {
             _fixed_values.insert(_high_value);
             _fixed_op = FILTER_IN;
+        } else {
+            _empty_range = _low_value > _high_value;
         }
     }
     _is_init_state = false;
