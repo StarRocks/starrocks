@@ -62,7 +62,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
     auto pass_through_chunk_buffer = get_pass_through_chunk_buffer(state->query_id());
     std::shared_ptr<DataStreamRecvr> recvr(new DataStreamRecvr(
             this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging, buffer_size, profile,
-            std::move(sub_plan_query_statistics_recvr), pass_through_chunk_buffer, is_pipeline));
+            std::move(sub_plan_query_statistics_recvr), is_pipeline, pass_through_chunk_buffer));
     uint32_t hash_value = get_hash_value(fragment_instance_id, dest_node_id);
     std::lock_guard<std::mutex> l(_lock);
     _fragment_stream_set.emplace(fragment_instance_id, dest_node_id);

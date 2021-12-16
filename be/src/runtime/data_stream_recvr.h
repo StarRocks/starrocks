@@ -114,8 +114,8 @@ private:
     DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
                     int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
-                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
-                    const PassThroughChunkBufferPtr& pass_through_chunk_buffer, bool is_pipeline);
+                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
+                    const PassThroughChunkBufferPtr& pass_through_chunk_buffer);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
@@ -188,9 +188,8 @@ private:
 
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
-    PassThroughChunkBufferPtr _pass_through_chunk_buffer;
-
     bool _is_pipeline;
+    PassThroughContext _pass_through_context;
 };
 
 } // end namespace starrocks

@@ -138,6 +138,7 @@ public:
     std::unique_ptr<Chunk> clone_empty_with_tuple() const;
     // Create an empty chunk with the same meta and reserve it of specified size.
     std::unique_ptr<Chunk> clone_empty_with_tuple(size_t size) const;
+    ChunkPtr clone_shared() const;
 
     void append(const Chunk& src) { append(src, 0, src.num_rows()); }
 

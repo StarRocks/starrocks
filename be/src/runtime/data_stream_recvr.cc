@@ -539,7 +539,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
                                  std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
-                                 const PassThroughChunkBufferPtr& pass_through_chunk_buffer, bool is_pipeline)
+                                 bool is_pipeline, const PassThroughChunkBufferPtr& pass_through_chunk_buffer)
         : _mgr(stream_mgr),
           _fragment_instance_id(fragment_instance_id),
           _dest_node_id(dest_node_id),
@@ -552,10 +552,9 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
           _query_mem_tracker(runtime_state->query_mem_tracker_ptr()),
           _instance_mem_tracker(runtime_state->instance_mem_tracker_ptr()),
           _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
-          _pass_through_chunk_buffer(pass_through_chunk_buffer),
-          _is_pipeline(is_pipeline) {
+          _is_pipeline(is_pipeline),
+          _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id) {
     // Create one queue per sender if is_merging is true.
-
     int num_queues = is_merging ? num_senders : 1;
     _sender_queues.reserve(num_queues);
     int num_sender_per_queue = is_merging ? 1 : num_senders;
