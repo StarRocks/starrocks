@@ -876,14 +876,10 @@ Status TabletManager::start_trash_sweep() {
             continue;
         }
 
+        bool remove_meta = false;
         TabletMeta tablet_meta;
         Status st = TabletMetaManager::get_tablet_meta(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash(),
                                                        &tablet_meta);
-        if (!st.ok() && !st.is_not_found()) {
-            LOG(WARNING) << "Fail to get tablet meta: " << st;
-            break;
-        }
-
         if (st.ok()) {
             if (tablet_meta.tablet_uid() != tablet->tablet_uid()) {
                 finished_tablets.push_back(tablet->tablet_id());
@@ -892,33 +888,38 @@ Status TabletManager::start_trash_sweep() {
             }
             if (tablet_meta.tablet_state() != TABLET_SHUTDOWN) { // This should not happen.
                 finished_tablets.push_back(tablet->tablet_id());
-                LOG(ERROR) << "Cannot remove normal state tablet " << tablet_meta.tablet_id()
-                           << ". tablet_uid=" << tablet->tablet_uid();
+                LOG(ERROR) << "Cannot remove normal state tablet " << tablet_meta.tablet_id();
                 continue;
             }
-            // remove tablet meta
-            if (st = _remove_tablet_meta(tablet); !st.ok()) {
-                LOG(WARNING) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ": " << st;
-                continue;
-            }
+            remove_meta = true;
+        } else if (!st.is_not_found()) {
+            LOG(ERROR) << "Fail to get tablet meta: " << st;
+            break;
+        } else {
+            // nothing to do here
         }
 
         if (info.flag == kMoveFilesToTrash) {
             st = _move_tablet_directories_to_trash(tablet);
-            if (st.ok() || st.is_not_found()) {
-                finished_tablets.push_back(tablet->tablet_id());
-                LOG(INFO) << "Moved " << tablet->tablet_id_path() << " to trash";
-            } else {
-                LOG(WARNING) << "Fail to move " << tablet->tablet_id_path() << " to trash:" << st;
-            }
-        } else {
+        } else if (info.flag == kDeleteFiles) {
             st = _remove_tablet_directories(tablet);
-            if (st.ok() || st.is_not_found()) {
-                finished_tablets.push_back(tablet->tablet_id());
-                LOG(INFO) << "Removed " << tablet->tablet_id_path();
-            } else {
-                LOG(WARNING) << "Fail to remove " << tablet->tablet_id_path() << ":" << st;
-            }
+        } else {
+            finished_tablets.push_back(tablet->tablet_id());
+            LOG(WARNING) << "Invalid flag " << info.flag;
+            continue;
+        }
+
+        if (st.ok() || st.is_not_found()) {
+            finished_tablets.push_back(tablet->tablet_id());
+            LOG(INFO) << ((info.flag == kMoveFilesToTrash) ? "Moved " : " Removed ") << tablet->tablet_id_path();
+        } else {
+            remove_meta = false;
+            LOG(WARNING) << "Fail to move " << tablet->tablet_id_path() << " to trash:" << st;
+        }
+
+        if (remove_meta) {
+            st = _remove_tablet_meta(tablet);
+            LOG_IF(ERROR, !st.ok()) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ": " << st;
         }
     }
 
@@ -1155,6 +1156,9 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, TabletDropFlag flag) {
+    if (flag != kDeleteFiles && flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
+        return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));
+    }
     TabletMap& tablet_map = _get_tablet_map(tablet_id);
     auto it = tablet_map.find(tablet_id);
     if (it == tablet_map.end()) {
@@ -1188,30 +1192,18 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, Tablet
         std::unique_lock l(_shutdown_tablets_lock);
         _shutdown_tablets.emplace(dropped_tablet->tablet_id(), std::move(drop_info));
     } else if (flag == kMoveFilesToTrash) {
-        // See comments above
         {
+            // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
             dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
         }
 
-        // If we call `_remove_tablet_meta` on primary key tablet, all its in-memory meta information
-        // will lose, which will make the background snapshot creation failed.
-        if (dropped_tablet->keys_type() == PRIMARY_KEYS) {
-            dropped_tablet->save_meta();
-            LOG(INFO) << "Shutdown primary key tablet " << tablet_id;
-        } else {
-            auto st = _remove_tablet_meta(dropped_tablet);
-            LOG_IF(FATAL, !st.ok()) << "Fail to remove tablet meta: " << st;
-            LOG(INFO) << "Removed tablet " << tablet_id;
-        }
+        dropped_tablet->save_meta();
 
-        // MOVE the tablet segment files to trash in background to avoid holding the lock of tablet map shard for long.
         std::unique_lock l(_shutdown_tablets_lock);
         _shutdown_tablets.emplace(dropped_tablet->tablet_id(), std::move(drop_info));
-    } else if (flag == kKeepMetaAndFiles) {
-        // nothing to do
     } else {
-        return Status::InternalError(fmt::format("unknown TabletDropFlag {}", (int)flag));
+        DCHECK_EQ(kKeepMetaAndFiles, flag);
     }
     dropped_tablet->deregister_tablet_from_dir();
     return Status::OK();
