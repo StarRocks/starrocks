@@ -125,8 +125,8 @@ Status DeltaWriter::_init() {
 
     RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
 
-    std::size_t partial_col_num = _req.slots->size();
-    if (partial_col_num > 0 && _req.slots->back()->col_name() == "__op") {
+    std::size_t partial_col_num = _opt.slots->size();
+    if (partial_col_num > 0 && _opt.slots->back()->col_name() == "__op") {
         --partial_col_num;
     }
     // maybe partial update, change to partial tablet schema
@@ -134,7 +134,7 @@ Status DeltaWriter::_init() {
         partial_col_num < _tablet->tablet_schema().num_columns()) {
         std::vector<std::size_t> column_indexes;
         for (auto i = 0; i < partial_col_num; ++i) {
-            const auto& slot_col_name = (*_req.slots)[i]->col_name();
+            const auto& slot_col_name = (*_opt.slots)[i]->col_name();
             std::size_t index = _tablet->field_index(slot_col_name);
             if (index < 0) {
                 std::stringstream ss;
