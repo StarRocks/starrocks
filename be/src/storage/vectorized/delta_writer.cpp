@@ -124,6 +124,32 @@ Status DeltaWriter::_init() {
     }
 
     RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+
+    std::size_t partial_col_num = _opt.slots->size();
+    if (partial_col_num > 0 && _opt.slots->back()->col_name() == "__op") {
+        --partial_col_num;
+    }
+    // maybe partial update, change to partial tablet schema
+    if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
+        partial_col_num < _tablet->tablet_schema().num_columns()) {
+        std::vector<std::size_t> column_indexes;
+        for (auto i = 0; i < partial_col_num; ++i) {
+            const auto& slot_col_name = (*_opt.slots)[i]->col_name();
+            std::size_t index = _tablet->field_index(slot_col_name);
+            if (index < 0) {
+                std::stringstream ss;
+                ss << "invalid column name: " << slot_col_name;
+                LOG(WARNING) << ss.str();
+                return Status::InternalError(ss.str());
+            }
+            column_indexes.push_back(index);
+        }
+        writer_context.partial_update_tablet_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+        writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
+    } else {
+        writer_context.tablet_schema = &_tablet->tablet_schema();
+    }
+
     writer_context.rowset_id = _storage_engine->next_rowset_id();
     writer_context.tablet_uid = _tablet->tablet_uid();
     writer_context.tablet_id = _opt.tablet_id;
@@ -131,7 +157,6 @@ Status DeltaWriter::_init() {
     writer_context.tablet_schema_hash = _opt.schema_hash;
     writer_context.rowset_type = BETA_ROWSET;
     writer_context.rowset_path_prefix = _tablet->schema_hash_path();
-    writer_context.tablet_schema = &(_tablet->tablet_schema());
     writer_context.rowset_state = PREPARED;
     writer_context.txn_id = _opt.txn_id;
     writer_context.load_id = _opt.load_id;
@@ -145,7 +170,7 @@ Status DeltaWriter::_init() {
         return Status::InternalError(ss.str());
     }
 
-    _tablet_schema = &(_tablet->tablet_schema());
+    _tablet_schema = writer_context.tablet_schema;
     _reset_mem_table();
 
     // create flush handler
@@ -262,6 +287,7 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     if (_cur_rowset == nullptr) {
         return Status::InternalError("Fail to build rowset");
     }
+    _cur_rowset->set_schema(&_tablet->tablet_schema());
     OLAPStatus res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                                 _cur_rowset, false);
     if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
