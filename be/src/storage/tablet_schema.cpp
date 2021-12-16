@@ -468,8 +468,7 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     }
     tablet_schema_pb->set_keys_type(static_cast<KeysType>(_keys_type));
     for (auto& col : _cols) {
-        ColumnPB* column = tablet_schema_pb->add_column();
-        col.to_schema_pb(column);
+        col.to_schema_pb(tablet_schema_pb->add_column());
     }
     tablet_schema_pb->set_num_short_key_columns(_num_short_key_columns);
     tablet_schema_pb->set_num_rows_per_row_block(_num_rows_per_row_block);
