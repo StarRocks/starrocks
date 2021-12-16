@@ -623,4 +623,16 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertTrue(plan.contains("8:HASH JOIN"));
         Assert.assertTrue(plan.contains("7:Decode"));
     }
+
+    @Test
+    public void testProjectWithUnionEmptySet() throws Exception {
+        String sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("3:Project\n" +
+                "  |  <slot 11> : 1\n" +
+                "  |  \n" +
+                "  2:Decode\n" +
+                "  |  <dict id 16> : <string id 1>"));
+    }
 }
