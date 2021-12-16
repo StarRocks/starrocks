@@ -91,8 +91,6 @@ private:
 
     void _init_counter(RuntimeState* state);
 
-    static Status _get_name_node_from_path(const std::string& path, std::string* namenode);
-
     int _tuple_id = 0;
     const TupleDescriptor* _tuple_desc = nullptr;
 

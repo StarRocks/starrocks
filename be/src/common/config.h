@@ -664,6 +664,11 @@ CONF_mInt32(buffer_stream_reserve_size, "8192000");
 
 CONF_Int64(max_segment_file_size, "1073741824");
 
+// Enables using hdfsPreadFully() instead of hdfsRead() when performing HDFS read operations.
+// This is necessary to use HDFS hedged reads (assuming the HDFS client is configured to do so).
+// hdfsPreadFully() are always enabled for object storage.
+CONF_Bool(use_hdfs_pread, "true");
+
 } // namespace config
 
 } // namespace starrocks
