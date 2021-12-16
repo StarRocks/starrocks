@@ -205,6 +205,17 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         boolean checkLeft = leftColumns.containsAll(requiredColumns) && leftColumns.size() == requiredColumns.size();
         boolean checkRight = rightColumns.containsAll(requiredColumns) && rightColumns.size() == requiredColumns.size();
 
+        // @Todo: Modify PlanFragmentBuilder to support complex query
+        // Different joins maybe different on-clause predicate order, so the order of shuffle key is different,
+        // and unfortunately PlanFragmentBuilder doesn't support adjust the order of join shuffle key,
+        // so we must check the shuffle order strict
+        if (checkLeft || checkRight) {
+            for (int i = 0; i < requiredColumns.size(); i++) {
+                checkLeft &= requiredColumns.get(i).equals(leftColumns.get(i));
+                checkRight &= requiredColumns.get(i).equals(rightColumns.get(i));
+            }
+        }
+
         if (checkLeft || checkRight) {
             // Adjust hash shuffle columns orders follow requirement
             List<Integer> requiredLeft = Lists.newArrayList();
