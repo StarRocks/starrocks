@@ -4901,6 +4901,16 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testIfTimediff() throws Exception {
+        String sql = "SELECT COUNT(*) FROM t0 WHERE (CASE WHEN CAST(t0.v1 AS BOOLEAN ) THEN " +
+                "TIMEDIFF(\"1970-01-08\", \"1970-01-12\") END) BETWEEN (1341067345) AND " +
+                "(((CASE WHEN false THEN -843579223 ELSE -1859488192 END)+(((-406527105)+(540481936))))) ;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "PREDICATES: CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) >= 1.341067345E9, CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) <= -1.725533361E9"));
+    }
+
+    @Test
     public void testPredicateOnThreeTables() throws Exception {
         String sql = "SELECT \n" +
                 "  DISTINCT t1.v4 \n" +

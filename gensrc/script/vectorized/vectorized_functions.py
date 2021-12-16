@@ -376,6 +376,7 @@ vectorized_functions = [
     [70112, 'if', 'BITMAP', ['BOOLEAN', 'BITMAP', 'BITMAP'], 'nullptr'],
     [70113, 'if', 'PERCENTILE', ['BOOLEAN', 'PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70114, 'if', 'HLL', ['BOOLEAN', 'HLL', 'HLL'], 'nullptr'],
+    [70115, 'if', 'TIME', ['BOOLEAN', 'TIME', 'TIME'], 'nullptr'],
 
     [70200, 'ifnull', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70201, 'ifnull', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -395,6 +396,7 @@ vectorized_functions = [
     [70212, 'ifnull', 'BITMAP', ['BITMAP', 'BITMAP'], 'nullptr'],
     [70213, 'ifnull', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70214, 'ifnull', 'HLL', ['HLL', 'HLL'], 'nullptr'],
+    [70215, 'ifnull', 'TIME', ['TIME', 'TIME'], 'nullptr'],
 
     [70300, 'nullif', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70301, 'nullif', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -414,6 +416,7 @@ vectorized_functions = [
     [70312, 'nullif', 'BITMAP', ['BITMAP', 'BITMAP'], 'nullptr'],
     [70313, 'nullif', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70314, 'nullif', 'HLL', ['HLL', 'HLL'], 'nullptr'],
+    [70315, 'nullif', 'TIME', ['TIME', 'TIME'], 'nullptr'],
 
     [70400, 'coalesce', 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
     [70401, 'coalesce', 'TINYINT', ['TINYINT', '...'], 'nullptr'],
@@ -433,6 +436,7 @@ vectorized_functions = [
     [70412, 'coalesce', 'BITMAP', ['BITMAP', '...'], 'nullptr'],
     [70413, 'coalesce', 'PERCENTILE', ['PERCENTILE', '...'], 'nullptr'],
     [70414, 'coalesce', 'HLL', ['HLL', '...'], 'nullptr'],
+    [70416, 'coalesce', 'TIME', ['TIME', '...'], 'nullptr'],
 
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
