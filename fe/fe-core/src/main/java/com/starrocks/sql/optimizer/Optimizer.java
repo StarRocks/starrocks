@@ -85,6 +85,10 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        // After prune columns, the output column in the logical property may outdated, because of the following rule
+        // will use the output column, we need to derive the logical property here.
+        memo.deriveAllGroupLogicalProperty();
+
         ruleRewriteIterative(memo, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         //Limit push must be after the column prune,
