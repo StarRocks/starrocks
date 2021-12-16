@@ -32,15 +32,15 @@ SELECT /*+ SET_VAR(enable_cbo = true) */ * from table;
 
 ### 统计信息采集
 
-StarRocks会定时采集统计信息，包括但不限于：行数，平均大小、基数信息、NULL值数据量、MAX/MIN值等等，数据会存储在_statistics_.table_statistic_v1中，当前支持抽样和全量两种收集方式：
+StarRocks会定时采集统计信息，包括但不限于：行数，平均大小、基数信息、NULL值数据量、MAX/MIN值等等，数据会存储在`_statistics_.table_statistic_v1`中，当前支持抽样和全量两种收集方式：
 
 * 抽样收集：
 
-    会均匀的从每一个partition中抽取N行数据进行统计信息计算，抽样行数可以通过参数指定。优点在于收集任务消耗的资源小，速度快，缺点在于收集的统计信息不准确，对优化器的帮助有限，默认一般为抽样收集，抽样的行数默认为200000行，采集周期为1天，数据未更新不会重新收集。
+    会均匀的从每一个partition中抽取N行数据进行统计信息计算，抽样行数可以通过参数指定。优点在于收集任务消耗的资源少，速度快，缺点在于收集的统计信息不准确，对优化器的帮助有限，默认一般为抽样收集，抽样的行数默认为200000行，采集周期为1天，数据未更新不会重新收集。
 
 * 全量收集
 
-    使用整个表的所有数据计算统计信息。优点在于收集到的统计信息准确，优化器可以更好的评估执行计划，但是缺点也比较明显，收集任务消耗资源非常大，速度慢。全量收集可以使用手动或者定时的方式进行主动触发:
+    使用整个表的所有数据计算统计信息。优点在于收集到的统计信息准确，优化器可以更好的评估执行计划，但是缺点也比较明显，收集任务消耗资源非常大，速度慢。全量收集可以使用手动或者定时的方式进行主动触发：
 
   * 手动Analyze收集: 通过手动触发Analyze命令收集统计信息
 
@@ -76,7 +76,7 @@ ANALYZE FULL TABLE tbl_name(columnA, columnB, columnC...);
 #### Analyze Job
 
 可以通过Analyze Job创建一个指定数据库/表/列的统计任务，每个任务有自己的执行周期以及配置，会常驻执行。
-当有多个Job中指定了收集同一个列时，会按照最新(job id最大)的Job中指定的配置执行
+当有多个Job中指定了收集同一个列时，会按照最新(job id最大)的Job中指定的配置执行。
 
 抽样收集
 
@@ -153,6 +153,6 @@ StarRocks提供一个新旧优化器**对比**的工具，用于回放fe中的au
 
 1. 确认已经修改了FE的统计信息收集配置。
 2. 下载测试工具，Oracle JDK版本 [new\_planner\_test.zip](http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/new_planner_test.zip)，Open JDK版本 [open\_jdk\_new\_planner\_test.zip](http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/open_jdk_new_planner_test.zip) ，然后解压。
-3. 按照README配置StarRocks的端口地址，FE的http_port，以及用户名密码
+3. 按照README配置StarRocks的端口地址，FE的http_port，以及用户名密码。
 4. 使用命令`java -jar new_planner_test.jar $fe.audit.log.path`执行测试，测试脚本会执行fe.audit.log 中的查询请求，并进行比对，分析查询结果并记录日志。
 5. 执行的结果会记录在result文件夹中，如果在result中包含慢查询，可以将result文件夹打包提交给StarRocks，协助我们修复问题。
