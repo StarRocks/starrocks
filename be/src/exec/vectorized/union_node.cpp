@@ -17,6 +17,12 @@ UnionNode::UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorT
           _first_materialized_child_idx(tnode.union_node.first_materialized_child_idx),
           _tuple_id(tnode.union_node.tuple_id) {}
 
+UnionNode::~UnionNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
+
 Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
 
