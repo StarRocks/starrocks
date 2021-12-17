@@ -119,9 +119,7 @@ public:
             _phase.compare_exchange_strong(old_phase, HashJoinPhase::EOS);
         }
     }
-    void enter_eos_phase() {
-        _phase = HashJoinPhase::EOS;
-    }
+    void enter_eos_phase() { _phase = HashJoinPhase::EOS; }
     // build phase
     Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk);
     Status build_ht(RuntimeState* state);
