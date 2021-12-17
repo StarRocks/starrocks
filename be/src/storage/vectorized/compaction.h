@@ -60,6 +60,8 @@ public:
                                                            size_t source_num);
 
     static uint32_t get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size);
+    static int32_t get_read_chunk_size(int64_t mem_limit, int32_t config_chunk_size, int64_t num_rows,
+                                       int64_t total_mem_footprint, size_t source_num);
 
     static void split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
                                          std::vector<std::vector<uint32_t>>* column_groups);
@@ -108,8 +110,8 @@ private:
     // merge rows from vectorized reader and write into `_output_rs_writer`.
     // return Status::OK() and set statistics into `*stats_output`.
     // return others on error
-    Status _merge_rowsets_horizontally(int64_t mem_limit, Statistics* stats_output);
-    Status _merge_rowsets_vertically(Statistics* stats_output);
+    Status _merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output);
+    Status _merge_rowsets_vertically(size_t segment_iterator_num, Statistics* stats_output);
 };
 
 } // namespace starrocks::vectorized
