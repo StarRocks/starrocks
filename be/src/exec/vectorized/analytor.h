@@ -39,7 +39,11 @@ class Analytor final : public pipeline::ContextWithDependency {
     friend class ManagedFunctionStates;
 
 public:
-    ~Analytor() = default;
+    ~Analytor() {
+        if (_state != nullptr) {
+            close(_state);
+        }
+    }
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc);
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
@@ -125,6 +129,9 @@ public:
 #endif
 
 private:
+    RuntimeState* _state = nullptr;
+    bool _is_closed = false;
+
     const TPlanNode& _tnode;
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;

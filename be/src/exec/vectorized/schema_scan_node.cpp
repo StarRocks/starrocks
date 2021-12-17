@@ -22,7 +22,11 @@ SchemaScanNode::SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const D
           _dest_tuple_desc(nullptr),
           _schema_scanner(nullptr) {}
 
-SchemaScanNode::~SchemaScanNode() = default;
+SchemaScanNode::~SchemaScanNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status SchemaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode));
@@ -88,7 +92,7 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
     }
 
     // new one scanner
-    _schema_scanner.reset(SchemaScanner::create(schema_table->schema_table_type()));
+    _schema_scanner = SchemaScanner::create(schema_table->schema_table_type());
 
     if (nullptr == _schema_scanner) {
         return Status::InternalError("schema scanner get nullptr pointer.");
