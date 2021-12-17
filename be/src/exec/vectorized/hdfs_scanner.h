@@ -211,7 +211,11 @@ protected:
 class HdfsParquetScanner final : public HdfsScanner {
 public:
     HdfsParquetScanner() = default;
-    ~HdfsParquetScanner() override = default;
+    ~HdfsParquetScanner() override {
+        if (_runtime_state != nullptr) {
+            close(_runtime_state);
+        }
+    }
 
     void update_counter();
     Status do_open(RuntimeState* runtime_state) override;
