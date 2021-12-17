@@ -196,10 +196,13 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
     vectorized::SparseRange read_range;
     DCHECK_EQ(range.begin(), _current_ordinal);
 
+    // read data from discontinuous ranges in multiple pages
+    // data in the same data page will be read together in one function call
+    // to reduce the overhead of multiple function calls
     while (iter.has_more()) {
-        // next row is the first row of next page
-        // do _load_next_page directly to avoid seek_page
         if (_page->remaining() == 0 && iter.begin() == end_ord) {
+            // next row is the first row of next page
+            // do _load_next_page directly to avoid seek_page
             _opts.stats->block_seek_num += 1;
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
@@ -209,6 +212,8 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
             end_ord = _page->first_ordinal() + _page->num_rows();
             contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         } else if (iter.begin() >= end_ord) {
+            // next row is not in current page
+            // seek data page first
             _opts.stats->block_seek_num += 1;
             RETURN_IF_ERROR(seek_to_ordinal(iter.begin()));
             end_ord = _page->first_ordinal() + _page->num_rows();
@@ -217,19 +222,24 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
 
         _current_ordinal = iter.begin();
         if (end_ord > _current_ordinal) {
+            // the data of current_range is in current page
+            // add current_range into read_range
             vectorized::Range r = iter.next(end_ord - _current_ordinal);
             read_range.add(vectorized::Range(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
             _current_ordinal += r.span_size();
         }
 
-        // next row is not in current page
-        // read current page data first
         if (iter.begin() >= end_ord) {
+            // next row is not in current page which means all ranges in
+            // current page have been added in read range
+            // read current page data first
             RETURN_IF_ERROR(_page->read(dst, read_range));
             read_range.clear();
         }
     }
+
     if (!read_range.empty()) {
+        // read data left if read range is not empty
         RETURN_IF_ERROR(_page->read(dst, read_range));
         read_range.clear();
     }
