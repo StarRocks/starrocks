@@ -144,12 +144,12 @@ Status ArrayColumnIterator::next_batch(const vectorized::SparseRange& range, vec
     }
 
     vectorized::SparseRangeIterator iter = range.new_iterator();
-    size_t nread = range.span_size();
+    size_t to_read = range.span_size();
 
     DCHECK_EQ(range.begin(), _array_size_iterator->get_current_ordinal());
     vectorized::SparseRange element_read_range;
     while (iter.has_more()) {
-        vectorized::Range r = iter.next(nread);
+        vectorized::Range r = iter.next(to_read);
 
         RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
         size_t element_ordinal = _array_size_iterator->element_ordinal();

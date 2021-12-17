@@ -123,12 +123,13 @@ public:
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
             vectorized::SparseRangeIterator iter = range.new_iterator();
-            size_t nread = range.span_size();
-            while (iter.has_more()) {
-                vectorized::Range r = iter.next(nread);
+            size_t to_read = range.span_size();
+            while (to_read > 0) {
+                vectorized::Range r = iter.next(to_read);
                 RETURN_IF_ERROR(seek(r.begin()));
                 size_t n = r.span_size();
                 RETURN_IF_ERROR(read(column, &n));
+                to_read -= r.span_size();
             }
         } else {
             RETURN_IF_ERROR(_data_decoder->next_batch(range, column));
@@ -205,13 +206,14 @@ public:
     Status read_dict_codes(vectorized::Column* column, const vectorized::SparseRange& range) override {
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
-            size_t nread = range.span_size();
+            size_t to_read = range.span_size();
             vectorized::SparseRangeIterator iter = range.new_iterator();
-            while (iter.has_more()) {
-                vectorized::Range r = iter.next(nread);
+            while (to_read > 0) {
+                vectorized::Range r = iter.next(to_read);
                 RETURN_IF_ERROR(seek(r.begin()));
                 size_t n = r.span_size();
                 RETURN_IF_ERROR(read_dict_codes(column, &n));
+                to_read -= r.span_size();
             }
         } else {
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(range, column));

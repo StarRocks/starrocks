@@ -53,10 +53,10 @@ public:
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override {
         vectorized::SparseRangeIterator iter = range.new_iterator();
-        size_t nread = range.span_size();
-        while (iter.has_more()) {
+        size_t to_read = range.span_size();
+        while (to_read > 0) {
             _current_rowid = iter.begin();
-            vectorized::Range r = iter.next(nread);
+            vectorized::Range r = iter.next(to_read);
             Buffer<rowid_t>& v = down_cast<FixedLengthColumn<rowid_t>*>(dst)->get_data();
             const size_t sz = v.size();
             raw::stl_vector_resize_uninitialized(&v, sz + r.span_size());
@@ -65,6 +65,7 @@ public:
                 ptr[i] = _current_rowid + i;
             }
             _current_rowid += r.span_size();
+            to_read -= r.span_size();
         }
         return Status::OK();
     }
