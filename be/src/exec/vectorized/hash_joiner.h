@@ -121,7 +121,6 @@ public:
     }
     void enter_eos_phase() {
         _phase = HashJoinPhase::EOS;
-        _ht.close();
     }
     // build phase
     Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk);
