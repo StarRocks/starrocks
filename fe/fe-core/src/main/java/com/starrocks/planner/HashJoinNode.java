@@ -41,6 +41,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THashJoinNode;
+import com.starrocks.thrift.TJoinDistributionMode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
@@ -359,6 +360,7 @@ public class HashJoinNode extends PlanNode {
         msg.node_type = TPlanNodeType.HASH_JOIN_NODE;
         msg.hash_join_node = new THashJoinNode();
         msg.hash_join_node.join_op = joinOp.toThrift();
+        msg.hash_join_node.distribution_mode = distrMode.toThrift();
         StringBuilder sqlJoinPredicatesBuilder = new StringBuilder();
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             TEqJoinCondition eqJoinCondition = new TEqJoinCondition(eqJoinPredicate.getChild(0).treeToThrift(),
@@ -486,6 +488,25 @@ public class HashJoinNode extends PlanNode {
         @Override
         public String toString() {
             return description;
+        }
+
+        public TJoinDistributionMode toThrift() {
+            switch (this) {
+                case BROADCAST:
+                    return TJoinDistributionMode.BROADCAST;
+                case PARTITIONED:
+                    return TJoinDistributionMode.PARTITIONED;
+                case LOCAL_HASH_BUCKET:
+                    return TJoinDistributionMode.LOCAL_HASH_BUCKET;
+                case SHUFFLE_HASH_BUCKET:
+                    return TJoinDistributionMode.SHUFFLE_HASH_BUCKET;
+                case COLOCATE:
+                    return TJoinDistributionMode.COLOCATE;
+                case REPLICATED:
+                    return TJoinDistributionMode.REPLICATED;
+                default:
+                    return TJoinDistributionMode.NONE;
+            }
         }
     }
 
