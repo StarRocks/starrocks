@@ -24,7 +24,6 @@
 
 #include "storage/field.h"
 #include "storage/olap_define.h"
-#include "storage/row_cursor_cell.h"
 #include "storage/tablet_schema.h"
 #include "util/hash_util.hpp"
 
@@ -37,10 +36,6 @@ public:
     static WrapperField* create_by_type(const FieldType& type, int32_t var_length);
 
     WrapperField(Field* rep, size_t variable_len, bool is_string_type);
-
-    // only used to wrapped content of row cursor cell to find element in wrapped field set
-    // do not delete rep, should call release_field before deconstructed
-    WrapperField(Field* rep, const RowCursorCell& row_cursor_cell);
 
     virtual ~WrapperField() {
         delete _rep;

@@ -32,9 +32,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/mem_pool.h"
-#include "storage/row.h"
-#include "storage/row_block.h"
-#include "storage/row_cursor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/storage_engine.h"
@@ -421,7 +418,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                             ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
                     Status st = datum_from_string(new_field.type().get(), &dst_datum, tmp, nullptr);
                     if (!st.ok()) {
-                        LOG(WARNING) << "create datum from string failed";
+                        LOG(WARNING) << "create datum from string failed: status=" << st;
                         return false;
                     }
                 }

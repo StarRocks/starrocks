@@ -604,7 +604,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Assign remaining unassigned conjuncts.
      */
     protected void assignConjuncts(Analyzer analyzer) {
-        List<Expr> unassigned = analyzer.getUnassignedConjuncts(this);
+        List<Expr> unassigned = analyzer.getUnassignedConjuncts(this.getTupleIds());
         conjuncts.addAll(unassigned);
         analyzer.markConjunctsAssigned(unassigned);
     }

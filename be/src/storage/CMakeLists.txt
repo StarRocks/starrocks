@@ -29,7 +29,6 @@ add_subdirectory(rowset)
 add_subdirectory(fs)
 
 add_library(Storage STATIC
-    aggregate_func.cpp
     base_tablet.cpp
     comparison_predicate.cpp
     decimal12.cpp
@@ -41,7 +40,6 @@ add_library(Storage STATIC
     lru_cache.cpp
     memtable_flush_executor.cpp
     null_predicate.cpp
-    olap_cond.cpp
     kv_store.cpp
     olap_server.cpp
     options.cpp
@@ -51,9 +49,6 @@ add_library(Storage STATIC
     protobuf_file.cpp
     rowset_update_state.cpp
     update_compaction_state.cpp
-    row_block.cpp
-    row_block2.cpp
-    row_cursor.cpp
     version_graph.cpp
     schema.cpp
     storage_engine.cpp
@@ -95,6 +90,7 @@ add_library(Storage STATIC
     rowset/segment_v2/binary_prefix_page.cpp
     rowset/segment_v2/segment.cpp
     rowset/segment_v2/segment_writer.cpp
+    rowset/segment_v2/storage_page_decoder.cpp
     rowset/segment_v2/block_split_bloom_filter.cpp
     rowset/segment_v2/bloom_filter_index_reader.cpp
     rowset/segment_v2/bloom_filter_index_writer.cpp

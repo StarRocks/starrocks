@@ -191,8 +191,13 @@ public class ReplayFromDumpTest {
     @Test
     public void testSSB10() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/ssb10"));
-        System.out.println(replayPair.second);
-        Assert.assertTrue(replayPair.second.contains("cardinality: 1600"));
+        Assert.assertTrue(replayPair.second.contains("  14:Project\n" +
+                "  |  output columns:\n" +
+                "  |  13 <-> [13: lo_revenue, INT, false]\n" +
+                "  |  22 <-> [22: d_year, INT, false]\n" +
+                "  |  38 <-> [38: c_city, VARCHAR, false]\n" +
+                "  |  46 <-> [46: s_city, VARCHAR, false]\n" +
+                "  |  cardinality: 28532"));
         Assert.assertTrue(replayPair.second.contains("  |----7:EXCHANGE\n"
                 + "  |       cardinality: 30"));
     }
@@ -265,7 +270,7 @@ public class ReplayFromDumpTest {
                 "  |  * inv_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
                 "  |  * inv_item_sk-->[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE\n" +
                 "  |  * inv_quantity_on_hand-->[0.0, 1000.0, 0.05000724964315228, 4.0, 1006.0] ESTIMATE\n" +
-                "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 334.80791666666664] ESTIMATE\n" +
+                "  |  * d_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |       cardinality: 335"));
@@ -294,5 +299,26 @@ public class ReplayFromDumpTest {
                 "  |  cross join:\n" +
                 "  |  predicates: (CAST(2: v2 AS DOUBLE) = CAST(8: v2 AS DOUBLE)) OR (3: v3 = 8: v2), " +
                 "CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1'\n"));
+    }
+
+    @Test
+    public void testJoinReorderPushColumnsNoHandleProject() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder"), null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
+                "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n" +
+                "  |  \n" +
+                "  5:OlapScanNode\n" +
+                "     TABLE: external_es_table_without_null"));
+    }
+
+    @Test
+    public void testMultiCountDistinct() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 33:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), multi_distinct_count(128: case), max(103: count)"));
     }
 }

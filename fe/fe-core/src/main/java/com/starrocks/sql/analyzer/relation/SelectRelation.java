@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class QuerySpecification extends QueryRelation {
+public class SelectRelation extends QueryRelation {
     private final Expr predicate;
 
     private final List<Expr> groupBy;
@@ -46,15 +46,15 @@ public class QuerySpecification extends QueryRelation {
 
     private Map<Expr, FieldId> columnReferences;
 
-    public QuerySpecification(List<Expr> outputExpr, List<String> columnOutputNames, boolean isDistinct,
-                              Scope outputScope, Scope orderScope, List<Expr> orderSourceExpressions,
-                              Relation relation, Expr predicate, LimitElement limit,
-                              List<Expr> groupBy, List<FunctionCallExpr> aggregate, List<List<Expr>> groupingSetsList,
-                              List<Expr> groupingFunctionCallExprs,
-                              List<OrderByElement> orderBy, Expr having,
-                              List<AnalyticExpr> outputAnalytic, List<AnalyticExpr> orderByAnalytic,
-                              Map<Expr, FieldId> columnReferences) {
-        super(outputExpr, outputScope, columnOutputNames);
+    public SelectRelation(List<Expr> outputExpr, List<String> columnOutputNames, boolean isDistinct,
+                          Scope orderScope, List<Expr> orderSourceExpressions,
+                          Relation relation, Expr predicate, LimitElement limit,
+                          List<Expr> groupBy, List<FunctionCallExpr> aggregate, List<List<Expr>> groupingSetsList,
+                          List<Expr> groupingFunctionCallExprs,
+                          List<OrderByElement> orderBy, Expr having,
+                          List<AnalyticExpr> outputAnalytic, List<AnalyticExpr> orderByAnalytic,
+                          Map<Expr, FieldId> columnReferences) {
+        super(outputExpr, columnOutputNames);
 
         this.isDistinct = isDistinct;
         this.orderScope = orderScope;
@@ -162,7 +162,7 @@ public class QuerySpecification extends QueryRelation {
     }
 
     public <R, C> R accept(RelationVisitor<R, C> visitor, C context) {
-        return visitor.visitQuerySpecification(this, context);
+        return visitor.visitSelect(this, context);
     }
 }
 

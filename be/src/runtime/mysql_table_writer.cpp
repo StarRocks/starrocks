@@ -40,7 +40,6 @@
 
 #include "exprs/expr.h"
 #include "runtime/mysql_table_writer.h"
-#include "runtime/row_batch.h"
 #include "runtime/tuple_row.h"
 #include "util/types.h"
 

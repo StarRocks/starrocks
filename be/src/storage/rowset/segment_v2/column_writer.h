@@ -27,7 +27,6 @@
 #include "gen_cpp/segment_v2.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dicts.h"
-#include "storage/row_cursor_cell.h"
 #include "storage/rowset/segment_v2/binary_dict_page.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/page_pointer.h" // for PagePointer
@@ -95,13 +94,6 @@ public:
 
     virtual Status init() = 0;
 
-    virtual Status append(const RowCursorCell& cell) {
-        static const int128_t s_default_value = 0;
-        uint8_t is_null = cell.is_null();
-        auto* p = !is_null ? (const uint8_t*)cell.cell_ptr() : (const uint8_t*)&s_default_value;
-        return append(p, &is_null, 1, is_null);
-    }
-
     virtual Status append(const vectorized::Column& column) = 0;
 
     virtual Status append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) = 0;
@@ -134,6 +126,8 @@ public:
     bool is_nullable() const { return _is_nullable; }
 
     Field* get_field() const { return _field.get(); }
+
+    virtual uint64_t total_mem_footprint() const = 0;
 
 private:
     std::unique_ptr<Field> _field;
@@ -180,6 +174,8 @@ public:
     ordinal_t get_next_rowid() const override { return _next_rowid; }
 
     bool is_global_dict_valid() override { return _is_global_dict_valid; }
+
+    uint64_t total_mem_footprint() const override { return _total_mem_footprint; }
 
 private:
     // All Pages will be organized into a linked list
@@ -250,6 +246,8 @@ private:
     int64_t _previous_ordinal = 0;
 
     bool _is_global_dict_valid = true;
+
+    uint64_t _total_mem_footprint = 0;
 };
 
 class ArrayColumnWriter final : public ColumnWriter {
@@ -282,8 +280,12 @@ public:
 
     ordinal_t get_next_rowid() const override { return _array_size_writer->get_next_rowid(); }
 
+    uint64_t total_mem_footprint() const override;
+
 private:
     Status _append(const vectorized::Column& column);
+
+    ColumnWriterOptions _opts;
 
     std::unique_ptr<ScalarColumnWriter> _null_writer;
     std::unique_ptr<ScalarColumnWriter> _array_size_writer;

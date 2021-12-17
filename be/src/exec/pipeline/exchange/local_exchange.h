@@ -18,9 +18,9 @@ namespace pipeline {
 // Exchange the local data from local sink operator to local source operator
 class LocalExchanger {
 public:
-    explicit LocalExchanger(std::shared_ptr<LocalExchangeMemoryManager> memory_manager,
+    explicit LocalExchanger(const std::string& name, std::shared_ptr<LocalExchangeMemoryManager> memory_manager,
                             LocalExchangeSourceOperatorFactory* source)
-            : _memory_manager(std::move(memory_manager)), _source(source) {}
+            : _name(name), _memory_manager(std::move(memory_manager)), _source(source) {}
 
     virtual Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
 
@@ -42,6 +42,8 @@ public:
         return true;
     }
 
+    const std::string& name() const { return _name; }
+
     bool need_input() const;
 
     void increment_sink_number() { _sink_number++; }
@@ -49,8 +51,9 @@ public:
     int32_t decrement_sink_number() { return _sink_number--; }
 
 protected:
+    const std::string _name;
     std::shared_ptr<LocalExchangeMemoryManager> _memory_manager;
-    std::atomic<int32_t> _sink_number{0};
+    std::atomic<int32_t> _sink_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
 };
 
@@ -112,7 +115,7 @@ class BroadcastExchanger final : public LocalExchanger {
 public:
     BroadcastExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                        LocalExchangeSourceOperatorFactory* source)
-            : LocalExchanger(memory_manager, source) {}
+            : LocalExchanger("Broadcast", memory_manager, source) {}
 
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 };
@@ -122,7 +125,7 @@ class PassthroughExchanger final : public LocalExchanger {
 public:
     PassthroughExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                          LocalExchangeSourceOperatorFactory* source)
-            : LocalExchanger(memory_manager, source) {}
+            : LocalExchanger("Passthrough", memory_manager, source) {}
 
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 

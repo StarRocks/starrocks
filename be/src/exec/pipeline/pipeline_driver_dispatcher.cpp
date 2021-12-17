@@ -69,9 +69,7 @@ void GlobalDriverDispatcher::run() {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 
             if (fragment_ctx->is_canceled()) {
-                VLOG_ROW << "[Driver] Canceled: driver=" << driver
-                         << ", error=" << fragment_ctx->final_status().to_string();
-                driver->finish_operators(runtime_state);
+                driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
@@ -92,9 +90,11 @@ void GlobalDriverDispatcher::run() {
             this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
 
             if (!status.ok()) {
-                VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
+                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                             << ", error=" << status.status().to_string();
                 query_ctx->cancel(status.status());
-                driver->finish_operators(runtime_state);
+                driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
@@ -191,7 +191,7 @@ void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ct
         int64_t max_active_time = 0;
         RuntimeProfile* pipeline_driver_profile_with_max_active_time = nullptr;
         for (auto* pipeline_driver_profile : pipeline_driver_profiles) {
-            auto* active_timer = pipeline_driver_profile->get_counter("DriverActiveTime");
+            auto* active_timer = pipeline_driver_profile->get_counter("ActiveTime");
             if (active_timer == nullptr) {
                 continue;
             }

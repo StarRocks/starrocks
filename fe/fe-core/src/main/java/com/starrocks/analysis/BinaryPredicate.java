@@ -629,15 +629,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         return op != Operator.EQ_FOR_NULL;
     }
 
-    @Override
-    public boolean isStrictPredicate() {
-        if (op == Operator.EQ_FOR_NULL) {
-            return false;
-        }
-        // To exclude 1 = 1;
-        return getChild(0).unwrapSlotRef() != null || getChild(1).unwrapSlotRef() != null;
-    }
-
     /**
      * Below function is added by new analyzer
      */

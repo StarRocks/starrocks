@@ -2,19 +2,29 @@
 package com.starrocks.sql.analyzer.relation;
 
 import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 
 public abstract class Relation {
-    /**
-     * output fields of this relation
-     */
-    protected final RelationFields relationFields;
+    private Scope scope;
 
-    public Relation(RelationFields relationFields) {
-        this.relationFields = relationFields;
+    public Relation() {
+    }
+
+    public Scope getScope() {
+        if (scope == null) {
+            throw new StarRocksPlannerException("Scope is null", ErrorType.INTERNAL_ERROR);
+        }
+        return scope;
+    }
+
+    public void setScope(Scope scope) {
+        this.scope = scope;
     }
 
     public RelationFields getRelationFields() {
-        return relationFields;
+        return scope.getRelationFields();
     }
 
     public <R, C> R accept(RelationVisitor<R, C> visitor, C context) {

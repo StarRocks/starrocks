@@ -160,7 +160,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return false;
     }
 
-    private static Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
+    public static final Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
             FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN
     );
 
@@ -175,6 +175,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
             return couldApplyLowCardAggregateFunction.contains(operator.getFnName());
         }
         return true;
+    }
+
+    public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
+        ColumnRefSet dictSet = new ColumnRefSet();
+        dictColIds.forEach(dictSet::union);
+        getAggregations().values().forEach((v) -> {
+            if (!couldApplyStringDict(v, dictSet)) {
+                resultSet.union(v.getUsedColumns());
+            }
+        });
     }
 
 }

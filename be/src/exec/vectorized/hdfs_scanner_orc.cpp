@@ -230,6 +230,9 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
         // create chunk
         orc::StringDictionary* dict = it->second;
+        if (dict->dictionaryOffset.size() > config::vector_chunk_size) {
+            continue;
+        }
         vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
         // always assume there is a possibility of null value in ORC column.
         // and we evaluate with null always.
@@ -325,11 +328,6 @@ void HdfsOrcScanner::update_counter() {
     COUNTER_UPDATE(_scanner_params.parent->_value_decode_timer, _stats.value_decode_ns);
     COUNTER_UPDATE(_scanner_params.parent->_level_decode_timer, _stats.level_decode_ns);
 #endif
-}
-
-void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {
-    update_counter();
-    _reader.reset();
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {

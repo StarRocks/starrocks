@@ -17,8 +17,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.analyzer.relation.ValuesRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -107,14 +107,14 @@ public class SubqueryTransformer {
         }
 
         private LogicalPlan getLogicalPlan(Relation relation, ConnectContext session, ExpressionMapping outer) {
-            if (!(relation instanceof QuerySpecification) && !(relation instanceof ValuesRelation)) {
+            if (!(relation instanceof SelectRelation) && !(relation instanceof ValuesRelation)) {
                 throw new SemanticException("Unsupported subquery relation");
             }
 
-            if (relation instanceof QuerySpecification) {
-                QuerySpecification querySpecification = (QuerySpecification) relation;
+            if (relation instanceof SelectRelation) {
+                SelectRelation selectRelation = (SelectRelation) relation;
                 // For in subQuery, the order by is meaningless
-                querySpecification.getOrderBy().clear();
+                selectRelation.getOrderBy().clear();
             }
 
             return new RelationTransformer(columnRefFactory, session, outer).transform(relation);
@@ -138,8 +138,8 @@ public class SubqueryTransformer {
 
             QueryRelation qb = ((Subquery) inPredicate.getChild(1)).getQueryBlock();
             LogicalPlan subqueryPlan = getLogicalPlan(qb, session, context.builder.getExpressionMapping());
-            if (qb instanceof QuerySpecification &&
-                    !subqueryPlan.getCorrelation().isEmpty() && ((QuerySpecification) qb).hasAggregation()) {
+            if (qb instanceof SelectRelation &&
+                    !subqueryPlan.getCorrelation().isEmpty() && ((SelectRelation) qb).hasAggregation()) {
                 throw new SemanticException(
                         "Unsupported correlated in predicate subquery with grouping or aggregation");
             }
@@ -234,8 +234,8 @@ public class SubqueryTransformer {
         public OptExprBuilder visitSubquery(Subquery subquery, SubqueryContext context) {
             LogicalPlan subqueryPlan =
                     getLogicalPlan(subquery.getQueryBlock(), session, context.builder.getExpressionMapping());
-            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryBlock() instanceof QuerySpecification
-                    && !((QuerySpecification) subquery.getQueryBlock()).hasAggregation()) {
+            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryBlock() instanceof SelectRelation
+                    && !((SelectRelation) subquery.getQueryBlock()).hasAggregation()) {
                 throw new SemanticException("Correlated scalar subquery should aggregation query");
             }
 
@@ -251,9 +251,9 @@ public class SubqueryTransformer {
              * So we need to do special processing on count,
              * other aggregate functions do not need special processing because they return NULL
              */
-            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryBlock() instanceof QuerySpecification &&
-                    ((QuerySpecification) subquery.getQueryBlock()).hasAggregation() &&
-                    ((QuerySpecification) subquery.getQueryBlock()).getAggregate().get(0).getFnName().getFunction()
+            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryBlock() instanceof SelectRelation &&
+                    ((SelectRelation) subquery.getQueryBlock()).hasAggregation() &&
+                    ((SelectRelation) subquery.getQueryBlock()).getAggregate().get(0).getFnName().getFunction()
                             .equalsIgnoreCase(FunctionSet.COUNT)) {
 
                 subqueryOutput = new CallOperator("ifnull", Type.BIGINT,

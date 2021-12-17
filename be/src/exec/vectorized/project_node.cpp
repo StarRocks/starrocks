@@ -34,7 +34,11 @@ ProjectNode::ProjectNode(starrocks::ObjectPool* pool, const starrocks::TPlanNode
                          const starrocks::DescriptorTbl& desc)
         : ExecNode(pool, node, desc) {}
 
-ProjectNode::~ProjectNode() = default;
+ProjectNode::~ProjectNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -227,7 +231,7 @@ void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext
 void ProjectNode::push_down_join_runtime_filter(RuntimeState* state,
                                                 vectorized::RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
-    _runtime_filter_collector.push_down(collector, _tuple_ids);
+    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 
     // check to see if runtime filters can be rewritten
     auto& descriptors = _runtime_filter_collector.descriptors();

@@ -217,17 +217,6 @@ public:
         return _scalar_column_writer->append(data, null_flags, count, has_null);
     };
 
-    Status append(const RowCursorCell& cell) override {
-        if (!_is_speculated) {
-            _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
-            _is_speculated = true;
-        }
-        static const int128_t s_default_value = 0;
-        uint8_t is_null = cell.is_null();
-        auto* p = !is_null ? (const uint8_t*)cell.cell_ptr() : (const uint8_t*)&s_default_value;
-        return append(p, &is_null, 1, is_null);
-    }
-
     // Speculate char/varchar encoding and reset encoding
     void speculate_column_and_set_encoding(const vectorized::Column& column);
 
@@ -250,6 +239,8 @@ public:
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
 
     bool is_global_dict_valid() override { return _scalar_column_writer->is_global_dict_valid(); }
+
+    uint64_t total_mem_footprint() const override { return _scalar_column_writer->total_mem_footprint(); }
 
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
@@ -424,6 +415,7 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
 Status ScalarColumnWriter::finish() {
     RETURN_IF_ERROR(finish_current_page());
     _opts.meta->set_num_rows(_next_rowid);
+    _opts.meta->set_total_mem_footprint(_total_mem_footprint);
     return Status::OK();
 }
 
@@ -611,6 +603,8 @@ Status ScalarColumnWriter::finish_current_page() {
 }
 
 Status ScalarColumnWriter::append(const vectorized::Column& column) {
+    _total_mem_footprint += column.byte_size();
+
     const uint8_t* ptr = column.raw_data();
     const uint8_t* null =
             is_nullable() ? down_cast<const vectorized::NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
@@ -618,6 +612,8 @@ Status ScalarColumnWriter::append(const vectorized::Column& column) {
 }
 
 Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column) {
+    _total_mem_footprint += column.byte_size();
+
     // Write offset column, it's only used in ArrayColumn
     // [1, 2, 3], [4, 5, 6]
     // In memory, it will be transformed by actual offset(0, 3, 6)
@@ -764,6 +760,7 @@ ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, std::uniqu
                                      std::unique_ptr<ScalarColumnWriter> offset_writer,
                                      std::unique_ptr<ColumnWriter> element_writer)
         : ColumnWriter(std::move(field), opts.meta->is_nullable()),
+          _opts(opts),
           _null_writer(std::move(null_writer)),
           _array_size_writer(std::move(offset_writer)),
           _element_writer(std::move(element_writer)) {}
@@ -846,7 +843,20 @@ Status ArrayColumnWriter::finish() {
     }
     RETURN_IF_ERROR(_array_size_writer->finish());
     RETURN_IF_ERROR(_element_writer->finish());
+
+    _opts.meta->set_num_rows(get_next_rowid());
+    _opts.meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();
+}
+
+uint64_t ArrayColumnWriter::total_mem_footprint() const {
+    uint64_t total_mem_footprint = 0;
+    if (is_nullable()) {
+        total_mem_footprint += _null_writer->total_mem_footprint();
+    }
+    total_mem_footprint += _array_size_writer->total_mem_footprint();
+    total_mem_footprint += _element_writer->total_mem_footprint();
+    return total_mem_footprint;
 }
 
 Status ArrayColumnWriter::write_data() {

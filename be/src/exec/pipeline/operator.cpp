@@ -32,8 +32,12 @@ Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name
 }
 
 Status Operator::prepare(RuntimeState* state) {
+    _total_timer = ADD_TIMER(_runtime_profile, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_runtime_profile, "PushTotalTime");
     _pull_timer = ADD_TIMER(_runtime_profile, "PullTotalTime");
+    _finishing_timer = ADD_TIMER(_runtime_profile, "SetFinishingTime");
+    _finished_timer = ADD_TIMER(_runtime_profile, "SetFinishedTime");
+    _close_timer = ADD_TIMER(_runtime_profile, "CloseTime");
 
     _push_chunk_num_counter = ADD_COUNTER(_runtime_profile, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_runtime_profile, "PushRowNum", TUnit::UNIT);

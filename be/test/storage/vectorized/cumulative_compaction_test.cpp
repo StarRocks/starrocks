@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
-#include "storage/row_cursor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -112,6 +111,62 @@ public:
         EXPECT_EQ(OLAP_SUCCESS, writer->add_chunk(*chunk));
     }
 
+    void do_compaction() {
+        config::storage_format_version = 2;
+        create_tablet_schema(UNIQUE_KEYS);
+
+        RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
+        create_rowset_writer_context(&rowset_writer_context);
+        std::unique_ptr<RowsetWriter> _rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
+
+        rowset_writer_add_rows(_rowset_writer);
+
+        _rowset_writer->flush();
+        RowsetSharedPtr src_rowset = _rowset_writer->build();
+        ASSERT_TRUE(src_rowset != nullptr);
+        RowsetId src_rowset_id;
+        src_rowset_id.init(10000);
+        ASSERT_EQ(src_rowset_id, src_rowset->rowset_id());
+        ASSERT_EQ(1024, src_rowset->num_rows());
+
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        create_tablet_meta(tablet_meta.get());
+        tablet_meta->add_rs_meta(src_rowset->rowset_meta());
+
+        {
+            RowsetId src_rowset_id;
+            src_rowset_id.init(10001);
+            rowset_writer_context.rowset_id = src_rowset_id;
+            rowset_writer_context.version =
+                    Version(rowset_writer_context.version.second + 1, rowset_writer_context.version.second + 1);
+
+            std::unique_ptr<RowsetWriter> _rowset_writer;
+            ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
+
+            rowset_writer_add_rows(_rowset_writer);
+
+            _rowset_writer->flush();
+            RowsetSharedPtr src_rowset = _rowset_writer->build();
+            ASSERT_TRUE(src_rowset != nullptr);
+            ASSERT_EQ(src_rowset_id, src_rowset->rowset_id());
+            ASSERT_EQ(1024, src_rowset->num_rows());
+
+            tablet_meta->add_rs_meta(src_rowset->rowset_meta());
+        }
+
+        TabletSharedPtr tablet =
+                Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
+                                                starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
+        tablet->init();
+
+        config::cumulative_compaction_skip_window_seconds = -2;
+
+        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
+
+        ASSERT_TRUE(cumulative_compaction.compact().ok());
+    }
+
     void SetUp() override {
         config::min_cumulative_compaction_num_singleton_deltas = 2;
         config::max_compaction_concurrency = 1;
@@ -186,60 +241,35 @@ TEST_F(CumulativeCompactionTest, test_candidate_rowsets_empty) {
     ASSERT_FALSE(cumulative_compaction.compact().ok());
 }
 
-TEST_F(CumulativeCompactionTest, test_compact_succeed) {
-    config::storage_format_version = 2;
-    create_tablet_schema(UNIQUE_KEYS);
+TEST_F(CumulativeCompactionTest, test_horizontal_compact_succeed) {
+    config::vertical_compaction_max_columns_per_group = 5;
+    do_compaction();
+}
 
-    RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
-    create_rowset_writer_context(&rowset_writer_context);
-    std::unique_ptr<RowsetWriter> _rowset_writer;
-    ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
+TEST_F(CumulativeCompactionTest, test_vertical_compact_succeed) {
+    config::vertical_compaction_max_columns_per_group = 1;
+    do_compaction();
+}
 
-    rowset_writer_add_rows(_rowset_writer);
+TEST_F(CumulativeCompactionTest, test_read_chunk_size) {
+    // total row size is 0 in old segment
+    int64_t mem_limit = 2147483648;
+    int32_t config_chunk_size = 4096;
+    int64_t total_num_rows = 10000;
+    int64_t total_mem_footprint = 0;
+    size_t source_num = 10;
+    ASSERT_EQ(config_chunk_size, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+                                                                 total_mem_footprint, source_num));
 
-    _rowset_writer->flush();
-    RowsetSharedPtr src_rowset = _rowset_writer->build();
-    ASSERT_TRUE(src_rowset != nullptr);
-    RowsetId src_rowset_id;
-    src_rowset_id.init(10000);
-    ASSERT_EQ(src_rowset_id, src_rowset->rowset_id());
-    ASSERT_EQ(1024, src_rowset->num_rows());
+    // normal total memory footprint
+    total_mem_footprint = 1073741824;
+    ASSERT_EQ(2001, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows, total_mem_footprint,
+                                                    source_num));
 
-    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
-    create_tablet_meta(tablet_meta.get());
-    tablet_meta->add_rs_meta(src_rowset->rowset_meta());
-
-    {
-        RowsetId src_rowset_id;
-        src_rowset_id.init(10001);
-        rowset_writer_context.rowset_id = src_rowset_id;
-        rowset_writer_context.version =
-                Version(rowset_writer_context.version.second + 1, rowset_writer_context.version.second + 1);
-
-        std::unique_ptr<RowsetWriter> _rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
-
-        rowset_writer_add_rows(_rowset_writer);
-
-        _rowset_writer->flush();
-        RowsetSharedPtr src_rowset = _rowset_writer->build();
-        ASSERT_TRUE(src_rowset != nullptr);
-        ASSERT_EQ(src_rowset_id, src_rowset->rowset_id());
-        ASSERT_EQ(1024, src_rowset->num_rows());
-
-        tablet_meta->add_rs_meta(src_rowset->rowset_meta());
-    }
-
-    TabletSharedPtr tablet =
-            Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
-                                            starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
-    tablet->init();
-
-    config::cumulative_compaction_skip_window_seconds = -2;
-
-    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-
-    ASSERT_TRUE(cumulative_compaction.compact().ok());
+    // mem limit is 0
+    mem_limit = 0;
+    ASSERT_EQ(config_chunk_size, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+                                                                 total_mem_footprint, source_num));
 }
 
 } // namespace starrocks::vectorized

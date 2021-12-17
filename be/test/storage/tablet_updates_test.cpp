@@ -26,6 +26,7 @@
 #include "storage/vectorized/empty_iterator.h"
 #include "storage/vectorized/schema_change.h"
 #include "storage/vectorized/union_iterator.h"
+#include "storage/wrapper_field.h"
 #include "util/defer_op.h"
 #include "util/path_util.h"
 
@@ -786,7 +787,38 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_normal) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(TabletUpdatesTest, compaction) {
+TEST_F(TabletUpdatesTest, horizontal_compaction) {
+    config::vertical_compaction_max_columns_per_group = 5;
+
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < 100; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    const auto& best_tablet =
+            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
+    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+    ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 3, keys));
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    // the time interval is not enough after last compaction
+    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+}
+
+TEST_F(TabletUpdatesTest, vertical_compaction) {
+    config::vertical_compaction_max_columns_per_group = 1;
+
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     std::vector<int64_t> keys;

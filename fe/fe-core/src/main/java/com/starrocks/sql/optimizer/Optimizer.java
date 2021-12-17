@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
@@ -24,7 +25,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
-import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.task.CTEContext;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -90,6 +90,10 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        // After prune columns, the output column in the logical property may outdated, because of the following rule
+        // will use the output column, we need to derive the logical property here.
+        memo.deriveAllGroupLogicalProperty();
+
         ruleRewriteIterative(memo, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         //Limit push must be after the column prune,
@@ -109,7 +113,6 @@ public class Optimizer {
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteOnlyOnce(memo, rootTaskContext, LimitPruneTabletsRule.getInstance());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
-        ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
@@ -170,6 +173,8 @@ public class Optimizer {
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
+        // This rule should be last
+        result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         return result;
     }
 

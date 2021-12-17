@@ -33,7 +33,7 @@ public:
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
-    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
     virtual Status prepare(RuntimeState* state);
 
@@ -44,7 +44,7 @@ public:
     // finish function is used to finish the following operator of the current operator that encounters its EOS
     // and has no data to push into its following operator, but the operator is not finished until its buffered
     // data inside is processed.
-    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
     virtual void set_finishing(RuntimeState* state) {}
 
@@ -56,15 +56,21 @@ public:
     // an implementation-specific context should override set_finished function, such as LocalExchangeSourceOperator.
     // For an ordinary operator, set_finished function is trivial and just has the same implementation with
     // set_finishing function.
-    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
     virtual void set_finished(RuntimeState* state) {}
+
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
+    // - When the fragment exits abnormally, the stage operator will become to CANCELLED between FINISHED and CLOSE.
+    // - When the fragment exits normally, there isn't CANCELLED stage for the drivers.
+    // Sometimes, the operator need to realize it is cancelled to stop earlier than normal, such as ExchangeSink.
+    virtual void set_cancelled(RuntimeState* state) {}
 
     // when local runtime filters are ready, the operator should bound its corresponding runtime in-filters.
     virtual void set_precondition_ready(RuntimeState* state);
 
     // close is used to do the cleanup work
-    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
     virtual Status close(RuntimeState* state);
 
@@ -142,8 +148,12 @@ protected:
     vectorized::RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
     // Common metrics
+    RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _push_timer = nullptr;
     RuntimeProfile::Counter* _pull_timer = nullptr;
+    RuntimeProfile::Counter* _finishing_timer = nullptr;
+    RuntimeProfile::Counter* _finished_timer = nullptr;
+    RuntimeProfile::Counter* _close_timer = nullptr;
 
     RuntimeProfile::Counter* _push_chunk_num_counter = nullptr;
     RuntimeProfile::Counter* _push_row_num_counter = nullptr;

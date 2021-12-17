@@ -74,19 +74,17 @@ public class PreAggregateTurnOnRule {
         void rewriteProject(OptExpression opt, PreAggregationContext context) {
             Projection projection = opt.getOp().getProjection();
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
-            ReplaceColumnRefRewriter subRewriter =
-                    new ReplaceColumnRefRewriter(projection.getCommonSubOperatorMap(), true);
 
             context.aggregations = context.aggregations.stream()
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                    .map(d -> d.accept(rewriter, null))
                     .collect(Collectors.toList());
 
             context.groupings = context.groupings.stream()
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                    .map(d -> d.accept(rewriter, null))
                     .collect(Collectors.toList());
 
             context.joinPredicates = context.joinPredicates.stream().filter(Objects::nonNull)
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                    .map(d -> d.accept(rewriter, null))
                     .collect(Collectors.toList());
         }
 
@@ -333,8 +331,8 @@ public class PreAggregateTurnOnRule {
                 }
             });
             context.aggregations.forEach(a -> aggregationColumns.union(a.getUsedColumns()));
-            boolean checkLeft = leftOutputColumns.contains(aggregationColumns);
-            boolean checkRight = rightOutputColumns.contains(aggregationColumns);
+            boolean checkLeft = leftOutputColumns.containsAll(aggregationColumns);
+            boolean checkRight = rightOutputColumns.containsAll(aggregationColumns);
             // Add join on predicate and predicate to context
             if (hashJoinOperator.getJoinPredicate() != null) {
                 context.joinPredicates.add(hashJoinOperator.getJoinPredicate().clone());

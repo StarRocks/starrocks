@@ -47,7 +47,6 @@ set(RUNTIME_FILES
     result_sink.cpp
     result_buffer_mgr.cpp
     result_writer.cpp
-    row_batch.cpp
     runtime_state.cpp
     string_value.cpp
     thread_resource_mgr.cpp
@@ -56,7 +55,6 @@ set(RUNTIME_FILES
     large_int_value.cpp
     tuple.cpp
     tuple_row.cpp
-    vectorized_row_batch.cpp
     fragment_mgr.cpp
     dpp_sink_internal.cpp
     load_path_mgr.cpp

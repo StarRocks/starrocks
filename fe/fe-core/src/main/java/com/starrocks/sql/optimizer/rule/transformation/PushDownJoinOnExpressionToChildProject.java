@@ -66,19 +66,19 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
         for (BinaryPredicateOperator binaryPredicateOperator : equalConjs) {
             ScalarOperator left = binaryPredicateOperator.getChild(0);
             ScalarOperator right = binaryPredicateOperator.getChild(1);
-            if (leftOutputColumns.contains(left.getUsedColumns()) && !left.isColumnRef()) {
+            if (leftOutputColumns.containsAll(left.getUsedColumns()) && !left.isColumnRef()) {
                 leftProjectMaps.put(context.getColumnRefFactory().create(left, left.getType(), left.isNullable()),
                         left);
             }
-            if (rightOutputColumns.contains(left.getUsedColumns()) && !left.isColumnRef()) {
+            if (rightOutputColumns.containsAll(left.getUsedColumns()) && !left.isColumnRef()) {
                 rightProjectMaps.put(context.getColumnRefFactory().create(left, left.getType(), left.isNullable()),
                         left);
             }
-            if (rightOutputColumns.contains(right.getUsedColumns()) && !right.isColumnRef()) {
+            if (rightOutputColumns.containsAll(right.getUsedColumns()) && !right.isColumnRef()) {
                 rightProjectMaps.put(context.getColumnRefFactory().create(right, right.getType(), right.isNullable()),
                         right);
             }
-            if (leftOutputColumns.contains(right.getUsedColumns()) && !right.isColumnRef()) {
+            if (leftOutputColumns.containsAll(right.getUsedColumns()) && !right.isColumnRef()) {
                 leftProjectMaps.put(context.getColumnRefFactory().create(right, right.getType(), right.isNullable()),
                         right);
             }

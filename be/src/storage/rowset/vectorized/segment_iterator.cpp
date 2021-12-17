@@ -18,14 +18,12 @@
 #include "simd/simd.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
-#include "storage/row_block2.h"
 #include "storage/rowset/segment_v2/bitmap_index_reader.h"
 #include "storage/rowset/segment_v2/column_decoder.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/default_value_column_iterator.h"
 #include "storage/rowset/segment_v2/dictcode_column_iterator.h"
-#include "storage/rowset/segment_v2/row_ranges.h"
 #include "storage/rowset/segment_v2/scalar_column_iterator.h"
 #include "storage/rowset/segment_v2/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
@@ -179,6 +177,8 @@ private:
 
     template <bool late_materialization>
     Status _build_context(ScanContext* ctx);
+
+    Status _init_global_dict_decoder();
 
     void _rewrite_predicates();
 
@@ -918,7 +918,6 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             if (use_global_dict_code) {
                 iter = new segment_v2::GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
                                                                     _opts.global_dictmaps->at(cid));
-                _column_decoders[cid].set_iterator(iter);
             } else {
                 iter = new segment_v2::DictCodeColumnIterator(cid, _column_iterators[cid]);
             }
@@ -988,6 +987,8 @@ Status SegmentIterator::_init_context() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     _late_materialization_ratio = config::late_materialization_ratio;
 
+    RETURN_IF_ERROR(_init_global_dict_decoder());
+
     if (_predicate_columns == 0 || _predicate_columns >= _schema.num_fields()) {
         // non or all field has predicate, disable late materialization.
         RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
@@ -1015,6 +1016,22 @@ Status SegmentIterator::_init_context() {
         }
     }
     _switch_context(&_context_list[0]);
+    return Status::OK();
+}
+
+Status SegmentIterator::_init_global_dict_decoder() {
+    // init decoder for all columns
+    // in some case _build_context<false> won't be called
+    for (int i = 0; i < _schema.num_fields(); ++i) {
+        const FieldPtr& f = _schema.field(i);
+        const ColumnId cid = f->id();
+        if (_can_using_global_dict(f)) {
+            auto iter = new segment_v2::GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
+                                                                     _opts.global_dictmaps->at(cid));
+            _obj_pool.add(iter);
+            _column_decoders[cid].set_iterator(iter);
+        }
+    }
     return Status::OK();
 }
 

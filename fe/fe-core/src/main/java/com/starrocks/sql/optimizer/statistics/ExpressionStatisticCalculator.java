@@ -6,8 +6,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -89,6 +91,44 @@ public class ExpressionStatisticCalculator {
         }
 
         @Override
+        public ColumnStatistic visitCastOperator(CastOperator cast, Void context) {
+            ColumnStatistic childStatistic = cast.getChild(0).accept(this, context);
+
+            if (childStatistic.isUnknown() ||
+                    inputStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+                return ColumnStatistic.unknown();
+            }
+
+            // If cast destination type is number/string, it's unnecessary to cast, keep self is enough.
+            if (!cast.getType().isDateType()) {
+                return childStatistic;
+            }
+
+            ConstantOperator max = ConstantOperator.createBigint((long) childStatistic.getMaxValue());
+            ConstantOperator min = ConstantOperator.createBigint((long) childStatistic.getMinValue());
+
+            try {
+                if (cast.getChild(0).getType().isDateType()) {
+                    max = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMaxValue()));
+                    min = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
+                } else {
+                    max = max.castTo(cast.getType());
+                    min = min.castTo(cast.getType());
+                }
+            } catch (Exception e) {
+                LOG.warn("expression statistic compute cast failed: " + max.toString() + ", " + min.toString() +
+                        ", to type: " + cast.getType());
+                return childStatistic;
+            }
+
+            double maxValue = Utils.getLongFromDateTime(max.getDatetime());
+            double minValue = Utils.getLongFromDateTime(min.getDatetime());
+
+            return new ColumnStatistic(minValue, maxValue, childStatistic.getNullsFraction(),
+                    childStatistic.getAverageRowSize(), childStatistic.getDistinctValuesCount());
+        }
+
+        @Override
         public ColumnStatistic visitCall(CallOperator call, Void context) {
             List<ColumnStatistic> childrenColumnStatistics =
                     call.getChildren().stream().map(child -> child.accept(this, context)).collect(Collectors.toList());
@@ -129,9 +169,12 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.MIN:
                     value = columnStatistic.getMinValue();
                     return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
+                case FunctionSet.ANY_VALUE:
+                    value = (columnStatistic.getMaxValue() - columnStatistic.getMinValue()) / 2;
+                    return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
                 case FunctionSet.YEAR:
-                    int minValue = 1000;
-                    int maxValue = 3000;
+                    int minValue = 1700;
+                    int maxValue = 2100;
                     try {
                         minValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
                         maxValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
@@ -169,7 +212,7 @@ public class ExpressionStatisticCalculator {
 
         private ColumnStatistic binaryExpressionCalculate(CallOperator callOperator, ColumnStatistic left,
                                                           ColumnStatistic right) {
-            double distinctValues = Math.max(left.getDistinctValuesCount(), right.getMaxValue());
+            double distinctValues = Math.max(left.getDistinctValuesCount(), right.getDistinctValuesCount());
             double nullsFraction = 1 - ((1 - left.getNullsFraction()) * (1 - right.getNullsFraction()));
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.ADD:
@@ -195,14 +238,14 @@ public class ExpressionStatisticCalculator {
                             callOperator.getType().getSlotSize(), distinctValues);
                 case FunctionSet.DIVIDE:
                     double divideMinValue = Math.min(Math.min(
-                            Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                                    Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     double divideMaxValue = Math.max(Math.max(
-                            Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                                    Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     return new ColumnStatistic(divideMinValue, divideMaxValue, nullsFraction,
                             callOperator.getType().getSlotSize(),

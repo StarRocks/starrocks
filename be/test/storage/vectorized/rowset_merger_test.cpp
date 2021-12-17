@@ -54,6 +54,8 @@ public:
     RowsetId rowset_id() override { return RowsetId(); }
 
     OLAPStatus flush() override { return OLAP_SUCCESS; }
+    OLAPStatus flush_columns() override { return OLAP_SUCCESS; }
+    OLAPStatus final_flush() override { return OLAP_SUCCESS; }
 
     OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
         all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
@@ -61,8 +63,30 @@ public:
         return OLAP_SUCCESS;
     }
 
+    OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
+        if (is_key) {
+            all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
+        } else {
+            for (size_t i = 0; i < column_indexes.size(); ++i) {
+                auto column_index = column_indexes[i];
+                DCHECK_LT(column_index - 1, non_key_columns.size());
+                non_key_columns[column_index - 1]->append(*chunk.get_column_by_index(i), 0, chunk.num_rows());
+            }
+        }
+        return OLAP_SUCCESS;
+    }
+
+    OLAPStatus add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                                      const std::vector<uint32_t>& rssid) {
+        RETURN_NOT_OK(add_columns(chunk, column_indexes, true));
+        all_rssids.insert(all_rssids.end(), rssid.begin(), rssid.end());
+        return OLAP_SUCCESS;
+    }
+
     std::unique_ptr<Column> all_pks;
     vector<uint32_t> all_rssids;
+
+    vector<std::unique_ptr<Column>> non_key_columns;
 };
 
 class RowsetMergerTest : public testing::Test {
@@ -185,7 +209,9 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
     return read_until_eof(iter);
 }
 
-TEST_F(RowsetMergerTest, merge) {
+TEST_F(RowsetMergerTest, horizontal_merge) {
+    config::vertical_compaction_max_columns_per_group = 5;
+
     srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     const int max_segments = 8;
@@ -220,7 +246,56 @@ TEST_F(RowsetMergerTest, merge) {
     EXPECT_EQ(rssids, writer.all_rssids);
 }
 
-TEST_F(RowsetMergerTest, merge_seq) {
+TEST_F(RowsetMergerTest, vertical_merge) {
+    config::vertical_compaction_max_columns_per_group = 1;
+
+    srand(GetCurrentTimeMicros());
+    create_tablet(rand(), rand());
+    const int max_segments = 8;
+    const int num_segment = 1 + rand() % max_segments;
+    const int N = 500000 + rand() % 1000000;
+    MergeConfig cfg;
+    cfg.chunk_size = 1000 + rand() % 2000;
+    cfg.algorithm = kVertical;
+    vector<uint32_t> rssids(N);
+    vector<vector<int64_t>> segments(num_segment);
+    for (int i = 0; i < N; i++) {
+        rssids[i] = rand() % num_segment;
+        segments[rssids[i]].push_back(i);
+    }
+    vector<RowsetSharedPtr> rowsets(num_segment);
+    for (int i = 0; i < num_segment; i++) {
+        auto rs = create_rowset(segments[i]);
+        ASSERT_TRUE(_tablet->rowset_commit(i + 2, rs).ok());
+        rowsets[i] = rs;
+    }
+    int64_t version = num_segment + 1;
+    EXPECT_EQ(N, read_tablet(_tablet, version));
+    TestRowsetWriter writer;
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
+    writer.non_key_columns.emplace_back(std::move(vectorized::Int16Column::create_mutable()));
+    writer.non_key_columns.emplace_back(std::move(vectorized::Int32Column::create_mutable()));
+    ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+
+    ASSERT_EQ(N, writer.all_pks->size());
+    ASSERT_EQ(2, writer.non_key_columns.size());
+    ASSERT_EQ(N, writer.non_key_columns[0]->size());
+    ASSERT_EQ(N, writer.non_key_columns[1]->size());
+    const int64_t* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
+    const int16_t* raw_k2_array = reinterpret_cast<const int16_t*>(writer.non_key_columns[0]->raw_data());
+    const int32_t* raw_k3_array = reinterpret_cast<const int32_t*>(writer.non_key_columns[1]->raw_data());
+    for (int64_t i = 0; i < N; i++) {
+        ASSERT_EQ(i, raw_pk_array[i]);
+        ASSERT_EQ(i % 100 + 1, raw_k2_array[i]);
+        ASSERT_EQ(i % 1000 + 2, raw_k3_array[i]);
+    }
+    EXPECT_EQ(rssids, writer.all_rssids);
+}
+
+TEST_F(RowsetMergerTest, horizontal_merge_seq) {
+    config::vertical_compaction_max_columns_per_group = 5;
+
     srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     const int max_segments = 8;
@@ -256,6 +331,53 @@ TEST_F(RowsetMergerTest, merge_seq) {
     const int64_t* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
     for (int64_t i = 0; i < N; i++) {
         ASSERT_EQ(i, raw_pk_array[i]);
+    }
+    EXPECT_EQ(rssids, writer.all_rssids);
+}
+
+TEST_F(RowsetMergerTest, vertical_merge_seq) {
+    config::vertical_compaction_max_columns_per_group = 1;
+
+    srand(GetCurrentTimeMicros());
+    create_tablet(rand(), rand());
+    const int max_segments = 8;
+    const int num_segment = 1 + rand() % max_segments;
+    const int N = 500000 + rand() % 1000000;
+    MergeConfig cfg;
+    cfg.chunk_size = 100 + rand() % 2000;
+    cfg.algorithm = kVertical;
+    vector<uint32_t> rssids(N);
+    vector<vector<int64_t>> segments(num_segment);
+    for (int i = 0; i < N; i++) {
+        rssids[i] = num_segment * i / N;
+        segments[rssids[i]].push_back(i);
+    }
+    vector<RowsetSharedPtr> rowsets(num_segment);
+    for (int i = 0; i < num_segment; i++) {
+        auto rs = create_rowset(segments[i]);
+        ASSERT_TRUE(_tablet->rowset_commit(i + 2, rs).ok());
+        rowsets[i] = rs;
+    }
+    int64_t version = num_segment + 1;
+    EXPECT_EQ(N, read_tablet(_tablet, version));
+    TestRowsetWriter writer;
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
+    writer.non_key_columns.emplace_back(std::move(vectorized::Int16Column::create_mutable()));
+    writer.non_key_columns.emplace_back(std::move(vectorized::Int32Column::create_mutable()));
+    ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+
+    ASSERT_EQ(N, writer.all_pks->size());
+    ASSERT_EQ(2, writer.non_key_columns.size());
+    ASSERT_EQ(N, writer.non_key_columns[0]->size());
+    ASSERT_EQ(N, writer.non_key_columns[1]->size());
+    const int64_t* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
+    const int16_t* raw_k2_array = reinterpret_cast<const int16_t*>(writer.non_key_columns[0]->raw_data());
+    const int32_t* raw_k3_array = reinterpret_cast<const int32_t*>(writer.non_key_columns[1]->raw_data());
+    for (int64_t i = 0; i < N; i++) {
+        ASSERT_EQ(i, raw_pk_array[i]);
+        ASSERT_EQ(i % 100 + 1, raw_k2_array[i]);
+        ASSERT_EQ(i % 1000 + 2, raw_k3_array[i]);
     }
     EXPECT_EQ(rssids, writer.all_rssids);
 }

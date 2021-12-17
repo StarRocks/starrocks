@@ -94,6 +94,7 @@ public class PublishVersionDaemon extends MasterDaemon {
         for (TransactionState transactionState : readyTransactionStates) {
             Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
             Set<Long> publishErrorReplicaIds = Sets.newHashSet();
+            Set<Long> unfinishedBackends = Sets.newHashSet();
             boolean allTaskFinished = true;
             for (PublishVersionTask publishVersionTask : transTasks.values()) {
                 if (publishVersionTask.isFinished()) {
@@ -105,11 +106,13 @@ public class PublishVersionDaemon extends MasterDaemon {
                     }
                 } else {
                     allTaskFinished = false;
+                    unfinishedBackends.add(publishVersionTask.getBackendId());
                 }
             }
             boolean shouldFinishTxn = true;
             if (!allTaskFinished) {
-                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState, publishErrorReplicaIds);
+                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
+                        publishErrorReplicaIds, unfinishedBackends);
             }
 
             if (shouldFinishTxn) {

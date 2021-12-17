@@ -313,13 +313,10 @@ OLAPStatus HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Ch
 }
 
 OLAPStatus HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
-    // create segment writer
     std::unique_ptr<segment_v2::SegmentWriter> segment_writer = _create_segment_writer();
     if (segment_writer == nullptr) {
         return OLAP_ERR_INIT_FAILED;
     }
-
-    // append chunk
     auto s = segment_writer->append_chunk(chunk);
     if (!s.ok()) {
         LOG(WARNING) << "Fail to append chunk, " << s.to_string();
@@ -330,8 +327,6 @@ OLAPStatus HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chun
         _num_rows_written += chunk.num_rows();
         _total_row_size += chunk.bytes_usage();
     }
-
-    // flush
     RETURN_NOT_OK(_flush_segment_writer(&segment_writer));
     return OLAP_SUCCESS;
 }

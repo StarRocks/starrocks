@@ -19,7 +19,6 @@
 
 namespace starrocks {
 
-class RowBlockV2;
 class Status;
 class TabletColumn;
 class TabletSchema;

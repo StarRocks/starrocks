@@ -52,6 +52,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 ");");
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
+        connectContext.getSessionVariable().setSqlMode(2);
     }
 
     @Test
@@ -212,8 +213,8 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "count(*) from supplier group by a,b) as t ";
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
-        Assert.assertTrue(plan.contains("output: multi_distinct_count(16: upper), " +
-                "multi_distinct_count(17: lower)"));
+        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: multi_distinct_count(16: upper), multi_distinct_count(15: lower)"));
 
         sql = "select count(distinct S_ADDRESS), count(distinct S_COMMENT) from supplier;";
         plan = getFragmentPlan(sql);
@@ -227,8 +228,8 @@ public class DecodeRewriteTest extends PlanTestBase {
         String sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by a,b";
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:13, strings:[mock], ids:[1])]"));
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:13, strings:[mock], ids:[1])]"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
 
         sql = "select count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);
@@ -253,8 +254,15 @@ public class DecodeRewriteTest extends PlanTestBase {
 
     @Test
     public void testDecodeRewriteTwoFunctions() throws Exception {
-        String sql = "select substr(S_ADDRESS, 0, 1), S_ADDRESS from supplier";
-        String plan = getFragmentPlan(sql);
+        String sql;
+        String plan;
+
+        sql = "select substr(S_ADDRESS, 0, S_NATIONKEY), upper(S_ADDRESS) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
+        sql = "select substr(S_ADDRESS, 0, 1), S_ADDRESS from supplier";
+        plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  <dict id 10> : <string id 3>\n" +
                 "  |  <dict id 11> : <string id 9>\n" +
                 "  |  string functions:\n" +
@@ -301,20 +309,20 @@ public class DecodeRewriteTest extends PlanTestBase {
         sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by a,b";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 13> : <string id 9>\n" +
                 "  |  <dict id 14> : <string id 10>\n" +
-                "  |  <dict id 15> : <string id 9>\n" +
                 "  |  string functions:\n" +
-                "  |  <function id 14> : upper(13: S_ADDRESS)\n" +
-                "  |  <function id 15> : lower(14: upper)\n"));
+                "  |  <function id 13> : lower(upper(12: S_ADDRESS))\n" +
+                "  |  <function id 14> : upper(12: S_ADDRESS)"));
 
         sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 13> : <string id 10>\n" +
                 "  |  <dict id 14> : <string id 11>\n" +
-                "  |  <dict id 15> : <string id 10>\n" +
                 "  |  string functions:\n" +
-                "  |  <function id 14> : upper(13: S_ADDRESS)\n" +
-                "  |  <function id 15> : lower(14: upper)"));
+                "  |  <function id 13> : lower(upper(12: S_ADDRESS))\n" +
+                "  |  <function id 14> : upper(12: S_ADDRESS)"));
     }
 
     @Test
@@ -338,6 +346,111 @@ public class DecodeRewriteTest extends PlanTestBase {
         sql = "select max(\"CONST\") from supplier";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
+    }
+
+    @Test
+    public void testDecodeNodeRewrite13() throws Exception {
+        String sql;
+        String plan;
+        // case join:
+        // select unsupported_function(dict_col) from table1 join table2
+        // Add Decode Node before unsupported Projection 1
+        sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY) from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 17> : coalesce(3, CAST(4: S_NATIONKEY AS VARCHAR))"));
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 18> : <string id 3>"));
+
+        // select unsupported_function(dict_col), dict_col from table1 join table2
+        // Add Decode Node before unsupported Projection 2
+        sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY),l.S_ADDRESS,r.S_ADDRESS " +
+                "from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        plan = getFragmentPlan(sql);
+
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 3> : 3\n" +
+                "  |  <slot 11> : 11\n" +
+                "  |  <slot 17> : coalesce(3, CAST(4: S_NATIONKEY AS VARCHAR))"));
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 18> : <string id 3>\n" +
+                "  |  <dict id 19> : <string id 11>"));
+
+        // select unsupported_function(dict_col), supported_func(dict_col), dict_col
+        // from table1 join table2;
+        // projection has both supported operator and no-supported operator
+        sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY), upper(l.S_ADDRESS), l.S_ADDRESS " +
+                "from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        plan = getFragmentPlan(sql);
+
+        Assert.assertFalse(plan.contains("Decode"));
+
+        // select unsupported_function(dict_col), supported_func(table2.dict_col2), table2.dict_col2
+        // from table1 join table2;
+        // left table don't support dict optimize, but right table support it
+        sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY), upper(r.P_MFGR),r.P_MFGR " +
+                "from supplier l join part_v2 r on l.s_suppkey = r.P_PARTKEY";
+        plan = getFragmentPlan(sql);
+
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 21> : <string id 11>\n" +
+                "  |  <dict id 22> : <string id 20>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 22> : upper(21: P_MFGR)"));
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 19> : coalesce(3: S_ADDRESS, CAST(4: S_NATIONKEY AS VARCHAR))\n" +
+                "  |  <slot 21> : 21: P_MFGR\n" +
+                "  |  <slot 22> : upper(21: P_MFGR)"));
+    }
+
+    @Test
+    public void testDecodeNodeRewrite14() throws Exception {
+        String sql;
+        String plan;
+        // case agg:
+        // select supported_agg(dict),unsupported_agg(dict) from table1
+        // Add Decode Node before unsupported Projection 1
+        sql = "select count(*), approx_count_distinct(S_ADDRESS) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
+        sql = "select max(S_ADDRESS), approx_count_distinct(S_ADDRESS) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+    }
+
+    @Test
+    public void testLeftJoinWithUnion() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "SELECT subt1.S_ADDRESS\n" +
+                "FROM (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt1 LEFT ANTI\n" +
+                "    JOIN (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt0 ON subt1.S_NATIONKEY = subt0.S_NATIONKEY  \n" +
+                "WHERE true\n" +
+                "UNION ALL\n" +
+                "SELECT subt1.S_ADDRESS\n" +
+                "FROM (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt1 LEFT ANTI\n" +
+                "    JOIN (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt0 ON subt1.S_NATIONKEY = subt0.S_NATIONKEY\n" +
+                "WHERE (NOT (true));";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 34> : <string id 17>\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 34> : 34: S_ADDRESS"));
     }
 
     @Test
@@ -486,20 +599,12 @@ public class DecodeRewriteTest extends PlanTestBase {
 
     @Test
     public void testAssignWrongNullableProperty() throws Exception {
-        String sql = "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier UNION SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier;";
+        String sql =
+                "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier UNION SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier;";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
-                "  |  child exprs:\n" +
-                "  |      [3, VARCHAR, false] | [9, BIGINT, true]\n" +
-                "  |      [14, VARCHAR, false] | [20, BIGINT, true]"));
-        Assert.assertTrue(plan.contains("  13:Project\n" +
-                "  |  output columns:\n" +
-                "  |  14 <-> [14: S_ADDRESS, VARCHAR, false]\n" +
-                "  |  20 <-> [20: dense_rank(), BIGINT, true]"));
-        Assert.assertTrue(plan.contains("  9:Decode\n" +
-                "  |  <dict id 22> : <string id 14>\n" +
-                "  |  cardinality: 1"));
-
+        // No need for low-card optimization for
+        // SCAN->DECODE->SORT
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test
@@ -533,5 +638,55 @@ public class DecodeRewriteTest extends PlanTestBase {
         sql = "select hex(10), s_address from supplier";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
+
+        sql = "SELECT SUM(count) FROM (SELECT CAST((CAST((((\"C\")||(CAST(s_address AS STRING ) ))) " +
+                "BETWEEN (((\"T\")||(\"\"))) AND (\"\") AS BOOLEAN) = true) " +
+                "AND (CAST((((\"C\")||(CAST(s_address AS STRING ) ))) BETWEEN (((\"T\")||(\"\"))) " +
+                "AND (\"\") AS BOOLEAN) IS NOT NULL) AS INT) as count FROM supplier ) t;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
+        sql =
+                "SELECT SUM(count) FROM (SELECT CAST((CAST((s_address) BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) " +
+                        "AND (s_address) AS BOOLEAN) = true) AND (CAST((s_address) " +
+                        "BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) AND (s_address) AS BOOLEAN) IS NOT NULL) AS INT) " +
+                        "as count FROM supplier ) t;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
     }
+
+    @Test
+    public void testDecodeOnExchange() throws Exception {
+        String sql = " SELECT \n" +
+                "  DISTINCT * \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      DISTINCT t1.v4 \n" +
+                "    FROM \n" +
+                "      t1, \n" +
+                "      test_all_type as t2, \n" +
+                "      test_all_type as t0 \n" +
+                "    WHERE \n" +
+                "      NOT (\n" +
+                "        (t2.t1a) != (\n" +
+                "          concat(t0.t1a, \"ji\")\n" +
+                "        )\n" +
+                "      ) \n" +
+                "  ) t;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("8:HASH JOIN"));
+        Assert.assertTrue(plan.contains("7:Decode"));
+    }
+
+    @Test
+    public void testProjectWithUnionEmptySet() throws Exception {
+        String sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 16> : <string id 11>"));
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 16> : 16: t1a"));
+    }
+
 }

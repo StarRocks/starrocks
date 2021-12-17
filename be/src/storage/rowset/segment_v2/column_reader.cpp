@@ -30,10 +30,10 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/logging.h"
-#include "storage/olap_cond.h"
 #include "storage/rowset/segment_v2/array_column_iterator.h"
 #include "storage/rowset/segment_v2/binary_dict_page.h" // for BinaryDictPageDecoder
 #include "storage/rowset/segment_v2/bitmap_index_reader.h"
+#include "storage/rowset/segment_v2/bloom_filter.h"
 #include "storage/rowset/segment_v2/bloom_filter_index_reader.h"
 #include "storage/rowset/segment_v2/encoding_info.h"
 #include "storage/rowset/segment_v2/page_handle.h" // for PageHandle
@@ -43,6 +43,7 @@
 #include "storage/rowset/segment_v2/zone_map_index.h"
 #include "storage/types.h" // for TypeInfo
 #include "storage/vectorized/column_predicate.h"
+#include "storage/wrapper_field.h"
 #include "util/block_compression.h"
 #include "util/rle_encoding.h" // for RleDecoder
 
@@ -109,6 +110,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     _column_type = static_cast<FieldType>(meta->type());
     _dict_page_pointer = PagePointer(meta->dict_page());
     _num_rows = meta->num_rows();
+    _total_mem_footprint = meta->total_mem_footprint();
     _flags.set(kHasAllDictEncodedPos, meta->has_all_dict_encoded());
     _flags.set(kAllDictEncodedPos, meta->all_dict_encoded());
     _flags.set(kIsNullablePos, meta->is_nullable());
@@ -220,48 +222,20 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     opts.stats = iter_opts.stats;
     opts.verify_checksum = _opts.verify_checksum;
     opts.use_page_cache = iter_opts.use_page_cache;
+    opts.encoding_type = _encoding_info->encoding();
     opts.kept_in_memory = _opts.kept_in_memory;
 
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
 }
 
-Status ColumnReader::get_row_ranges_by_zone_map(CondColumn* cond_column, CondColumn* delete_condition,
-                                                std::unordered_set<uint32_t>* delete_partial_filtered_pages,
-                                                RowRanges* row_ranges) {
-    RETURN_IF_ERROR(_load_zone_map_index_once());
-    std::vector<uint32_t> page_indexes;
-    RETURN_IF_ERROR(_get_filtered_pages(cond_column, delete_condition, delete_partial_filtered_pages, &page_indexes));
-    RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
+Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes,
+                                           vectorized::SparseRange* row_ranges) {
+    for (auto i : page_indexes) {
+        ordinal_t page_first_id = _ordinal_index.reader->get_first_ordinal(i);
+        ordinal_t page_last_id = _ordinal_index.reader->get_last_ordinal(i);
+        row_ranges->add({static_cast<rowid_t>(page_first_id), static_cast<rowid_t>(page_last_id + 1)});
+    }
     return Status::OK();
-}
-
-bool ColumnReader::match_condition(CondColumn* cond) const {
-    if (_segment_zone_map == nullptr || cond == nullptr) {
-        return true;
-    }
-    std::unique_ptr<WrapperField> min_value(WrapperField::create_by_type(delegate_type(_column_type), _column_length));
-    std::unique_ptr<WrapperField> max_value(WrapperField::create_by_type(delegate_type(_column_type), _column_length));
-    _parse_zone_map(*_segment_zone_map, min_value.get(), max_value.get());
-    return _zone_map_match_condition(*_segment_zone_map, min_value.get(), max_value.get(), cond);
-}
-
-void ColumnReader::_parse_zone_map(const ZoneMapPB& zone_map, WrapperField* min_value_container,
-                                   WrapperField* max_value_container) {
-    // min value and max value are valid if has_not_null is true
-    if (zone_map.has_not_null()) {
-        min_value_container->from_string(zone_map.min());
-        max_value_container->from_string(zone_map.max());
-    }
-    // for compatible original Cond eval logic
-    // TODO(hkp): optimize OlapCond
-    if (zone_map.has_null()) {
-        // for compatible, if exist null, original logic treat null as min
-        min_value_container->set_null();
-        if (!zone_map.has_not_null()) {
-            // for compatible OlapCond's 'is not null'
-            max_value_container->set_null();
-        }
-    }
 }
 
 Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, vectorized::ZoneMapDetail* detail) const {
@@ -275,99 +249,6 @@ Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, vectorized::ZoneMapDet
         RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
     }
     detail->set_num_rows(num_rows());
-    return Status::OK();
-}
-
-bool ColumnReader::_zone_map_match_condition(const ZoneMapPB& zone_map, WrapperField* min_value_container,
-                                             WrapperField* max_value_container, CondColumn* cond) {
-    if (!zone_map.has_not_null() && !zone_map.has_null()) {
-        return false; // no data in this zone
-    }
-
-    if (cond == nullptr) {
-        return true;
-    }
-
-    return cond->eval({min_value_container, max_value_container});
-}
-
-Status ColumnReader::_get_filtered_pages(CondColumn* cond_column, CondColumn* delete_condition,
-                                         std::unordered_set<uint32_t>* delete_partial_filtered_pages,
-                                         std::vector<uint32_t>* page_indexes) {
-    const std::vector<ZoneMapPB>& zone_maps = _zone_map_index.reader->page_zone_maps();
-    int32_t page_size = _zone_map_index.reader->num_pages();
-    std::unique_ptr<WrapperField> min_value(WrapperField::create_by_type(delegate_type(_column_type), _column_length));
-    std::unique_ptr<WrapperField> max_value(WrapperField::create_by_type(delegate_type(_column_type), _column_length));
-    for (int32_t i = 0; i < page_size; ++i) {
-        _parse_zone_map(zone_maps[i], min_value.get(), max_value.get());
-        if (_zone_map_match_condition(zone_maps[i], min_value.get(), max_value.get(), cond_column)) {
-            bool should_read = true;
-            if (delete_condition != nullptr) {
-                int state = delete_condition->del_eval({min_value.get(), max_value.get()});
-                if (state == DEL_SATISFIED) {
-                    should_read = false;
-                } else if (state == DEL_PARTIAL_SATISFIED) {
-                    delete_partial_filtered_pages->insert(i);
-                }
-            }
-            if (should_read) {
-                page_indexes->push_back(i);
-            }
-        }
-    }
-    return Status::OK();
-}
-
-Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes, RowRanges* row_ranges) {
-    row_ranges->clear();
-    for (auto i : page_indexes) {
-        ordinal_t page_first_id = _ordinal_index.reader->get_first_ordinal(i);
-        ordinal_t page_last_id = _ordinal_index.reader->get_last_ordinal(i);
-        RowRanges page_row_ranges(
-                RowRanges::create_single(static_cast<int64_t>(page_first_id), static_cast<int64_t>(page_last_id + 1)));
-        RowRanges::ranges_union(*row_ranges, page_row_ranges, row_ranges);
-    }
-    return Status::OK();
-}
-
-Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes,
-                                           vectorized::SparseRange* row_ranges) {
-    for (auto i : page_indexes) {
-        ordinal_t page_first_id = _ordinal_index.reader->get_first_ordinal(i);
-        ordinal_t page_last_id = _ordinal_index.reader->get_last_ordinal(i);
-        row_ranges->add({static_cast<rowid_t>(page_first_id), static_cast<rowid_t>(page_last_id + 1)});
-    }
-    return Status::OK();
-}
-
-Status ColumnReader::get_row_ranges_by_bloom_filter(CondColumn* cond_column, RowRanges* row_ranges) {
-    RETURN_IF_ERROR(_load_bloom_filter_index_once());
-    RowRanges bf_row_ranges;
-    std::unique_ptr<BloomFilterIndexIterator> bf_iter;
-    RETURN_IF_ERROR(_bloom_filter_index.reader->new_iterator(&bf_iter));
-    size_t range_size = row_ranges->range_size();
-    // get covered page ids
-    std::set<int32_t> page_ids;
-    for (int i = 0; i < range_size; ++i) {
-        int64_t from = row_ranges->get_range_from(i);
-        int64_t idx = from;
-        int64_t to = row_ranges->get_range_to(i);
-        auto iter = _ordinal_index.reader->seek_at_or_before(from);
-        while (idx < to) {
-            page_ids.insert(iter.page_index());
-            idx = static_cast<int>(iter.last_ordinal() + 1);
-            iter.next();
-        }
-    }
-    for (const auto& pid : page_ids) {
-        std::unique_ptr<BloomFilter> bf;
-        RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
-        if (cond_column->eval(bf.get())) {
-            bf_row_ranges.add(RowRange(static_cast<int64_t>(_ordinal_index.reader->get_first_ordinal(pid)),
-                                       static_cast<int64_t>(_ordinal_index.reader->get_last_ordinal(pid) + 1)));
-        }
-    }
-    RowRanges::ranges_intersection(*row_ranges, bf_row_ranges, row_ranges);
     return Status::OK();
 }
 

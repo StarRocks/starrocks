@@ -201,6 +201,8 @@ CONF_mInt32(doris_scan_range_row_count, "524288");
 CONF_mInt32(doris_scanner_queue_size, "1024");
 // single read execute fragment row size
 CONF_mInt32(doris_scanner_row_num, "16384");
+// number of max hdfs scanners
+CONF_Int32(max_hdfs_scanner_num, "50");
 // number of max scan keys
 CONF_mInt32(doris_max_scan_key_num, "1024");
 // the max number of push down values of a single column.
@@ -302,6 +304,11 @@ CONF_Int32(max_compaction_concurrency, "-1");
 CONF_mInt32(base_compaction_trace_threshold, "120");
 CONF_mInt32(cumulative_compaction_trace_threshold, "60");
 CONF_mInt32(update_compaction_trace_threshold, "20");
+
+// Max columns of each compaction group.
+// If the number of schema columns is greater than this,
+// the columns will be divided into groups for vertical compaction.
+CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 // Max row source mask memory bytes, default is 200M.
 // Should be smaller than compaction_mem_limit.
@@ -457,6 +464,8 @@ CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
+CONF_String(consistency_max_memory_limit, "10G");
+CONF_Int32(consistency_max_memory_limit_percent, "20");
 
 // update interval of tablet stat cache
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
@@ -640,6 +649,10 @@ CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
+// the buffer size of SinkBuffer
+CONF_Int64(pipeline_sink_buffer_size, "64");
+// the degree of parallelism of brpc
+CONF_Int64(pipeline_sink_brpc_dop, "8");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 // max hdfs file handle
@@ -650,6 +663,11 @@ CONF_mInt32(max_hdfs_file_handle, "1000");
 CONF_mInt32(buffer_stream_reserve_size, "8192000");
 
 CONF_Int64(max_segment_file_size, "1073741824");
+
+// Enables using hdfsPreadFully() instead of hdfsRead() when performing HDFS read operations.
+// This is necessary to use HDFS hedged reads (assuming the HDFS client is configured to do so).
+// hdfsPreadFully() are always enabled for object storage.
+CONF_Bool(use_hdfs_pread, "true");
 
 } // namespace config
 

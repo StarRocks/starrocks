@@ -62,7 +62,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
@@ -125,10 +124,11 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
 }
 
 void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector) {
+    if (collector->empty()) return;
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
-    _runtime_filter_collector.push_down(collector, _tuple_ids);
+    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 }
 
 void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state,

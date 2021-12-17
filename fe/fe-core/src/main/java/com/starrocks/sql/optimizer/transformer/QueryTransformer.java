@@ -15,8 +15,8 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -53,7 +53,7 @@ class QueryTransformer {
         this.outer = outer;
     }
 
-    public LogicalPlan plan(QuerySpecification queryBlock, Map<String, ExpressionMapping> cteContext) {
+    public LogicalPlan plan(SelectRelation queryBlock, Map<String, ExpressionMapping> cteContext) {
         OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
 
         builder = filter(builder, queryBlock.getPredicate());

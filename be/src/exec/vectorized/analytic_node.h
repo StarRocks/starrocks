@@ -13,8 +13,12 @@ namespace vectorized {
 
 class AnalyticNode final : public ExecNode {
 public:
-    ~AnalyticNode() override = default;
     AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
+    ~AnalyticNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;

@@ -65,14 +65,6 @@ private:
     bool is_condition_value_valid(const TabletColumn& column, const TCondition& cond, const string& value_str);
 };
 
-// Represents a delete condition
-struct DeleteConditions {
-    DeleteConditions() {}
-    ~DeleteConditions() = default;
-    int32_t filter_version{0};     // delete condition version
-    Conditions* del_cond{nullptr}; // delete condition
-};
-
 // Used to check if one row is deleted
 // 1. Initialize with a version
 //    OLAPStatus res;
@@ -89,34 +81,8 @@ struct DeleteConditions {
 //    * Should hold header lock before calling init()
 class DeleteHandler {
 public:
-    typedef std::vector<DeleteConditions>::size_type cond_num_t;
-
-    DeleteHandler() {}
-    ~DeleteHandler();
-
     // Use regular expression to extract 'column_name', 'op' and 'operands'
     static bool parse_condition(const std::string& condition_str, TCondition* condition);
-
-    OLAPStatus init(const TabletSchema& schema, const DelPredicateArray& delete_conditions, int32_t version);
-
-    // Check if input row is deleted
-    bool is_filter_data(const int32_t data_version, const RowCursor& row) const;
-
-    cond_num_t conditions_num() const { return _del_conds.size(); }
-
-    bool empty() const { return _del_conds.empty(); }
-
-    std::vector<int32_t> get_conds_version();
-
-    void finalize();
-
-    const std::vector<DeleteConditions>& get_delete_conditions() const { return _del_conds; }
-
-    void get_delete_conditions_after_version(int32_t version, std::vector<const Conditions*>* delete_conditions) const;
-
-private:
-    bool _is_inited{false};
-    std::vector<DeleteConditions> _del_conds;
 };
 
 } // namespace starrocks

@@ -11,6 +11,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/any_value.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
@@ -973,6 +974,74 @@ TEST_F(AggregateTest, test_bitmap_intersect_nullable) {
     const auto& result_data = static_cast<const BitmapColumn&>(result_data_column);
 
     ASSERT_EQ("1", result_data.get_pool()[0].to_string());
+}
+
+template <typename T, typename TResult>
+void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFunction* func) {
+    using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
+    using ExpeactedResultColumnType = typename ColumnTraits<T>::ColumnType;
+
+    // update input column 1
+    auto result_column1 = ResultColumn::create();
+    std::unique_ptr<ManagedAggregateState> state = ManagedAggregateState::Make(func);
+    ColumnPtr column = gen_input_column1<T>();
+    const Column* row_column = column.get();
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, state->mutable_data());
+    func->finalize_to_column(ctx, state->data(), result_column1.get());
+
+    auto expected_column1 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
+    ASSERT_EQ(expected_column1.get_data()[0], result_column1->get_data()[0]);
+
+    // update input column 2
+    auto result_column2 = ResultColumn::create();
+    std::unique_ptr<ManagedAggregateState> state2 = ManagedAggregateState::Make(func);
+    ColumnPtr column2 = gen_input_column2<T>();
+    row_column = column2.get();
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, state2->mutable_data());
+    func->finalize_to_column(ctx, state2->data(), result_column2.get());
+
+    auto expected_column2 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
+    ASSERT_EQ(expected_column2.get_data()[0], result_column2->get_data()[0]);
+
+    // merge column 1 and column 2
+    auto final_result_column = ResultColumn::create();
+    func->serialize_to_column(ctx, state->data(), final_result_column.get());
+    func->merge(ctx, final_result_column.get(), state2->data(), 0);
+    func->finalize_to_column(ctx, state2->data(), final_result_column.get());
+
+    ASSERT_EQ(final_result_column->get_data()[0], result_column1->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_any_value) {
+    const AggregateFunction* func = get_aggregate_function("any_value", TYPE_SMALLINT, TYPE_SMALLINT, false);
+    test_non_deterministic_agg_function<int16_t, int16_t>(ctx, func);
+
+    func = get_aggregate_function("any_value", TYPE_INT, TYPE_INT, false);
+    test_non_deterministic_agg_function<int32_t, int32_t>(ctx, func);
+
+    func = get_aggregate_function("any_value", TYPE_BIGINT, TYPE_BIGINT, false);
+    test_non_deterministic_agg_function<int64_t, int64_t>(ctx, func);
+
+    func = get_aggregate_function("any_value", TYPE_LARGEINT, TYPE_LARGEINT, false);
+    test_non_deterministic_agg_function<int128_t, int128_t>(ctx, func);
+
+    func = get_aggregate_function("any_value", TYPE_FLOAT, TYPE_FLOAT, false);
+    test_non_deterministic_agg_function<float, float>(ctx, func);
+
+    func = get_aggregate_function("any_value", TYPE_DOUBLE, TYPE_DOUBLE, false);
+    test_non_deterministic_agg_function<double, double>(ctx, func);
+
+    func = get_aggregate_function("any_value", TYPE_VARCHAR, TYPE_VARCHAR, false);
+    test_non_deterministic_agg_function<Slice, Slice>(ctx, func);
+
+    func = get_aggregate_function("any_value", TYPE_DECIMALV2, TYPE_DECIMALV2, false);
+    test_non_deterministic_agg_function<DecimalV2Value, DecimalV2Value>(ctx, func);
+
+    func = get_aggregate_function("any_value", TYPE_DATETIME, TYPE_DATETIME, false);
+    test_non_deterministic_agg_function<TimestampValue, TimestampValue>(ctx, func);
+
+    func = get_aggregate_function("any_value", TYPE_DATE, TYPE_DATE, false);
+    test_non_deterministic_agg_function<DateValue, DateValue>(ctx, func);
 }
 
 } // namespace starrocks::vectorized

@@ -22,7 +22,7 @@ class MemTable;
 
 enum WriteType { LOAD = 1, LOAD_DELETE = 2, DELETE = 3 };
 
-struct WriteRequest {
+struct DeltaWriterOptions {
     int64_t tablet_id;
     int32_t schema_hash;
     WriteType write_type;
@@ -39,7 +39,7 @@ struct WriteRequest {
 // This class is NOT thread-safe, external synchronization is required.
 class DeltaWriter {
 public:
-    static Status open(WriteRequest* req, MemTracker* mem_tracker, DeltaWriter** writer);
+    static Status open(const DeltaWriterOptions& opt, MemTracker* mem_tracker, DeltaWriter** writer);
 
     ~DeltaWriter();
 
@@ -66,7 +66,7 @@ public:
     int64_t mem_consumption() const;
 
 private:
-    DeltaWriter(WriteRequest* req, MemTracker* parent, StorageEngine* storage_engine);
+    DeltaWriter(const DeltaWriterOptions& opt, MemTracker* parent, StorageEngine* storage_engine);
 
     Status _init();
 
@@ -78,11 +78,11 @@ private:
     void _reset_mem_table();
 
     bool _is_init = false;
-    WriteRequest _req;
+    DeltaWriterOptions _opt;
     TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
-    std::shared_ptr<MemTable> _mem_table;
+    std::unique_ptr<MemTable> _mem_table;
     const TabletSchema* _tablet_schema;
     bool _delta_written_success;
 

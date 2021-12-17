@@ -296,7 +296,7 @@ public:
     ~TestSinkOperator() override = default;
 
     bool need_input() const override { return true; }
-    bool has_output() const override { return _chunk != nullptr; }
+    bool has_output() const override { return false; }
     bool is_finished() const override { return _is_finished; }
     void set_finishing(RuntimeState* state) override {
         TestOperator::set_finishing(state);
@@ -309,12 +309,10 @@ public:
 private:
     CounterPtr _counter;
     bool _is_finished = false;
-    ChunkPtr _chunk = nullptr;
 };
 
 Status TestSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     _counter->process_push(chunk);
-    _chunk = chunk;
     return Status::OK();
 }
 
@@ -557,6 +555,7 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_full_chunk) {
     size_t original_chunk_size = config::vector_chunk_size;
     config::vector_chunk_size = 16;
     size_t chunk_size = config::vector_chunk_size;
+    DeferOp op([=]() { config::vector_chunk_size = original_chunk_size; });
 
     for (size_t i = 1; i <= max_degree_of_parallelism; ++i) {
         CounterPtr sourceCounter = std::make_shared<Counter>();
@@ -587,7 +586,5 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_full_chunk) {
         ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num * i, 0);
         ASSERT_EQ(lifecycle_error_num, 0);
     }
-
-    config::vector_chunk_size = original_chunk_size;
 }
 } // namespace starrocks::pipeline

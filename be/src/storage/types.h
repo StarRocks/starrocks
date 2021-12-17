@@ -305,6 +305,7 @@ public:
         size_t item_size = src_value.length * _item_size;
         size_t nulls_size = src_value.has_null ? src_value.length : 0;
         dest_value.data = mem_pool->allocate(item_size + nulls_size);
+        assert(dest_value.data != nullptr);
         dest_value.has_null = src_value.has_null;
         dest_value.null_signs = src_value.has_null ? reinterpret_cast<uint8_t*>(dest_value.data) + item_size : nullptr;
 
@@ -1245,6 +1246,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_CHAR> : public BaseFieldtypeTraits<OLAP_F
         Slice l_slice = unaligned_load<Slice>(dest);
         Slice r_slice = unaligned_load<Slice>(src);
         l_slice.data = reinterpret_cast<char*>(mem_pool->allocate(r_slice.size));
+        assert(l_slice.data != nullptr);
         memory_copy(l_slice.data, r_slice.data, r_slice.size);
         l_slice.size = r_slice.size;
         unaligned_store<Slice>(dest, l_slice);
