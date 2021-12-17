@@ -3841,7 +3841,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "    UNPARTITIONED\n" +
                 "\n" +
                 "  5:AGGREGATE (update serialize)\n" +
-                "  |  output: max(4: v2)\n" +
+                "  |  output: max(7: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:UNION"));
@@ -3904,7 +3904,7 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select SUM(x1) from (select v2 as x1 from t0 union select v3 from t0) as q";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 4: v2\n" +
+                "  |  group by: 7: v2\n" +
                 "  |  \n" +
                 "  6:EXCHANGE\n" +
                 "\n" +
@@ -3914,11 +3914,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 06\n" +
-                "    HASH_PARTITIONED: 4: v2\n" +
+                "    HASH_PARTITIONED: 7: v2\n" +
                 "\n" +
                 "  5:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 4: v2\n"));
+                "  |  group by: 7: v2\n"));
 
         sql = "select SUM(x1) from (select v2 as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
@@ -4411,15 +4411,15 @@ public class PlanFragmentTest extends PlanTestBase {
                 " union all select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:4: v1 | 5: v2 | 6: v3\n" +
+                " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
                 "  1:Project\n" +
-                "  |  <slot 4> : 10: v7\n" +
-                "  |  <slot 5> : 11: v8\n" +
-                "  |  <slot 6> : 12: v9\n" +
+                "  |  <slot 10> : 7: v7\n" +
+                "  |  <slot 11> : 8: v8\n" +
+                "  |  <slot 12> : 9: v9\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
     }
@@ -4441,7 +4441,7 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from (select * from t0 limit 0 intersect select * from t1 intersect select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:4: v1 | 5: v2 | 6: v3\n" +
+                " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  RESULT SINK\n" +
@@ -4452,7 +4452,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "intersect select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:4: v1 | 5: v2 | 6: v3\n" +
+                " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  RESULT SINK\n" +
@@ -4477,7 +4477,7 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from (select * from t0 limit 0 except select * from t1 except select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:4: v1 | 5: v2 | 6: v3\n" +
+                " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  RESULT SINK\n" +
@@ -4965,5 +4965,53 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         // Just make sure we can get the final plan, and not crashed because of stats calculator error.
         System.out.println(sql);
+    }
+
+    @Test
+    public void testSetOpCast() throws Exception {
+        String sql = "select * from t0 union all (select * from t1 union all select k1,k7,k8 from  baseall)";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(
+                "  0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [1, BIGINT, true] | [4, VARCHAR(20), true] | [5, DOUBLE, true]\n" +
+                "  |      [23, BIGINT, true] | [24, VARCHAR(20), true] | [25, DOUBLE, true]"));
+        Assert.assertTrue(plan.contains(
+                "  |  19 <-> [19: k7, VARCHAR, true]\n" +
+                "  |  20 <-> [20: k8, DOUBLE, true]\n" +
+                "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)"));
+
+        sql = "select * from t0 union all (select cast(v4 as int), v5,v6 from t1 except select cast(v7 as int), v8, v9 from t2)";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [1, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
+                "  |      [15, BIGINT, true] | [13, BIGINT, true] | [14, BIGINT, true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  |----11:EXCHANGE\n" +
+                "  |       cardinality: 1\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "     cardinality: 1\n" +
+                "\n" +
+                "PLAN FRAGMENT 1(F02)\n" +
+                "\n" +
+                "  Input Partition: RANDOM\n" +
+                "  OutPut Partition: RANDOM\n" +
+                "  OutPut Exchange Id: 11\n" +
+                "\n" +
+                "  10:Project\n" +
+                "  |  output columns:\n" +
+                "  |  13 <-> [13: v5, BIGINT, true]\n" +
+                "  |  14 <-> [14: v6, BIGINT, true]\n" +
+                "  |  15 <-> cast([12: cast, INT, true] as BIGINT)\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:EXCEPT\n" +
+                "  |  child exprs:\n" +
+                "  |      [7, INT, true] | [5, BIGINT, true] | [6, BIGINT, true]\n" +
+                "  |      [11, INT, true] | [9, BIGINT, true] | [10, BIGINT, true]"));
     }
 }

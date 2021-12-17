@@ -105,7 +105,7 @@ class QueryTransformer {
     }
 
     private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
-        return new RelationTransformer(columnRefFactory, session, cteContext).visit(node);
+        return new RelationTransformer(columnRefFactory, session, cteContext).visit(node).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,

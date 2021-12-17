@@ -220,8 +220,10 @@ public class SubqueryTransformer {
                 builder = node.getChild(1).accept(this, new SubqueryContext(builder, false));
             } else if (CompoundPredicate.Operator.AND == node.getOp()) {
                 // And Scope extend from parents
-                builder = node.getChild(0).accept(this, new SubqueryContext(builder, context.useSemiAnti));
-                builder = node.getChild(1).accept(this, new SubqueryContext(builder, context.useSemiAnti));
+                builder = node.getChild(0)
+                        .accept(this, new SubqueryContext(builder, context.useSemiAnti));
+                builder = node.getChild(1)
+                        .accept(this, new SubqueryContext(builder, context.useSemiAnti));
             } else {
                 builder = node.getChild(0).accept(this, new SubqueryContext(builder, false));
             }

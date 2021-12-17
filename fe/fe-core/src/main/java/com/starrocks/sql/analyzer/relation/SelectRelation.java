@@ -61,7 +61,7 @@ public class SelectRelation extends QueryRelation {
                           List<OrderByElement> orderBy, Expr having,
                           List<AnalyticExpr> outputAnalytic, List<AnalyticExpr> orderByAnalytic,
                           Map<Expr, FieldId> columnReferences) {
-        super(outputExpr, columnOutputNames);
+        super(columnOutputNames);
 
         this.outputExpr = outputExpr;
         this.isDistinct = isDistinct;

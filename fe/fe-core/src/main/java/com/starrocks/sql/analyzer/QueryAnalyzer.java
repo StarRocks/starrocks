@@ -318,6 +318,13 @@ public class QueryAnalyzer {
                 outputTypes[fieldIdx] = commonType;
             }
 
+            ArrayList<Field> fields = new ArrayList<>();
+            for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
+                Field oldField = setOpRelation.getRelationFields().getFieldByIndex(fieldIdx);
+                fields.add(new Field(oldField.getName(), outputTypes[fieldIdx],
+                        oldField.getRelationAlias(), oldField.getOriginExpression()));
+            }
+
             if (setOperand.getOperation().equals(SetOperationStmt.Operation.UNION)) {
                 if (setOpRelation instanceof UnionRelation) {
                     ((UnionRelation) setOpRelation).addRelation(relation);
@@ -353,12 +360,6 @@ public class QueryAnalyzer {
                         INTERNAL_ERROR);
             }
 
-            ArrayList<Field> fields = new ArrayList<>();
-            for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
-                Field oldField = setOpRelation.getRelationFields().getFieldByIndex(fieldIdx);
-                fields.add(new Field(oldField.getName(), outputTypes[fieldIdx],
-                        oldField.getRelationAlias(), oldField.getOriginExpression()));
-            }
             setOpRelation.setScope(new Scope(RelationId.of(setOpRelation), new RelationFields(fields)));
         }
         return (SetOperationRelation) setOpRelation;

@@ -194,6 +194,6 @@ UNION
     AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1]] having [null]
         AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1]] having [null]
             SCAN (columns[1: v1] predicate[1: v1 = 1])
-    PREDICATE 7: expr = 1
+    PREDICATE 5: expr = 1
         VALUES (null)
 [end]

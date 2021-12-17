@@ -10,7 +10,7 @@ public class ValuesRelation extends QueryRelation {
     private final List<List<Expr>> rows;
 
     public ValuesRelation(List<ArrayList<Expr>> rows, List<String> columnOutputNames) {
-        super(rows.get(0), columnOutputNames);
+        super(columnOutputNames);
         this.rows = new ArrayList<>(rows);
     }
 
@@ -24,6 +24,10 @@ public class ValuesRelation extends QueryRelation {
 
     public List<List<Expr>> getRows() {
         return rows;
+    }
+
+    public List<Expr> getOutputExpr() {
+        return rows.get(0);
     }
 
     public <R, C> R accept(RelationVisitor<R, C> visitor, C context) {
