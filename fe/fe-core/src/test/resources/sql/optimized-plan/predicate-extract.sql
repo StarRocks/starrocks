@@ -114,10 +114,10 @@ INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
 [sql]
 select v1 from t0 inner join t1 on v3 = v4 where  v2 in (1,2) or (v2 = 3 and v3 = 3) or (v2 in (4,5) and v3=4) and v2 = 6;
 [result]
-INNER JOIN (join-predicate [4: v4 = 3: v3] post-join-predicate [null])
-    SCAN (columns[4: v4] predicate[null])
-    EXCHANGE SHUFFLE[3]
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (1, 2) OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 IN (4, 5) AND 3: v3 = 4 AND 2: v2 = 6 AND 2: v2 IN (1, 2, 3)])
+INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (1, 2) OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 IN (4, 5) AND 3: v3 = 4 AND 2: v2 = 6 AND 2: v2 IN (1, 2, 3)])
+    EXCHANGE BROADCAST
+        SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
