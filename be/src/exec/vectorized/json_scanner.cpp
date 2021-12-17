@@ -394,6 +394,8 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         if (!st.ok()) {
             chunk->set_num_rows(n);
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
+                // We would continue to construct row even if error is returned,
+                // hence the number of error appended to the file should be limited.
                 row.reset();
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);

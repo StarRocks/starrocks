@@ -15,7 +15,7 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
         return (from > std::numeric_limits<ToType>::max() || from < std::numeric_limits<ToType>::min());
     }
 
-    return false;
+    return (from < std::numeric_limits<ToType>::lowest() || from > std::numeric_limits<ToType>::max());
 }
 
 // The value must be in type simdjson::ondemand::json_type::number;

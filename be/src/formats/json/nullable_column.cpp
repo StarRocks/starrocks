@@ -58,8 +58,7 @@ static Status add_nullable_binary_column(Column* column, const TypeDescriptor& t
 
     try {
         if (value->is_null()) {
-            data_column->append_default(1);
-            null_column->append(1);
+            nullable_column->append_nulls(1);
             return Status::OK();
         }
 
