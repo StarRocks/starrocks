@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -256,24 +257,33 @@ public class CostModel {
             Preconditions.checkNotNull(statistics);
 
             CostEstimate result;
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
             switch (distributionSpec.getType()) {
                 case ANY:
                     result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
                     break;
                 case BROADCAST:
-                    if (statistics.getOutputSize(outputColumns) >
-                            ConnectContext.get().getSessionVariable().getMaxExecMemByte()) {
+                    if (statistics.getOutputSize(outputColumns) > sessionVariable.getMaxExecMemByte()) {
                         return CostEstimate.infinite();
                     }
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
+                    int pipelineDop = 1;
+                    if (sessionVariable.isEnablePipelineEngine()) {
+                        // pipelineDop is 0 means that the query executed in pipeline engine use the half number of cpu
+                        // cores, we use 32 as an estimate value
+                        // todo(ywb) we need to get BE cpu cores from BE heartbeat.
+                        pipelineDop = sessionVariable.getPipelineDop() > 0 ? sessionVariable.getPipelineDop() : 32;
+                    }
                     // beNum is the number of right table should broadcast, now use alive backends
                     int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
                     result = CostEstimate
                             .of(statistics.getOutputSize(outputColumns) *
                                             Catalog.getCurrentSystemInfo().getBackendIds(true).size(),
-                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
-                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum);
+                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum *
+                                            pipelineDop,
+                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum *
+                                            pipelineDop);
                     break;
                 case SHUFFLE:
                 case GATHER:
