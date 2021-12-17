@@ -60,6 +60,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
     DCHECK(profile != nullptr);
     VLOG_FILE << "creating receiver for fragment=" << fragment_instance_id << ", node=" << dest_node_id;
     auto pass_through_chunk_buffer = get_pass_through_chunk_buffer(state->query_id());
+    DCHECK(pass_through_chunk_buffer.get() != nullptr);
     std::shared_ptr<DataStreamRecvr> recvr(new DataStreamRecvr(
             this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging, buffer_size, profile,
             std::move(sub_plan_query_statistics_recvr), is_pipeline, pass_through_chunk_buffer));
@@ -157,7 +158,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     }
 
     bool eos = request.eos();
-    if (request.chunks_size() > 0) {
+    if (request.chunks_size() > 0 || request.use_pass_through()) {
         RETURN_IF_ERROR(recvr->add_chunks(request, eos ? nullptr : done));
     }
     if (eos) {
@@ -228,7 +229,7 @@ void DataStreamMgr::open_query(const TUniqueId& query_id) {
     {
         std::unique_lock _l(_pass_through_chunk_lock);
         if (_pass_through_chunk_buffer_manager.find(query_id) == _pass_through_chunk_buffer_manager.end()) {
-            PassThroughChunkBufferPtr buffer = std::make_shared<PassThroughChunkBuffer>();
+            PassThroughChunkBufferPtr buffer = std::make_shared<PassThroughChunkBuffer>(query_id);
             _pass_through_chunk_buffer_manager.emplace(std::make_pair(query_id, buffer));
         }
     }

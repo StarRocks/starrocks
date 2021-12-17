@@ -3,6 +3,7 @@
 #pragma once
 #include <map>
 
+#include "column/column_hash.h"
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h" // for PlanNodeId
@@ -10,19 +11,30 @@
 namespace starrocks {
 
 // To manage pass through chunks between sink/sources in the same process.
-using ChunkPtrVector = std::vector<vectorized::ChunkPtr>;
+using ChunkUniquePtrVector = std::vector<vectorized::ChunkUniquePtr>;
 class PassThroughChannel;
 
 class PassThroughChunkBuffer {
 public:
     using Key = std::pair<TUniqueId, PlanNodeId>;
-    PassThroughChunkBuffer() = default;
+
+    struct KeyHash {
+        size_t operator()(const Key& key) const {
+            uint64_t hash = vectorized::CRC_HASH_SEED1;
+            hash = vectorized::crc_hash_uint64(key.first.hi, hash);
+            hash = vectorized::crc_hash_uint64(key.first.lo, hash);
+            hash = vectorized::crc_hash_uint64(key.second, hash);
+            return hash;
+        }
+    };
+    PassThroughChunkBuffer(const TUniqueId& query_id);
     ~PassThroughChunkBuffer();
     PassThroughChannel* get_or_create_channel(const Key& key);
 
 private:
-    std::mutex _lock;
-    std::map<Key, PassThroughChannel*> _key_to_channel;
+    std::mutex _mutex;
+    const TUniqueId _query_id;
+    std::unordered_map<Key, PassThroughChannel*, KeyHash> _key_to_channel;
 };
 using PassThroughChunkBufferPtr = std::shared_ptr<PassThroughChunkBuffer>;
 
@@ -30,16 +42,17 @@ class PassThroughContext {
 public:
     PassThroughContext(const PassThroughChunkBufferPtr& chunk_buffer, TUniqueId fragment_instance_id,
                        PlanNodeId node_id)
-            : _chunk_buffer(chunk_buffer) {
-        _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(fragment_instance_id, node_id));
-    }
-
-    void append_chunk(const vectorized::Chunk* chunk);
-    void pull_chunks(ChunkPtrVector* chunks);
+            : _chunk_buffer(chunk_buffer), _fragment_instance_id(fragment_instance_id), _node_id(node_id) {}
+    void init();
+    void append_chunk(const vectorized::Chunk* chunk, size_t chunk_size);
+    void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
 
 private:
+    // hold this chunk buffer to avoid early deallocation.
     PassThroughChunkBufferPtr _chunk_buffer;
-    PassThroughChannel* _channel;
+    TUniqueId _fragment_instance_id;
+    PlanNodeId _node_id;
+    PassThroughChannel* _channel = nullptr;
 };
 
 } // namespace starrocks

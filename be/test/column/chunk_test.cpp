@@ -251,4 +251,18 @@ TEST_F(ChunkTest, test_append_chunk_safe) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_clone_unique) {
+    auto chunk = std::make_shared<Chunk>();
+
+    auto c1 = make_column(0);
+    auto c2 = make_column(20);
+    chunk->append_column(c1, 0);
+    chunk->append_column(c2, 1);
+
+    auto copy = chunk->clone_unique();
+    copy->check_or_die();
+    ASSERT_EQ(copy->num_rows(), chunk->num_rows());
+}
+
 } // namespace starrocks::vectorized

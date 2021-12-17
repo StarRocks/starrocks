@@ -3,52 +3,66 @@
 #include "runtime/data_stream_common.h"
 
 #include "column/chunk.h"
+#include "common/logging.h"
 
 namespace starrocks {
 
 class PassThroughChannel {
 public:
-    void append_chunk(const vectorized::Chunk* chunk) {
-        vectorized::ChunkPtr clone = chunk->clone_shared();
+    void append_chunk(const vectorized::Chunk* chunk, size_t chunk_size) {
+        auto clone = chunk->clone_unique();
         {
-            std::unique_lock l(_lock);
+            std::unique_lock l(_mutex);
             _buffer.emplace_back(std::move(clone));
+            _bytes.push_back(chunk_size);
         }
     }
 
-    void pull_chunks(ChunkPtrVector* chunks) {
-        std::unique_lock l(_lock);
+    void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
+        std::unique_lock l(_mutex);
         chunks->swap(_buffer);
+        bytes->swap(_bytes);
     }
 
 private:
-    std::mutex _lock; // lock-step to push/pull chunks
-    ChunkPtrVector _buffer;
+    std::mutex _mutex; // lock-step to push/pull chunks
+    ChunkUniquePtrVector _buffer;
+    std::vector<size_t> _bytes;
 };
 
+PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id) : _mutex(), _query_id(query_id) {
+    VLOG_FILE << "PassThroughChunkBuffer::create. query_id = " << _query_id;
+}
+
+PassThroughChunkBuffer::~PassThroughChunkBuffer() {
+    VLOG_FILE << "PassThroughChunkBuffer::destroy. query_id = " << _query_id;
+    for (auto& it : _key_to_channel) {
+        delete it.second;
+    }
+    _key_to_channel.clear();
+}
+
 PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key) {
-    std::unique_lock l(_lock);
+    std::unique_lock l(_mutex);
     auto it = _key_to_channel.find(key);
     if (it == _key_to_channel.end()) {
         auto* channel = new PassThroughChannel();
         _key_to_channel.emplace(std::make_pair(key, channel));
-        it = _key_to_channel.find(key);
-    }
-    return it->second;
-}
-
-PassThroughChunkBuffer::~PassThroughChunkBuffer() {
-    std::unique_lock l(_lock);
-    for (auto& it : _key_to_channel) {
-        delete it.second;
+        return channel;
+    } else {
+        return it->second;
     }
 }
 
-void PassThroughContext::append_chunk(const vectorized::Chunk* chunk) {
-    _channel->append_chunk(chunk);
+void PassThroughContext::init() {
+    _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
 }
-void PassThroughContext::pull_chunks(ChunkPtrVector* chunks) {
-    _channel->pull_chunks(chunks);
+
+void PassThroughContext::append_chunk(const vectorized::Chunk* chunk, size_t chunk_size) {
+    _channel->append_chunk(chunk, chunk_size);
+}
+void PassThroughContext::pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
+    _channel->pull_chunks(chunks, bytes);
 }
 
 } // namespace starrocks

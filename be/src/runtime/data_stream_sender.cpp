@@ -258,13 +258,15 @@ Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk,
 
     // If chunk is not null, append it to request
     if (chunk != nullptr) {
-        if (_use_pass_through) {
+        if (!_use_pass_through) {
             auto pchunk = _chunk_request.add_chunks();
             RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
             _current_request_bytes += pchunk->data().size();
         } else {
-            _pass_through_context.append_chunk(chunk);
-            _current_request_bytes += chunk->serialize_size();
+            size_t chunk_size = chunk->serialize_size();
+            _pass_through_context.append_chunk(chunk, chunk_size);
+            _current_request_bytes += chunk_size;
+            COUNTER_UPDATE(_parent->_pass_through_bytes_counter, chunk_size);
         }
     }
 
@@ -284,7 +286,6 @@ Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk,
         RETURN_IF_ERROR(_do_send_chunk_rpc(&_chunk_request, attachment));
         // lets request sequence increment
         _chunk_request.clear_chunks();
-        _chunk_request.set_use_pass_through(_use_pass_through);
         _current_request_bytes = 0;
         *is_real_sent = true;
     }
@@ -307,6 +308,7 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     SCOPED_TIMER(_parent->_send_request_timer);
 
     request->set_sequence(_request_seq);
+    request->set_use_pass_through(_use_pass_through);
     if (_is_transfer_chain && (_send_query_statistics_with_every_batch || request->eos())) {
         auto statistic = request->mutable_query_statistics();
         _parent->_query_statistics->to_pb(statistic);
@@ -406,6 +408,7 @@ bool DataStreamSender::Channel::_check_use_pass_through() {
 }
 
 void DataStreamSender::Channel::_prepare_pass_through() {
+    _pass_through_context.init();
     _use_pass_through = _check_use_pass_through();
 }
 
@@ -437,6 +440,7 @@ DataStreamSender::DataStreamSender(RuntimeState* state, bool is_vectorized, int 
 
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
     auto pass_through_chunk_buffer = state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
+    DCHECK(pass_through_chunk_buffer.get() != nullptr);
     for (int i = 0; i < destinations.size(); ++i) {
         // Select first dest as transfer chain.
         bool is_transfer_chain = (i == 0);
@@ -541,7 +545,8 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_sent_counter = ADD_COUNTER(profile(), "BytesSent", TUnit::BYTES);
-    _uncompressed_bytes_counter = ADD_COUNTER(profile(), "UncompressedBytes", TUnit::BYTES);
+    _pass_through_bytes_counter = ADD_COUNTER(profile(), "BytesPassThrough", TUnit::BYTES);
+    _uncompressed_bytes_counter = ADD_COUNTER(profile(), "BytesUncompressed", TUnit::BYTES);
     _ignore_rows = ADD_COUNTER(profile(), "IgnoreRows", TUnit::UNIT);
     _serialize_batch_timer = ADD_TIMER(profile(), "SerializeBatchTime");
     _compress_timer = ADD_TIMER(profile(), "CompressTime");

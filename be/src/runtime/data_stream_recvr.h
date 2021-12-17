@@ -175,6 +175,7 @@ private:
 
     // Number of bytes received
     RuntimeProfile::Counter* _bytes_received_counter;
+    RuntimeProfile::Counter* _bytes_pass_through_counter;
 
     // Time series of number of bytes received, samples _bytes_received_counter
     // RuntimeProfile::TimeSeriesCounter* _bytes_received_time_series_counter;

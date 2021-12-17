@@ -268,15 +268,15 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_tuple(size_t size) const {
     return std::make_unique<Chunk>(columns, _slot_id_to_index, _tuple_id_to_index);
 }
 
-ChunkPtr Chunk::clone_shared() const {
+std::unique_ptr<Chunk> Chunk::clone_unique() const {
     std::unique_ptr<Chunk> chunk = clone_empty_with_tuple(0);
     for (const auto& kv : _slot_id_to_index) {
-        SlotId slot_id = kv.first;
         size_t index = kv.second;
         ColumnPtr column = _columns[index]->clone_shared();
-        chunk->update_column(column, slot_id);
+        chunk->_columns[index] = std::move(column);
     }
-    return std::move(chunk);
+    chunk->check_or_die();
+    return chunk;
 }
 
 void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
