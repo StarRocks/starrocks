@@ -161,6 +161,9 @@ public class JoinAssociativityRule extends TransformationRule {
         HashMap<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
         HashMap<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         if (leftChildJoinProjection != null) {
+            // leftChildJoinProjection not only contains the projection from leftChild1 and leftChild2.
+            // but also contains the projection generated from left join, such like columnRef -> constant(20 -> "16")
+            // this projection is can put it leftExpression or rightExpression. we put it on the right here.
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChildJoinProjection.getColumnRefMap()
                     .entrySet()) {
                 if (!entry.getValue().isColumnRef() &&
@@ -169,6 +172,10 @@ public class JoinAssociativityRule extends TransformationRule {
                 } else if (!entry.getValue().isColumnRef() &&
                         leftChild1.getOutputColumns().containsAll(entry.getValue().getUsedColumns())) {
                     leftExpression.put(entry.getKey(), entry.getValue());
+                } else if (!entry.getValue().isColumnRef()) {
+                    // because we put columnRef -> constant(20 -> "16") the rightExpression, the other projection like
+                    // columnRef ->columnRef (21 -> 20) also need to put to rightExpression.
+                    rightExpression.put(entry.getKey(), entry.getValue());
                 }
             }
         }

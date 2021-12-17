@@ -93,6 +93,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -172,7 +173,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                 // derive stats from child
                 // use clone here because it will be rewrite later
-                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
+                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator).clone();
+
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap(), true);
+                mapOperator = mapOperator.accept(rewriter, null);
                 pruneBuilder.addColumnStatistic(columnRefOperator,
                         ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
             }
@@ -678,8 +682,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 rightStatistics.getUsedColumns(),
                 Utils.extractConjuncts(joinOnPredicate));
 
-        // TODO(ywb): now join node statistics only care obout the row count, but the column statistics will also change
-        //  after join operation
         Statistics crossJoinStats = crossBuilder.build();
         double innerRowCount = -1;
         // For unknown column Statistics
@@ -744,8 +746,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             case FULL_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(1, leftRowCount + rightRowCount - innerRowCount));
-                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics, joinStatsBuilder);
-                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
+                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics,
+                        joinStatsBuilder);
+                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics,
+                        joinStatsBuilder);
                 break;
             default:
                 throw new StarRocksPlannerException("Not support join type : " + joinType,
