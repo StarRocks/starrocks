@@ -905,7 +905,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (new_tablet->tablet_state() != TABLET_NOTREADY) {
         Status st = _validate_alter_result(new_tablet, request);
         LOG(INFO) << "tablet's state=" << new_tablet->tablet_state()
-                  << " the convert job alreay finished, check its version"
+                  << " the convert job already finished, check its version"
                   << " res=" << st.to_string();
         return Status::InternalError("new tablet's meta is invalid");
     }

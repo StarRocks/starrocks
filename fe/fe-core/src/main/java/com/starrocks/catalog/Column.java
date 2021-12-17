@@ -40,6 +40,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TColumn;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -54,6 +56,9 @@ import java.util.Objects;
  * This class represents the column-related metadata.
  */
 public class Column implements Writable {
+
+    private static final Logger LOG = LogManager.getLogger(Column.class);
+
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "type")
@@ -447,19 +452,26 @@ public class Column implements Writable {
     // else for a batch of every row different like uuid(). return null
     // consistency requires ConnectContext.get() != null to assurance
     public String getCalculatedDefaultValue() {
+        if (ConnectContext.get() != null) {
+            return getCalculatedDefaultValueWithTime(ConnectContext.get().getStartTime());
+        } else {
+            // should not run up here
+            LOG.warn("The calculation of the default value time does not use session time.");
+            return getCalculatedDefaultValueWithTime(System.currentTimeMillis());
+        }
+    }
+
+    // if the column have a default value or default expr can be calculated like now(). return calculated value
+    // else for a batch of every row different like uuid(). return null
+    // require specify startTime
+    public String getCalculatedDefaultValueWithTime(long startTime) {
         if (defaultValue != null) {
             return defaultValue;
         }
         if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            // current transaction time
-            if (ConnectContext.get() != null) {
-                LocalDateTime startTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+            LocalDateTime localDateTime = Instant.ofEpochMilli(startTime)
                         .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-                return startTime.toString();
-            } else {
-                // should not run up here
-                return LocalDateTime.now().toString();
-            }
+            return localDateTime.toString();
         }
         return null;
     }

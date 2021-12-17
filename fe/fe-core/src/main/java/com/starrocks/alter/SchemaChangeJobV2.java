@@ -126,6 +126,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     protected long watershedTxnId = -1;
     @SerializedName(value = "storageFormat")
     private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
+    @SerializedName(value = "startTime")
+    private long startTime;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
@@ -169,6 +171,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     public void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
         this.indexChange = indexChange;
         this.indexes = indexes;
+    }
+
+    public long getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(long startTime) {
+        this.startTime = startTime;
     }
 
     public void setStorageFormat(TStorageFormat storageFormat) {
@@ -243,6 +253,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
 
+                    // copy for generate some const default value
+                    List<Column> copiedShadowSchema = Lists.newArrayList();
+                    for (Column column : shadowSchema) {
+                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                        if (defaultValueType == Column.DefaultValueType.CONST) {
+                            Column copiedColumn = new Column(column);
+                            copiedColumn.setDefaultValue(column.getCalculatedDefaultValueWithTime(startTime));
+                            copiedShadowSchema.add(copiedColumn);
+                        } else {
+                            copiedShadowSchema.add(column);
+                        }
+                    }
+
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         List<Replica> shadowReplicas = shadowTablet.getReplicas();
@@ -254,7 +277,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     shadowShortKeyColumnCount, shadowSchemaHash,
                                     Partition.PARTITION_INIT_VERSION,
                                     originKeysType, TStorageType.COLUMN, storageMedium,
-                                    shadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
+                                    copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
                                     tbl.isInMemory(),
                                     tbl.getPartitionInfo().getTabletType(partitionId));
                             createReplicaTask.setBaseTablet(
