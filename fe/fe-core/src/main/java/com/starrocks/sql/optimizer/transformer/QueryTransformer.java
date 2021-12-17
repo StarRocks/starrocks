@@ -45,16 +45,19 @@ class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
     private final ExpressionMapping outer;
+    private final Map<String, ExpressionMapping> cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
-    QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer) {
+    QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
+                     Map<String, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.outer = outer;
+        this.cteContext = cteContext;
     }
 
-    public LogicalPlan plan(SelectRelation queryBlock, Map<String, ExpressionMapping> cteContext) {
-        OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
+    public LogicalPlan plan(SelectRelation queryBlock) {
+        OptExprBuilder builder = planFrom(queryBlock.getRelation());
 
         builder = filter(builder, queryBlock.getPredicate());
         builder =
@@ -104,8 +107,8 @@ class QueryTransformer {
         return outputs;
     }
 
-    private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
-        return new RelationTransformer(columnRefFactory, session, cteContext).visit(node);
+    private OptExprBuilder planFrom(Relation node) {
+        return new RelationTransformer(columnRefFactory, session, outer, cteContext).visit(node).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,
@@ -157,7 +160,7 @@ class QueryTransformer {
         SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
         for (Expr expression : expressions) {
-            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression);
+            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression, cteContext);
             ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                     subOpt.getExpressionMapping(), projections, columnRefFactory);
             outputTranslations.put(expression, columnRef);
@@ -173,7 +176,7 @@ class QueryTransformer {
         }
 
         SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
-        subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate);
+        subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate, cteContext);
 
         ScalarOperator scalarPredicate =
                 subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, outer, correlation);
