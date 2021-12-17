@@ -87,9 +87,7 @@ public:
               _is_transfer_chain(is_transfer_chain),
               _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch),
               _enable_exchange_pass_through(enable_exchange_pass_through),
-              _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id) {
-        _prepare_pass_through();
-    }
+              _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id) {}
 
     virtual ~Channel() {
         if (_closure != nullptr && _closure->unref()) {
@@ -207,9 +205,10 @@ private:
     // whether the dest can be treated as query statistics transfer chain.
     bool _is_transfer_chain;
     bool _send_query_statistics_with_every_batch;
-    bool _enable_exchange_pass_through;
-    bool _use_pass_through = false;
     bool _is_inited = false;
+
+    bool _enable_exchange_pass_through = false;
+    bool _use_pass_through = false;
     PassThroughContext _pass_through_context;
 };
 
@@ -248,8 +247,11 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
     }
     _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
 
+    _prepare_pass_through();
+
     _need_close = true;
     _is_inited = true;
+
     return Status::OK();
 }
 
@@ -258,15 +260,15 @@ Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk,
 
     // If chunk is not null, append it to request
     if (chunk != nullptr) {
-        if (!_use_pass_through) {
-            auto pchunk = _chunk_request.add_chunks();
-            RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
-            _current_request_bytes += pchunk->data().size();
-        } else {
+        if (_use_pass_through) {
             size_t chunk_size = chunk->serialize_size();
             _pass_through_context.append_chunk(chunk, chunk_size);
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_pass_through_bytes_counter, chunk_size);
+        } else {
+            auto pchunk = _chunk_request.add_chunks();
+            RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
+            _current_request_bytes += pchunk->data().size();
         }
     }
 
@@ -280,6 +282,7 @@ Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk,
         // RPC first.
         RETURN_IF_ERROR(_wait_prev_request());
         _chunk_request.set_eos(eos);
+        _chunk_request.set_use_pass_through(_use_pass_through);
         // we will send the current request now
         butil::IOBuf attachment;
         _parent->construct_brpc_attachment(&_chunk_request, &attachment);
@@ -308,7 +311,6 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     SCOPED_TIMER(_parent->_send_request_timer);
 
     request->set_sequence(_request_seq);
-    request->set_use_pass_through(_use_pass_through);
     if (_is_transfer_chain && (_send_query_statistics_with_every_batch || request->eos())) {
         auto statistic = request->mutable_query_statistics();
         _parent->_query_statistics->to_pb(statistic);
@@ -429,7 +431,8 @@ DataStreamSender::DataStreamSender(RuntimeState* state, bool is_vectorized, int 
           _serialize_batch_timer(nullptr),
           _bytes_sent_counter(nullptr),
           _dest_node_id(sink.dest_node_id),
-          _destinations(destinations) {
+          _destinations(destinations),
+          _enable_exchange_pass_through(enable_exchange_pass_through) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
            sink.output_partition.type == TPartitionType::HASH_PARTITIONED ||

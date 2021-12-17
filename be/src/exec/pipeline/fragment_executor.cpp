@@ -276,7 +276,7 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
                 context->next_operator_id(), t_datasink.stream_sink.dest_node_id, sink_buffer,
                 sender->get_partition_type(), sender->destinations(), sender->sender_id(), sender->get_dest_node_id(),
-                sender->get_partition_exprs(), _fragment_ctx);
+                sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(), _fragment_ctx);
         _fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
 
     } else if (typeid(*datasink) == typeid(starrocks::MultiCastDataStreamSink)) {
@@ -322,7 +322,8 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
                     std::make_shared<SinkBuffer>(_fragment_ctx->runtime_state(), sender->destinations(), dop);
             auto sink_op = std::make_shared<ExchangeSinkOperatorFactory>(
                     context->next_operator_id(), -1, sink_buffer, sender->get_partition_type(), sender->destinations(),
-                    sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(), _fragment_ctx);
+                    sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(),
+                    sender->get_enable_exchange_pass_through(), _fragment_ctx);
 
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);

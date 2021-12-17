@@ -34,7 +34,7 @@ public:
                          const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
                          const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
                          PlanNodeId dest_node_id, const std::vector<ExprContext*>& partition_expr_ctxs,
-                         FragmentContext* const fragment_ctx);
+                         bool enable_exchange_pass_through, FragmentContext* const fragment_ctx);
 
     ~ExchangeSinkOperator() override = default;
 
@@ -151,7 +151,7 @@ public:
                                 TPartitionType::type part_type,
                                 const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
-                                FragmentContext* const fragment_ctx);
+                                bool enable_exchange_pass_through, FragmentContext* const fragment_ctx);
 
     ~ExchangeSinkOperatorFactory() override = default;
 
@@ -176,6 +176,8 @@ private:
 
     // For shuffle exchange
     std::vector<ExprContext*> _partition_expr_ctxs; // compute per-row partition values
+
+    bool _enable_exchange_pass_through;
 
     FragmentContext* const _fragment_ctx;
 };

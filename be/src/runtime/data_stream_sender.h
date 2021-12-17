@@ -113,6 +113,8 @@ public:
 
     int sender_id() const { return _sender_id; }
 
+    const bool get_enable_exchange_pass_through() const { return _enable_exchange_pass_through; }
+
 private:
     class Channel;
 
@@ -205,6 +207,8 @@ private:
     PlanNodeId _dest_node_id;
 
     std::vector<TPlanFragmentDestination> _destinations;
+
+    bool _enable_exchange_pass_through = false;
 };
 
 } // namespace starrocks
