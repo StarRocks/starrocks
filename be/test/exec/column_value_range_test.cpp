@@ -3,6 +3,7 @@
 #include "column/type_traits.h"
 #include "exec/olap_common.h"
 #include "gtest/gtest.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
 TEST(NormalizeRangeTest, RangeTest) {
@@ -116,6 +117,23 @@ TEST(NormalizeRangeTest, BoolRangeTest) {
         range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {false});
         range.add_range(SQLFilterOp::FILTER_LESS, true);
         ASSERT_FALSE(range.is_empty_value_range());
+    }
+}
+
+TEST(NormalizeRangeTest, ExtendScanKeyTest) {
+    const constexpr PrimitiveType Type = TYPE_BIGINT;
+    using CppType = RunTimeCppType<Type>;
+    // Test OverFlow
+    {
+        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
+                                        std::numeric_limits<CppType>::max());
+        range.add_range(SQLFilterOp::FILTER_LESS, 0);
+
+        OlapScanKeys scan_keys;
+        scan_keys._begin_scan_keys.emplace_back();
+        scan_keys._begin_scan_keys.emplace_back();
+        bool res = scan_keys.extend_scan_key(range, 1024).ok();
+        ASSERT_TRUE(res);
     }
 }
 
