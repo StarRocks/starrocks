@@ -289,7 +289,7 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_rows_frame(RuntimeState* 
 
 Status AnalyticNode::_try_fetch_next_partition_data(RuntimeState* state, int64_t* partition_end) {
     *partition_end = _analytor->find_partition_end();
-    while (!_analytor->is_partition_finished(*partition_end)) {
+    while (!_analytor->is_partition_finished()) {
         RETURN_IF_ERROR(_fetch_next_chunk(state));
         *partition_end = _analytor->find_partition_end();
     }

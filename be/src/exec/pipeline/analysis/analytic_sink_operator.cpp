@@ -90,16 +90,15 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
 Status AnalyticSinkOperator::_process_by_partition_if_necessary() {
     while (_analytor->has_output()) {
-        int64_t found_partition_end = _analytor->find_partition_end();
-
         // We only process it after all the data in a partition is reached
-        if (!_analytor->is_partition_finished(found_partition_end)) {
+        if (!_analytor->is_partition_finished()) {
             return Status::OK();
         }
 
         size_t chunk_size = _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows();
         _analytor->create_agg_result_columns(chunk_size);
 
+        int64_t found_partition_end = _analytor->find_partition_end();
         bool is_new_partition = _analytor->is_new_partition(found_partition_end);
         if (is_new_partition) {
             _analytor->reset_state_for_new_partition(found_partition_end);
@@ -113,6 +112,9 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary() {
             vectorized::ChunkPtr chunk;
             RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
             _analytor->offer_chunk_to_buffer(chunk);
+            if (_analytor->reached_limit()) {
+                return Status::OK();
+            }
         }
     }
     return Status::OK();
