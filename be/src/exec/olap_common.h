@@ -705,7 +705,7 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
     bool has_converted = false;
     if (range.is_fixed_value_range()) {
         const size_t mul = std::max<size_t>(1, _begin_scan_keys.size());
-        if (range.get_fixed_value_size() * mul > max_scan_key_num) {
+        if (range.get_fixed_value_size() > max_scan_key_num / mul) {
             if (range.is_range_value_convertible()) {
                 range.convert_to_range_value();
             } else {
@@ -714,7 +714,7 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
         }
     } else if (range.is_fixed_value_convertible() && _is_convertible) {
         const size_t mul = std::max<size_t>(1, _begin_scan_keys.size());
-        if (range.get_convertible_fixed_value_size() * mul <= max_scan_key_num) {
+        if (range.get_convertible_fixed_value_size() <= max_scan_key_num / mul) {
             if (range.is_low_value_mininum() && range.is_high_value_maximum()) {
                 has_converted = true;
             }
