@@ -7,7 +7,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/tablet_reader.h"
 #include "util/defer_op.h"
@@ -72,6 +74,21 @@ uint32_t Compaction::get_segment_max_rows(int64_t max_segment_file_size, int64_t
         max_segment_rows = 1;
     }
     return max_segment_rows;
+}
+
+int32_t Compaction::get_read_chunk_size(int64_t mem_limit, int32_t config_chunk_size, int64_t total_num_rows,
+                                        int64_t total_mem_footprint, size_t source_num) {
+    uint64_t chunk_size = config_chunk_size;
+    if (mem_limit > 0) {
+        int64_t avg_row_size = (total_mem_footprint + 1) / (total_num_rows + 1);
+        // The result of the division operation be zero, so added one
+        chunk_size = 1 + mem_limit / (source_num * avg_row_size + 1);
+    }
+
+    if (chunk_size > config_chunk_size) {
+        chunk_size = config_chunk_size;
+    }
+    return chunk_size;
 }
 
 void Compaction::split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
@@ -152,9 +169,9 @@ Status Compaction::do_compaction_impl() {
     Statistics stats;
     Status res;
     if (algorithm == kVertical) {
-        res = _merge_rowsets_vertically(&stats);
+        res = _merge_rowsets_vertically(segment_iterator_num, &stats);
     } else {
-        res = _merge_rowsets_horizontally(config::compaction_memory_limit_per_worker, &stats);
+        res = _merge_rowsets_horizontally(segment_iterator_num, &stats);
     }
     if (!res.ok()) {
         LOG(WARNING) << "fail to do " << compaction_name() << ". res=" << res.to_string()
@@ -249,7 +266,7 @@ Status Compaction::construct_output_rowset_writer(uint32_t max_rows_per_segment,
     return Status::OK();
 }
 
-Status Compaction::_merge_rowsets_horizontally(int64_t mem_limit, Statistics* stats_output) {
+Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     TabletReader reader(_tablet, _output_rs_writer->version(), schema);
@@ -257,21 +274,15 @@ Status Compaction::_merge_rowsets_horizontally(int64_t mem_limit, Statistics* st
     reader_params.reader_type = compaction_type();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
 
-    int64_t num_rows = 0;
-    int64_t total_row_size = 0;
-    uint64_t chunk_size = DEFAULT_CHUNK_SIZE;
-    if (mem_limit > 0) {
-        for (auto& rowset : _input_rowsets) {
-            num_rows += rowset->num_rows();
-            total_row_size += rowset->total_row_size();
-        }
-        int64_t avg_row_size = (total_row_size + 1) / (num_rows + 1);
-        // The result of thie division operation be zero, so added one
-        chunk_size = 1 + mem_limit / (_input_rowsets.size() * avg_row_size + 1);
+    int64_t total_num_rows = 0;
+    int64_t total_mem_footprint = 0;
+    for (auto& rowset : _input_rowsets) {
+        total_num_rows += rowset->num_rows();
+        total_mem_footprint += rowset->total_row_size();
     }
-    if (chunk_size > config::vector_chunk_size) {
-        chunk_size = config::vector_chunk_size;
-    }
+    int32_t chunk_size = get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
+                                             total_num_rows, total_mem_footprint, segment_iterator_num);
+    VLOG(1) << "tablet=" << _tablet->tablet_id() << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.prepare());
     RETURN_IF_ERROR(reader.open(reader_params));
@@ -334,7 +345,7 @@ Status Compaction::_merge_rowsets_horizontally(int64_t mem_limit, Statistics* st
     return Status::OK();
 }
 
-Status Compaction::_merge_rowsets_vertically(Statistics* stats_output) {
+Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet->tablet_id(), _tablet->data_dir()->path());
     auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
@@ -350,7 +361,30 @@ Status Compaction::_merge_rowsets_vertically(Statistics* stats_output) {
         TabletReaderParams reader_params;
         reader_params.reader_type = compaction_type();
         reader_params.profile = _runtime_profile.create_child("merge_rowsets");
-        reader_params.chunk_size = config::vector_chunk_size;
+
+        int64_t total_num_rows = 0;
+        int64_t total_mem_footprint = 0;
+        for (auto& rowset : _input_rowsets) {
+            if (rowset->rowset_meta()->rowset_type() != BETA_ROWSET) {
+                continue;
+            }
+
+            total_num_rows += rowset->num_rows();
+            auto* beta_rowset = down_cast<BetaRowset*>(rowset.get());
+            for (auto& segment : beta_rowset->segments()) {
+                for (uint32_t column_index : _column_groups[i]) {
+                    const auto* column_reader = segment->column(column_index);
+                    if (column_reader == nullptr) {
+                        continue;
+                    }
+                    total_mem_footprint += column_reader->total_mem_footprint();
+                }
+            }
+        }
+        int32_t chunk_size = get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
+                                                 total_num_rows, total_mem_footprint, segment_iterator_num);
+        VLOG(1) << "tablet=" << _tablet->tablet_id() << ", column group=" << i << ", reader chunk size=" << chunk_size;
+        reader_params.chunk_size = chunk_size;
         RETURN_IF_ERROR(reader.prepare());
         RETURN_IF_ERROR(reader.open(reader_params));
 
