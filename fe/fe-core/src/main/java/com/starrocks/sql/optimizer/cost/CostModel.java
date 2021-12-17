@@ -268,8 +268,12 @@ public class CostModel {
                         return CostEstimate.infinite();
                     }
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
-                    int pipelineDop = sessionVariable.isEnablePipelineEngine() && sessionVariable.getPipelineDop() > 0 ?
-                            sessionVariable.getPipelineDop() : 1;
+                    int pipelineDop = 1;
+                    if (sessionVariable.isEnablePipelineEngine()) {
+                        // pipelineDop is 0 means that the query executed in pipeline engine use the half number of cpu
+                        // cores, we use 32 as an estimate value
+                        pipelineDop = sessionVariable.getPipelineDop() > 0 ? sessionVariable.getPipelineDop() : 32;
+                    }
                     // beNum is the number of right table should broadcast, now use alive backends
                     int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
                     result = CostEstimate
