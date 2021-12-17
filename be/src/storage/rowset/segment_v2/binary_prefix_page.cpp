@@ -317,33 +317,33 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& 
     if (PREDICT_FALSE(_cur_pos >= _num_values)) {
         return Status::OK();
     }
-    size_t nread = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_values - _cur_pos));
+    size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_values - _cur_pos));
 
     vectorized::SparseRangeIterator iter = range.new_iterator();
     if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
-        while (nread > 0) {
+        while (to_read > 0) {
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
             DCHECK(ok);
-            vectorized::Range r = iter.next(nread);
+            vectorized::Range r = iter.next(to_read);
             for (size_t i = 1; i < r.span_size(); ++i) {
                 RETURN_IF_ERROR(_next_value(&_current_value));
                 size_t len = strnlen(reinterpret_cast<const char*>(_current_value.data()), _current_value.size());
                 (void)dst->append_strings({Slice(_current_value.data(), len)});
             }
-            nread -= r.span_size();
+            to_read -= r.span_size();
         }
     } else {
-        while (nread > 0) {
+        while (to_read > 0) {
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
             DCHECK(ok);
-            vectorized::Range r = iter.next(nread);
+            vectorized::Range r = iter.next(to_read);
             for (size_t i = 1; i < r.span_size(); ++i) {
                 RETURN_IF_ERROR(_next_value(&_current_value));
                 (void)dst->append_strings({_current_value});
             }
-            nread -= r.span_size();
+            to_read -= r.span_size();
         }
     }
     return Status::OK();

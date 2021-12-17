@@ -217,15 +217,15 @@ public:
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override {
         DCHECK(_parsed);
 
-        size_t nread = range.span_size();
-        if (PREDICT_FALSE(nread == 0 || _cur_idx >= _num_elems)) {
+        size_t to_read = range.span_size();
+        if (PREDICT_FALSE(to_read == 0 || _cur_idx >= _num_elems)) {
             return Status::OK();
         }
 
         vectorized::SparseRangeIterator iter = range.new_iterator();
         while (iter.has_more() && _cur_idx < _num_elems) {
             _cur_idx = iter.begin();
-            vectorized::Range r = iter.next(nread);
+            vectorized::Range r = iter.next(to_read);
             size_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
             int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE],
                                         max_fetch * SIZE_OF_TYPE);

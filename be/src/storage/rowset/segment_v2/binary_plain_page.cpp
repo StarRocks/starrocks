@@ -21,34 +21,34 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& r
         return Status::OK();
     }
 
-    size_t nread = std::min(range.span_size(), _num_elems - _cur_idx);
+    size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
     std::vector<Slice> strs;
-    strs.reserve(nread);
+    strs.reserve(to_read);
     vectorized::SparseRangeIterator iter = range.new_iterator();
     if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
-        while (nread > 0) {
+        while (to_read > 0) {
             _cur_idx = iter.begin();
-            vectorized::Range r = iter.next(nread);
+            vectorized::Range r = iter.next(to_read);
             size_t end = _cur_idx + r.span_size();
             for (; _cur_idx < end; _cur_idx++) {
                 Slice s = string_at_index(_cur_idx);
                 s.size = strnlen(s.data, s.size);
                 strs.emplace_back(s);
             }
-            nread -= r.span_size();
+            to_read -= r.span_size();
         }
         if (dst->append_strings(strs)) {
             return Status::OK();
         }
     } else {
-        while (nread > 0) {
+        while (to_read > 0) {
             _cur_idx = iter.begin();
-            vectorized::Range r = iter.next(nread);
+            vectorized::Range r = iter.next(to_read);
             size_t end = _cur_idx + r.span_size();
             for (; _cur_idx < end; _cur_idx++) {
                 strs.emplace_back(string_at_index(_cur_idx));
             }
-            nread -= r.span_size();
+            to_read -= r.span_size();
         }
         if (range.size() == 1) {
             if (dst->append_continuous_strings(strs)) {

@@ -229,12 +229,12 @@ public:
         }
         CppType value{};
 
-        size_t nread =
+        size_t to_read =
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
         vectorized::SparseRangeIterator iter = range.new_iterator();
-        while (nread > 0) {
+        while (to_read > 0) {
             seek_to_position_in_page(iter.begin());
-            vectorized::Range r = iter.next(nread);
+            vectorized::Range r = iter.next(to_read);
             for (size_t i = 0; i < r.span_size(); ++i) {
                 if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {
                     return Status::Corruption("RLE decode failed");
@@ -243,7 +243,7 @@ public:
                 DCHECK_EQ(1, p);
             }
             _cur_index += r.span_size();
-            nread -= r.span_size();
+            to_read -= r.span_size();
         }
         return Status::OK();
     }

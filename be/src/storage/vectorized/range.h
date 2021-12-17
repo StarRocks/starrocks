@@ -316,7 +316,6 @@ inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
         range->add(r);
         size -= r.span_size();
     }
-    return;
 }
 
 inline size_t SparseRangeIterator::covered_ranges(size_t size) const {
