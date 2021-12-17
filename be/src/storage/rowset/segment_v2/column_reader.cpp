@@ -110,6 +110,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     _column_type = static_cast<FieldType>(meta->type());
     _dict_page_pointer = PagePointer(meta->dict_page());
     _num_rows = meta->num_rows();
+    _total_mem_footprint = meta->total_mem_footprint();
     _flags.set(kHasAllDictEncodedPos, meta->has_all_dict_encoded());
     _flags.set(kAllDictEncodedPos, meta->all_dict_encoded());
     _flags.set(kIsNullablePos, meta->is_nullable());

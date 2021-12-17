@@ -36,7 +36,7 @@ struct TabletScannerParams {
 class TabletScanner {
 public:
     explicit TabletScanner(OlapScanNode* parent);
-    ~TabletScanner() = default;
+    ~TabletScanner();
 
     TabletScanner(const TabletScanner&) = delete;
     TabletScanner(TabletScanner&&) = delete;

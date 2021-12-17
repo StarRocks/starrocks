@@ -11,7 +11,11 @@ OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, con
           _meta_scan_node(tnode.meta_scan_node),
           _desc_tbl(descs) {}
 
-OlapMetaScanNode::~OlapMetaScanNode() {}
+OlapMetaScanNode::~OlapMetaScanNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status OlapMetaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -23,12 +27,11 @@ void OlapMetaScanNode::_init_counter(RuntimeState* state) {
     _meta_scan_profile = _runtime_profile->create_child("META_SCAN", true, false);
 
     _io_timer = ADD_TIMER(_meta_scan_profile, "IOTime");
-    return;
 }
 
 Status OlapMetaScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     for (auto& scan_range : scan_ranges) {
-        _scan_ranges.emplace_back(new TInternalScanRange(scan_range.scan_range.internal_scan_range));
+        _scan_ranges.emplace_back(std::make_unique<TInternalScanRange>(scan_range.scan_range.internal_scan_range));
         COUNTER_UPDATE(_tablet_counter, 1);
     }
     return Status::OK();
@@ -92,6 +95,10 @@ Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
 }
 
 Status OlapMetaScanNode::close(RuntimeState* state) {
+    if (is_closed()) {
+        return Status::OK();
+    }
+
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     return ScanNode::close(state);
 }
