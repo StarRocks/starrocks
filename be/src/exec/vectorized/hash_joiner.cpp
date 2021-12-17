@@ -137,34 +137,8 @@ Status HashJoiner::build_ht(RuntimeState* state) {
         RETURN_IF_ERROR(_build(state));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
-        _short_circuit_break();
-        auto old_phase = HashJoinPhase::BUILD;
-        // _phase may be set to HashJoinPhase::EOS because HashJoinProbeOperator finishes prematurely.
-        uint64_t runtime_join_filter_pushdown_limit = 1024000;
-        if (state->query_options().__isset.runtime_join_filter_pushdown_limit) {
-            runtime_join_filter_pushdown_limit = state->query_options().runtime_join_filter_pushdown_limit;
-        }
-
-        if (_is_push_down) {
-            if (_probe_node_type == TPlanNodeType::EXCHANGE_NODE && _build_node_type == TPlanNodeType::EXCHANGE_NODE) {
-                _is_push_down = false;
-            } else if (_ht.get_row_count() > runtime_join_filter_pushdown_limit) {
-                _is_push_down = false;
-            }
-
-            if (_is_push_down || _build_conjunct_ctxs_is_empty) {
-                // In filter could be used to fast compute segment row range in storage engine
-                RETURN_IF_ERROR(_create_runtime_in_filters(state));
-            }
-        }
-
-        // it's quite critical to put publish runtime filters before short-circuit of
-        // "inner-join with empty right table". because for global runtime filter
-        // merge node is waiting for all partitioned runtime filter, so even hash row count is zero
-        // we still have to build it.
-        RETURN_IF_ERROR(_create_runtime_bloom_filters(state, runtime_join_filter_pushdown_limit));
-        _phase.compare_exchange_strong(old_phase, HashJoinPhase::PROBE);
     }
+
     return Status::OK();
 }
 
@@ -246,6 +220,36 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 Status HashJoiner::close(RuntimeState* state) {
     _ht.close();
     return Status::OK();
+}
+
+Status HashJoiner::create_runtime_filters(RuntimeState* state) {
+    if (_phase != HashJoinPhase::BUILD) {
+        return Status::OK();
+    }
+
+    uint64_t runtime_join_filter_pushdown_limit = 1024000;
+    if (state->query_options().__isset.runtime_join_filter_pushdown_limit) {
+        runtime_join_filter_pushdown_limit = state->query_options().runtime_join_filter_pushdown_limit;
+    }
+
+    if (_is_push_down) {
+        if (_probe_node_type == TPlanNodeType::EXCHANGE_NODE && _build_node_type == TPlanNodeType::EXCHANGE_NODE) {
+            _is_push_down = false;
+        } else if (_ht.get_row_count() > runtime_join_filter_pushdown_limit) {
+            _is_push_down = false;
+        }
+
+        if (_is_push_down || _build_conjunct_ctxs_is_empty) {
+            // In filter could be used to fast compute segment row range in storage engine
+            RETURN_IF_ERROR(_create_runtime_in_filters(state));
+        }
+    }
+
+    // it's quite critical to put publish runtime filters before short-circuit of
+    // "inner-join with empty right table". because for global runtime filter
+    // merge node is waiting for all partitioned runtime filter, so even hash row count is zero
+    // we still have to build it.
+    return _create_runtime_bloom_filters(state, runtime_join_filter_pushdown_limit);
 }
 
 bool HashJoiner::_has_null(const ColumnPtr& column) {
