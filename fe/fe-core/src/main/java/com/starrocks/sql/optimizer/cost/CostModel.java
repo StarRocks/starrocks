@@ -272,6 +272,7 @@ public class CostModel {
                     if (sessionVariable.isEnablePipelineEngine()) {
                         // pipelineDop is 0 means that the query executed in pipeline engine use the half number of cpu
                         // cores, we use 32 as an estimate value
+                        // todo(ywb) we need to get BE cpu cores from BE heartbeat.
                         pipelineDop = sessionVariable.getPipelineDop() > 0 ? sessionVariable.getPipelineDop() : 32;
                     }
                     // beNum is the number of right table should broadcast, now use alive backends
