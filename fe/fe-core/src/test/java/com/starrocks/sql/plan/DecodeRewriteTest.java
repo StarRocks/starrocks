@@ -662,12 +662,11 @@ public class DecodeRewriteTest extends PlanTestBase {
     public void testProjectWithUnionEmptySet() throws Exception {
         String sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:Project\n" +
-                "  |  <slot 11> : 1\n" +
-                "  |  use vectorized: true\n" +
-                "  |  \n" +
-                "  2:Decode\n" +
-                "  |  <dict id 16> : <string id 1>\n" +
-                "  |  use vectorized: true"));
+
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 16> : <string id 11>"));
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 16> : 16: t1a"));
     }
+
 }
