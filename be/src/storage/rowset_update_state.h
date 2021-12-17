@@ -25,6 +25,8 @@ public:
 
     Status load(int64_t tablet_id, Rowset* rowset);
 
+    Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, const PrimaryIndex& index);
+
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
 

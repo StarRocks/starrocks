@@ -37,7 +37,7 @@ namespace starrocks {
 
 class DataDir;
 class OlapTuple;
-class RowCursor;
+class PrimaryIndex;
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class RowsetFactory;
