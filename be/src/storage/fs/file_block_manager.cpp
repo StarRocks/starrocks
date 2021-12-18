@@ -217,9 +217,6 @@ Status FileWritableBlock::_close(SyncMode mode) {
             _block_manager->_metrics->total_disk_sync->increment(1);
         }
         sync = _writer->sync();
-        if (sync.ok()) {
-            sync = _block_manager->_sync_metadata(_path);
-        }
         WARN_IF_ERROR(sync, strings::Substitute("Failed to sync when closing block $0", _path));
     }
     Status close = _writer->close();
