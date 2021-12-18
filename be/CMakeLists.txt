@@ -469,7 +469,8 @@ set(STARROCKS_DEPENDENCIES
     glog
     re2
     pprof
-    # lz4 must set before librdkafka
+    # Put lz4 in front of librdkafka to make sure that segment use the native lz4 library to compress/decompress page
+    # Otherwise, he will use the lz4 Library in librdkafka
     lz4
     libevent
     curl
