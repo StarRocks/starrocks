@@ -41,6 +41,7 @@
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
 #include "storage/types.h"
+#include "storage/vectorized/range.h"
 #include "util/coding.h"
 #include "util/faststring.h"
 
@@ -227,6 +228,8 @@ public:
     }
 
     Status next_batch(size_t* count, vectorized::Column* dst) override;
+
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
     size_t count() const override {
         DCHECK(_parsed);

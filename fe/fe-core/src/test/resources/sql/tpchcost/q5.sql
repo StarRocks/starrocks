@@ -30,9 +30,9 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 28:MERGING-EXCHANGE
-cardinality: 25
+cardinality: 5
 column statistics:
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 
 PLAN FRAGMENT 1(F13)
@@ -44,21 +44,21 @@ OutPut Exchange Id: 28
 27:SORT
 |  order by: [55, DOUBLE, true] DESC
 |  offset: 0
-|  cardinality: 25
+|  cardinality: 5
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 26:AGGREGATE (merge finalize)
 |  aggregate: sum[([55: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false]
-|  cardinality: 25
+|  cardinality: 5
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 25:EXCHANGE
-cardinality: 25
+cardinality: 5
 
 PLAN FRAGMENT 2(F00)
 
@@ -70,9 +70,9 @@ OutPut Exchange Id: 25
 |  STREAMING
 |  aggregate: sum[([54: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false]
-|  cardinality: 25
+|  cardinality: 5
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 23:Project
@@ -81,7 +81,7 @@ OutPut Exchange Id: 25
 |  54 <-> [25: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [26: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 16390852
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 22:HASH JOIN
@@ -94,12 +94,12 @@ OutPut Exchange Id: 25
 |  cardinality: 16390852
 |  column statistics:
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 |----21:EXCHANGE
@@ -127,7 +127,7 @@ OutPut Exchange Id: 25
 |  column statistics:
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.2765072765072763E7] ESTIMATE
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.2765072765072763E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
@@ -166,9 +166,9 @@ OutPut Exchange Id: 21
 |  46 <-> [46: N_NAME, VARCHAR, false]
 |  cardinality: 200000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -177,10 +177,10 @@ OutPut Exchange Id: 21
 |  - filter_id = 3, build_expr = (45: N_NATIONKEY), remote = false
 |  cardinality: 200000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 |----18:EXCHANGE
 |       cardinality: 5
@@ -210,8 +210,8 @@ OutPut Exchange Id: 18
 |  46 <-> [46: N_NAME, CHAR, false]
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 16:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -220,9 +220,9 @@ OutPut Exchange Id: 18
 |  - filter_id = 2, build_expr = (50: R_REGIONKEY), remote = false
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----15:EXCHANGE
@@ -287,7 +287,7 @@ OutPut Exchange Id: 08
 |  equal join conjunct: [11: O_CUSTKEY, INT, false] = [1: C_CUSTKEY, INT, false]
 |  cardinality: 22765073
 |  column statistics:
-|  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
+|  * C_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.2765072765072763E7] ESTIMATE
 |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE

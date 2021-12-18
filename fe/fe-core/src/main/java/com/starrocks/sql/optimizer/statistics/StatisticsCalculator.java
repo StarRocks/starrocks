@@ -93,7 +93,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -169,14 +168,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             pruneBuilder.addColumnStatistics(statistics.getColumnStatistics());
             pruneBuilder.setOutputRowCount(statistics.getOutputRowCount());
 
+            Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
-                // derive stats from child
-                // use clone here because it will be rewrite later
-                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator).clone();
-
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(
-                        projection.getCommonSubOperatorMap(), true);
-                mapOperator = mapOperator.accept(rewriter, null);
+                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                 pruneBuilder.addColumnStatistic(columnRefOperator,
                         ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
             }
@@ -541,16 +535,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalProject(LogicalProjectOperator node, ExpressionContext context) {
-        return computeProjectNode(context, node.getColumnRefMap(), node.getCommonSubOperatorMap());
+        return computeProjectNode(context, node.getColumnRefMap());
     }
 
     @Override
     public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
-        return computeProjectNode(context, node.getColumnRefMap(), node.getCommonSubOperatorMap());
+        Preconditions.checkState(node.getCommonSubOperatorMap().isEmpty());
+        return computeProjectNode(context, node.getColumnRefMap());
     }
 
-    private Void computeProjectNode(ExpressionContext context, Map<ColumnRefOperator, ScalarOperator> columnRefMap,
-                                    Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap) {
+    private Void computeProjectNode(ExpressionContext context, Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         Preconditions.checkState(context.arity() == 1);
 
         Statistics.Builder builder = Statistics.builder();
@@ -561,12 +555,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         allBuilder.addColumnStatistics(inputStatistics.getColumnStatistics());
 
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
-            // derive stats from child
-            // use clone here because it will be rewrite later
-            ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator).clone();
-
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(commonSubOperatorMap, true);
-            mapOperator = mapOperator.accept(rewriter, null);
+            ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator);
             ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
             builder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
             allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
@@ -670,100 +659,103 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                  JoinOperator joinType, long limit) {
         Preconditions.checkState(context.arity() == 2);
 
-        Statistics.Builder builder = Statistics.builder();
         Statistics leftStatistics = context.getChildStatistics(0);
         Statistics rightStatistics = context.getChildStatistics(1);
+        // construct cross join statistics
+        Statistics.Builder crossBuilder = Statistics.builder();
+        crossBuilder.addColumnStatistics(leftStatistics.getOutputColumnsStatistics(context.getChildOutputColumns(0)));
+        crossBuilder.addColumnStatistics(rightStatistics.getOutputColumnsStatistics(context.getChildOutputColumns(1)));
         double leftRowCount = leftStatistics.getOutputRowCount();
         double rightRowCount = rightStatistics.getOutputRowCount();
+        double crossRowCount = leftRowCount * rightRowCount;
+        crossBuilder.setOutputRowCount(crossRowCount);
 
-        builder.addColumnStatistics(leftStatistics.getOutputColumnsStatistics(context.getChildOutputColumns(0)));
-        builder.addColumnStatistics(rightStatistics.getOutputColumnsStatistics(context.getChildOutputColumns(1)));
         List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftStatistics.getUsedColumns(),
                 rightStatistics.getUsedColumns(),
                 Utils.extractConjuncts(joinOnPredicate));
 
-        double crossRowCount = leftRowCount * rightRowCount;
-        builder.setOutputRowCount(crossRowCount);
-        // TODO(ywb): now join node statistics only care obout the row count, but the column statistics will also change
-        //  after join operation
-        Statistics statistics = builder.build();
+        Statistics crossJoinStats = crossBuilder.build();
         double innerRowCount = -1;
-        // For no column Statistics
-        for (BinaryPredicateOperator binaryPredicateOperator : eqOnPredicates) {
-            ScalarOperator leftOperator = binaryPredicateOperator.getChild(0);
-            ScalarOperator rightOperator = binaryPredicateOperator.getChild(1);
-            if (leftOperator.isColumnRef() && rightOperator.isColumnRef()) {
-                ColumnStatistic leftColumn = statistics.getColumnStatistic((ColumnRefOperator) leftOperator);
-                ColumnStatistic rightColumn = statistics.getColumnStatistic((ColumnRefOperator) rightOperator);
-                if (leftColumn.isUnknown() || rightColumn.isUnknown()) {
-                    // To avoid anti-join estimation of 0 rows, the rows of inner join
-                    // need to take a table with a small number of rows
-                    if (joinType.isAntiJoin()) {
-                        innerRowCount = Math.max(0, Math.min(leftRowCount, rightRowCount));
-                    } else {
-                        innerRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount));
-                    }
-                    break;
-                }
+        // For unknown column Statistics
+        boolean hasUnknownColumnStatistics =
+                eqOnPredicates.stream().map(PredicateOperator::getChildren).flatMap(Collection::stream)
+                        .filter(ScalarOperator::isColumnRef)
+                        .map(column -> crossJoinStats.getColumnStatistic((ColumnRefOperator) column))
+                        .anyMatch(ColumnStatistic::isUnknown);
+        if (hasUnknownColumnStatistics) {
+            // To avoid anti-join estimation of 0 rows, the rows of inner join
+            // need to take a table with a small number of rows
+            if (joinType.isAntiJoin()) {
+                innerRowCount = Math.max(0, Math.min(leftRowCount, rightRowCount));
+            } else {
+                innerRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount));
             }
         }
+
+        Statistics innerJoinStats;
         if (innerRowCount == -1) {
-            innerRowCount = estimateInnerRowCount(builder.build(), eqOnPredicates);
+            innerJoinStats = estimateInnerJoinStatistics(crossJoinStats, eqOnPredicates);
+            innerRowCount = innerJoinStats.getOutputRowCount();
+        } else {
+            innerJoinStats = Statistics.buildFrom(crossJoinStats).setOutputRowCount(innerRowCount).build();
         }
 
+        Statistics.Builder joinStatsBuilder;
         switch (joinType) {
             case CROSS_JOIN:
-                builder.setOutputRowCount(crossRowCount);
+                joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                 break;
             case INNER_JOIN:
                 if (eqOnPredicates.isEmpty()) {
-                    builder.setOutputRowCount(crossRowCount);
+                    joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                     break;
                 }
-                builder.setOutputRowCount(innerRowCount);
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 break;
             case LEFT_OUTER_JOIN:
-                builder.setOutputRowCount(max(innerRowCount, leftRowCount));
-                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, builder);
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
+                joinStatsBuilder.setOutputRowCount(max(innerRowCount, leftRowCount));
+                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
             case RIGHT_SEMI_JOIN:
-                builder.setOutputRowCount(innerRowCount);
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 break;
             case LEFT_ANTI_JOIN:
             case NULL_AWARE_LEFT_ANTI_JOIN:
-                builder.setOutputRowCount(max(0, leftRowCount - innerRowCount));
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
+                joinStatsBuilder.setOutputRowCount(max(0, leftRowCount - innerRowCount));
                 break;
             case RIGHT_OUTER_JOIN:
-                builder.setOutputRowCount(max(innerRowCount, rightRowCount));
-                computeNullFractionForOuterJoin(rightRowCount, innerRowCount, leftStatistics, builder);
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
+                joinStatsBuilder.setOutputRowCount(max(innerRowCount, rightRowCount));
+                computeNullFractionForOuterJoin(rightRowCount, innerRowCount, leftStatistics, joinStatsBuilder);
                 break;
             case RIGHT_ANTI_JOIN:
-                builder.setOutputRowCount(max(0, rightRowCount - innerRowCount));
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
+                joinStatsBuilder.setOutputRowCount(max(0, rightRowCount - innerRowCount));
                 break;
             case FULL_OUTER_JOIN:
-                builder.setOutputRowCount(max(1, leftRowCount + rightRowCount - innerRowCount));
-                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics, builder);
-                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics, builder);
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
+                joinStatsBuilder.setOutputRowCount(max(1, leftRowCount + rightRowCount - innerRowCount));
+                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics,
+                        joinStatsBuilder);
+                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics,
+                        joinStatsBuilder);
                 break;
-            case MERGE_JOIN:
-                // TODO
-                break;
+            default:
+                throw new StarRocksPlannerException("Not support join type : " + joinType,
+                        ErrorType.INTERNAL_ERROR);
         }
+        Statistics joinStats = joinStatsBuilder.build();
+
         List<ScalarOperator> notEqJoin = Utils.extractConjuncts(joinOnPredicate);
         notEqJoin.removeAll(eqOnPredicates);
         notEqJoin.add(predicate);
 
-        Statistics estimateStatistics;
-        estimateStatistics = estimateStatistics(notEqJoin, builder.build());
-
-        if (limit != -1 && limit < estimateStatistics.getOutputRowCount()) {
-            estimateStatistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
-        }
-
+        Statistics estimateStatistics = estimateStatistics(notEqJoin, joinStats);
         context.setStatistics(estimateStatistics);
         return visitOperator(context.getOp(), context);
-
     }
 
     private void computeNullFractionForOuterJoin(double outerTableRowCount, double innerJoinRowCount,
@@ -959,14 +951,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(context.getOp(), context);
     }
 
-    public double estimateInnerRowCount(Statistics statistics, List<BinaryPredicateOperator> eqOnPredicates) {
+    public Statistics estimateInnerJoinStatistics(Statistics statistics, List<BinaryPredicateOperator> eqOnPredicates) {
         if (eqOnPredicates.isEmpty()) {
-            return statistics.getOutputRowCount();
+            return statistics;
         }
         if (ConnectContext.get().getSessionVariable().isUseCorrelatedJoinEstimate()) {
-            return estimatedInnerRowCountAssumeCorrelated(statistics, eqOnPredicates);
+            return estimatedInnerJoinStatisticsAssumeCorrelated(statistics, eqOnPredicates);
         } else {
-            return estimateInnerRowCountMiddleGround(statistics, eqOnPredicates);
+            return Statistics.buildFrom(statistics)
+                    .setOutputRowCount(estimateInnerRowCountMiddleGround(statistics, eqOnPredicates)).build();
         }
     }
 
@@ -975,16 +968,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // clause separately because stats estimates would be way off. Instead we choose so called
     // "driving predicate" which mostly reduces join output rows cardinality and apply UNKNOWN_FILTER_COEFFICIENT
     // for other (auxiliary) predicates.
-    private double estimatedInnerRowCountAssumeCorrelated(Statistics statistics,
-                                                          List<BinaryPredicateOperator> eqOnPredicates) {
+    private Statistics estimatedInnerJoinStatisticsAssumeCorrelated(Statistics statistics,
+                                                                    List<BinaryPredicateOperator> eqOnPredicates) {
         Queue<BinaryPredicateOperator> remainingEqOnPredicates = new LinkedList<>(eqOnPredicates);
         BinaryPredicateOperator drivingPredicate = remainingEqOnPredicates.poll();
-        double result = statistics.getOutputRowCount();
+        Statistics result = statistics;
         for (int i = 0; i < eqOnPredicates.size(); ++i) {
             Statistics estimateStatistics =
                     estimateByEqOnPredicates(statistics, drivingPredicate, remainingEqOnPredicates);
-            if (estimateStatistics.getOutputRowCount() < result) {
-                result = estimateStatistics.getOutputRowCount();
+            if (estimateStatistics.getOutputRowCount() < result.getOutputRowCount()) {
+                result = estimateStatistics;
             }
             remainingEqOnPredicates.add(drivingPredicate);
             drivingPredicate = remainingEqOnPredicates.poll();

@@ -64,7 +64,7 @@ BetaRowset::BetaRowset(const TabletSchema* schema, string rowset_path, RowsetMet
         : Rowset(schema, std::move(rowset_path), std::move(rowset_meta)) {}
 
 OLAPStatus BetaRowset::init() {
-    return OLAP_SUCCESS; // no op
+    return OLAP_SUCCESS;
 }
 
 Status BetaRowset::do_load() {

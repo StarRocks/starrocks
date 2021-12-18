@@ -33,13 +33,15 @@ using Analytors = std::vector<AnalytorPtr>;
 
 // Component used to do analytic processing
 // it contains common data struct and algorithm of analysis
-// TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
-// TODO(hcf) all the data should be protected by lightweight lock
 class Analytor final : public pipeline::ContextWithDependency {
     friend class ManagedFunctionStates;
 
 public:
-    ~Analytor() = default;
+    ~Analytor() {
+        if (_state != nullptr) {
+            close(_state);
+        }
+    }
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc);
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
@@ -98,7 +100,7 @@ public:
     void reset_window_state();
     void get_window_function_result(int32_t start, int32_t end);
 
-    bool is_partition_finished(int64_t found_partition_end);
+    bool is_partition_finished();
     Status output_result_chunk(vectorized::ChunkPtr* chunk);
     size_t compute_memory_usage();
     void create_agg_result_columns(int64_t chunk_size);
@@ -125,6 +127,9 @@ public:
 #endif
 
 private:
+    RuntimeState* _state = nullptr;
+    bool _is_closed = false;
+
     const TPlanNode& _tnode;
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;

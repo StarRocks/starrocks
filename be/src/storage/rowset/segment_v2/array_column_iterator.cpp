@@ -122,6 +122,67 @@ Status ArrayColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     return Status::OK();
 }
 
+Status ArrayColumnIterator::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
+    vectorized::ArrayColumn* array_column = nullptr;
+    vectorized::NullColumn* null_column = nullptr;
+    if (dst->is_nullable()) {
+        auto* nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+
+        array_column = down_cast<vectorized::ArrayColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<vectorized::NullColumn*>(nullable_column->null_column().get());
+    } else {
+        array_column = down_cast<vectorized::ArrayColumn*>(dst);
+    }
+
+    CHECK((_null_iterator == nullptr && null_column == nullptr) ||
+          (_null_iterator != nullptr && null_column != nullptr));
+
+    // 1. Read null column
+    if (_null_iterator != nullptr) {
+        RETURN_IF_ERROR(_null_iterator->next_batch(range, null_column));
+        down_cast<vectorized::NullableColumn*>(dst)->update_has_null();
+    }
+
+    vectorized::SparseRangeIterator iter = range.new_iterator();
+    size_t to_read = range.span_size();
+
+    DCHECK_EQ(range.begin(), _array_size_iterator->get_current_ordinal());
+    vectorized::SparseRange element_read_range;
+    while (iter.has_more()) {
+        vectorized::Range r = iter.next(to_read);
+
+        RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
+        size_t element_ordinal = _array_size_iterator->element_ordinal();
+        //RETURN_IF_ERROR(next_batch(&n, dst));
+        // 2. Read offset column
+        // [1, 2, 3], [4, 5, 6]
+        // In memory, it will be transformed to actual offset(0, 3, 6)
+        // On disk, offset is stored as length array(3, 3)
+        auto* offsets = array_column->offsets_column().get();
+        auto& data = offsets->get_data();
+        size_t end_offset = data.back();
+
+        size_t prev_array_size = offsets->size();
+        vectorized::SparseRange size_read_range(r);
+        RETURN_IF_ERROR(_array_size_iterator->next_batch(size_read_range, offsets));
+        size_t curr_array_size = offsets->size();
+
+        size_t num_to_read = end_offset;
+        for (size_t i = prev_array_size; i < curr_array_size; ++i) {
+            end_offset += data[i];
+            data[i] = end_offset;
+        }
+        num_to_read = end_offset - num_to_read;
+
+        element_read_range.add(vectorized::Range(element_ordinal, element_ordinal + num_to_read));
+    }
+
+    DCHECK_EQ(element_read_range.begin(), _element_iterator->get_current_ordinal());
+    RETURN_IF_ERROR(_element_iterator->next_batch(element_read_range, array_column->elements_column().get()));
+
+    return Status::OK();
+}
+
 Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
     vectorized::ArrayColumn* array_column = nullptr;
     vectorized::NullColumn* null_column = nullptr;

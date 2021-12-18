@@ -92,7 +92,7 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
-}; // class MemTable
+};
 
 } // namespace vectorized
 

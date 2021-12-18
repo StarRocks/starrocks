@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -382,5 +383,13 @@ public class SelectStmtTest {
         String selectStmtStr2 =
                 "SELECT db1.tbl1.k1 FROM db1.tbl1 GROUP BY db1.tbl1 HAVING ((MAX(TIMEDIFF(NULL, NULL))) IS NULL)";
         UtFrameUtils.parseAndAnalyzeStmt(selectStmtStr2, ctx);
+    }
+
+    @Test
+    public void testAnyValueFunctions() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        String selectStmtStr =
+                "SELECT db1.tbl1.k1, any_value(db1.tbl1.k2) FROM db1.tbl1 GROUP BY db1.tbl1.k1";
+        UtFrameUtils.parseAndAnalyzeStmt(selectStmtStr, ctx);
     }
 }

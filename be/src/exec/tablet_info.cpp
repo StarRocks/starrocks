@@ -57,16 +57,9 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
         index->schema_hash = p_index.schema_hash();
         for (auto& col : p_index.columns()) {
             auto it = slots_map.find(col);
-            if (it == std::end(slots_map)) {
-                if (col == LOAD_OP_COLUMN) {
-                    // no op slot, so all op is insert, skip op column
-                    continue;
-                }
-                std::stringstream ss;
-                ss << "unknown index column, column=" << col;
-                return Status::InternalError(ss.str());
+            if (it != std::end(slots_map)) {
+                index->slots.emplace_back(it->second);
             }
-            index->slots.emplace_back(it->second);
         }
         _indexes.emplace_back(index);
     }
@@ -94,16 +87,9 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
         index->schema_hash = t_index.schema_hash;
         for (auto& col : t_index.columns) {
             auto it = slots_map.find(col);
-            if (it == std::end(slots_map)) {
-                if (col == LOAD_OP_COLUMN) {
-                    // no op slot, so all op is insert, skip op column
-                    continue;
-                }
-                std::stringstream ss;
-                ss << "unknown index column, column=" << col;
-                return Status::InternalError(ss.str());
+            if (it != std::end(slots_map)) {
+                index->slots.emplace_back(it->second);
             }
-            index->slots.emplace_back(it->second);
         }
         _indexes.emplace_back(index);
     }

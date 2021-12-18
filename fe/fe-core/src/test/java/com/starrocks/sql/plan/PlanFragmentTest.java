@@ -4901,6 +4901,16 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testIfTimediff() throws Exception {
+        String sql = "SELECT COUNT(*) FROM t0 WHERE (CASE WHEN CAST(t0.v1 AS BOOLEAN ) THEN " +
+                "TIMEDIFF(\"1970-01-08\", \"1970-01-12\") END) BETWEEN (1341067345) AND " +
+                "(((CASE WHEN false THEN -843579223 ELSE -1859488192 END)+(((-406527105)+(540481936))))) ;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "PREDICATES: CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) >= 1.341067345E9, CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) <= -1.725533361E9"));
+    }
+
+    @Test
     public void testPredicateOnThreeTables() throws Exception {
         String sql = "SELECT \n" +
                 "  DISTINCT t1.v4 \n" +
@@ -4965,6 +4975,124 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         // Just make sure we can get the final plan, and not crashed because of stats calculator error.
         System.out.println(sql);
+    }
+
+    @Test
+    public void testDeriveOutputColumns() throws Exception {
+        String sql = "select \n" +
+                "  rand() as c0, \n" +
+                "  round(\n" +
+                "    cast(\n" +
+                "      rand() as DOUBLE\n" +
+                "    )\n" +
+                "  ) as c1 \n" +
+                "from \n" +
+                "  (\n" +
+                "    select \n" +
+                "      subq_0.v1 as c0 \n" +
+                "    from \n" +
+                "      (\n" +
+                "        select \n" +
+                "          v1,v2,v3\n" +
+                "        from \n" +
+                "          t0 as ref_0 \n" +
+                "        where \n" +
+                "          ref_0.v1 = ref_0.v2 \n" +
+                "        limit \n" +
+                "          72\n" +
+                "      ) as subq_0 \n" +
+                "      right join t1 as ref_1 on (subq_0.v3 = ref_1.v5) \n" +
+                "    where \n" +
+                "      subq_0.v2 <> subq_0.v3 \n" +
+                "    limit \n" +
+                "      126\n" +
+                "  ) as subq_1 \n" +
+                "where \n" +
+                "  66 <= unix_timestamp() \n" +
+                "limit \n" +
+                "  155;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("6:Project\n" +
+                "  |  <slot 2> : 2: v2"));
+    }
+
+    @Test
+    public void testSelectConstantFormJoin() throws Exception {
+        String sql = "SELECT \n" +
+                "  * \n" +
+                "from \n" +
+                "  (\n" +
+                "    select \n" +
+                "      ref_0.t1c as c5, \n" +
+                "      37 as c6 \n" +
+                "    from \n" +
+                "      test_all_type as ref_0 \n" +
+                "      inner join test_all_type as ref_1 on (\n" +
+                "        ref_0.t1f = ref_1.t1f\n" +
+                "      ) \n" +
+                "    where \n" +
+                "      ref_0.t1c <> ref_0.t1c\n" +
+                "  ) as subq_0 \n" +
+                "  inner join part as ref_2 on (subq_0.c5 = ref_2.P_PARTKEY) \n" +
+                "  inner join supplier as ref_3 on (subq_0.c5 = ref_3.S_SUPPKEY) \n" +
+                "where \n" +
+                "  (\n" +
+                "    (ref_3.S_NAME > ref_2.P_TYPE) \n" +
+                "    and (true)\n" +
+                "  ) \n" +
+                "  and (\n" +
+                "    (subq_0.c6 = ref_3.S_NATIONKEY) \n" +
+                "    and (true)\n" +
+                "  ) \n" +
+                "limit \n" +
+                "  45;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("6:Project\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 40> : CAST(37 AS INT)"));
+    }
+
+    @Test
+    public void testPushDownEquivalenceDerivePredicate() throws Exception {
+        // check is null predicate on t1.v5 which equivalences derive from t1.v4 can not push down to scan node
+        String sql = "SELECT \n" +
+                "  subt0.v2, \n" +
+                "  t1.v6\n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t0.v1, \n" +
+                "      t0.v2, \n" +
+                "      t0.v3\n" +
+                "    FROM \n" +
+                "      t0\n" +
+                "  ) subt0 \n" +
+                "  LEFT JOIN t1 ON subt0.v3 = t1.v4 \n" +
+                "  AND subt0.v3 = t1.v4 \n" +
+                "  AND subt0.v3 = t1.v5 \n" +
+                "  AND subt0.v3 >= t1.v5 \n" +
+                "WHERE \n" +
+                "  (\n" +
+                "    (\n" +
+                "      (t1.v4) < (\n" +
+                "        (\n" +
+                "          (-650850438)-(\n" +
+                "            (\n" +
+                "              (2000266938)%(-1243652117)\n" +
+                "            )\n" +
+                "          )\n" +
+                "        )\n" +
+                "      )\n" +
+                "    ) IS NULL\n" +
+                "  ) \n" +
+                "GROUP BY \n" +
+                " subt0.v2, \n" +
+                "  t1.v6;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 0:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1"));
     }
 
     @Test

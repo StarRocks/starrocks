@@ -53,20 +53,25 @@ void PipelineDriverPoller::run_internal() {
         while (driver_it != local_blocked_drivers.end()) {
             auto* driver = *driver_it;
 
-            if (driver->pending_finish() && !driver->is_still_pending_finish()) {
-                // driver->pending_finish() return true means that when a driver's sink operator is finished,
-                // but its source operator still has pending io task that executed in io threads and has
-                // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
-                // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
-                // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
-                // FragmentContext is unregistered prematurely.
-                driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
-                                                                               : DriverState::FINISH);
-                remove_blocked_driver(local_blocked_drivers, driver_it);
-                ready_drivers.emplace_back(driver);
+            if (driver->pending_finish()) {
+                if (driver->is_still_pending_finish()) {
+                    ++driver_it;
+                } else {
+                    // driver->pending_finish() return true means that when a driver's sink operator is finished,
+                    // but its source operator still has pending io task that executed in io threads and has
+                    // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
+                    // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
+                    // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
+                    // FragmentContext is unregistered prematurely.
+                    driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                                   : DriverState::FINISH);
+                    remove_blocked_driver(local_blocked_drivers, driver_it);
+                    ready_drivers.emplace_back(driver);
+                }
             } else if (driver->is_finished()) {
                 remove_blocked_driver(local_blocked_drivers, driver_it);
-            } else if (!driver->pending_finish() && driver->query_ctx()->is_expired()) {
+                ready_drivers.emplace_back(driver);
+            } else if (driver->query_ctx()->is_expired()) {
                 // there are not any drivers belonging to a query context can make progress for an expiration period
                 // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                 // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
@@ -84,7 +89,7 @@ void PipelineDriverPoller::run_internal() {
                     remove_blocked_driver(local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
                 }
-            } else if (!driver->pending_finish() && driver->fragment_ctx()->is_canceled()) {
+            } else if (driver->fragment_ctx()->is_canceled()) {
                 // If the fragment is cancelled when the source operator is already pending i/o task,
                 // The state of driver shouldn't be changed.
                 driver->cancel_operators(driver->fragment_ctx()->runtime_state());
@@ -97,31 +102,6 @@ void PipelineDriverPoller::run_internal() {
                     ready_drivers.emplace_back(driver);
                 }
             } else if (driver->is_not_blocked()) {
-                switch (driver->driver_state()) {
-                case DriverState::INPUT_EMPTY: {
-                    auto elapsed_time = driver->_input_empty_timer_sw->elapsed_time();
-                    if (driver->_first_input_empty_timer->value() == 0) {
-                        driver->_first_input_empty_timer->update(elapsed_time);
-                    } else {
-                        driver->_followup_input_empty_timer->update(elapsed_time);
-                    }
-                    driver->_input_empty_timer->update(elapsed_time);
-                    break;
-                }
-                case DriverState::OUTPUT_FULL:
-                    driver->_output_full_timer->update(driver->_output_full_timer_sw->elapsed_time());
-                    break;
-                case DriverState::PRECONDITION_BLOCK: {
-                    // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
-                    //  This writing method is a bit tricky, and when there is a better way, replace it
-                    auto runtime_state_ptr = driver->fragment_ctx()->runtime_state_ptr();
-                    driver->mark_precondition_ready(runtime_state_ptr.get());
-                    driver->_precondition_block_timer->update(driver->_precondition_block_timer_sw->elapsed_time());
-                    break;
-                }
-                default:
-                    break;
-                }
                 driver->set_driver_state(DriverState::READY);
                 remove_blocked_driver(local_blocked_drivers, driver_it);
                 ready_drivers.emplace_back(driver);
@@ -156,21 +136,8 @@ void PipelineDriverPoller::run_internal() {
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(this->_mutex);
-    driver->_pending_timer_sw->reset();
-    switch (driver->driver_state()) {
-    case DriverState::INPUT_EMPTY:
-        driver->_input_empty_timer_sw->reset();
-        break;
-    case DriverState::OUTPUT_FULL:
-        driver->_output_full_timer_sw->reset();
-        break;
-    case DriverState::PRECONDITION_BLOCK:
-        driver->_precondition_block_timer_sw->reset();
-        break;
-    default:
-        break;
-    }
     this->_blocked_drivers.push_back(driver);
+    driver->_pending_timer_sw->reset();
     this->_cond.notify_one();
 }
 

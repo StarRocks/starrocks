@@ -169,6 +169,9 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.MIN:
                     value = columnStatistic.getMinValue();
                     return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
+                case FunctionSet.ANY_VALUE:
+                    value = (columnStatistic.getMaxValue() - columnStatistic.getMinValue()) / 2;
+                    return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
                 case FunctionSet.YEAR:
                     int minValue = 1700;
                     int maxValue = 2100;

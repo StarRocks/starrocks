@@ -418,7 +418,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                             ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
                     Status st = datum_from_string(new_field.type().get(), &dst_datum, tmp, nullptr);
                     if (!st.ok()) {
-                        LOG(WARNING) << "create datum from string failed";
+                        LOG(WARNING) << "create datum from string failed: status=" << st;
                         return false;
                     }
                 }

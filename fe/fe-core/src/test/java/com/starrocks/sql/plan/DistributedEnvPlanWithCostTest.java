@@ -567,7 +567,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  column statistics: \n" +
                 "  |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
                 "  |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
-                "  |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE\n" +
+                "  |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
                 "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
                 "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE"));
     }
@@ -927,5 +927,53 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     * L_SHIPDATE-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE"));
 
         connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(100));
+    }
+
+    @Test
+    public void testInPredicateStatisticsEstimate() throws Exception {
+        String sql = "select * from lineitem where L_LINENUMBER in (1,2,3,4)";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 342857143"));
+        Assert.assertTrue(plan.contains("* L_LINENUMBER-->[1.0, 4.0, 0.0, 4.0, 4.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 342857143"));
+        Assert.assertTrue(plan.contains("* L_LINENUMBER-->[2.0, 5.0, 0.0, 4.0, 4.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER in (L_RETURNFLAG+1,2+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 4.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER + 1 in (L_RETURNFLAG+1,2+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
+        // check without column statistics
+        sql = "select * from test_all_type where t1b in (1,2,3,4)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+
+        sql = "select * from test_all_type where t1b in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+
+        sql = "select * from test_all_type where t1b+1 in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+        // check not in
+        sql = "select * from lineitem where L_LINENUMBER not in (1,2,3,4)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 257142857"));
+        Assert.assertTrue(plan.contains(" * L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER not in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 257142857"));
+        Assert.assertTrue(plan.contains(" * L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER + 1 not in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+        Assert.assertTrue(plan.contains(" * L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
     }
 }

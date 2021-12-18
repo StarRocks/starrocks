@@ -31,6 +31,7 @@
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/chunk_iterator.h"
+#include "storage/vectorized/compaction.h"
 #include "storage/vectorized/rowset_merger.h"
 #include "storage/vectorized/schema_change.h"
 #include "util/defer_op.h"
@@ -728,7 +729,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
     }
+    size_t delete_op = 0;
     for (const auto& one_delete : state.deletes()) {
+        delete_op += one_delete->size();
         index.erase(*one_delete, &new_deletes);
     }
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
@@ -846,9 +849,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id << " version:" << version_info.version.to_string()
               << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows << " " << del_percent << "%"
-              << " rowset:" << rowset_id << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
-              << " #del:" << old_total_del << "+" << new_del << "=" << total_del << " #dv:" << ndelvec
-              << " duration:" << t_write - t_start << "ms"
+              << " rowset:" << rowset_id << " #seg:" << rowset->num_segments() << " #op(upsert:" << rowset->num_rows()
+              << " del:" << delete_op << ") #del:" << old_total_del << "+" << new_del << "=" << total_del
+              << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
               << Substitute("($0/$1/$2/$3)", t_load - t_start, t_index - t_load, t_delvec - t_index,
                             t_write - t_delvec);
     VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
@@ -917,6 +920,8 @@ StatusOr<std::unique_ptr<CompactionInfo>> TabletUpdates::_get_compaction() {
 }
 
 Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply) {
+    int64_t input_rowsets_size = 0;
+    int64_t input_row_num = 0;
     auto info = (*pinfo).get();
     vector<RowsetSharedPtr> input_rowsets(info->inputs.size());
     {
@@ -932,9 +937,19 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
                 return Status::InternalError(msg);
             } else {
                 input_rowsets[i] = itr->second;
+                input_rowsets_size = input_rowsets[i]->data_disk_size();
+                input_row_num = input_rowsets[i]->num_rows();
             }
         }
     }
+
+    uint32_t max_rows_per_segment = vectorized::Compaction::get_segment_max_rows(config::max_segment_file_size,
+                                                                                 input_row_num, input_rowsets_size);
+
+    int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+    size_t num_columns = _tablet.num_columns();
+    vectorized::CompactionAlgorithm algorithm = vectorized::Compaction::choose_compaction_algorithm(
+            num_columns, max_columns_per_group, input_rowsets.size());
 
     // create rowset writer
     RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
@@ -948,6 +963,9 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
     context.tablet_schema = &(_tablet.tablet_schema());
     context.rowset_state = COMMITTED;
     context.segments_overlap = NONOVERLAPPING;
+    context.max_rows_per_segment = max_rows_per_segment;
+    context.writer_type =
+            (algorithm == vectorized::kVertical ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
     std::unique_ptr<RowsetWriter> rowset_writer;
     Status st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
     if (!st.ok()) {
@@ -958,6 +976,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
     }
     vectorized::MergeConfig cfg;
     cfg.chunk_size = config::vector_chunk_size;
+    cfg.algorithm = algorithm;
     RETURN_IF_ERROR(vectorized::compaction_merge_rowsets(_tablet, info->start_version.major(), input_rowsets,
                                                          rowset_writer.get(), cfg));
     auto output_rowset = rowset_writer->build();

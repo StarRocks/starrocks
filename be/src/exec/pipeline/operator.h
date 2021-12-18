@@ -148,8 +148,12 @@ protected:
     vectorized::RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
     // Common metrics
+    RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _push_timer = nullptr;
     RuntimeProfile::Counter* _pull_timer = nullptr;
+    RuntimeProfile::Counter* _finishing_timer = nullptr;
+    RuntimeProfile::Counter* _finished_timer = nullptr;
+    RuntimeProfile::Counter* _close_timer = nullptr;
 
     RuntimeProfile::Counter* _push_chunk_num_counter = nullptr;
     RuntimeProfile::Counter* _push_row_num_counter = nullptr;

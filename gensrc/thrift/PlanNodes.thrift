@@ -369,6 +369,16 @@ enum TJoinOp {
   NULL_AWARE_LEFT_ANTI_JOIN
 }
 
+enum TJoinDistributionMode {
+  NONE,
+  BROADCAST,
+  PARTITIONED,
+  LOCAL_HASH_BUCKET,
+  SHUFFLE_HASH_BUCKET,
+  COLOCATE,
+  REPLICATED
+}
+
 struct THashJoinNode {
   1: required TJoinOp join_op
 
@@ -394,6 +404,8 @@ struct THashJoinNode {
   // runtime filters built by this node.
   50: optional list<TRuntimeFilterDescription> build_runtime_filters;
   51: optional bool build_runtime_filters_from_planner;
+
+  52: optional TJoinDistributionMode distribution_mode;
 }
 
 struct TMergeJoinNode {
@@ -426,6 +438,7 @@ enum TAggregationOp {
   LAG,
   HLL_C,
   BITMAP_UNION,
+  ANY_VALUE
 }
 
 //struct TAggregateFunctionCall {

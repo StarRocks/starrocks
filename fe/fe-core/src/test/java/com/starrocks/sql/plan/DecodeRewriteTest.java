@@ -420,6 +420,40 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testLeftJoinWithUnion() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "SELECT subt1.S_ADDRESS\n" +
+                "FROM (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt1 LEFT ANTI\n" +
+                "    JOIN (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt0 ON subt1.S_NATIONKEY = subt0.S_NATIONKEY  \n" +
+                "WHERE true\n" +
+                "UNION ALL\n" +
+                "SELECT subt1.S_ADDRESS\n" +
+                "FROM (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt1 LEFT ANTI\n" +
+                "    JOIN (\n" +
+                "        SELECT S_ADDRESS, S_NATIONKEY\n" +
+                "        FROM supplier\n" +
+                "    ) subt0 ON subt1.S_NATIONKEY = subt0.S_NATIONKEY\n" +
+                "WHERE (NOT (true));";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 34> : <string id 17>\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 34> : 34: S_ADDRESS"));
+    }
+
+    @Test
     public void testScanFilter() throws Exception {
         String sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
         String plan = getFragmentPlan(sql);
@@ -612,10 +646,11 @@ public class DecodeRewriteTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
 
-        sql = "SELECT SUM(count) FROM (SELECT CAST((CAST((s_address) BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) " +
-                "AND (s_address) AS BOOLEAN) = true) AND (CAST((s_address) " +
-                "BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) AND (s_address) AS BOOLEAN) IS NOT NULL) AS INT) " +
-                "as count FROM supplier ) t;";
+        sql =
+                "SELECT SUM(count) FROM (SELECT CAST((CAST((s_address) BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) " +
+                        "AND (s_address) AS BOOLEAN) = true) AND (CAST((s_address) " +
+                        "BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) AND (s_address) AS BOOLEAN) IS NOT NULL) AS INT) " +
+                        "as count FROM supplier ) t;";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
     }
@@ -643,4 +678,15 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("8:HASH JOIN"));
         Assert.assertTrue(plan.contains("7:Decode"));
     }
+
+    @Test
+    public void testProjectWithUnionEmptySet() throws Exception {
+        String sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 16> : <string id 11>"));
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 16> : 16: t1a"));
+    }
+
 }

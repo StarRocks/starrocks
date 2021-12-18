@@ -122,13 +122,7 @@ public class ReplayFromDumpTest {
 
     private Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
             throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
-        if (sessionVariable != null) {
-            queryDumpInfo.setSessionVariable(sessionVariable);
-        }
-        return new Pair<>(queryDumpInfo,
-                UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
-                        getExplainString(TExplainLevel.COSTS));
+        return getPlanFragment(dumpJsonStr, sessionVariable, TExplainLevel.COSTS);
     }
 
     private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
@@ -270,7 +264,7 @@ public class ReplayFromDumpTest {
                 "  |  * inv_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
                 "  |  * inv_item_sk-->[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE\n" +
                 "  |  * inv_quantity_on_hand-->[0.0, 1000.0, 0.05000724964315228, 4.0, 1006.0] ESTIMATE\n" +
-                "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 334.80791666666664] ESTIMATE\n" +
+                "  |  * d_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |       cardinality: 335"));
@@ -320,5 +314,13 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains(" 33:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), multi_distinct_count(128: case), max(103: count)"));
+    }
+
+    @Test
+    public void testJoinWithPipelineDop() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("24:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)"));
     }
 }
