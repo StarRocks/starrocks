@@ -355,6 +355,8 @@ public:
 
     Status next_batch(size_t* count, vectorized::Column* dst) override;
 
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+
     size_t count() const override { return _num_elements; }
 
     size_t current_index() const override { return _cur_index; }
@@ -387,16 +389,31 @@ private:
 
 template <FieldType Type>
 inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized::Column* dst) {
+    vectorized::SparseRange read_range;
+    size_t begin = current_index();
+    read_range.add(vectorized::Range(begin, begin + *count));
+    RETURN_IF_ERROR(next_batch(read_range, dst));
+    *count = current_index() - begin;
+    return Status::OK();
+}
+
+template <FieldType Type>
+inline Status BitShufflePageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_index >= _num_elements)) {
-        *count = 0;
         return Status::OK();
     }
 
-    *count = std::min(*count, static_cast<size_t>(_num_elements - _cur_index));
-    int n = dst->append_numbers(get_data(_cur_index * SIZE_OF_TYPE), *count * SIZE_OF_TYPE);
-    DCHECK_EQ(*count, n);
-    _cur_index += *count;
+    size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
+    vectorized::SparseRangeIterator iter = range.new_iterator();
+    while (to_read > 0) {
+        _cur_index = iter.begin();
+        vectorized::Range r = iter.next(to_read);
+        int n = dst->append_numbers(get_data(_cur_index * SIZE_OF_TYPE), r.span_size() * SIZE_OF_TYPE);
+        DCHECK_EQ(r.span_size(), n);
+        _cur_index += r.span_size();
+        to_read -= r.span_size();
+    }
     return Status::OK();
 }
 

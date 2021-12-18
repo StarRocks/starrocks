@@ -390,5 +390,111 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     EXPECT_EQ(count, num_rows);
 }
 
+TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
+    std::string s1("abcdefghijklmnopqrstuvwxyz");
+    std::string s2("bbcdefghijklmnopqrstuvwxyz");
+    std::string s3("cbcdefghijklmnopqrstuvwxyz");
+    std::string s4("dbcdefghijklmnopqrstuvwxyz");
+    std::string s5("ebcdefghijklmnopqrstuvwxyz");
+    std::string s6("fbcdefghijklmnopqrstuvwxyz");
+    std::string s7("gbcdefghijklmnopqrstuvwxyz");
+    std::string s8("hbcdefghijklmnopqrstuvwxyz");
+    std::vector<Slice> data_strs{s1, s2, s3, s4, s5, s6, s7, s8};
+
+    TabletColumn c1 = create_int_key(1);
+    TabletColumn c2 = create_int_key(2);
+    TabletColumn c3 = create_with_default_value<OLAP_FIELD_TYPE_VARCHAR>("");
+    c3.set_length(65535);
+
+    TabletSchema tablet_schema = create_schema({c1, c2, c3});
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+
+    std::string file_name = kSegmentDir + "/read_multiple_types_column";
+    std::unique_ptr<fs::WritableBlock> wblock;
+    fs::CreateBlockOptions wblock_opts({file_name});
+    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
+
+    SegmentWriter writer(std::move(wblock), 0, &tablet_schema, opts);
+
+    int32_t chunk_size = config::vector_chunk_size;
+    size_t num_rows = 10000;
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+
+    {
+        // col1 col2
+        std::vector<uint32_t> column_indexes{0, 1};
+        ASSERT_OK(writer.init(column_indexes, true));
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+        for (auto i = 0; i < num_rows % chunk_size; ++i) {
+            chunk->reset();
+            auto& cols = chunk->columns();
+            for (auto j = 0; j < chunk_size; ++j) {
+                if (i * chunk_size + j >= num_rows) {
+                    break;
+                }
+                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            }
+            ASSERT_OK(writer.append_chunk(*chunk));
+        }
+        ASSERT_OK(writer.finalize_columns(&index_size));
+    }
+
+    {
+        // col3
+        std::vector<uint32_t> column_indexes{2};
+        ASSERT_OK(writer.init(column_indexes, false));
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+        for (auto i = 0; i < num_rows % chunk_size; ++i) {
+            chunk->reset();
+            auto& cols = chunk->columns();
+            for (auto j = 0; j < chunk_size; ++j) {
+                if (i * chunk_size + j >= num_rows) {
+                    break;
+                }
+                cols[0]->append_datum(vectorized::Datum(data_strs[j % 8]));
+            }
+            ASSERT_OK(writer.append_chunk(*chunk));
+        }
+        ASSERT_OK(writer.finalize_columns(&index_size));
+    }
+
+    ASSERT_OK(writer.finalize_footer(&file_size));
+    auto segment = *segment_v2::Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    vectorized::SegmentReadOptions seg_options;
+    seg_options.block_mgr = _block_mgr;
+    OlapReaderStatistics stats;
+    seg_options.stats = &stats;
+    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+    auto res = segment->new_iterator(schema, seg_options);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
+    auto seg_iterator = res.value();
+
+    size_t count = 0;
+    auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+    while (true) {
+        chunk->reset();
+        auto st = seg_iterator->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_FALSE(!st.ok());
+        for (auto i = 0; i < chunk->num_rows(); ++i) {
+            EXPECT_EQ(count, chunk->get(i)[0].get_int32());
+            EXPECT_EQ(count + 1, chunk->get(i)[1].get_int32());
+            EXPECT_EQ(data_strs[i % 8].to_string(), chunk->get(i)[2].get_slice().to_string());
+            ++count;
+        }
+    }
+    EXPECT_EQ(count, num_rows);
+}
+
 } // namespace segment_v2
 } // namespace starrocks

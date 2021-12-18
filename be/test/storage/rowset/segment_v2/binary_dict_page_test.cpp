@@ -36,6 +36,7 @@
 #include "storage/rowset/segment_v2/page_decoder.h"
 #include "storage/rowset/segment_v2/storage_page_decoder.h"
 #include "storage/types.h"
+#include "storage/vectorized/chunk_helper.h"
 #include "util/debug_util.h"
 
 namespace starrocks::segment_v2 {
@@ -127,6 +128,21 @@ public:
         ASSERT_EQ("Nature", values[0].to_string());
         ASSERT_EQ("Captain", values[1].to_string());
         ASSERT_EQ("Xmas", values[2].to_string());
+
+        page_decoder.seek_to_position_in_page(0);
+        ASSERT_EQ(0, page_decoder.current_index());
+        auto column = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
+        vectorized::SparseRange read_range;
+        read_range.add(vectorized::Range(0, 2));
+        read_range.add(vectorized::Range(4, 7));
+        status = page_decoder.next_batch(read_range, column.get());
+        ASSERT_TRUE(status.ok());
+        ASSERT_EQ(5, column->size());
+        ASSERT_EQ("Individual", column->get(0).get_slice().to_string());
+        ASSERT_EQ("Lifetime", column->get(1).get_slice().to_string());
+        ASSERT_EQ("Evolution", column->get(2).get_slice().to_string());
+        ASSERT_EQ("Nature", column->get(3).get_slice().to_string());
+        ASSERT_EQ("Captain", column->get(4).get_slice().to_string());
     }
 
     void test_with_large_data_size(const std::vector<Slice>& contents) {
@@ -220,6 +236,35 @@ public:
                                       << ", expect:" << hexdump((char*)expect.data(), expect.size())
                                       << ", actual:" << hexdump((char*)actual.data(), actual.size())
                                       << ", line number:" << page_start_ids[slice_index] + pos + 1;
+
+            status = page_decoder.seek_to_position_in_page(0);
+            ASSERT_TRUE(status.ok());
+            size_t slice_num = page_start_ids[slice_index + 1] - page_start_ids[slice_index];
+            auto dst = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
+            vectorized::SparseRange read_range;
+            read_range.add(vectorized::Range(0, slice_num / 3));
+            read_range.add(vectorized::Range(slice_num / 2, (slice_num * 2 / 3)));
+            read_range.add(vectorized::Range((slice_num * 3 / 4), slice_num));
+            size_t read_num = read_range.span_size();
+
+            status = page_decoder.next_batch(read_range, dst.get());
+            ASSERT_TRUE(status.ok());
+            ASSERT_EQ(read_num, dst->size());
+
+            size_t offset = 0;
+            vectorized::SparseRangeIterator read_iter = read_range.new_iterator();
+            while (read_iter.has_more()) {
+                vectorized::Range r = read_iter.next(read_num);
+                for (int i = 0; i < r.span_size(); ++i) {
+                    std::string expect = contents[page_start_ids[slice_index] + r.begin() + i].to_string();
+                    std::string actual = dst->get(i + offset).get_slice().to_string();
+                    ASSERT_EQ(expect, actual) << "slice index:" << slice_index << ", pos:" << offset + i
+                                              << ", expect:" << hexdump((char*)expect.data(), expect.size())
+                                              << ", actual:" << hexdump((char*)actual.data(), actual.size())
+                                              << ", line number:" << page_start_ids[slice_index] + offset + i + 1;
+                }
+                offset += r.span_size();
+            }
         }
     }
 };
