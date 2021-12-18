@@ -274,7 +274,7 @@ void FileScanNode::scanner_worker(int start_idx, int length) {
 
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
-    MakeScopedCleanup([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
+    auto cleanup = MakeScopedCleanup([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
     auto status = Expr::clone_if_not_exists(_conjunct_ctxs, runtime_state(), &scanner_expr_ctxs);
 
     if (!status.ok()) {
