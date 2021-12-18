@@ -7,6 +7,7 @@
 #include "column/column.h"
 #include "runtime/global_dicts.h"
 #include "storage/rowset/segment_v2/column_iterator.h"
+#include "storage/vectorized/range.h"
 
 namespace starrocks::segment_v2 {
 // DictCodeColumnIterator is a wrapper/proxy on another column iterator that will
@@ -26,6 +27,10 @@ public:
     ColumnIterator* column_iterator() const { return _col_iter; }
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
+
+    Status next_batch(const vectorized::SparseRange& range, Column* dst) override {
+        return _col_iter->next_dict_codes(range, dst);
+    }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
         return _col_iter->fetch_values_by_rowid(rowids, size, values);
@@ -81,6 +86,10 @@ public:
     ColumnIterator* column_iterator() const { return _col_iter; }
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
+
+    Status next_batch(const vectorized::SparseRange& range, Column* dst) override {
+        return _col_iter->next_dict_codes(range, dst);
+    }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
         if (_local_dict_code_col == nullptr) {

@@ -51,6 +51,25 @@ public:
         return Status::OK();
     }
 
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override {
+        vectorized::SparseRangeIterator iter = range.new_iterator();
+        size_t to_read = range.span_size();
+        while (to_read > 0) {
+            _current_rowid = iter.begin();
+            vectorized::Range r = iter.next(to_read);
+            Buffer<rowid_t>& v = down_cast<FixedLengthColumn<rowid_t>*>(dst)->get_data();
+            const size_t sz = v.size();
+            raw::stl_vector_resize_uninitialized(&v, sz + r.span_size());
+            rowid_t* ptr = &v[sz];
+            for (size_t i = 0; i < r.span_size(); i++) {
+                ptr[i] = _current_rowid + i;
+            }
+            _current_rowid += r.span_size();
+            to_read -= r.span_size();
+        }
+        return Status::OK();
+    }
+
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
         return Status::NotSupported("Not supported by RowIdColumnIterator: fetch_values_by_rowid");
     }

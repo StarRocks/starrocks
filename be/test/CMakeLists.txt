@@ -103,6 +103,9 @@ set(EXEC_FILES
         ./formats/csv/float_converter_test.cpp
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
+        ./formats/json/binary_column_test.cpp
+        ./formats/json/numeric_column_test.cpp
+        ./formats/json/nullable_column_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_utils_test.cpp
@@ -245,7 +248,10 @@ set(EXEC_FILES
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
 set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-
+set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+        
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif()
