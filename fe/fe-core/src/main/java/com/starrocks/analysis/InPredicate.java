@@ -29,7 +29,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Reference;
 import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
@@ -211,17 +210,7 @@ public class InPredicate extends Predicate {
             opcode = isNotIn ? TExprOpcode.FILTER_NEW_NOT_IN : TExprOpcode.FILTER_NEW_IN;
         }
 
-        Reference<SlotRef> slotRefRef = new Reference<SlotRef>();
-        Reference<Integer> idxRef = new Reference<Integer>();
-        if (isSingleColumnPredicate(slotRefRef,
-                idxRef) && idxRef.getRef() == 0 && slotRefRef.getRef().getNumDistinctValues() > 0) {
-            selectivity =
-                    (double) (getChildren().size() - 1) / (double) slotRefRef.getRef()
-                            .getNumDistinctValues();
-            selectivity = Math.max(0.0, Math.min(1.0, selectivity));
-        } else {
-            selectivity = Expr.DEFAULT_SELECTIVITY;
-        }
+        selectivity = Expr.DEFAULT_SELECTIVITY;
     }
 
     @Override
