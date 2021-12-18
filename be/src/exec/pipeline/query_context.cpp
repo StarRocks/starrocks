@@ -10,10 +10,12 @@ QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()), _num_fragments(0), _num_active_fragments(0) {}
 
 QueryContext::~QueryContext() {
-    if (_is_runtime_filter_coordinator) {
-        _exec_env->runtime_filter_worker()->close_query(_query_id);
+    if (_exec_env != nullptr) {
+        if (_is_runtime_filter_coordinator) {
+            _exec_env->runtime_filter_worker()->close_query(_query_id);
+        }
+        _exec_env->stream_mgr()->close_query(_query_id);
     }
-    _exec_env->stream_mgr()->close_query(_query_id);
 }
 FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
