@@ -200,6 +200,40 @@ public:
                         << datum_to_string(type_info.get(), dst->get(i));
             }
         }
+
+        {
+            // read range data of page
+            segment_v2::PageDecoderOptions decoder_options;
+            PageDecoderType page_decoder(encoded_data, decoder_options);
+            Status status = page_decoder.init();
+            ASSERT_TRUE(status.ok());
+            ASSERT_EQ(0, page_decoder.current_index());
+
+            auto dst = vectorized::ChunkHelper::column_from_field_type(Type, false);
+            vectorized::SparseRange read_range;
+            read_range.add(vectorized::Range(0, count / 3));
+            read_range.add(vectorized::Range(count / 2, (count * 2 / 3)));
+            read_range.add(vectorized::Range((count * 3 / 4), count));
+            size_t read_num = read_range.span_size();
+
+            dst->reserve(read_range.span_size());
+            status = page_decoder.next_batch(read_range, dst.get());
+            ASSERT_TRUE(status.ok());
+            ASSERT_EQ(read_num, dst->size());
+
+            TypeInfoPtr type_info = get_type_info(Type);
+            size_t offset = 0;
+            vectorized::SparseRangeIterator read_iter = read_range.new_iterator();
+            while (read_iter.has_more()) {
+                vectorized::Range r = read_iter.next(read_num);
+                for (int i = 0; i < r.span_size(); ++i) {
+                    ASSERT_EQ(0, type_info->cmp(src->get(r.begin() + i), dst->get(i + offset)))
+                            << " row " << i << ": " << datum_to_string(type_info.get(), src->get(r.begin() + i))
+                            << " vs " << datum_to_string(type_info.get(), dst->get(i + offset));
+                }
+                offset += r.span_size();
+            }
+        }
     }
 
     // The values inserted should be sorted.

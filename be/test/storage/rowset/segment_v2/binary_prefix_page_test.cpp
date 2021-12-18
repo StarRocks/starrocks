@@ -221,6 +221,26 @@ public:
             ASSERT_EQ(std::to_string(i), column2->get_slice(i - 1015));
         }
 
+        ret = page_decoder->seek_to_position_in_page(0);
+        ASSERT_TRUE(ret.ok());
+        auto column3 = vectorized::BinaryColumn::create();
+        vectorized::SparseRange read_range;
+        read_range.add(vectorized::Range(0, 10));
+        read_range.add(vectorized::Range(15, 25));
+        read_range.add(vectorized::Range(28, 38));
+        ret = page_decoder->next_batch(read_range, column3.get());
+        ASSERT_TRUE(ret.ok());
+        ASSERT_EQ(30, column3->size());
+        for (int i = 1000; i < 1010; ++i) {
+            ASSERT_EQ(std::to_string(i), column3->get_slice(i - 1000));
+        }
+        for (int i = 1015; i < 1025; ++i) {
+            ASSERT_EQ(std::to_string(i), column3->get_slice(i - 1015 + 10));
+        }
+        for (int i = 1028; i < 1038; ++i) {
+            ASSERT_EQ(std::to_string(i), column3->get_slice(i - 1028 + 20));
+        }
+
         std::string v1_string = std::to_string(1039);
         Slice v1 = Slice(v1_string);
         bool exact_match;

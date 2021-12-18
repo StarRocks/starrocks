@@ -303,26 +303,47 @@ Status BinaryPrefixPageDecoder<Type>::_next_value(faststring* value) {
 
 template <FieldType Type>
 Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
+    vectorized::SparseRange read_range;
+    size_t begin = current_index();
+    read_range.add(vectorized::Range(begin, begin + *n));
+    RETURN_IF_ERROR(next_batch(read_range, dst));
+    *n = current_index() - begin + 1;
+    return Status::OK();
+}
+
+template <FieldType Type>
+Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_pos >= _num_values)) {
-        *n = 0;
         return Status::OK();
     }
-    *n = std::min(*n, static_cast<size_t>(_num_values - _cur_pos));
-    // FIXME: ???
-    [[maybe_unused]] bool ok = dst->append_strings({_current_value});
-    DCHECK(ok);
+    size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_values - _cur_pos));
+
+    vectorized::SparseRangeIterator iter = range.new_iterator();
     if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
-        for (size_t i = 1; i < *n; ++i) {
-            RETURN_IF_ERROR(_next_value(&_current_value));
-            // remove trailing zeros.
-            size_t len = strnlen(reinterpret_cast<const char*>(_current_value.data()), _current_value.size());
-            (void)dst->append_strings({Slice(_current_value.data(), len)});
+        while (to_read > 0) {
+            seek_to_position_in_page(iter.begin());
+            bool ok = dst->append_strings({_current_value});
+            DCHECK(ok);
+            vectorized::Range r = iter.next(to_read);
+            for (size_t i = 1; i < r.span_size(); ++i) {
+                RETURN_IF_ERROR(_next_value(&_current_value));
+                size_t len = strnlen(reinterpret_cast<const char*>(_current_value.data()), _current_value.size());
+                (void)dst->append_strings({Slice(_current_value.data(), len)});
+            }
+            to_read -= r.span_size();
         }
     } else {
-        for (size_t i = 1; i < *n; ++i) {
-            RETURN_IF_ERROR(_next_value(&_current_value));
-            (void)dst->append_strings({_current_value});
+        while (to_read > 0) {
+            seek_to_position_in_page(iter.begin());
+            bool ok = dst->append_strings({_current_value});
+            DCHECK(ok);
+            vectorized::Range r = iter.next(to_read);
+            for (size_t i = 1; i < r.span_size(); ++i) {
+                RETURN_IF_ERROR(_next_value(&_current_value));
+                (void)dst->append_strings({_current_value});
+            }
+            to_read -= r.span_size();
         }
     }
     return Status::OK();

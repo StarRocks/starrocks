@@ -90,6 +90,9 @@ public:
     SparseRangeIterator() {}
     explicit SparseRangeIterator(const SparseRange* r);
 
+    SparseRangeIterator(const SparseRangeIterator& iter)
+            : _range(iter._range), _index(iter._index), _next_rowid(iter._next_rowid) {}
+
     rowid_t begin() const { return _next_rowid; }
 
     // Return true iff there are untraversed range, i.e, `next` will return a non-empty range.
@@ -98,6 +101,9 @@ public:
     // Return the next contiguous range contains at most |size| rows.
     // `has_more` must be checked before calling this method.
     Range next(size_t size);
+
+    // Return the next discontiguous range contains at most |size| rows
+    void next_range(size_t size, SparseRange* range);
 
     size_t covered_ranges(size_t size) const;
 
@@ -302,6 +308,14 @@ inline Range SparseRangeIterator::next(size_t size) {
         }
     }
     return ret;
+}
+
+inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
+    while (size > 0 && has_more()) {
+        Range r = next(size);
+        range->add(r);
+        size -= r.span_size();
+    }
 }
 
 inline size_t SparseRangeIterator::covered_ranges(size_t size) const {
