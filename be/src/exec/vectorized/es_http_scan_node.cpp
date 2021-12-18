@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
@@ -188,8 +189,11 @@ void EsHttpScanNode::_try_skip_constant_conjuncts() {
     // TODO: skip constant true
     for (auto& _conjunct_ctx : _conjunct_ctxs) {
         if (_conjunct_ctx->root()->is_constant()) {
-            void* value = _conjunct_ctx->get_value(nullptr);
-            if (value == nullptr || *reinterpret_cast<bool*>(value) == false) {
+            // unreachable path
+            // The new optimizer will rewrite `where always false` to `EMPTY_SET`
+            ColumnPtr value = _conjunct_ctx->evaluate(nullptr);
+            DCHECK(value->is_constant());
+            if (value->only_null() || value->get(0).get_uint8() == 0) {
                 _eos = true;
             }
         }
