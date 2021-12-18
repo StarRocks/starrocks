@@ -379,7 +379,7 @@ public class FunctionCallExpr extends Expr {
             }
 
             for (Expr child : children) {
-                if (child.type.isOnlyMetricType()) {
+                if (child.type.isPercentile()) {
                     throw new AnalysisException(Type.OnlyMetricTypeErrorMsg);
                 }
             }

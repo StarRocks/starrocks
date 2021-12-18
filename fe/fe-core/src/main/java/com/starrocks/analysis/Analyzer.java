@@ -46,21 +46,12 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.planner.PlanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.BetweenToCompoundRule;
 import com.starrocks.rewrite.ExprRewriteRule;
 import com.starrocks.rewrite.ExprRewriter;
-import com.starrocks.rewrite.FoldConstantsRule;
 import com.starrocks.rewrite.NormalizeBinaryPredicatesRule;
 import com.starrocks.rewrite.ReplaceDateFormatRule;
-import com.starrocks.rewrite.mvrewrite.CountDistinctToBitmap;
-import com.starrocks.rewrite.mvrewrite.CountDistinctToBitmapOrHLLRule;
-import com.starrocks.rewrite.mvrewrite.CountFieldToSum;
-import com.starrocks.rewrite.mvrewrite.HLLHashToSlotRefRule;
-import com.starrocks.rewrite.mvrewrite.NDVToHll;
-import com.starrocks.rewrite.mvrewrite.PercentileApproxToUnionRule;
-import com.starrocks.rewrite.mvrewrite.ToBitmapToSlotRefRule;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -111,9 +102,6 @@ public class Analyzer {
     // A predicate such as "t1.a = t2.b" has two entries, one for 't1' and
     // another one for 't2'.
 
-    // map from tuple id to list of Exprs referencing tuple
-    // which buffer can reuse in vectorized proccess
-    private final Map<TupleId, List<Expr>> bufferReuseExprs = Maps.newHashMap();
     // map from tuple id to the current output column index
     private final Map<TupleId, Integer> currentOutputColumn = Maps.newHashMap();
     // used for Information Schema Table Scan
@@ -199,17 +187,11 @@ public class Analyzer {
         // analysis.
         public boolean isExplain;
 
-        // Indicates whether the query has plan hints.
-        public boolean hasPlanHints = false;
-
         // True if at least one of the analyzers belongs to a subquery.
         public boolean containsSubquery = false;
 
         // all registered conjuncts (map from id to Predicate)
         private final Map<ExprId, Expr> conjuncts = Maps.newHashMap();
-
-        // all registered conjuncts bound by a single tuple id; used in getBoundPredicates()
-        public final ArrayList<ExprId> singleTidConjuncts = Lists.newArrayList();
 
         // eqJoinConjuncts[tid] contains all conjuncts of the form
         // "<lhs> = <rhs>" in which either lhs or rhs is fully bound by tid
@@ -266,8 +248,6 @@ public class Analyzer {
         // Expr rewriter for normalizing and rewriting expressions.
         private final ExprRewriter exprRewriter_;
 
-        private final ExprRewriter mvExprRewriter;
-
         public GlobalState(Catalog catalog, ConnectContext context) {
             this.catalog = catalog;
             this.context = context;
@@ -280,18 +260,7 @@ public class Analyzer {
             // pushdown and Parquet row group pruning based on min/max statistics.
             rules.add(NormalizeBinaryPredicatesRule.INSTANCE);
             rules.add(ReplaceDateFormatRule.INSTANCE);
-            rules.add(FoldConstantsRule.INSTANCE);
             exprRewriter_ = new ExprRewriter(rules);
-            // init mv rewriter
-            List<ExprRewriteRule> mvRewriteRules = Lists.newArrayList();
-            mvRewriteRules.add(ToBitmapToSlotRefRule.INSTANCE);
-            mvRewriteRules.add(CountDistinctToBitmapOrHLLRule.INSTANCE);
-            mvRewriteRules.add(CountDistinctToBitmap.INSTANCE);
-            mvRewriteRules.add(NDVToHll.INSTANCE);
-            mvRewriteRules.add(HLLHashToSlotRefRule.INSTANCE);
-            mvRewriteRules.add(CountFieldToSum.INSTANCE);
-            mvRewriteRules.add(PercentileApproxToUnionRule.INSTANCE);
-            mvExprRewriter = new ExprRewriter(mvRewriteRules);
         }
     }
 
@@ -551,10 +520,6 @@ public class Analyzer {
         return globalState.exprRewriter_;
     }
 
-    public ExprRewriter getMVExprRewriter() {
-        return globalState.mvExprRewriter;
-    }
-
     /**
      * Return descriptor of registered table/alias.
      *
@@ -789,12 +754,6 @@ public class Analyzer {
         }
     }
 
-    public void registerConjuncts(List<Expr> l, TupleId tupleId) throws AnalysisException {
-        final List<TupleId> tupleIds = Lists.newArrayList();
-        tupleIds.add(tupleId);
-        registerConjuncts(l, tupleIds);
-    }
-
     // register all conjuncts and handle constant conjuncts with ids
     public void registerConjuncts(List<Expr> l, List<TupleId> ids) throws AnalysisException {
         for (Expr e : l) {
@@ -915,35 +874,6 @@ public class Analyzer {
                 binaryPred.setIsEqJoinConjunct(true);
             }
         }
-    }
-
-    /**
-     * Create and register an auxiliary predicate to express an equivalence
-     * between two exprs (BinaryPredicate with EQ); this predicate does not need
-     * to be assigned, but it's used for equivalence class computation. Does
-     * nothing if the lhs or rhs expr are NULL. Registering an equivalence with
-     * NULL would be incorrect, because <expr> = NULL is false (even NULL =
-     * NULL).
-     */
-    public void createAuxEquivPredicate(Expr lhs, Expr rhs) {
-        // Check the expr type as well as the class because NullLiteral could
-        // have been
-        // implicitly cast to a type different than NULL.
-        if (lhs instanceof NullLiteral || rhs instanceof NullLiteral
-                || lhs.getType().isNull() || rhs.getType().isNull()) {
-            return;
-        }
-        // create an eq predicate between lhs and rhs
-        BinaryPredicate p = new BinaryPredicate(BinaryPredicate.Operator.EQ, lhs, rhs);
-        p.setIsAuxExpr();
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("register equiv predicate: " + p.toSql() + " " + p.debugString());
-        }
-        registerConjunct(p);
-    }
-
-    public List<Expr> getUnassignedConjuncts(PlanNode node) {
-        return getUnassignedConjuncts(node.getTupleIds());
     }
 
     /**
@@ -1255,10 +1185,6 @@ public class Analyzer {
 
     public boolean isFullOuterJoined(Expr e) {
         return globalState.fullOuterJoinedConjuncts.containsKey(e.getId());
-    }
-
-    public TableRef getOjRef(Expr e) {
-        return globalState.ojClauseByConjunct.get(e.getId());
     }
 
     /**
