@@ -158,10 +158,9 @@ static void plan_read_by_rssid(const vector<uint64_t>& rowids, size_t* num_defau
         }
     }
     *num_default = defaults.size();
-    bool has_default = num_default > 0;
     idxes->resize(rowids.size());
     size_t ridx = 0;
-    if (has_default) {
+    if (defaults.size() > 0) {
         // set defaults idxes to 0
         for (uint32_t e : defaults) {
             (*idxes)[e] = ridx;
