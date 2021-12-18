@@ -248,7 +248,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
             }
         } else if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (rightOutputColumns.containsAll(p.getUsedColumns()) && canEliminateNull(rightOutputColumns, p.clone())) {
+                if (rightOutputColumns.contains(p.getUsedColumns()) && canEliminateNull(rightOutputColumns, p.clone())) {
                     rightPushDown.add(p);
                 }
             }
@@ -260,7 +260,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (leftOutputColumns.containsAll(p.getUsedColumns()) && canEliminateNull(leftOutputColumns, p.clone())) {
+                if (leftOutputColumns.contains(p.getUsedColumns()) && canEliminateNull(leftOutputColumns, p.clone())) {
                     leftPushDown.add(p);
                 }
             }
