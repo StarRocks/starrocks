@@ -53,20 +53,25 @@ void PipelineDriverPoller::run_internal() {
         while (driver_it != local_blocked_drivers.end()) {
             auto* driver = *driver_it;
 
-            if (driver->pending_finish() && !driver->is_still_pending_finish()) {
-                // driver->pending_finish() return true means that when a driver's sink operator is finished,
-                // but its source operator still has pending io task that executed in io threads and has
-                // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
-                // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
-                // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
-                // FragmentContext is unregistered prematurely.
-                driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
-                                                                               : DriverState::FINISH);
-                remove_blocked_driver(local_blocked_drivers, driver_it);
-                ready_drivers.emplace_back(driver);
+            if (driver->pending_finish()) {
+                if (driver->is_still_pending_finish()) {
+                    ++driver_it;
+                } else {
+                    // driver->pending_finish() return true means that when a driver's sink operator is finished,
+                    // but its source operator still has pending io task that executed in io threads and has
+                    // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
+                    // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
+                    // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
+                    // FragmentContext is unregistered prematurely.
+                    driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                                   : DriverState::FINISH);
+                    remove_blocked_driver(local_blocked_drivers, driver_it);
+                    ready_drivers.emplace_back(driver);
+                }
             } else if (driver->is_finished()) {
                 remove_blocked_driver(local_blocked_drivers, driver_it);
-            } else if (!driver->pending_finish() && driver->query_ctx()->is_expired()) {
+                ready_drivers.emplace_back(driver);
+            } else if (driver->query_ctx()->is_expired()) {
                 // there are not any drivers belonging to a query context can make progress for an expiration period
                 // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                 // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
@@ -84,7 +89,7 @@ void PipelineDriverPoller::run_internal() {
                     remove_blocked_driver(local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
                 }
-            } else if (!driver->pending_finish() && driver->fragment_ctx()->is_canceled()) {
+            } else if (driver->fragment_ctx()->is_canceled()) {
                 // If the fragment is cancelled when the source operator is already pending i/o task,
                 // The state of driver shouldn't be changed.
                 driver->cancel_operators(driver->fragment_ctx()->runtime_state());

@@ -138,7 +138,8 @@ size_t Chunk::serialize_size() const {
     return size;
 }
 
-void Chunk::serialize(uint8_t* dst) const {
+size_t Chunk::serialize(uint8_t* dst) const {
+    uint8_t* head = dst;
     uint32_t version = 1;
     encode_fixed32_le(dst, version);
     dst += sizeof(uint32_t);
@@ -149,6 +150,7 @@ void Chunk::serialize(uint8_t* dst) const {
     for (const auto& column : _columns) {
         dst = column->serialize_column(dst);
     }
+    return dst - head;
 }
 
 size_t Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
@@ -182,15 +184,17 @@ size_t Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
 
     size_t size = serialize_size();
     chunk->mutable_data()->resize(size);
-    serialize((uint8_t*)chunk->mutable_data()->data());
+    size_t written_size = serialize((uint8_t*)chunk->mutable_data()->data());
+    chunk->set_serialized_size(written_size);
     return size;
 }
 
-Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta) {
+Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta, size_t serialized_size) {
     _slot_id_to_index = meta.slot_id_to_index;
     _tuple_id_to_index = meta.tuple_id_to_index;
     _columns.resize(_slot_id_to_index.size() + _tuple_id_to_index.size());
 
+    const uint8_t* head = src;
     uint32_t version = decode_fixed32_le(src);
     DCHECK_EQ(version, 1);
     src += sizeof(uint32_t);
@@ -206,10 +210,23 @@ Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta
         src = column->deserialize_column(src);
     }
 
-    size_t except = serialize_size();
-    if (UNLIKELY(len != except)) {
-        return Status::InternalError(
-                strings::Substitute("deserialize chunk data failed. len: $0, except: $1", len, except));
+    // The logic is a bit confusing here.
+    // `len` and `expected` are both "estimated" serialized size. it could be larger than real serialized size.
+    // `serialized_size` and `read_size` are both "real" serialized size. it's exactly how much bytes are written into buffer.
+    // For some object column types like bitmap/hll/percentile, "estimated" and "real" are not always the same.
+    // And for bitmap, sometimes `len` and `expected` are different. So to fix that problem, we fallback to compare "real" serialized size.
+
+    // We compare "real" serialized size first. It may fails because of backward compatibility. For old version of BE,
+    // there is no "serialized_size" this field(which means the value is zero), and we fallback to compare "estimated" serialized size.
+    // And for new version of BE, the "real" serialized size always matches, and we can save the cost of calling `serialzied_size`.
+    size_t read_size = src - head;
+    if (UNLIKELY(read_size != serialized_size)) {
+        size_t expected = serialize_size();
+        if (UNLIKELY(len != expected)) {
+            return Status::InternalError(strings::Substitute(
+                    "deserialize chunk data failed. len: $0, expected: $1, ser_size: $2, deser_size: $3", len, expected,
+                    serialized_size, read_size));
+        }
     }
     DCHECK_EQ(rows, num_rows());
     return Status::OK();
