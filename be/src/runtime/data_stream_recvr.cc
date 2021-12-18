@@ -413,6 +413,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
 
     const int32_t be_number = request.be_number();
     const int32_t sequence = request.sequence();
+    bool use_pass_through = request.use_pass_through();
 
     {
         std::unique_lock<std::mutex> l(_lock);
@@ -446,7 +447,10 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
             DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
             return Status::OK();
         }
-        if (_chunk_meta.types.empty()) {
+        // We only need to build chunk meta on first chunk and not use_pass_through
+        // By using pass through, chunks are trasmitted in shared memory without ser/deser
+        // So there is no need to build chunk meta.
+        if (_chunk_meta.types.empty() && !use_pass_through) {
             SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
             auto& pchunk = request.chunks(0);
             RETURN_IF_ERROR(_build_chunk_meta(pchunk));
@@ -456,19 +460,35 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
-    for (auto& pchunk : request.chunks()) {
-        int64_t chunk_bytes = pchunk.data().size();
-        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
-        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+    if (use_pass_through) {
+        ChunkUniquePtrVector swap_chunks;
+        std::vector<size_t> swap_bytes;
+        _recvr->_pass_through_context.pull_chunks(&swap_chunks, &swap_bytes);
+        DCHECK(swap_chunks.size() == swap_bytes.size());
+        size_t bytes = 0;
+        for (size_t i = 0; i < swap_chunks.size(); i++) {
+            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), std::move(swap_chunks[i]), nullptr};
+            local_chunk_queue.emplace_back(std::move(item));
+            bytes += swap_bytes[i];
+        }
+        total_chunk_bytes += bytes;
+        COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
+    } else {
+        for (auto& pchunk : request.chunks()) {
+            int64_t chunk_bytes = pchunk.data().size();
+            ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
-        // TODO(zc): review this chunk_bytes
-        local_chunk_queue.emplace_back(std::move(item));
+            ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
 
-        total_chunk_bytes += chunk_bytes;
+            // TODO(zc): review this chunk_bytes
+            local_chunk_queue.emplace_back(std::move(item));
+
+            total_chunk_bytes += chunk_bytes;
+        }
+        COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
     }
-    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
 
     wait_timer.start();
     {
