@@ -107,8 +107,6 @@ public:
 
     static void parse_json_paths(const std::string& path_strings, std::vector<JsonPath>* parsed_paths);
 
-    static Status minify_json_to_string(simdjson::ondemand::value& val, std::unique_ptr<char[]>& buf, size_t& buflen);
-
 private:
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths);
 
