@@ -21,10 +21,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.rewrite.ExprRewriter;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -100,19 +98,6 @@ public class SqlModeTest {
         Expr expr = parsedStmt.getSelectList().getItems().get(0).getExpr();
         if (!(expr.contains(FunctionCallExpr.class))) {
             Assert.fail("Mode not working");
-        }
-
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
-        try {
-            parsedStmt.analyze(analyzer);
-            ExprRewriter rewriter = analyzer.getExprRewriter();
-            rewriter.reset();
-            parsedStmt.rewriteExprs(rewriter);
-
-            Expr result = parsedStmt.getSelectList().getItems().get(0).getExpr();
-            Assert.assertEquals(Expr.IS_NULL_LITERAL.apply(result), true);
-        } catch (UserException e) {
-            Assert.fail(e.getMessage());
         }
     }
 }
