@@ -119,10 +119,10 @@ public:
     //     ...
     //     column n data
     // Note: You should ensure the dst buffer size is enough
-    void serialize(uint8_t* dst) const;
+    size_t serialize(uint8_t* dst) const;
 
     // Deserialize chunk by |src| (chunk data) and |meta| (chunk meta)
-    Status deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta);
+    Status deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta, size_t serialized_size);
 
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     // not clone tuple column
