@@ -461,8 +461,6 @@ set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
     ${WL_START_GROUP}
     rocksdb
-    librdkafka_cpp
-    librdkafka
     libs2
     snappy
     ${Boost_LIBRARIES}
@@ -471,6 +469,8 @@ set(STARROCKS_DEPENDENCIES
     glog
     re2
     pprof
+    # Put lz4 in front of librdkafka to make sure that segment use the native lz4 library to compress/decompress page
+    # Otherwise, he will use the lz4 Library in librdkafka
     lz4
     libevent
     curl
@@ -497,6 +497,8 @@ set(STARROCKS_DEPENDENCIES
     ryu
     hyperscan
     simdjson
+    librdkafka_cpp
+    librdkafka
     ${WL_END_GROUP}
 )
 
