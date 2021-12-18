@@ -411,7 +411,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableColumnExprPredicate = false;
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH)
-    private boolean enableExchangePassThrough = false;
+    private boolean enableExchangePassThrough = true;
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
