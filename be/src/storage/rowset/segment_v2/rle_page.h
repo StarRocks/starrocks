@@ -25,6 +25,7 @@
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
+#include "storage/vectorized/range.h"
 #include "util/coding.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
@@ -213,21 +214,37 @@ public:
     }
 
     Status next_batch(size_t* n, vectorized::Column* dst) override {
+        vectorized::SparseRange read_range;
+        size_t begin = current_index();
+        read_range.add(vectorized::Range(begin, begin + *n));
+        RETURN_IF_ERROR(next_batch(read_range, dst));
+        *n = current_index() - begin;
+        return Status::OK();
+    }
+
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override {
         DCHECK(_parsed);
         if (PREDICT_FALSE(_cur_index >= _num_elements)) {
-            *n = 0;
             return Status::OK();
         }
         CppType value{};
-        *n = std::min(*n, static_cast<size_t>(_num_elements - _cur_index));
-        for (size_t i = 0; i < *n; i++) {
-            if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {
-                return Status::Corruption("RLE decode failed");
+
+        size_t to_read =
+                std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
+        vectorized::SparseRangeIterator iter = range.new_iterator();
+        while (to_read > 0) {
+            seek_to_position_in_page(iter.begin());
+            vectorized::Range r = iter.next(to_read);
+            for (size_t i = 0; i < r.span_size(); ++i) {
+                if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {
+                    return Status::Corruption("RLE decode failed");
+                }
+                [[maybe_unused]] int p = dst->append_numbers(&value, sizeof(value));
+                DCHECK_EQ(1, p);
             }
-            [[maybe_unused]] int r = dst->append_numbers(&value, sizeof(value));
-            DCHECK_EQ(1, r);
+            _cur_index += r.span_size();
+            to_read -= r.span_size();
         }
-        _cur_index += *n;
         return Status::OK();
     }
 
