@@ -30,7 +30,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rewrite.ExprRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,7 +38,6 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Abstract base class for any statement that returns results
@@ -261,15 +259,16 @@ public abstract class QueryStmt extends StatementBase {
     }
 
     protected Expr rewriteQueryExprByMvColumnExpr(Expr expr, Analyzer analyzer) throws AnalysisException {
-        if (forbiddenMVRewrite) {
-            return expr;
-        }
-        if (expr.isBoundByTupleIds(disableTuplesMVRewriter.stream().collect(Collectors.toList()))) {
-            return expr;
-        }
-        ExprRewriter rewriter = analyzer.getMVExprRewriter();
-        rewriter.reset();
-        return rewriter.rewrite(expr, analyzer);
+        return expr;
+//        if (forbiddenMVRewrite) {
+//            return expr;
+//        }
+//        if (expr.isBoundByTupleIds(new ArrayList<>(disableTuplesMVRewriter))) {
+//            return expr;
+//        }
+//        ExprRewriter rewriter = analyzer.getMVExprRewriter();
+//        rewriter.reset();
+//        return rewriter.rewrite(expr, analyzer);
     }
 
     /**

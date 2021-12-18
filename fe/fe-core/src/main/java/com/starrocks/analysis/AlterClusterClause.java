@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import org.apache.commons.lang.NotImplementedException;
@@ -47,20 +46,7 @@ public class AlterClusterClause extends AlterClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Config.disable_cluster_feature) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "ALTER CLUSTER");
-        }
-
-        if (properties == null || properties.size() == 0) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_PARAMETER);
-        }
-
-        if (!properties.containsKey(CreateClusterStmt.CLUSTER_INSTANCE_NUM)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_INSTANCE_NUM);
-        }
-
-        instanceNum = Integer.parseInt(properties.get(CreateClusterStmt.CLUSTER_INSTANCE_NUM));
-        password = properties.get(CreateClusterStmt.CLUSTER_SUPERMAN_PASSWORD);
+        ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "ALTER CLUSTER");
     }
 
     @Override
