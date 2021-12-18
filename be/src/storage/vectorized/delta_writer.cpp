@@ -297,6 +297,7 @@ Status DeltaWriter::commit() {
     if (!_state.compare_exchange_strong(curr_state, kCommitted, std::memory_order_acq_rel)) {
         return Status::InternalError("delta writer has been aborted");
     }
+    LOG(INFO) << "Closed delta writer. tablet_id=" << _tablet->tablet_id();
     return Status::OK();
 }
 
