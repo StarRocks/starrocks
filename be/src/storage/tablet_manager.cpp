@@ -914,7 +914,7 @@ Status TabletManager::start_trash_sweep() {
             LOG(INFO) << ((info.flag == kMoveFilesToTrash) ? "Moved " : " Removed ") << tablet->tablet_id_path();
         } else {
             remove_meta = false;
-            LOG(WARNING) << "Fail to move " << tablet->tablet_id_path() << " to trash:" << st;
+            LOG(WARNING) << "Fail to remove or move " << tablet->tablet_id_path() << " :" << st;
         }
 
         if (remove_meta) {
