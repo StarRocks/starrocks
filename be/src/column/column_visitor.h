@@ -44,7 +44,7 @@ public:
     virtual Status visit(const vectorized::FixedLengthColumn<uint24_t>& column);
     virtual Status visit(const vectorized::FixedLengthColumn<decimal12_t>& column);
 
-    // NOTE: Inherited classes normally does not need to implement the following methods, they are
+    // NOTE: Inherited classes normally don't need to implement the following methods, they are
     // defined here mainly for successful compiling.
     virtual Status visit(const vectorized::FixedLengthColumnBase<int8_t>& column);
     virtual Status visit(const vectorized::FixedLengthColumnBase<uint8_t>& column);
