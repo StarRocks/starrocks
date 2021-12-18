@@ -322,7 +322,7 @@ public class ReplayFromDumpTest {
     public void testJoinWithPipelineDop() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("24:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("25:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
     }
 }
