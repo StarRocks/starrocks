@@ -187,7 +187,16 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
     bool is_merging = _analytic_partition_exprs.empty();
 
-    auto sort_context_factory = std::make_shared<SortContextFactory>(is_merging, _limit, _is_asc_order, _is_null_first);
+    if (!is_merging) {
+        // prepend local shuffle to PartitionSortSinkOperator
+        operators_sink_with_sort =
+                context->maybe_interpolate_local_shuffle_exchange(operators_sink_with_sort, _analytic_partition_exprs);
+    }
+
+    auto degree_of_parallelism =
+            down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
+    auto sort_context_factory = std::make_shared<SortContextFactory>(is_merging, _limit, degree_of_parallelism,
+                                                                     _is_asc_order, _is_null_first);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
@@ -204,24 +213,16 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(local_merge_sort_source_operator.get(), context, rc_rf_probe_collector);
 
+    operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
+    context->add_pipeline(operators_sink_with_sort);
     if (is_merging) {
-        operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
-        context->add_pipeline(operators_sink_with_sort);
         // local_merge_sort_source_operator's instance count must be 1
         local_merge_sort_source_operator->set_degree_of_parallelism(1);
-        operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
     } else {
-        // prepend local shuffle to PartitionSortSinkOperator
-        operators_sink_with_sort =
-                context->maybe_interpolate_local_shuffle_exchange(operators_sink_with_sort, _analytic_partition_exprs);
-        operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
-        context->add_pipeline(operators_sink_with_sort);
         // Each PartitionSortSinkOperator has an independent LocalMergeSortSinkOperator respectively
-        auto degree_of_parallelism =
-                down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
         local_merge_sort_source_operator->set_degree_of_parallelism(degree_of_parallelism);
-        operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
     }
+    operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
 
     return operators_source_with_sort;
 }

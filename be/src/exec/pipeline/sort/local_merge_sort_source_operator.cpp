@@ -38,7 +38,7 @@ bool LocalMergeSortSourceOperator::is_finished() const {
     return _sort_context->is_partition_sort_finished() && _sort_context->is_output_finished();
 }
 OperatorPtr LocalMergeSortSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    auto sort_context = _sort_context_factory->create(degree_of_parallelism, driver_sequence);
+    auto sort_context = _sort_context_factory->create(driver_sequence);
     return std::make_shared<LocalMergeSortSourceOperator>(this, _id, _plan_node_id, sort_context.get());
 }
 
