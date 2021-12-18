@@ -5121,4 +5121,40 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("6:Project\n" +
                 "  |  <slot 2> : 2: v2"));
     }
+
+    @Test
+    public void testSelectConstantFormJoin() throws Exception {
+        String sql = "SELECT \n" +
+                "  * \n" +
+                "from \n" +
+                "  (\n" +
+                "    select \n" +
+                "      ref_0.t1c as c5, \n" +
+                "      37 as c6 \n" +
+                "    from \n" +
+                "      test_all_type as ref_0 \n" +
+                "      inner join test_all_type as ref_1 on (\n" +
+                "        ref_0.t1f = ref_1.t1f\n" +
+                "      ) \n" +
+                "    where \n" +
+                "      ref_0.t1c <> ref_0.t1c\n" +
+                "  ) as subq_0 \n" +
+                "  inner join part as ref_2 on (subq_0.c5 = ref_2.P_PARTKEY) \n" +
+                "  inner join supplier as ref_3 on (subq_0.c5 = ref_3.S_SUPPKEY) \n" +
+                "where \n" +
+                "  (\n" +
+                "    (ref_3.S_NAME > ref_2.P_TYPE) \n" +
+                "    and (true)\n" +
+                "  ) \n" +
+                "  and (\n" +
+                "    (subq_0.c6 = ref_3.S_NATIONKEY) \n" +
+                "    and (true)\n" +
+                "  ) \n" +
+                "limit \n" +
+                "  45;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("6:Project\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 40> : CAST(37 AS INT)"));
+    }
 }
