@@ -197,6 +197,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
             size_t chunk_size = chunk->serialize_size();
             _pass_through_context.append_chunk(chunk, chunk_size);
             _current_request_bytes += chunk_size;
+            COUNTER_UPDATE(_parent->_pass_through_bytes_counter, chunk_size);
         } else {
             auto pchunk = _chunk_request->add_chunks();
             RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
@@ -330,6 +331,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_sent_counter = ADD_COUNTER(_runtime_profile, "BytesSent", TUnit::BYTES);
+    _pass_through_bytes_counter = ADD_COUNTER(_runtime_profile, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_runtime_profile, "UncompressedBytes", TUnit::BYTES);
     _ignore_rows = ADD_COUNTER(_runtime_profile, "IgnoreRows", TUnit::UNIT);
     _serialize_batch_timer = ADD_TIMER(_runtime_profile, "SerializeBatchTime");

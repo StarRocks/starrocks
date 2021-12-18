@@ -19,9 +19,11 @@ public:
     }
 
     void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
-        std::unique_lock l(_mutex);
-        chunks->swap(_buffer);
-        bytes->swap(_bytes);
+        {
+            std::unique_lock l(_mutex);
+            chunks->swap(_buffer);
+            bytes->swap(_bytes);
+        }
     }
 
 private:
