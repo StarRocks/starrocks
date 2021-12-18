@@ -2,6 +2,7 @@
 
 #include "exprs/vectorized/time_functions.h"
 
+#include "column/column_helper.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
 #include "runtime/runtime_state.h"
@@ -1253,9 +1254,11 @@ ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
     ColumnBuilder<TYPE_VARCHAR> builder;
     ColumnViewer<Type> viewer(cols[0]);
 
-    builder.data_column()->reserve(viewer.size(), viewer.size() * patten_size);
+    size_t num_rows = viewer.size();
 
-    for (int i = 0; i < viewer.size(); ++i) {
+    builder.data_column()->reserve(num_rows, num_rows * patten_size);
+
+    for (int i = 0; i < num_rows; ++i) {
         if (viewer.is_null(i)) {
             builder.append_null();
             continue;
@@ -1264,7 +1267,7 @@ ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
         builder.append(OP::template apply<RunTimeCppType<Type>, RunTimeCppType<TYPE_VARCHAR>>(viewer.value(i)));
     }
 
-    return builder.build(cols[0]->is_constant());
+    return builder.build(ColumnHelper::is_all_const(cols));
 }
 
 std::string format_for_yyyyMMdd(const DateValue& date_value) {
@@ -1454,13 +1457,14 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
     if (fc != nullptr && fc->is_valid) {
         return do_format<TYPE_DATETIME>(fc, columns);
     } else {
+        size_t num_rows = columns[0]->size();
         ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<TYPE_DATETIME> viewer_date(columns[0]);
         ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
 
         builder.reserve(columns[0]->size());
 
-        for (int i = 0; i < viewer_date.size(); ++i) {
+        for (int i = 0; i < num_rows; ++i) {
             if (viewer_date.is_null(i)) {
                 builder.append_null();
                 continue;
@@ -1469,7 +1473,7 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
             common_format_process(&viewer_date, &viewer_format, &builder, i);
         }
 
-        return builder.build(columns[0]->is_constant());
+        return builder.build(ColumnHelper::is_all_const(columns));
     }
 }
 
@@ -1482,13 +1486,14 @@ ColumnPtr TimeFunctions::date_format(FunctionContext* context, const Columns& co
     if (fc != nullptr && fc->is_valid) {
         return do_format<TYPE_DATE>(fc, columns);
     } else {
+        int num_rows = columns[0]->size();
         ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<TYPE_DATE> viewer_date(columns[0]);
         ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
 
         builder.reserve(columns[0]->size());
 
-        for (int i = 0; i < viewer_date.size(); ++i) {
+        for (int i = 0; i < num_rows; ++i) {
             if (viewer_date.is_null(i)) {
                 builder.append_null();
                 continue;
@@ -1497,7 +1502,7 @@ ColumnPtr TimeFunctions::date_format(FunctionContext* context, const Columns& co
             common_format_process(&viewer_date, &viewer_format, &builder, i);
         }
 
-        return builder.build(columns[0]->is_constant());
+        return builder.build(ColumnHelper::is_all_const(columns));
     }
 }
 
