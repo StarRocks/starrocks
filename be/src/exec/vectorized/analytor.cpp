@@ -338,22 +338,17 @@ void Analytor::get_window_function_result(int32_t start, int32_t end) {
     }
 }
 
-bool Analytor::is_partition_finished(int64_t found_partition_end) {
-    // current partition data don't consume finished
-    if (_input_eos | (_current_row_position < _partition_end)) {
+bool Analytor::is_partition_finished() {
+    if (_input_eos) {
         return true;
     }
 
-    // no partition or hasn't fecth one chunk
-    if ((_partition_ctxs.empty() & !_input_eos) | (found_partition_end == 0)) {
+    // No partition or hasn't fecth one chunk
+    if (_partition_ctxs.empty() || _partition_end == 0) {
         return false;
     }
 
-    // partition end not found
-    if (!_partition_ctxs.empty() && found_partition_end == _partition_columns[0]->size() && !_input_eos) {
-        return false;
-    }
-    return true;
+    return _current_row_position >= _partition_end;
 }
 
 Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
@@ -429,7 +424,7 @@ void Analytor::append_column(size_t chunk_size, vectorized::Column* dst_column, 
 }
 
 bool Analytor::is_new_partition(int64_t found_partition_end) {
-    // _current_row_position >= _partition_end : current partition data has consumed finished
+    // _current_row_position >= _partition_end : current partition data has been processed
     // _partition_end == 0 : the first partition
     return ((_current_row_position >= _partition_end) &
             ((_partition_end == 0) | (_partition_end != found_partition_end)));
@@ -445,7 +440,7 @@ int64_t Analytor::find_partition_end() {
         return _partition_end;
     }
 
-    if (_partition_columns.empty() | (_input_rows == 0)) {
+    if (_partition_columns.empty() || _input_rows == 0) {
         return _input_rows;
     }
 
