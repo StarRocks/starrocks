@@ -5157,4 +5157,47 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  <slot 3> : 3: t1c\n" +
                 "  |  <slot 40> : CAST(37 AS INT)"));
     }
+
+    @Test
+    public void testPushDownEquivalenceDerivePredicate() throws Exception {
+        // check is null predicate on t1.v5 which equivalences derive from t1.v4 can not push down to scan node
+        String sql = "SELECT \n" +
+                "  subt0.v2, \n" +
+                "  t1.v6\n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t0.v1, \n" +
+                "      t0.v2, \n" +
+                "      t0.v3\n" +
+                "    FROM \n" +
+                "      t0\n" +
+                "  ) subt0 \n" +
+                "  LEFT JOIN t1 ON subt0.v3 = t1.v4 \n" +
+                "  AND subt0.v3 = t1.v4 \n" +
+                "  AND subt0.v3 = t1.v5 \n" +
+                "  AND subt0.v3 >= t1.v5 \n" +
+                "WHERE \n" +
+                "  (\n" +
+                "    (\n" +
+                "      (t1.v4) < (\n" +
+                "        (\n" +
+                "          (-650850438)-(\n" +
+                "            (\n" +
+                "              (2000266938)%(-1243652117)\n" +
+                "            )\n" +
+                "          )\n" +
+                "        )\n" +
+                "      )\n" +
+                "    ) IS NULL\n" +
+                "  ) \n" +
+                "GROUP BY \n" +
+                " subt0.v2, \n" +
+                "  t1.v6;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 0:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1"));
+    }
 }
