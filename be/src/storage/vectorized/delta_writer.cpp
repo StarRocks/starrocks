@@ -190,15 +190,13 @@ Status DeltaWriter::_init() {
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
     Status st;
-    switch (_get_state()) {
+    auto state = _get_state();
+    switch (state) {
     case kUninitialized:
-        return Status::InternalError("cannot write delta writer in kUninitialized state");
     case kCommitted:
-        return Status::InternalError("cannot write delta writer in kCommitted state");
     case kAborted:
-        return Status::InternalError("cannot write delta writer in kAborted state");
     case kClosed:
-        return Status::InternalError("cannot write delta writer in kClosed state");
+        return Status::InternalError(fmt::format("cannot write delta writer in {} state", _state_name(state)));
     case kWriting:
         bool full = _mem_table->insert(chunk, indexes, from, size);
         if (_mem_tracker->limit_exceeded()) {
@@ -223,15 +221,13 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
 Status DeltaWriter::close() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
     Status st;
-    switch (_get_state()) {
+    auto state = _get_state();
+    switch (state) {
     case kUninitialized:
-        return Status::InternalError("cannot close delta writer in kUninitialized state");
     case kCommitted:
-        return Status::InternalError("cannot close delta writer in kCommitted state");
     case kAborted:
-        return Status::InternalError("cannot close delta writer in kAborted state");
     case kClosed:
-        return Status::InternalError("cannot close delta writer in kClosed state");
+        return Status::InternalError(fmt::format("cannot close delta writer in {} state", _state_name(state)));
     case kWriting:
         st = _flush_memtable_async();
         _set_state(st.ok() ? kClosed : kAborted);
@@ -260,13 +256,12 @@ void DeltaWriter::_reset_mem_table() {
 
 Status DeltaWriter::commit() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
-    switch (_get_state()) {
+    auto state = _get_state();
+    switch (state) {
     case kUninitialized:
-        return Status::InternalError("cannot commit delta writer in kUninitialized state");
     case kAborted:
-        return Status::InternalError("cannot commit delta writer in kAborted state");
     case kWriting:
-        return Status::InternalError("cannot commit delta writer in kWriting state");
+        return Status::InternalError(fmt::format("cannot commit delta writer in {} state", _state_name(state)));
     case kCommitted:
         return Status::OK();
     case kClosed:
@@ -311,6 +306,22 @@ void DeltaWriter::abort() {
 
 int64_t DeltaWriter::partition_id() const {
     return _opt.partition_id;
+}
+
+const char* DeltaWriter::_state_name(State state) const {
+    switch (state) {
+    case kUninitialized:
+        return "kUninitialized";
+    case kAborted:
+        return "kAborted";
+    case kWriting:
+        return "kWriting";
+    case kCommitted:
+        return "kCommitted";
+    case kClosed:
+        return "kClosed";
+    }
+    return "";
 }
 
 } // namespace starrocks::vectorized

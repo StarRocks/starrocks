@@ -100,6 +100,7 @@ private:
     Status _init();
     Status _flush_memtable_async();
     Status _flush_memtable();
+    const char* _state_name(State state) const;
 
     void _garbage_collection();
 

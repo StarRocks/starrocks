@@ -76,13 +76,6 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
 
 Status LoadChannelMgr::open(const PTabletWriterOpenRequest& params) {
     UniqueId load_id(params.id());
-    int64_t mem_limit_in_req = params.has_load_mem_limit() ? params.load_mem_limit() : -1;
-    int64_t job_max_memory = calc_job_max_load_memory(mem_limit_in_req, _mem_tracker->limit());
-
-    int64_t timeout_in_req_s = params.has_load_channel_timeout_s() ? params.load_channel_timeout_s() : -1;
-    int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
-    auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
-
     std::shared_ptr<LoadChannel> channel;
     {
         std::lock_guard<std::mutex> l(_lock);
@@ -90,6 +83,13 @@ Status LoadChannelMgr::open(const PTabletWriterOpenRequest& params) {
         if (it != _load_channels.end()) {
             channel = it->second;
         } else {
+            int64_t mem_limit_in_req = params.has_load_mem_limit() ? params.load_mem_limit() : -1;
+            int64_t job_max_memory = calc_job_max_load_memory(mem_limit_in_req, _mem_tracker->limit());
+
+            int64_t timeout_in_req_s = params.has_load_channel_timeout_s() ? params.load_channel_timeout_s() : -1;
+            int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
+            auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
+
             channel.reset(new LoadChannel(load_id, job_timeout_s, std::move(job_mem_tracker)));
             _load_channels.insert({load_id, channel});
         }
