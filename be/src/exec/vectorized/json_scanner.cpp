@@ -28,7 +28,7 @@
 
 namespace starrocks::vectorized {
 
-const int64_t MAX_ERROR_LINES_IN_FILE = 10;
+const int64_t MAX_ERROR_LINES_IN_FILE = 50;
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
