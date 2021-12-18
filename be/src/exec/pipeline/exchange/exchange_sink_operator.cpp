@@ -465,7 +465,8 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
             uncompressed_size = src->serialize_size();
             // TODO(kks): resize without initializing the new bytes
             dst->mutable_data()->resize(uncompressed_size);
-            src->serialize((uint8_t*)dst->mutable_data()->data());
+            size_t written_size = src->serialize((uint8_t*)dst->mutable_data()->data());
+            dst->set_serialized_size(written_size);
         }
     }
 
