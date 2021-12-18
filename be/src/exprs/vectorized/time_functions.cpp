@@ -1457,10 +1457,12 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
     if (fc != nullptr && fc->is_valid) {
         return do_format<TYPE_DATETIME>(fc, columns);
     } else {
-        size_t num_rows = columns[0]->size();
+        bool all_const = ColumnHelper::is_all_const(columns);
         ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<TYPE_DATETIME> viewer_date(columns[0]);
         ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
+
+        size_t num_rows = all_const ? viewer_date.size() : columns[0]->size();
 
         builder.reserve(columns[0]->size());
 
@@ -1473,7 +1475,7 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
             common_format_process(&viewer_date, &viewer_format, &builder, i);
         }
 
-        return builder.build(ColumnHelper::is_all_const(columns));
+        return builder.build(all_const);
     }
 }
 
