@@ -215,13 +215,19 @@ Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta
     // `serialized_size` and `read_size` are both "real" serialized size. it's exactly how much bytes are written into buffer.
     // For some object column types like bitmap/hll/percentile, "estimated" and "real" are not always the same.
     // And fr bitmap, sometimes `len` and `expected` are different. So to fix that problem, we fallback to compare "real" serialized size.
-    size_t read_size = src - head;
-    size_t expected = serialize_size();
 
-    if (UNLIKELY(len != expected && read_size != serialized_size)) {
-        return Status::InternalError(strings::Substitute(
-                "deserialize chunk data failed. len: $0, expected: $1, serialized_size: $2, deserialized_size: $3", len,
-                expected, serialized_size, read_size));
+    // kks gives a proposal, and I think it's a truly great idea.
+    // We compare "real" serialized size first. It may fails because of backward compatibility. For old version of BE,
+    // there is no "serialized_size" this field(which means the value is zero), and we fallback to compare "estimated" serialized size.
+    // And for new version of BE, the "real" serialized size always matches, and we can save the cost of calling `serialzied_size`.
+    size_t read_size = src - head;
+    if (UNLIKELY(read_size != serialized_size)) {
+        size_t expected = serialize_size();
+        if (UNLIKELY(len != expected)) {
+            return Status::InternalError(strings::Substitute(
+                    "deserialize chunk data failed. len: $0, expected: $1, ser_size: $2, deser_size: $3", len, expected,
+                    serialized_size, read_size));
+        }
     }
     DCHECK_EQ(rows, num_rows());
     return Status::OK();
