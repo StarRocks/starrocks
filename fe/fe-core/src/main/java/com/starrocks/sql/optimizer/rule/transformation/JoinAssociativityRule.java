@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
@@ -161,9 +162,6 @@ public class JoinAssociativityRule extends TransformationRule {
         HashMap<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
         HashMap<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         if (leftChildJoinProjection != null) {
-            // leftChildJoinProjection not only contains the projection from leftChild1 and leftChild2.
-            // but also contains the projection generated from left join, such like columnRef -> constant(20 -> "16")
-            // this projection is can put it leftExpression or rightExpression. we put it on the right here.
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChildJoinProjection.getColumnRefMap()
                     .entrySet()) {
                 if (!entry.getValue().isColumnRef() &&
@@ -172,10 +170,6 @@ public class JoinAssociativityRule extends TransformationRule {
                 } else if (!entry.getValue().isColumnRef() &&
                         leftChild1.getOutputColumns().containsAll(entry.getValue().getUsedColumns())) {
                     leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (!entry.getValue().isColumnRef()) {
-                    // because we put columnRef -> constant(20 -> "16") the rightExpression, the other projection like
-                    // columnRef ->columnRef (21 -> 20) also need to put to rightExpression.
-                    rightExpression.put(entry.getKey(), entry.getValue());
                 }
             }
         }
@@ -216,10 +210,16 @@ public class JoinAssociativityRule extends TransformationRule {
             } else {
                 expressionProject = Maps.newHashMap(leftChild1.getOp().getProjection().getColumnRefMap());
             }
-            expressionProject.putAll(leftExpression);
+            // Use leftChild1 projection to rewrite the leftExpression, it's like two project node merge.
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionProject);
+            Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap(expressionProject);
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftExpression.entrySet()) {
+                rewriteMap.put(entry.getKey(), entry.getValue().accept(rewriter, null));
+            }
+
             Operator.Builder builder = OperatorBuilderFactory.build(leftChild1.getOp());
             Operator newOp = builder.withOperator(leftChild1.getOp())
-                    .setProjection(new Projection(expressionProject)).build();
+                    .setProjection(new Projection(rewriteMap)).build();
             left = OptExpression.create(newOp, leftChild1.getInputs());
 
             //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
