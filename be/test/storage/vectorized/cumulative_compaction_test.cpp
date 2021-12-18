@@ -263,8 +263,8 @@ TEST_F(CumulativeCompactionTest, test_read_chunk_size) {
 
     // normal total memory footprint
     total_mem_footprint = 1073741824;
-    ASSERT_EQ(2001, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
-                                                    total_mem_footprint, source_num));
+    ASSERT_EQ(2001, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows, total_mem_footprint,
+                                                    source_num));
 
     // mem limit is 0
     mem_limit = 0;
