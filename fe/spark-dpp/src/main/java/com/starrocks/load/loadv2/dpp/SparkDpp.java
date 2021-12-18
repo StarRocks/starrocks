@@ -781,7 +781,7 @@ public final class SparkDpp implements java.io.Serializable {
 
     // This method is to keep the splitting consistent with broker load / mini load
     private String[] splitLine(String line, char sep) {
-        if (line == null || line.equals("")) {
+        if (line == null || line.isEmpty()) {
             return new String[0];
         }
         int index = 0;
@@ -1217,13 +1217,13 @@ public final class SparkDpp implements java.io.Serializable {
         String outputPath = etlJobConfig.getOutputPath();
         String resultFilePath = outputPath + "/" + DPP_RESULT_FILE;
         URI uri = new URI(outputPath);
-        FileSystem fs = FileSystem.get(uri, serializableHadoopConf.value());
         Path filePath = new Path(resultFilePath);
-        FSDataOutputStream outputStream = fs.create(filePath);
-        Gson gson = new Gson();
-        outputStream.write(gson.toJson(dppResult).getBytes());
-        outputStream.write('\n');
-        outputStream.close();
+        try (FileSystem fs = FileSystem.get(uri, serializableHadoopConf.value());
+                FSDataOutputStream outputStream = fs.create(filePath)) {
+            Gson gson = new Gson();
+            outputStream.write(gson.toJson(dppResult).getBytes());
+            outputStream.write('\n');
+        }
     }
 
     public void doDpp() throws Exception {
