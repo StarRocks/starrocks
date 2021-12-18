@@ -240,15 +240,27 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         ScalarOperator derivedPredicate = JoinPredicateUtils.equivalenceDerive(predicate, false);
         List<ScalarOperator> derivedPredicates = Utils.extractConjuncts(derivedPredicate);
 
-        if (join.getJoinType().isLeftOuterJoin() || join.getJoinType().isLeftSemiJoin()) {
+        if (join.getJoinType().isLeftSemiJoin()) {
             for (ScalarOperator p : derivedPredicates) {
                 if (rightOutputColumns.contains(p.getUsedColumns())) {
                     rightPushDown.add(p);
                 }
             }
-        } else if (join.getJoinType().isRightOuterJoin() || join.getJoinType().isRightSemiJoin()) {
+        } else if (join.getJoinType().isLeftOuterJoin()) {
+            for (ScalarOperator p : derivedPredicates) {
+                if (rightOutputColumns.containsAll(p.getUsedColumns()) && canEliminateNull(rightOutputColumns, p.clone())) {
+                    rightPushDown.add(p);
+                }
+            }
+        } else if (join.getJoinType().isRightSemiJoin()) {
             for (ScalarOperator p : derivedPredicates) {
                 if (leftOutputColumns.contains(p.getUsedColumns())) {
+                    leftPushDown.add(p);
+                }
+            }
+        } else if (join.getJoinType().isRightOuterJoin()) {
+            for (ScalarOperator p : derivedPredicates) {
+                if (leftOutputColumns.containsAll(p.getUsedColumns()) && canEliminateNull(leftOutputColumns, p.clone())) {
                     leftPushDown.add(p);
                 }
             }
