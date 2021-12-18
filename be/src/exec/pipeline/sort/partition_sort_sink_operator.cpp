@@ -73,7 +73,7 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t degree_of_paralleli
                                                                            &_is_asc_order, &_is_null_first,
                                                                            SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
-    auto sort_context = _sort_context_factory->create(driver_sequence);
+    auto sort_context = _sort_context_factory->create(degree_of_parallelism, driver_sequence);
 
     sort_context->add_partition_chunks_sorter(chunks_sorter);
     auto ope = std::make_shared<PartitionSortSinkOperator>(

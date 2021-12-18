@@ -238,10 +238,10 @@ class SortContextFactory;
 using SortContextFactoryPtr = std::shared_ptr<SortContextFactory>;
 class SortContextFactory {
 public:
-    SortContextFactory(bool is_merging, int64_t limit, int32_t num_right_sinkers,
-                       const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
+    SortContextFactory(bool is_merging, int64_t limit, const std::vector<bool>& _is_asc_order,
+                       const std::vector<bool>& is_null_first);
 
-    SortContextPtr create(int i);
+    SortContextPtr create(int32_t degree_of_parallelism, int32_t driver_sequence);
 
 private:
     // _is_merging is true means to merge multiple output streams of PartitionSortSinkOperators into a common
@@ -251,7 +251,6 @@ private:
     bool _is_merging;
     SortContexts _sort_contexts;
     int64_t _limit;
-    const int32_t _num_right_sinkers;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
 };
