@@ -121,5 +121,3 @@ Status set_config(const std::string& field, const std::string& value);
 
 } // namespace config
 } // namespace starrocks
-
-

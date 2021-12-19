@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#pragma once 
+#pragma once
 
 #include <mutex>
 #include <vector>
@@ -78,4 +78,3 @@ private:
 };
 
 } // namespace starrocks
-
