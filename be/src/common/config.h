@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_CONFIG_H
-#define STARROCKS_BE_SRC_COMMON_CONFIG_H
+#pragma once
 
 #include "configbase.h"
 
@@ -673,4 +672,4 @@ CONF_Bool(use_hdfs_pread, "true");
 
 } // namespace starrocks
 
-#endif // STARROCKS_BE_SRC_COMMON_CONFIG_H
+
