@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_COMMON_HDFS_H
-#define STARROCKS_BE_SRC_COMMON_COMMON_HDFS_H
-
+#pragma once
 // This is a wrapper around the hdfs header.  When we are compiling to IR,
 // we don't want to pull in the hdfs headers.  We only need the headers
 // for the typedefs which we will replicate here
@@ -32,4 +30,3 @@ typedef void* hdfsFile;
 #else
 #endif
 
-#endif

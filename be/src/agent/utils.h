@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_AGENT_UTILS_H
-#define STARROCKS_BE_SRC_AGENT_UTILS_H
+#pragma once
 
 #include "agent/status.h"
 #include "gen_cpp/FrontendService.h"
@@ -96,4 +95,3 @@ private:
 }; // class AgentUtils
 
 } // namespace starrocks
-#endif // STARROCKS_BE_SRC_AGENT_UTILS_H

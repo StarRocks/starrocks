@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_COMMON_GLOBAL_TYPES_H
-#define STARROCKS_BE_SRC_COMMON_COMMON_GLOBAL_TYPES_H
-
+#pragma once
 namespace starrocks {
 
 // for now, these are simply ints; if we find we need to generate ids in the
@@ -34,4 +32,5 @@ typedef int PlanNodeId;
 
 }; // namespace starrocks
 
-#endif
+
+
