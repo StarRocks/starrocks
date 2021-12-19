@@ -1462,6 +1462,8 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
         ColumnViewer<TYPE_DATETIME> viewer_date(columns[0]);
         ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
 
+        // all_const was true viewer_date.size() will return 1
+        // which could reduce unnecessary calculations
         size_t num_rows = all_const ? viewer_date.size() : columns[0]->size();
 
         builder.reserve(columns[0]->size());
