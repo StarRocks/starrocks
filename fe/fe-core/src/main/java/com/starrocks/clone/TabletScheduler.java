@@ -1029,7 +1029,7 @@ public class TabletScheduler extends MasterDaemon {
     }
 
     private void sendDeleteReplicaTask(long backendId, long tabletId, int schemaHash) {
-        DropReplicaTask task = new DropReplicaTask(backendId, tabletId, schemaHash);
+        DropReplicaTask task = new DropReplicaTask(backendId, tabletId, schemaHash, false);
         AgentBatchTask batchTask = new AgentBatchTask();
         batchTask.addTask(task);
         AgentTaskExecutor.submit(batchTask);
