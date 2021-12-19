@@ -226,8 +226,9 @@ Status DeltaWriter::close() {
     case kUninitialized:
     case kCommitted:
     case kAborted:
-    case kClosed:
         return Status::InternalError(fmt::format("cannot close delta writer in {} state", _state_name(state)));
+    case kClosed:
+        return Status::OK();
     case kWriting:
         st = _flush_memtable_async();
         _set_state(st.ok() ? kClosed : kAborted);
