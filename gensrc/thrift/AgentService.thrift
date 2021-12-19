@@ -79,6 +79,7 @@ struct TCreateTabletReq {
 struct TDropTabletReq {
     1: required Types.TTabletId tablet_id
     2: optional Types.TSchemaHash schema_hash
+    3: optional bool force
 }
 
 struct TAlterTabletReq {
