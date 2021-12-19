@@ -671,5 +671,3 @@ CONF_Bool(use_hdfs_pread, "true");
 } // namespace config
 
 } // namespace starrocks
-
-

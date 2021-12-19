@@ -72,4 +72,3 @@
 #else
 #define DIAGNOSTIC_IGNORE(XXX)
 #endif
-

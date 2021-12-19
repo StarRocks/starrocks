@@ -85,5 +85,3 @@ private:
 };
 
 } // end namespace starrocks
-
-

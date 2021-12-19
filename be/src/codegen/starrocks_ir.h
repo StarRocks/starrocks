@@ -34,4 +34,3 @@
 #define IR_NO_INLINE
 #define IR_ALWAYS_INLINE
 #endif
-
