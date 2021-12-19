@@ -29,4 +29,3 @@ typedef void* hdfsFS;
 typedef void* hdfsFile;
 #else
 #endif
-

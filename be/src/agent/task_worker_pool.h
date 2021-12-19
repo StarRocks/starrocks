@@ -149,4 +149,3 @@ private:
     const TaskWorkerPool& operator=(const TaskWorkerPool&) = delete;
 }; // class TaskWorkerPool
 } // namespace starrocks
-

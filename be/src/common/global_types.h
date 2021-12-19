@@ -31,6 +31,3 @@ typedef int TableId;
 typedef int PlanNodeId;
 
 }; // namespace starrocks
-
-
-

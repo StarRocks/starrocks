@@ -47,4 +47,3 @@ enum AgentStatus {
     STARROCKS_DISK_REACH_CAPACITY_LIMIT = -903,
 };
 } // namespace starrocks
-
