@@ -18,4 +18,5 @@ add_library(Column STATIC
         binary_column.cpp
         object_column.cpp
         decimalv3_column.cpp
+        column_visitor.cpp
         )
