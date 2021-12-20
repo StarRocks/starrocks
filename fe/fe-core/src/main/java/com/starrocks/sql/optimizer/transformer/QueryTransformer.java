@@ -54,12 +54,7 @@ class QueryTransformer {
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer,
                             Map<String, ExpressionMapping> cteContext) {
         OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
-        if (outer != null) {
-            List<ColumnRefOperator> fieldsList = new ArrayList<>();
-            fieldsList.addAll(builder.getFieldMappings());
-            fieldsList.addAll(outer.getFieldMappings());
-            builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), fieldsList));
-        }
+        builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), builder.getFieldMappings(), outer));
 
         builder = filter(builder, queryBlock.getPredicate());
         builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),

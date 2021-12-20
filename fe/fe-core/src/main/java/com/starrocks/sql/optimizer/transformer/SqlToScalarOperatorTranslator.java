@@ -85,7 +85,12 @@ public final class SqlToScalarOperatorTranslator {
     }
 
     public static ScalarOperator translate(Expr expression, ExpressionMapping expressionMapping) {
-        return translate(expression, expressionMapping, new ArrayList<>());
+        List<ColumnRefOperator> correlation = new ArrayList<>();
+        ScalarOperator rewriteScalarOp = translate(expression, expressionMapping, correlation);
+        if (!correlation.isEmpty()) {
+            throw unsupportedException("Only support use correlated columns in the where clause of subqueries");
+        }
+        return rewriteScalarOp;
     }
 
     public static ScalarOperator translate(Expr expression, ExpressionMapping expressionMapping,
@@ -150,8 +155,9 @@ public final class SqlToScalarOperatorTranslator {
             if (resolvedField.isPresent()) {
                 ColumnRefOperator correlatedColumnRef =
                         expressionMapping.getColumnRefWithIndex(resolvedField.get().getRelationFieldIndex());
-                if (resolvedField.get().getRelationFieldIndex() >=
-                        expressionMapping.getScope().getRelationFields().size()) {
+
+                if (resolvedField.get().getScope().getRelationId()
+                        .equals(expressionMapping.getOuterScopeRelationId())) {
                     correlation.add(correlatedColumnRef);
                 }
                 return correlatedColumnRef;
