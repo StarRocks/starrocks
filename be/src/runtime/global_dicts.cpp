@@ -172,7 +172,7 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
     auto result_column = expr_ctx->evaluate(temp_chunk.get());
 
     ColumnViewer<TYPE_VARCHAR> viewer(result_column);
-    int row_sz = viewer.size();
+    int row_sz = result_column->size();
 
     dict_opt_ctx->code_convert_map.resize(DICT_DECODE_MAX_SIZE + 1);
     std::fill(dict_opt_ctx->code_convert_map.begin(), dict_opt_ctx->code_convert_map.end(), 0);
