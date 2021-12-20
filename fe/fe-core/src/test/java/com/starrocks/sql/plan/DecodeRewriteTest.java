@@ -516,7 +516,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "dict_string_id_to_int_ids:{20=28}"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
-        Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]))), " +
+        Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]), is_merge:false)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
     }
 

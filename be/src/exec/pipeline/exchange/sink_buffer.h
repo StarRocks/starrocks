@@ -40,7 +40,8 @@ struct ClosureContext {
 // TODO(hcf) how to export brpc error
 class SinkBuffer {
 public:
-    SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations, size_t num_sinkers);
+    SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations, bool is_dest_merge,
+               size_t num_sinkers);
     ~SinkBuffer();
 
     void add_request(const TransmitChunkInfo& request);
@@ -59,8 +60,9 @@ private:
     void _process_send_window(const TUniqueId& instance_id, const int64_t sequence);
     void _try_to_send_rpc(const TUniqueId& instance_id);
 
-    MemTracker* _mem_tracker = nullptr;
+    const MemTracker* _mem_tracker;
     const int32_t _brpc_timeout_ms;
+    const bool _is_dest_merge;
 
     // Taking into account of efficiency, all the following maps
     // use int64_t as key, which is the field type of TUniqueId::lo

@@ -106,6 +106,10 @@ public class ExchangeNode extends PlanNode {
         return distributionType;
     }
 
+    public boolean isMerge() {
+        return mergeInfo != null;
+    }
+
     @Override
     public final void computeTupleIds() {
         clearTupleIds();

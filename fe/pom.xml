@@ -20,7 +20,7 @@ under the License.
 -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.starrocks</groupId>
@@ -42,6 +42,12 @@ under the License.
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
+        <log4j.version>2.17.0</log4j.version>
+        <jackson.version>2.12.1</jackson.version>
+        <spark.version>2.4.6</spark.version>
+        <tomcat.version>8.5.70</tomcat.version>
+        <parquet.version>1.10.1</parquet.version>
+        <hadoop.version>3.3.0</hadoop.version>
         <skip.plugin>false</skip.plugin>
     </properties>
 
@@ -209,7 +215,35 @@ under the License.
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-core</artifactId>
-                <version>2.12.1</version>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-annotations -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.dataformat</groupId>
+                <artifactId>jackson-dataformat-yaml</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.module/jackson-module-jaxb-annotations -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.module</groupId>
+                <artifactId>jackson-module-jaxb-annotations</artifactId>
+                <version>${jackson.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.codehaus.jackson/jackson-mapper-asl -->
@@ -343,21 +377,21 @@ under the License.
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-api</artifactId>
-                <version>2.17.0</version>
+                <version>${log4j.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core -->
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-core</artifactId>
-                <version>2.17.0</version>
+                <version>${log4j.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-slf4j-impl -->
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-slf4j-impl</artifactId>
-                <version>2.17.0</version>
+                <version>${log4j.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/io.dropwizard.metrics/metrics-core -->
@@ -415,34 +449,6 @@ under the License.
                 <groupId>com.github.mifmif</groupId>
                 <artifactId>generex</artifactId>
                 <version>1.0.1</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-annotations -->
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-annotations</artifactId>
-                <version>2.12.1</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind -->
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-databind</artifactId>
-                <version>2.12.1</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml -->
-            <dependency>
-                <groupId>com.fasterxml.jackson.dataformat</groupId>
-                <artifactId>jackson-dataformat-yaml</artifactId>
-                <version>2.12.1</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.module/jackson-module-jaxb-annotations -->
-            <dependency>
-                <groupId>com.fasterxml.jackson.module</groupId>
-                <artifactId>jackson-module-jaxb-annotations</artifactId>
-                <version>2.12.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
@@ -534,7 +540,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-core_2.12</artifactId>
-                <version>2.4.6</version>
+                <version>${spark.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.slf4j</groupId>
@@ -551,14 +557,22 @@ under the License.
             <dependency>
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-launcher_2.12</artifactId>
-                <version>2.4.6</version>
+                <version>${spark.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql_2.12 -->
             <dependency>
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-sql_2.12</artifactId>
-                <version>2.4.6</version>
+                <version>${spark.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-catalyst -->
+            <dependency>
+                <groupId>org.apache.spark</groupId>
+                <artifactId>spark-catalyst_2.12</artifactId>
+                <version>${spark.version}</version>
                 <scope>provided</scope>
             </dependency>
 
@@ -573,7 +587,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-common</artifactId>
-                <version>3.3.0</version>
+                <version>${hadoop.version}</version>
                 <scope>provided</scope>
                 <exclusions>
                     <exclusion>
@@ -587,7 +601,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-column</artifactId>
-                <version>1.10.1</version>
+                <version>${parquet.version}</version>
                 <scope>provided</scope>
             </dependency>
 
@@ -595,7 +609,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-hadoop</artifactId>
-                <version>1.10.1</version>
+                <version>${parquet.version}</version>
                 <scope>provided</scope>
             </dependency>
 
@@ -603,7 +617,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-common</artifactId>
-                <version>1.10.1</version>
+                <version>${parquet.version}</version>
                 <scope>provided</scope>
             </dependency>
 
@@ -628,14 +642,6 @@ under the License.
                 <version>4.0.2</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-catalyst -->
-            <dependency>
-                <groupId>org.apache.spark</groupId>
-                <artifactId>spark-catalyst_2.12</artifactId>
-                <version>2.4.6</version>
-                <scope>provided</scope>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/org.apache.zookeeper/zookeeper -->
             <dependency>
                 <groupId>org.apache.zookeeper</groupId>
@@ -647,14 +653,14 @@ under the License.
             <dependency>
                 <groupId>org.apache.tomcat.embed</groupId>
                 <artifactId>tomcat-embed-core</artifactId>
-                <version>8.5.70</version>
+                <version>${tomcat.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.tomcat/tomcat-annotations-api -->
             <dependency>
                 <groupId>org.apache.tomcat</groupId>
                 <artifactId>tomcat-annotations-api</artifactId>
-                <version>8.5.70</version>
+                <version>${tomcat.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
@@ -675,7 +681,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-client</artifactId>
-                <version>3.3.0</version>
+                <version>${hadoop.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.fasterxml.uuid/java-uuid-generator -->
@@ -689,7 +695,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-aws</artifactId>
-                <version>3.3.0</version>
+                <version>${hadoop.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
