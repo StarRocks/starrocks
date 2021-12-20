@@ -210,14 +210,12 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
                 break;
             }
             end_ord = _page->first_ordinal() + _page->num_rows();
-            contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         } else if (iter.begin() >= end_ord) {
             // next row is not in current page
             // seek data page first
             _opts.stats->block_seek_num += 1;
             RETURN_IF_ERROR(seek_to_ordinal(iter.begin()));
             end_ord = _page->first_ordinal() + _page->num_rows();
-            contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         }
 
         _current_ordinal = iter.begin();
@@ -233,6 +231,7 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
             // next row is not in current page which means all ranges in
             // current page have been added in read range
             // read current page data first
+            contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
             RETURN_IF_ERROR(_page->read(dst, read_range));
             read_range.clear();
         }
@@ -240,6 +239,7 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
 
     if (!read_range.empty()) {
         // read data left if read range is not empty
+        contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         RETURN_IF_ERROR(_page->read(dst, read_range));
         read_range.clear();
     }
