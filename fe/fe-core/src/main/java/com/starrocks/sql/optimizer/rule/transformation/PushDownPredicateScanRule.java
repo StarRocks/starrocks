@@ -33,8 +33,6 @@ public class PushDownPredicateScanRule extends TransformationRule {
     public static final PushDownPredicateScanRule ES_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
 
-    private final ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
-
     public PushDownPredicateScanRule(OperatorType type) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));
     }
@@ -46,6 +44,7 @@ public class PushDownPredicateScanRule extends TransformationRule {
         OptExpression scan = input.getInputs().get(0);
         LogicalScanOperator logicalScanOperator = (LogicalScanOperator) scan.getOp();
 
+        ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
         ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
         predicates = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)
