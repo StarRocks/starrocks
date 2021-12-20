@@ -173,35 +173,37 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 */
 
 #ifndef BE_TEST
-const int64_t TRY_CONSUME_SIZE = 1 * 1024 * 1024 * 1024;
 #define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
-#define MEMORY_CONSUME_PTR(ptr) starrocks::tls_thread_status.mem_consume(tc_malloc_size(ptr))
-#define MEMORY_RELEASE_PTR(ptr) starrocks::tls_thread_status.mem_release(tc_malloc_size(ptr))
 #define MEMORY_CONSUME_SIZE(size) starrocks::tls_thread_status.mem_consume(size)
 #define MEMORY_RELEASE_SIZE(size) starrocks::tls_thread_status.mem_release(size)
-#define LARGE_MEM_CONSUME_RETURN_ENOMEM(size) RETURN_IF(!starrocks::tls_thread_status.try_mem_consume(size), ENOMEM);
-#define LARGE_MEM_CONSUME(size) RETURN_IF(!starrocks::tls_thread_status.try_mem_consume(size), nullptr);
+#define MEMORY_CONSUME_PTR(ptr) MEMORY_CONSUME_SIZE(tc_malloc_size(ptr))
+#define MEMORY_RELEASE_PTR(ptr) MEMORY_RELEASE_SIZE(tc_malloc_size(ptr))
+#define TRY_MEM_CONSUME(size, err_ret) RETURN_IF_UNLIKELY(!starrocks::tls_thread_status.try_mem_consume(size), err_ret)
+#define SET_EXCEED_MEM_TRACKER() \
+    starrocks::tls_thread_status.set_exceed_mem_tracker(starrocks::ExecEnv::GetInstance()->process_mem_tracker())
+#define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
 #else
-const int64_t TRY_CONSUME_SIZE = 32 * 1024 * 1024;
 std::atomic<int64_t> g_mem_usage(0);
 #define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
-#define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(tc_malloc_size(ptr))
-#define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(tc_malloc_size(ptr))
 #define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)
 #define MEMORY_RELEASE_SIZE(size) g_mem_usage.fetch_sub(size)
-#define LARGE_MEM_CONSUME_RETURN_ENOMEM(size) g_mem_usage.fetch_add(size)
-#define LARGE_MEM_CONSUME(size) g_mem_usage.fetch_add(size)
+#define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(tc_malloc_size(ptr))
+#define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(tc_malloc_size(ptr))
+#define TRY_MEM_CONSUME(size, err_ret) g_mem_usage.fetch_add(size)
+#define SET_EXCEED_MEM_TRACKER() (void)0
+#define IS_BAD_ALLOC_CATCHED() false
 #endif
 
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
-    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
+    if (IS_BAD_ALLOC_CATCHED()) {
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
-        LARGE_MEM_CONSUME(tc_nallocx(size, 0));
+        TRY_MEM_CONSUME(tc_nallocx(size, 0), nullptr);
         void* ptr = tc_malloc(size);
         if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(tc_nallocx(size, 0));
         }
         return ptr;
@@ -231,10 +233,12 @@ void* my_realloc(void* p, size_t size) __THROW {
         return nullptr;
     }
     int64_t old_size = TC_MALLOC_SIZE(p);
-    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
-        LARGE_MEM_CONSUME(tc_nallocx(size, 0) - old_size);
+
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(tc_nallocx(size, 0) - old_size, nullptr);
         void* ptr = tc_realloc(p, size);
         if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(tc_nallocx(size, 0) - old_size);
         }
         return ptr;
@@ -257,10 +261,12 @@ void* my_calloc(size_t n, size_t size) __THROW {
     if (UNLIKELY(size == 0)) {
         return nullptr;
     }
-    if (UNLIKELY(n * size >= TRY_CONSUME_SIZE)) {
-        LARGE_MEM_CONSUME(n * size);
+
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(n * size, nullptr);
         void* ptr = tc_calloc(n, size);
         if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(n * size);
         } else {
             MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - n * size);
@@ -280,10 +286,11 @@ void my_cfree(void* ptr) __THROW {
 
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
-    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
-        LARGE_MEM_CONSUME(size);
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, nullptr);
         void* ptr = tc_memalign(align, size);
         if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
             MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
@@ -298,10 +305,11 @@ void* my_memalign(size_t align, size_t size) __THROW {
 
 // aligned_alloc
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
-    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
-        LARGE_MEM_CONSUME(size);
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, nullptr);
         void* ptr = tc_memalign(align, size);
         if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
             MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
@@ -316,10 +324,11 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 
 // valloc
 void* my_valloc(size_t size) __THROW {
-    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
-        LARGE_MEM_CONSUME(size);
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, nullptr);
         void* ptr = tc_valloc(size);
         if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
             MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
@@ -334,10 +343,11 @@ void* my_valloc(size_t size) __THROW {
 
 // pvalloc
 void* my_pvalloc(size_t size) __THROW {
-    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
-        LARGE_MEM_CONSUME(size);
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, nullptr);
         void* ptr = tc_valloc(size);
         if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
             MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
@@ -352,10 +362,11 @@ void* my_pvalloc(size_t size) __THROW {
 
 // posix_memalign
 int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
-    if (UNLIKELY(size >= TRY_CONSUME_SIZE)) {
-        LARGE_MEM_CONSUME_RETURN_ENOMEM(size);
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, ENOMEM);
         int ret = tc_posix_memalign(r, align, size);
         if (UNLIKELY(ret != 0)) {
+            SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
             MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(*r) - size);
