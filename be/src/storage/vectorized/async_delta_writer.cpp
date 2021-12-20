@@ -5,7 +5,8 @@
 #include <fmt/format.h>
 
 #include "runtime/current_thread.h"
-#include "storage/vectorized/async_delta_writer_executor.h"
+#include "storage/async_delta_writer_executor.h"
+#include "storage/storage_engine.h"
 #include "util/uid_util.h"
 
 namespace starrocks::vectorized {
@@ -61,11 +62,15 @@ StatusOr<std::unique_ptr<AsyncDeltaWriter>> AsyncDeltaWriter::open(const DeltaWr
 }
 
 Status AsyncDeltaWriter::_init() {
+    if (UNLIKELY(StorageEngine::instance() == nullptr)) {
+        return Status::InternalError("StorageEngine::instance() is NULL");
+    }
     bthread::ExecutionQueueOptions opts;
-    opts.executor = AsyncDeltaWriterExecutor::Instance();
-
-    int r = bthread::execution_queue_start(&_queue_id, &opts, _execute, _writer.get());
-    if (r) {
+    opts.executor = StorageEngine::instance()->async_delta_writer_executor();
+    if (UNLIKELY(opts.executor == nullptr)) {
+        return Status::InternalError("AsyncDeltaWriterExecutor init failed");
+    }
+    if (int r = bthread::execution_queue_start(&_queue_id, &opts, _execute, _writer.get()); r != 0) {
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
     return Status::OK();

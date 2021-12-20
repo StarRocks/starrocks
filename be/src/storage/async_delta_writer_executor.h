@@ -5,15 +5,23 @@
 #include "common/config.h"
 #include "util/threadpool.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Used to run bthread::ExecutionQueue task in pthread instead of bthread.
 // Reference: https://github.com/apache/incubator-brpc/blob/master/docs/cn/execution_queue.md
 class AsyncDeltaWriterExecutor : public bthread::Executor {
 public:
-    static AsyncDeltaWriterExecutor* Instance() {
-        static AsyncDeltaWriterExecutor instance;
-        return &instance;
+    Status init() {
+        if (_thread_pool != nullptr) {
+            return Status::InternalError("already initialized");
+        }
+        auto st = ThreadPoolBuilder("AsyncDeltaWriterExecutor")
+                          .set_min_threads(config::number_tablet_writer_threads / 2)
+                          .set_max_threads(config::number_tablet_writer_threads)
+                          .set_max_queue_size(40960)
+                          .set_idle_timeout(MonoDelta::FromMilliseconds(5 * 60 * 1000))
+                          .build(&_thread_pool);
+        return st;
     }
 
     int submit(void* (*fn)(void*), void* args) override {
@@ -23,17 +31,7 @@ public:
     }
 
 private:
-    AsyncDeltaWriterExecutor() {
-        CHECK(ThreadPoolBuilder("AsyncDeltaWriterExecutor")
-                      .set_min_threads(config::number_tablet_writer_threads / 2)
-                      .set_max_threads(config::number_tablet_writer_threads)
-                      .set_max_queue_size(40960)
-                      .set_idle_timeout(MonoDelta::FromMilliseconds(5 * 60 * 1000))
-                      .build(&_thread_pool)
-                      .ok());
-    }
-
     std::unique_ptr<ThreadPool> _thread_pool;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
