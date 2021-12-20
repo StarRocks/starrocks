@@ -52,7 +52,7 @@ struct FlushTablet {
 // corresponding to a certain load job
 class LoadChannel {
 public:
-    LoadChannel(const UniqueId& load_id, int64_t mem_limit, int64_t timeout_s, MemTracker* mem_tracker);
+    LoadChannel(const UniqueId& load_id, int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker);
     ~LoadChannel();
 
     // open a new load channel if not exist
@@ -70,31 +70,13 @@ public:
 
     const UniqueId& load_id() const { return _load_id; }
 
-    // reduce memory with lock, for handle mem exceed limit in load channel mgr.
-    void reduce_mem_usage_async(const std::set<int64_t>& flush_tablet_ids,
-                                std::shared_ptr<TabletsChannel>* tablets_channel, int64_t* tablet_id,
-                                int64_t* tablet_mem_consumption);
-
-    int64_t mem_consumption() const { return _mem_tracker->consumption(); }
-    bool mem_limit_exceeded() const { return _mem_tracker->limit_exceeded(); }
-
     int64_t timeout() const { return _timeout_s; }
 
 private:
-    // check if this load channel mem consumption exceeds limit.
-    // If yes, it will pick several tablets channels to try to reduce memory consumption to limit.
-    void _handle_mem_exceed_limit();
-
-    // reduce memory internal without lock, for handle mem exceed limit in load channel
-    void _reduce_mem_usage_async_internal(const std::set<int64_t>& flush_tablet_ids,
-                                          std::shared_ptr<TabletsChannel>* tablets_channel, int64_t* tablet_id,
-                                          int64_t* tablet_mem_consumption);
-
-    // when mem consumption exceeds limit, should call this method to find the channel
-    // that consumes the largest memory(, and then we can reduce its memory usage).
-    bool _find_largest_consumption_channel(std::shared_ptr<TabletsChannel>* channel);
-
     UniqueId _load_id;
+    // the timeout of this load job.
+    // Timed out channels will be periodically deleted by LoadChannelMgr.
+    int64_t _timeout_s;
     // Tracks the total memory comsupted by current load job on this BE
     std::unique_ptr<MemTracker> _mem_tracker;
 
@@ -108,14 +90,10 @@ private:
     bool _opened = false;
 
     std::atomic<time_t> _last_updated_time;
-
-    // the timeout of this load job.
-    // Timed out channels will be periodically deleted by LoadChannelMgr.
-    int64_t _timeout_s;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {
-    os << "LoadChannel(id=" << load_channel.load_id() << ", mem=" << load_channel.mem_consumption()
+    os << "LoadChannel(id=" << load_channel.load_id()
        << ", last_update_time=" << static_cast<uint64_t>(load_channel.last_updated_time()) << ")";
     return os;
 }
