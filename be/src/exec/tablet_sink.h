@@ -350,7 +350,6 @@ private:
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;
-    OlapTablePartitionParam* _partition = nullptr;
     OlapTableLocationParam* _location = nullptr;
     StarRocksNodesInfo* _nodes_info = nullptr;
 
