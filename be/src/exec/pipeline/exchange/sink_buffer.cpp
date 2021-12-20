@@ -5,9 +5,10 @@
 namespace starrocks::pipeline {
 
 SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations,
-                       size_t num_sinkers)
+                       bool is_dest_merge, size_t num_sinkers)
         : _mem_tracker(state->instance_mem_tracker()),
           _brpc_timeout_ms(std::min(3600, state->query_options().query_timeout) * 1000),
+          _is_dest_merge(is_dest_merge),
           _num_uncancelled_sinkers(num_sinkers) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
@@ -99,6 +100,11 @@ void SinkBuffer::cancel_one_sinker() {
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {
+    // Both sender side and receiver side can tolerate disorder of tranmission
+    // if receiver side is not ExchangeMergeSortSourceOperator
+    if (!_is_dest_merge) {
+        return;
+    }
     auto& seqs = _discontinuous_acked_seqs[instance_id.lo];
     seqs.insert(sequence);
     auto& max_continuous_acked_seq = _max_continuous_acked_seqs[instance_id.lo];
@@ -120,12 +126,18 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
 
         auto& buffer = _buffers[instance_id.lo];
 
-        // discontinuous_acked_window_size means that we are not received all the ack
-        // with sequence from _max_continuous_acked_seqs[x] to _request_seqs[x]
-        // Limit the size of the window to avoid buffering too much out-of-order data at the receiving side
-        int64_t discontinuous_acked_window_size =
-                _request_seqs[instance_id.lo] - _max_continuous_acked_seqs[instance_id.lo];
-        if (buffer.empty() || discontinuous_acked_window_size >= config::pipeline_sink_brpc_dop) {
+        bool too_much_brpc_process = false;
+        if (_is_dest_merge) {
+            // discontinuous_acked_window_size means that we are not received all the ack
+            // with sequence from _max_continuous_acked_seqs[x] to _request_seqs[x]
+            // Limit the size of the window to avoid buffering too much out-of-order data at the receiving side
+            int64_t discontinuous_acked_window_size =
+                    _request_seqs[instance_id.lo] - _max_continuous_acked_seqs[instance_id.lo];
+            too_much_brpc_process = discontinuous_acked_window_size >= config::pipeline_sink_brpc_dop;
+        } else {
+            too_much_brpc_process = _num_in_flight_rpcs[instance_id.lo] >= config::pipeline_sink_brpc_dop;
+        }
+        if (buffer.empty() || too_much_brpc_process) {
             return;
         }
 
