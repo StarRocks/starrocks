@@ -143,7 +143,9 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
 
     ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
     if (_limit > 0) {
-        if (_limit <= 1024) {
+        // HeapChunkSorter has higher performance when sorting fewer elements,
+        // after testing we think 1024 is a good threshold
+        if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
             _chunks_sorter =
                     std::make_unique<HeapChunkSorter>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
                                                       &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);

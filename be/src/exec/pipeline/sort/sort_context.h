@@ -75,7 +75,9 @@ public:
      * Output the result data in a streaming manner,
      * And dynamically adjust the heap.
      */
-    ChunkPtr pull_chunk(const std::function<uint32_t(DataSegment* min_heap_entry)>& get_and_update_min_entry_func) {
+    // uint32_t UpdateFunc(DataSegment* min_heap_entry)
+    template <class UpdateFunc>
+    ChunkPtr pull_chunk(UpdateFunc&& get_and_update_min_entry_func) {
         // Get appropriate size
         uint32_t needed_rows = std::min((uint64_t)config::vector_chunk_size, _require_rows - _next_output_row);
 

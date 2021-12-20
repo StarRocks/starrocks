@@ -12,6 +12,7 @@
 #include "exec/vectorized/chunks_sorter.h"
 #include "glog/logging.h"
 #include "runtime/primitive_type.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
@@ -94,15 +95,13 @@ class SortingHeap {
 public:
     SortingHeap(Compare comp) : _comp(std::move(comp)) {}
 
-    bool is_valid() const { return !_queue.empty(); }
-
     const T& top() { return _queue.front(); }
 
     size_t size() { return _queue.size(); }
 
     bool empty() { return _queue.empty(); }
 
-    T& next_child() { return _queue[_next_child_index()]; }
+    T& next_child() { return _queue[_greater_child_index()]; }
 
     void reserve(size_t reserve_sz) { _queue.reserve(reserve_sz); }
 
@@ -139,7 +138,7 @@ private:
     Sequence _queue;
     Compare _comp;
 
-    size_t _next_child_index() {
+    size_t _greater_child_index() {
         size_t next_idx = 0;
         if (next_idx == 0) {
             next_idx = 1;
@@ -154,7 +153,7 @@ private:
 
         auto begin = _queue.begin();
 
-        size_t child_idx = _next_child_index();
+        size_t child_idx = _greater_child_index();
         auto child_it = begin + child_idx;
 
         /// Check if we are in order.
@@ -216,28 +215,30 @@ public:
     HeapChunkSorter(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                     const std::vector<bool>* is_null_first, size_t offset, size_t limit, size_t size_of_chunk_batch)
             : ChunksSorter(sort_exprs, is_asc, is_null_first, size_of_chunk_batch), _offset(offset), _limit(limit) {}
-    virtual ~HeapChunkSorter() = default;
+    ~HeapChunkSorter() = default;
 
-    virtual Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    virtual Status done(RuntimeState* state) override;
-    virtual void get_next(ChunkPtr* chunk, bool* eos) override;
-    virtual int64_t mem_usage() const override {
+    Status update(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status done(RuntimeState* state) override;
+    void get_next(ChunkPtr* chunk, bool* eos) override;
+    int64_t mem_usage() const override {
         if (_sort_heap == nullptr || _sort_heap->empty()) {
             return 0;
         }
-        return _sort_heap->size() * _sort_heap->top().data_segment()->mem_usage();
+        int first_rows = _sort_heap->top().data_segment()->chunk->num_rows();
+        return _sort_heap->size() * _sort_heap->top().data_segment()->mem_usage() / first_rows;
     }
-    // TODO: implemnt for pipeline
-    virtual bool pull_chunk(ChunkPtr* chunk) override { return false; }
-    virtual DataSegment* get_result_data_segment() override { return nullptr; }
-    virtual uint64_t get_partition_rows() const override { return 0; }
-    virtual Permutation* get_permutation() const override { return nullptr; }
+    bool pull_chunk(ChunkPtr* chunk) override;
+    DataSegment* get_result_data_segment() override;
+    uint64_t get_partition_rows() const override;
+    Permutation* get_permutation() const override { return nullptr; }
 
     void setup_runtime(RuntimeProfile* profile, const std::string& parent_profile) override;
 
 private:
     inline size_t _number_of_rows_to_sort() const { return _offset + _limit; }
 
+    // For TOPN cases, we can filter out a very large amount of data with
+    // the elements at the top of the heap, which will significantly improve the sorting performance
     int _filter_data(detail::ChunkHolder* chunk_holder, int row_sz);
 
     template <PrimitiveType TYPE>
@@ -254,10 +255,12 @@ private:
     const size_t _offset;
     const size_t _limit;
 
-    std::vector<detail::ChunkRowCursor> _sorted_values;
+    // std::vector<detail::ChunkRowCursor> _sorted_values;
 
     RuntimeProfile::Counter* _sort_filter_rows = nullptr;
     RuntimeProfile::Counter* _sort_filter_costs = nullptr;
+
+    DataSegment _merged_segment;
 };
 
 } // namespace starrocks::vectorized

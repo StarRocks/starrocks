@@ -268,6 +268,7 @@ using DataSegments = std::vector<DataSegment>;
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorter {
 public:
+    static constexpr int USE_HEAP_SORTER_LIMIT_SZ = 1024;
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expresion. This sorter will use but not own the object.

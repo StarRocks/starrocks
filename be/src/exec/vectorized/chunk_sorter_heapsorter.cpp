@@ -86,7 +86,9 @@ Status HeapChunkSorter::update(RuntimeState* state, const ChunkPtr& chunk) {
         if (_number_of_rows_to_sort() == _sort_heap->size()) {
             // if heap was full
             int rows_afterfilter_sz = _filter_data(chunk_holder, row_sz);
-            COUNTER_UPDATE(_sort_filter_rows, (row_sz - rows_afterfilter_sz));
+            if (_sort_filter_rows != nullptr) {
+                COUNTER_UPDATE(_sort_filter_rows, (row_sz - rows_afterfilter_sz));
+            }
             for (int i = 0; i < rows_afterfilter_sz; ++i) {
                 detail::ChunkRowCursor cursor(i, chunk_holder);
                 _sort_heap->replace_top_if_less(std::move(cursor));
@@ -113,10 +115,25 @@ Status HeapChunkSorter::update(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
+DataSegment* HeapChunkSorter::get_result_data_segment() {
+    return &_merged_segment;
+}
+uint64_t HeapChunkSorter::get_partition_rows() const {
+    return _merged_segment.chunk->num_rows();
+}
+
 Status HeapChunkSorter::done(RuntimeState* state) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
     if (_sort_heap) {
-        _sorted_values = _sort_heap->sorted_seq();
+        auto sorted_values = _sort_heap->sorted_seq();
+        size_t result_rows = sorted_values.size();
+        ChunkPtr result_chunk = sorted_values[0].data_segment()->chunk->clone_empty(result_rows);
+        for (int i = 0; i < result_rows; ++i) {
+            auto rid = sorted_values[i].row_id();
+            const auto& ref_chunk = sorted_values[i].data_segment()->chunk;
+            result_chunk->append_safe(*ref_chunk, rid, 1);
+        }
+        _merged_segment.init(_sort_exprs, result_chunk);
     }
     _sort_heap.reset();
     return Status::OK();
@@ -124,23 +141,32 @@ Status HeapChunkSorter::done(RuntimeState* state) {
 
 void HeapChunkSorter::get_next(ChunkPtr* chunk, bool* eos) {
     ScopedTimer<MonotonicStopWatch> timer(_output_timer);
-
-    if (_next_output_row == _sorted_values.size()) {
-        *eos = true;
+    if (_next_output_row >= _merged_segment.chunk->num_rows()) {
         *chunk = nullptr;
+        *eos = true;
         return;
     }
-
-    const size_t count = std::min(size_t(config::vector_chunk_size), _sorted_values.size() - _next_output_row);
-    chunk->reset(_sorted_values[0].data_segment()->chunk->clone_empty(count).release());
-
-    for (int i = _next_output_row; i < count + _next_output_row; ++i) {
-        auto rid = _sorted_values[i].row_id();
-        const auto& ref_chunk = _sorted_values[i].data_segment()->chunk;
-        (*chunk)->append_safe(*ref_chunk, rid, 1);
-    }
-
+    *eos = false;
+    size_t count = std::min(size_t(config::vector_chunk_size), _merged_segment.chunk->num_rows() - _next_output_row);
+    chunk->reset(_merged_segment.chunk->clone_empty(count).release());
+    (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
     _next_output_row += count;
+}
+
+bool HeapChunkSorter::pull_chunk(ChunkPtr* chunk) {
+    if (_next_output_row >= _merged_segment.chunk->num_rows()) {
+        *chunk = nullptr;
+        return true;
+    }
+    size_t count = std::min(size_t(config::vector_chunk_size), _merged_segment.chunk->num_rows() - _next_output_row);
+    chunk->reset(_merged_segment.chunk->clone_empty(count).release());
+    (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
+    _next_output_row += count;
+
+    if (_next_output_row >= _merged_segment.chunk->num_rows()) {
+        return true;
+    }
+    return false;
 }
 
 template <PrimitiveType TYPE>
