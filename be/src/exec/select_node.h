@@ -19,15 +19,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_SELECT_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_SELECT_NODE_H
+#pragma once
 
 #include "exec/exec_node.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
-
-class Tuple;
 
 // Node that evaluates conjuncts and enforces a limit but otherwise passes along
 // the rows pulled from its child unchanged.
@@ -52,5 +49,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

@@ -36,7 +36,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/string_value.h"
 #include "runtime/string_value.hpp"
-#include "runtime/tuple.h"
 #include "runtime/types.h"
 #include "udf/udf.h"
 
