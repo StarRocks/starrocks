@@ -27,14 +27,11 @@
 
 namespace starrocks {
 
-LoadChannel::LoadChannel(const UniqueId& load_id, int64_t mem_limit, int64_t timeout_s, MemTracker* mem_tracker)
-        : _load_id(load_id), _timeout_s(timeout_s) {
-    _mem_tracker = std::make_unique<MemTracker>(mem_limit, _load_id.to_string(), mem_tracker, true);
-    // _last_updated_time should be set before being inserted to
-    // _load_channels in load_channel_mgr, or it may be erased
-    // immediately by gc thread.
-    _last_updated_time.store(time(nullptr));
-}
+LoadChannel::LoadChannel(const UniqueId& load_id, int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker)
+        : _load_id(load_id),
+          _timeout_s(timeout_s),
+          _mem_tracker(std::move(mem_tracker)),
+          _last_updated_time(time(nullptr)) {}
 
 LoadChannel::~LoadChannel() {
     LOG(INFO) << "load channel mem peak usage=" << _mem_tracker->peak_consumption()
@@ -85,9 +82,6 @@ Status LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request,
         channel = it->second;
     }
 
-    // 2. check if mem consumption exceed limit
-    _handle_mem_exceed_limit();
-
     // 3. add batch to tablets channel
     if (request.has_chunk()) {
         RETURN_IF_ERROR(channel->add_chunk(request));
@@ -106,83 +100,6 @@ Status LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request,
     }
     _last_updated_time.store(time(nullptr));
     return st;
-}
-
-void LoadChannel::_handle_mem_exceed_limit() {
-    // lock so that only one thread can check mem limit
-    std::lock_guard<std::mutex> l(_lock);
-
-    if (!_mem_tracker->limit_exceeded()) {
-        return;
-    }
-    LOG(INFO) << "Reducing memory of " << *this << " because its mem consumption=" << _mem_tracker->consumption()
-              << " has exceeded limit=" << _mem_tracker->limit();
-
-    int64_t exceeded_mem = _mem_tracker->consumption() - _mem_tracker->limit();
-    std::vector<FlushTablet> flush_tablets;
-    std::set<int64_t> flush_tablet_ids;
-    int64_t tablet_mem_consumption;
-    do {
-        std::shared_ptr<TabletsChannel> tablets_channel;
-        int64_t tablet_id = -1;
-        _reduce_mem_usage_async_internal(flush_tablet_ids, &tablets_channel, &tablet_id, &tablet_mem_consumption);
-        if (tablet_id != -1) {
-            flush_tablets.emplace_back(this, tablets_channel.get(), tablet_id);
-            flush_tablet_ids.insert(tablet_id);
-            exceeded_mem -= tablet_mem_consumption;
-            VLOG(3) << "Flush " << *this << ", tablet id=" << tablet_id
-                    << ", mem consumption=" << tablet_mem_consumption;
-        } else {
-            break;
-        }
-    } while (exceeded_mem > 0);
-
-    // wait flush finish
-    for (const FlushTablet& flush_tablet : flush_tablets) {
-        Status st = flush_tablet.tablets_channel->wait_mem_usage_reduced(flush_tablet.tablet_id);
-        if (!st.ok()) {
-            // wait may return failed, but no need to handle it here, just log.
-            // tablet_vec will only contains success tablet, and then let FE judge it.
-            LOG(WARNING) << "Fail to wait memory reduced. err=" << st.to_string();
-        }
-    }
-    LOG(INFO) << "Reduce memory finish. " << *this << ", flush tablets num=" << flush_tablet_ids.size()
-              << ", current mem consumption=" << _mem_tracker->consumption() << ", limit=" << _mem_tracker->limit();
-}
-
-void LoadChannel::reduce_mem_usage_async(const std::set<int64_t>& flush_tablet_ids,
-                                         std::shared_ptr<TabletsChannel>* tablets_channel, int64_t* tablet_id,
-                                         int64_t* tablet_mem_consumption) {
-    // lock so that only one thread can check mem limit
-    std::lock_guard<std::mutex> l(_lock);
-    _reduce_mem_usage_async_internal(flush_tablet_ids, tablets_channel, tablet_id, tablet_mem_consumption);
-}
-
-void LoadChannel::_reduce_mem_usage_async_internal(const std::set<int64_t>& flush_tablet_ids,
-                                                   std::shared_ptr<TabletsChannel>* tablets_channel, int64_t* tablet_id,
-                                                   int64_t* tablet_mem_consumption) {
-    if (_find_largest_consumption_channel(tablets_channel)) {
-        Status st = (*tablets_channel)->reduce_mem_usage_async(flush_tablet_ids, tablet_id, tablet_mem_consumption);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to reduce memory async. error=" << st.to_string();
-        }
-    } else {
-        // should not happen, add log to observe
-        LOG(WARNING) << "Fail to find suitable tablets channel when memory exceed. "
-                     << "load_id=" << _load_id;
-    }
-}
-
-// lock should be held when calling this method
-bool LoadChannel::_find_largest_consumption_channel(std::shared_ptr<TabletsChannel>* channel) {
-    int64_t max_consume = 0;
-    for (auto& it : _tablets_channels) {
-        if (it.second->mem_consumption() > max_consume) {
-            max_consume = it.second->mem_consumption();
-            *channel = it.second;
-        }
-    }
-    return max_consume > 0;
 }
 
 bool LoadChannel::is_finished() {
