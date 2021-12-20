@@ -42,7 +42,6 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "runtime/tuple_row.h"
 #include "service/backend_options.h"
 #include "storage/olap_common.h"
 #include "storage/utils.h"
