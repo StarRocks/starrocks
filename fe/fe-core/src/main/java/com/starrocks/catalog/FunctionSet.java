@@ -113,6 +113,12 @@ public class FunctionSet {
     public static final String HOUR = "hour";
     public static final String MINUTE = "minute";
     public static final String SECOND = "second";
+    public static final String CURDATE = "curdate";
+    public static final String CURRENT_TIMESTAMP = "current_timestamp";
+    public static final String CURRENT_TIME = "current_time";
+    public static final String NOW = "now";
+    public static final String UNIX_TIMESTAMP = "unix_timestamp";
+    public static final String UTC_TIMESTAMP = "utc_timestamp";
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 

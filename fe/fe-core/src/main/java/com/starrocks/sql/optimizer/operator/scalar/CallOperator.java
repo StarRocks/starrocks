@@ -122,9 +122,14 @@ public class CallOperator extends ScalarOperator {
                     .add(FunctionSet.BITMAP_UNION_INT)
                     .add(FunctionSet.BITMAP_UNION_COUNT)
                     .add(FunctionSet.BITMAP_COUNT)
+                    .add(FunctionSet.CURDATE)
+                    .add(FunctionSet.CURRENT_TIMESTAMP)
+                    .add(FunctionSet.CURRENT_TIME)
+                    .add(FunctionSet.NOW)
+                    .add(FunctionSet.UNIX_TIMESTAMP)
+                    .add(FunctionSet.UTC_TIMESTAMP)
                     .build();
 
-    // TODO(kks): improve this
     @Override
     public boolean isNullable() {
         return !AlwaysReturnNonNullableFunctions.contains(fnName);
