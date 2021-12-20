@@ -55,6 +55,16 @@ void PipelineDriverPoller::run_internal() {
 
             if (driver->pending_finish()) {
                 if (driver->is_still_pending_finish()) {
+                    if (driver->fragment_ctx()->is_canceled()) {
+                        driver->cancel_operators(driver->fragment_ctx()->runtime_state());
+                        if (!driver->is_still_pending_finish()) {
+                            driver->set_driver_state(DriverState::CANCELED);
+                            remove_blocked_driver(local_blocked_drivers, driver_it);
+                            ready_drivers.emplace_back(driver);
+
+                            continue;
+                        }
+                    }
                     ++driver_it;
                 } else {
                     // driver->pending_finish() return true means that when a driver's sink operator is finished,
