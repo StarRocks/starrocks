@@ -7,8 +7,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -342,13 +344,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap(projectOperator.getColumnRefMap());
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
-                if (kv.getValue() instanceof ColumnRefOperator) {
-                    rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
-                            newProjectMap, newStringToDicts);
-                } else {
-                    rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
-                            newProjectMap, newStringToDicts);
-                }
+                rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
+                        newProjectMap, newStringToDicts);
             }
 
             context.stringColumnIdToDictColumnIds = newStringToDicts;
@@ -358,52 +355,52 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return new Projection(newProjectMap, projectOperator.getCommonSubOperatorMap());
         }
 
-        private void rewriteOneScalarOperatorForProjection(ColumnRefOperator oldStringColumn,
-                                                           ScalarOperator operator,
+        private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn,
+                                                           ScalarOperator valueOperator,
                                                            DecodeContext context,
                                                            Map<ColumnRefOperator, ScalarOperator> newProjectMap,
                                                            Map<Integer, Integer> newStringToDicts) {
-            if (operator instanceof ColumnRefOperator) {
-                ColumnRefOperator stringColumn = (ColumnRefOperator) operator;
+            if (valueOperator instanceof ColumnRefOperator) {
+                ColumnRefOperator stringColumn = (ColumnRefOperator) valueOperator;
                 if (context.stringColumnIdToDictColumnIds.containsKey(stringColumn.getId())) {
                     Integer columnId = context.stringColumnIdToDictColumnIds.get(stringColumn.getId());
                     ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
 
                     newProjectMap.put(dictColumn, dictColumn);
-                    newProjectMap.remove(stringColumn);
+                    newProjectMap.remove(keyColumn);
 
-                    newStringToDicts.put(stringColumn.getId(), dictColumn.getId());
+                    newStringToDicts.put(keyColumn.getId(), dictColumn.getId());
                 }
                 return;
             }
 
-            if (!Projection.couldApplyDictOptimize(operator)) {
+            if (!Projection.couldApplyDictOptimize(valueOperator)) {
                 return;
             }
 
-            int stringColumnId = operator.getUsedColumns().getFirstId();
+            int stringColumnId = valueOperator.getUsedColumns().getFirstId();
             if (context.stringColumnIdToDictColumnIds.containsKey(stringColumnId)) {
                 ColumnRefOperator oldStringArgColumn = context.columnRefFactory.getColumnRef(stringColumnId);
                 Integer columnId =
-                        context.stringColumnIdToDictColumnIds.get(operator.getUsedColumns().getFirstId());
+                        context.stringColumnIdToDictColumnIds.get(valueOperator.getUsedColumns().getFirstId());
                 ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
 
                 ColumnRefOperator newDictColumn = context.columnRefFactory.create(
-                        oldStringColumn.getName(), ID_TYPE, oldStringColumn.isNullable());
+                        keyColumn.getName(), ID_TYPE, keyColumn.isNullable());
 
                 Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMapWithExpectedSize(1);
                 rewriteMap.put(oldStringArgColumn, dictColumn);
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
                 // Will modify the operator, must use clone
-                ScalarOperator newCallOperator = operator.clone().accept(rewriter, null);
+                ScalarOperator newCallOperator = valueOperator.clone().accept(rewriter, null);
                 newCallOperator.setType(ID_TYPE);
 
                 newProjectMap.put(newDictColumn, newCallOperator);
-                newProjectMap.remove(oldStringColumn);
+                newProjectMap.remove(keyColumn);
 
                 context.stringFunctions.put(newDictColumn, newCallOperator);
 
-                newStringToDicts.put(oldStringColumn.getId(), newDictColumn.getId());
+                newStringToDicts.put(keyColumn.getId(), newDictColumn.getId());
             }
         }
 
@@ -439,14 +436,37 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         (kv.getValue().getFnName().equals(FunctionSet.COUNT) ||
                                 kv.getValue().getFnName().equals(FunctionSet.MULTI_DISTINCT_COUNT));
                 if (canApplyDictDecodeOpt) {
+                    CallOperator oldCall = kv.getValue();
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
                     if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
                         Integer dictColumnId = context.stringColumnIdToDictColumnIds.get(columnId);
                         ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(dictColumnId);
-                        CallOperator newCall = new CallOperator(kv.getValue().getFnName(), kv.getValue().getType(),
-                                Collections.singletonList(dictColumn), kv.getValue().getFunction(),
-                                kv.getValue().isDistinct());
-                        newAggMap.put(kv.getKey(), newCall);
+
+                        List<ScalarOperator> newArguments = Collections.singletonList(dictColumn);
+                        Type[] newTypes = newArguments.stream().map(ScalarOperator::getType).toArray(Type[]::new);
+                        Function newFunction = Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
+                                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                        Type newReturnType = oldCall.getType();
+
+                        ColumnRefOperator outputColumn = kv.getKey();
+
+                        // Add decode node to aggregate function that returns a string
+                        if (oldCall.getType().isVarchar()) {
+                            newReturnType = ID_TYPE;
+                            ColumnRefOperator outputStringColumn = kv.getKey();
+                            // now we only support max/min for dict columns
+                            // so we use input dict column
+                            newStringToDicts.put(outputStringColumn.getId(), dictColumnId);
+
+                            newAggMap.remove(outputStringColumn);
+                            outputColumn = dictColumn;
+                        }
+
+                        CallOperator newCall = new CallOperator(oldCall.getFnName(), newReturnType,
+                                newArguments, newFunction,
+                                oldCall.isDistinct());
+
+                        newAggMap.put(outputColumn, newCall);
                     }
                 }
             }

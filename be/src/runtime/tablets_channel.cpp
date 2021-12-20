@@ -148,7 +148,8 @@ Status TabletsChannel::add_chunk(const PTabletWriterAddChunkRequest& params) {
     }
 
     vectorized::Chunk chunk;
-    RETURN_IF_ERROR(chunk.deserialize((const uint8_t*)pchunk.data().data(), pchunk.data().size(), _chunk_meta));
+    RETURN_IF_ERROR(chunk.deserialize((const uint8_t*)pchunk.data().data(), pchunk.data().size(), _chunk_meta,
+                                      pchunk.serialized_size()));
     DCHECK_EQ(params.tablet_ids_size(), chunk.num_rows());
 
     size_t channel_size = _tablet_id_to_sorted_indexes.size();
@@ -447,6 +448,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
                 for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
                     const std::string& dict_word = slot.global_dict_words(i);
                     auto* data = _mem_pool->allocate(dict_word.size());
+                    RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
                     memcpy(data, dict_word.data(), dict_word.size());
                     Slice slice(data, dict_word.size());
                     global_dict.emplace(slice, i);

@@ -377,9 +377,11 @@ Status DataStreamRecvr::SenderQueue::add_chunks_for_pipeline(const PTransmitChun
 
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
                                                         faststring* uncompressed_buffer) {
+    size_t serialized_size = pchunk.serialized_size();
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-        RETURN_IF_ERROR(chunk->deserialize((const uint8_t*)pchunk.data().data(), pchunk.data().size(), _chunk_meta));
+        RETURN_IF_ERROR(chunk->deserialize((const uint8_t*)pchunk.data().data(), pchunk.data().size(), _chunk_meta,
+                                           serialized_size));
     } else {
         size_t uncompressed_size = 0;
         {
@@ -393,7 +395,8 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
         }
         {
             SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-            RETURN_IF_ERROR(chunk->deserialize(uncompressed_buffer->data(), uncompressed_size, _chunk_meta));
+            RETURN_IF_ERROR(
+                    chunk->deserialize(uncompressed_buffer->data(), uncompressed_size, _chunk_meta, serialized_size));
         }
     }
     return Status::OK();

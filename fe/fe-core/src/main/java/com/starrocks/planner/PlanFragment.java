@@ -530,4 +530,20 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             List<Pair<Integer, ColumnDict>> loadGlobalDicts) {
         this.loadGlobalDicts = loadGlobalDicts;
     }
+
+    public boolean hashLocalBucketShuffleRightOrFullJoin(PlanNode planRoot) {
+        if (planRoot instanceof HashJoinNode) {
+            HashJoinNode joinNode = (HashJoinNode) planRoot;
+            if (joinNode.isLocalHashBucket() &&
+                    (joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin())) {
+                return true;
+            }
+        }
+        for (PlanNode childNode : planRoot.getChildren()) {
+            if (hashLocalBucketShuffleRightOrFullJoin(childNode)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

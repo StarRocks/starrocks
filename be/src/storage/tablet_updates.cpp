@@ -733,7 +733,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
     }
+    size_t delete_op = 0;
     for (const auto& one_delete : state.deletes()) {
+        delete_op += one_delete->size();
         index.erase(*one_delete, &new_deletes);
     }
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
@@ -848,9 +850,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id << " version:" << version_info.version.to_string()
               << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows << " " << del_percent << "%"
-              << " rowset:" << rowset_id << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
-              << " #del:" << old_total_del << "+" << new_del << "=" << total_del << " #dv:" << ndelvec
-              << " duration:" << t_write - t_start << "ms"
+              << " rowset:" << rowset_id << " #seg:" << rowset->num_segments() << " #op(upsert:" << rowset->num_rows()
+              << " del:" << delete_op << ") #del:" << old_total_del << "+" << new_del << "=" << total_del
+              << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
               << Substitute("($0/$1/$2/$3)", t_load - t_start, t_index - t_load, t_delvec - t_index,
                             t_write - t_delvec);
     VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);

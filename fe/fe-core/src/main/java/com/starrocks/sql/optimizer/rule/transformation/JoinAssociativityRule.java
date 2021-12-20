@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
@@ -209,10 +210,16 @@ public class JoinAssociativityRule extends TransformationRule {
             } else {
                 expressionProject = Maps.newHashMap(leftChild1.getOp().getProjection().getColumnRefMap());
             }
-            expressionProject.putAll(leftExpression);
+            // Use leftChild1 projection to rewrite the leftExpression, it's like two project node merge.
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionProject);
+            Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap(expressionProject);
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftExpression.entrySet()) {
+                rewriteMap.put(entry.getKey(), entry.getValue().accept(rewriter, null));
+            }
+
             Operator.Builder builder = OperatorBuilderFactory.build(leftChild1.getOp());
             Operator newOp = builder.withOperator(leftChild1.getOp())
-                    .setProjection(new Projection(expressionProject)).build();
+                    .setProjection(new Projection(rewriteMap)).build();
             left = OptExpression.create(newOp, leftChild1.getInputs());
 
             //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan

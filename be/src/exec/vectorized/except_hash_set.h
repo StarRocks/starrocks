@@ -44,10 +44,15 @@ public:
     using Iterator = typename HashSet::iterator;
     using KeyVector = std::vector<Slice>;
 
-    ExceptHashSet()
-            : _hash_set(std::make_unique<HashSet>()),
-              _mem_pool(std::make_unique<MemPool>()),
-              _buffer(_mem_pool->allocate(_max_one_row_size * config::vector_chunk_size)) {}
+    ExceptHashSet() = default;
+
+    Status init() {
+        _hash_set = std::make_unique<HashSet>();
+        _mem_pool = std::make_unique<MemPool>();
+        _buffer = _mem_pool->allocate(_max_one_row_size * config::vector_chunk_size);
+        RETURN_IF_UNLIKELY_NULL(_buffer, Status::MemoryAllocFailed("alloc mem of except hash set failed"));
+        return Status::OK();
+    }
 
     Iterator begin() { return _hash_set->begin(); }
 

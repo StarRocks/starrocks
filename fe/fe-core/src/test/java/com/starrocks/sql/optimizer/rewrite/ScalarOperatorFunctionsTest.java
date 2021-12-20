@@ -666,6 +666,20 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void concat_ws_with_null() {
+        ConstantOperator[] arg = {ConstantOperator.createVarchar("star"),
+                ConstantOperator.createNull(Type.VARCHAR),
+                ConstantOperator.createVarchar("cks")};
+        ConstantOperator result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), arg);
+        assertEquals(Type.VARCHAR, result.getType());
+        assertEquals("starrocks", result.getVarchar());
+
+        result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","),
+                ConstantOperator.createNull(Type.VARCHAR));
+        assertEquals("", result.getVarchar());
+    }
+
+    @Test
     public void fromUnixTime2() throws AnalysisException {
         ConstantOperator date =
                 ScalarOperatorFunctions.fromUnixTime(O_INT_10, ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s"));
