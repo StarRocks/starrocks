@@ -404,7 +404,7 @@ public class QueryAnalyzer {
         cteScope.setParent(scope);
         for (View withQuery : stmt.getWithClause().getViews()) {
 
-            QueryRelation query = transformQueryStmt(withQuery.getQueryStmt(), cteScope);
+            QueryRelation query = transformQueryStmt(withQuery.getQueryStmtWithParse(), cteScope);
 
             /*
              *  Because the analysis of CTE is sensitive to order
@@ -856,7 +856,7 @@ public class QueryAnalyzer {
 
         if (table instanceof View) {
             View view = (View) table;
-            QueryRelation query = transformQueryStmt(view.getQueryStmt(), scope);
+            QueryRelation query = transformQueryStmt(view.getQueryStmtWithParse(), scope);
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (Field field : query.getRelationFields().getAllFields()) {
@@ -968,7 +968,8 @@ public class QueryAnalyzer {
         if (node.getGroupByClause() != null) {
             GroupByClause groupByClause = node.getGroupByClause();
             if (groupByClause.getGroupingType() == GroupByClause.GroupingType.GROUP_BY) {
-                for (Expr groupingExpr : groupByClause.getGroupingExprs()) {
+                List<Expr> groupingExprs = groupByClause.getGroupingExprs();
+                for (Expr groupingExpr : groupingExprs) {
                     if (groupingExpr instanceof IntLiteral) {
                         long ordinal = ((IntLiteral) groupingExpr).getLongValue();
                         if (ordinal < 1 || ordinal > outputExpressions.size()) {
@@ -1017,7 +1018,7 @@ public class QueryAnalyzer {
 
                     List<List<Expr>> groupingSets =
                             Sets.powerSet(IntStream.range(0, rewriteOriGrouping.size())
-                                            .boxed().collect(Collectors.toSet())).stream()
+                                    .boxed().collect(Collectors.toSet())).stream()
                                     .map(l -> l.stream().map(rewriteOriGrouping::get).collect(Collectors.toList()))
                                     .collect(Collectors.toList());
 
