@@ -30,7 +30,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/comparison_predicate.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
