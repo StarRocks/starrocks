@@ -306,11 +306,11 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
 Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
                                                 bool is_pipeline) {
-    DCHECK(request.chunks_size() > 0 || request.use_pass_through());
+    bool use_pass_through = request.use_pass_through();
+    DCHECK(request.chunks_size() > 0 || use_pass_through);
     int32_t be_number = request.be_number();
     int64_t sequence = request.sequence();
     ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
-    bool use_pass_through = request.use_pass_through();
     {
         std::unique_lock<std::mutex> l(_lock);
         wait_timer.stop();
@@ -409,11 +409,10 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
 
 Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
                                                                ::google::protobuf::Closure** done) {
-    DCHECK(request.chunks_size() > 0);
-
+    bool use_pass_through = request.use_pass_through();
+    DCHECK(request.chunks_size() > 0 || use_pass_through);
     const int32_t be_number = request.be_number();
     const int32_t sequence = request.sequence();
-    bool use_pass_through = request.use_pass_through();
 
     {
         std::unique_lock<std::mutex> l(_lock);

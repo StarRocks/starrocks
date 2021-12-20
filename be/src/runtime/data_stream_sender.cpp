@@ -301,6 +301,7 @@ Status DataStreamSender::Channel::send_chunk_request(PTransmitChunkParams* param
     params->set_node_id(_dest_node_id);
     params->set_sender_id(_parent->_sender_id);
     params->set_be_number(_parent->_be_number);
+    params->set_use_pass_through(_use_pass_through);
     auto status = _do_send_chunk_rpc(params, attachment);
     params->release_finst_id();
     return status;

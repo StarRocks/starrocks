@@ -434,10 +434,10 @@ TEST_F(JsonScannerTest, test_multi_type) {
     range.__set_path("./be/test/exec/test_data/json_scanner/test_multi_type.json");
     ranges.emplace_back(range);
 
-    auto scanner = create_json_scanner(
-            types, ranges,
-            {"f_bool", "f_tinyint", "f_smallint", "f_int", "f_bigint", "f_float", "f_double", "f_varchar", "f_date",
-             "f_datetime", "f_array", "f_decimal", "f_char", "f_time"});
+    auto scanner =
+            create_json_scanner(types, ranges,
+                                {"f_bool", "f_tinyint", "f_smallint", "f_int", "f_bigint", "f_float", "f_double",
+                                 "f_varchar", "f_date", "f_datetime", "f_array", "f_decimal", "f_char", "f_time"});
 
     Status st;
     st = scanner->open();

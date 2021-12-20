@@ -228,6 +228,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
     chunk_request->set_sender_id(_parent->_sender_id);
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
+    chunk_request->set_use_pass_through(_use_pass_through);
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment};
     _parent->_buffer->add_request(info);
@@ -409,8 +410,10 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                 butil::IOBuf attachment;
                 construct_brpc_attachment(_chunk_request, attachment);
                 for (auto idx : _channel_indices) {
-                    PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-                    RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, attachment));
+                    if (!_channels[idx]->use_pass_through()) {
+                        PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
+                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, attachment));
+                    }
                 }
                 _current_request_bytes = 0;
                 _chunk_request.reset();
