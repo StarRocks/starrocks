@@ -208,40 +208,29 @@ Status JsonScanner::_construct_cast_exprs() {
 }
 
 Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<std::vector<JsonPath>>* path_vecs) {
-    simdjson::dom::parser parser;
-    simdjson::dom::element elem;
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element elem = parser.parse(jsonpath.c_str(), jsonpath.length());
 
-    auto err = parser.parse(jsonpath.c_str(), jsonpath.length()).get(elem);
+        simdjson::dom::array paths = elem.get_array();
 
-    if (err) {
-        return Status::InvalidArgument(strings::Substitute("Invalid json path: $0, code $1, error: $2", jsonpath, err,
-                                                           simdjson::error_message(err)));
-    }
+        for (const auto& path : paths) {
+            if (!path.is_string()) {
+                return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
+            }
 
-    simdjson::dom::array paths;
-    err = elem.get_array().get(paths);
-    if (err) {
-        return Status::InvalidArgument(strings::Substitute("Invalid json path: $0, code $1, error: $2", jsonpath, err,
-                                                           simdjson::error_message(err)));
-    }
+            std::vector<JsonPath> parsed_paths;
+            const char* cstr = path.get_c_str();
 
-    for (const auto& path : paths) {
-        if (!path.is_string()) {
-            return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
+            JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths);
+            path_vecs->push_back(parsed_paths);
         }
-
-        std::vector<JsonPath> parsed_paths;
-        const char* cstr;
-        auto err = path.get_c_str().get(cstr);
-        if (err) {
-            return Status::InvalidArgument(strings::Substitute("Invalid json path: $0, code $1, error: $2", jsonpath,
-                                                               err, simdjson::error_message(err)));
-        }
-
-        JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths);
-        path_vecs->push_back(parsed_paths);
+        return Status::OK();
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("Invalid json path: $0, code $1, error: $2", jsonpath, err,
+                                           simdjson::error_message(err));
+        return Status::DataQualityError(err_msg);
     }
-    return Status::OK();
 }
 
 Status JsonScanner::_create_src_chunk(ChunkPtr* chunk) {
@@ -442,120 +431,73 @@ Status JsonReader::_get_row(simdjson::ondemand::object* row, bool* empty) {
 }
 
 Status JsonReader::_get_row_from_array(simdjson::ondemand::object* row) {
-    auto value = *_array_begin;
+    try {
+        auto value = *_array_begin;
+        // Parse the value as object, otherwise an exception is thrown.
+        *row = value.get_object();
+        return Status::OK();
 
-    simdjson::ondemand::json_type tp;
-    auto err = value.type().get(tp);
-    if (err) {
-        std::string err_msg = strings::Substitute("Failed to determine json type. code=$0, error=$1", err,
-                                                  simdjson::error_message(err));
-        return Status::DataQualityError(err_msg.c_str());
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("Failed to parse row as object from array, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
     }
-
-    if (tp != simdjson::ondemand::json_type::object) {
-        return Status::DataQualityError("nested array is not supported");
-    }
-
-    err = value.get_object().get(*row);
-    if (err) {
-        std::string err_msg = strings::Substitute("Failed to parse json as object. code=$0, error=$1", err,
-                                                  simdjson::error_message(err));
-        return Status::DataQualityError(err_msg.c_str());
-    }
-    return Status::OK();
 }
 
 Status JsonReader::_get_row_from_document_stream(simdjson::ondemand::object* row, bool* empty) {
-    simdjson::ondemand::document_reference doc;
-    auto err = (*_doc_stream_itr).get(doc);
-    if (err) {
-        std::string err_msg = strings::Substitute("Failed to parse json as document. code=$0, error=$1", err,
-                                                  simdjson::error_message(err));
-        return Status::DataQualityError(err_msg.c_str());
-    }
+    try {
+        simdjson::ondemand::document_reference doc = *_doc_stream_itr;
 
-    simdjson::ondemand::json_type tp;
-    Status st;
+        simdjson::ondemand::json_type tp = doc.type();
 
-    err = doc.type().get(tp);
-    if (err) {
-        std::string err_msg = strings::Substitute("Failed to determine json type. code=$0, error=$1", err,
-                                                  simdjson::error_message(err));
-        return Status::DataQualityError(err_msg.c_str());
-    }
+        switch (tp) {
+        case simdjson::ondemand::json_type::array: {
+            if (!_scanner->_strip_outer_array) {
+                std::string err_msg("JSON data is an array, strip_outer_array must be set true");
+                return Status::DataQualityError(err_msg.c_str());
+            }
 
-    switch (tp) {
-    case simdjson::ondemand::json_type::array: {
-        if (!_scanner->_strip_outer_array) {
-            std::string err_msg("JSON data is an array, strip_outer_array must be set true");
-            return Status::DataQualityError(err_msg.c_str());
+            simdjson::ondemand::array arr = doc.get_array();
+
+            *empty = arr.is_empty();
+
+            if (*empty) {
+                return Status::OK();
+            }
+
+            _array_begin = arr.begin();
+            _array_end = arr.end().get(_array_end);
+
+            _array_is_empty = false;
+
+            return _get_row_from_array(row);
         }
 
-        simdjson::ondemand::array arr;
-        err = doc.get_array().get(arr);
-        if (err) {
-            std::string err_msg = strings::Substitute("Failed to parse json as array. code=$0, error=$1", err,
-                                                      simdjson::error_message(err));
-            return Status::DataQualityError(err_msg.c_str());
-        }
+        case simdjson::ondemand::json_type::object: {
+            if (_scanner->_strip_outer_array) {
+                std::string err_msg("JSON data is an object, strip_outer_array must be set false");
+                return Status::DataQualityError(err_msg.c_str());
+            }
 
-        err = arr.is_empty().get(*empty);
-        if (err) {
-            std::string err_msg = strings::Substitute("Failed to parse json as array. code=$0, error=$1", err,
-                                                      simdjson::error_message(err));
-            return Status::DataQualityError(err_msg.c_str());
-        }
-
-        if (*empty) {
+            *row = doc.get_object();
             return Status::OK();
         }
 
-        err = arr.begin().get(_array_begin);
-        if (err) {
-            std::string err_msg = strings::Substitute("Failed to parse json as array. code=$0, error=$1", err,
-                                                      simdjson::error_message(err));
-            return Status::DataQualityError(err_msg.c_str());
+        default:
+            return Status::DataQualityError("Failed to decode json as array/object");
         }
 
-        err = arr.end().get(_array_end);
-        if (err) {
-            std::string err_msg = strings::Substitute("Failed to parse json as array. code=$0, error=$1", err,
-                                                      simdjson::error_message(err));
-            return Status::DataQualityError(err_msg.c_str());
-        }
-
-        _array_is_empty = false;
-
-        st = _get_row_from_array(row);
-        break;
+        return Status::OK();
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("Failed to parse row from document stream, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
     }
-
-    case simdjson::ondemand::json_type::object: {
-        if (_scanner->_strip_outer_array) {
-            std::string err_msg("JSON data is an object, strip_outer_array must be set false");
-            return Status::DataQualityError(err_msg.c_str());
-        }
-
-        err = doc.get_object().get(*row);
-        if (err) {
-            std::string err_msg = strings::Substitute("Failed to decode json as object. code=$0, error=$1", err,
-                                                      simdjson::error_message(err));
-            return Status::DataQualityError(err_msg.c_str());
-        }
-        st = Status::OK();
-        break;
-    }
-    default:
-        return Status::DataQualityError("Failed to decode json as array/object");
-    }
-
-    return st;
 }
 
 Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                                   const std::vector<SlotDescriptor*>& slot_descs) {
     RETURN_IF_ERROR(_filter_row_with_jsonroot(row));
-
     if (_scanner->_json_paths.empty()) {
         // No json path.
 
@@ -568,9 +510,9 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             auto column = chunk->get_column_by_slot_id(slot_desc->id());
             auto col_name = slot_desc->col_name();
 
-            simdjson::ondemand::value val;
-            auto err = row->find_field_unordered(col_name).get(val);
-            if (err) {
+            try {
+                simdjson::ondemand::value val = row->find_field_unordered(col_name);
+            } catch (simdjson::simdjson_error& e) {
                 if (col_name == "__op") {
                     // special treatment for __op column, fill default value '0' rather than null
                     column->append_strings(std::vector{Slice{"0"}});
@@ -632,8 +574,10 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdj
 
     // Sort the column in the slot_descs as the key order in json document.
     for (auto field : obj) {
-        auto err = field.key().get(json_str);
-        if (err) {
+        try {
+            json_str = field.key();
+        } catch (simdjson::simdjson_error& e) {
+            // Nothing would be done if got any error.
             return;
         }
 
