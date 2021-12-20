@@ -360,7 +360,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
         std::vector<size_t> swap_bytes;
-        _recvr->_pass_through_context.pull_chunks(&swap_chunks, &swap_bytes);
+        _recvr->_pass_through_context.pull_chunks(request.sender_id(), &swap_chunks, &swap_bytes);
         DCHECK(swap_chunks.size() == swap_bytes.size());
         size_t bytes = 0;
         for (size_t i = 0; i < swap_chunks.size(); i++) {
@@ -464,7 +464,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
         std::vector<size_t> swap_bytes;
-        _recvr->_pass_through_context.pull_chunks(&swap_chunks, &swap_bytes);
+        _recvr->_pass_through_context.pull_chunks(request.sender_id(), &swap_chunks, &swap_bytes);
         DCHECK(swap_chunks.size() == swap_bytes.size());
         size_t bytes = 0;
         for (size_t i = 0; i < swap_chunks.size(); i++) {

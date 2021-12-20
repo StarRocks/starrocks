@@ -260,7 +260,7 @@ Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk,
     if (chunk != nullptr) {
         if (_use_pass_through) {
             size_t chunk_size = chunk->serialize_size();
-            _pass_through_context.append_chunk(chunk, chunk_size);
+            _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size);
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_pass_through_bytes_counter, chunk_size);
         } else {

@@ -16,14 +16,14 @@ class PassThroughChannel;
 
 class PassThroughChunkBuffer {
 public:
-    using Key = std::pair<TUniqueId, PlanNodeId>;
+    using Key = std::tuple<TUniqueId, PlanNodeId>;
 
     struct KeyHash {
         size_t operator()(const Key& key) const {
             uint64_t hash = vectorized::CRC_HASH_SEED1;
-            hash = vectorized::crc_hash_uint64(key.first.hi, hash);
-            hash = vectorized::crc_hash_uint64(key.first.lo, hash);
-            hash = vectorized::crc_hash_uint64(key.second, hash);
+            hash = vectorized::crc_hash_uint64(std::get<0>(key).hi, hash);
+            hash = vectorized::crc_hash_uint64(std::get<0>(key).lo, hash);
+            hash = vectorized::crc_hash_uint64(std::get<1>(key), hash);
             return hash;
         }
     };
@@ -44,8 +44,8 @@ public:
                        PlanNodeId node_id)
             : _chunk_buffer(chunk_buffer), _fragment_instance_id(fragment_instance_id), _node_id(node_id) {}
     void init();
-    void append_chunk(const vectorized::Chunk* chunk, size_t chunk_size);
-    void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
+    void append_chunk(int sender_id, const vectorized::Chunk* chunk, size_t chunk_size);
+    void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
 
 private:
     // hold this chunk buffer to avoid early deallocation.
