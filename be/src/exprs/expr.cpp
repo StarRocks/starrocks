@@ -588,12 +588,18 @@ ColumnPtr Expr::evaluate_const(ExprContext* context) {
     if (!is_constant()) {
         return nullptr;
     }
-    if (_constant_column != nullptr) {
-        return _constant_column;
+    // TODO(by satanson):  std::atomic_load(shared_ptr<T>) deprecated in C++20
+    auto old_col = std::atomic_load(&_constant_column);
+    if (old_col) {
+        return old_col;
     }
-
-    _constant_column = context->evaluate(this, nullptr);
-    return _constant_column;
+    auto new_col = context->evaluate(this, nullptr);
+    // TODO(by satanson): std::atomic_compare_exchange_strong(shared_ptr<T>, ...) deprecated in C++20
+    if (std::atomic_compare_exchange_strong(&_constant_column, &old_col, new_col)) {
+        return new_col;
+    } else {
+        return old_col;
+    }
 }
 
 ColumnPtr Expr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
