@@ -82,6 +82,13 @@ struct TDataStreamSink {
   2: required Partitions.TDataPartition output_partition
 
   3: optional bool ignore_not_found
+
+  // Only useful in pipeline mode
+  // If receiver side is ExchangeMergeSortSourceOperator, then all the
+  // packets should be kept in order (according sequence), so the sender
+  // side need to maintain a send window in order to avoiding the receiver
+  // buffer too many out-of-order packets
+  4: optional bool is_merge
 }
 
 struct TMultiCastDataStreamSink {
