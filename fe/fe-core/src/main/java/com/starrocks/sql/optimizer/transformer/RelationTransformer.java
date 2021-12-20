@@ -179,7 +179,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session, outer).plan(node, cteContext);
+        return new QueryTransformer(columnRefFactory, session).plan(node, outer, cteContext);
     }
 
     @Override
@@ -381,7 +381,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         }
 
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
-                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputVariables));
+                new ExpressionMapping(node.getScope(), outputVariables));
         LogicalProjectOperator projectOperator =
                 new LogicalProjectOperator(outputVariables.stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
@@ -448,12 +448,15 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         LogicalPlan leftPlan = visit(node.getLeft());
         LogicalPlan rightPlan = visit(node.getRight());
 
-        ExpressionMapping expressionMapping = new ExpressionMapping(
-                new Scope(RelationId.of(node),
-                        node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
-                Streams.concat(leftPlan.getRootBuilder().getFieldMappings().stream(),
-                                rightPlan.getRootBuilder().getFieldMappings().stream())
-                        .collect(Collectors.toList()));
+        // The scope needs to be rebuilt here, because the scope of Semi/Anti Join
+        // only has a child field. Bug on predicate needs to see the two child field
+        Scope joinScope = new Scope(RelationId.of(node),
+                node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields()));
+        joinScope.setParent(node.getScope().getParent());
+        ExpressionMapping expressionMapping = new ExpressionMapping(joinScope, Streams.concat(
+                        leftPlan.getRootBuilder().getFieldMappings().stream(),
+                        rightPlan.getRootBuilder().getFieldMappings().stream())
+                .collect(Collectors.toList()));
 
         if (node.getOnPredicate() == null) {
             OptExprBuilder joinOptExprBuilder = new OptExprBuilder(new LogicalJoinOperator.Builder()
@@ -469,7 +472,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         }
 
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
-                .translateWithoutRewrite(node.getOnPredicate(), expressionMapping, null, null);
+                .translateWithoutRewrite(node.getOnPredicate(), expressionMapping);
         ScalarOperator onPredicate = SqlToScalarOperatorTranslator.translate(node.getOnPredicate(), expressionMapping);
 
         /*
@@ -497,15 +500,16 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
         ExpressionMapping outputExpressionMapping;
         if (node.getType().isLeftSemiAntiJoin()) {
-            outputExpressionMapping =
-                    new ExpressionMapping(new Scope(RelationId.of(node), node.getLeft().getRelationFields()),
-                            Lists.newArrayList(leftPlan.getRootBuilder().getFieldMappings()));
+            outputExpressionMapping = new ExpressionMapping(node.getScope(),
+                    Lists.newArrayList(leftPlan.getRootBuilder().getFieldMappings()));
         } else if (node.getType().isRightSemiAntiJoin()) {
-            outputExpressionMapping =
-                    new ExpressionMapping(new Scope(RelationId.of(node), node.getRight().getRelationFields()),
-                            Lists.newArrayList(rightPlan.getRootBuilder().getFieldMappings()));
+            outputExpressionMapping = new ExpressionMapping(node.getScope(),
+                    Lists.newArrayList(rightPlan.getRootBuilder().getFieldMappings()));
         } else {
-            outputExpressionMapping = expressionMapping;
+            outputExpressionMapping = new ExpressionMapping(node.getScope(), Streams.concat(
+                            leftPlan.getRootBuilder().getFieldMappings().stream(),
+                            rightPlan.getRootBuilder().getFieldMappings().stream())
+                    .collect(Collectors.toList()));
         }
 
         LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder()

@@ -17,6 +17,7 @@ import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
 import com.starrocks.sql.analyzer.relation.SelectRelation;
+import com.starrocks.sql.analyzer.relation.ValuesRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -893,7 +894,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             QueryRelation queryRelation = analyzeSuccess(sql);
-            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
+            List<Expr> items = ((ValuesRelation) queryRelation).getOutputExpr();
             Assert.assertEquals(items.get(0).getType(), ScalarType.DOUBLE);
             Assert.assertEquals(items.get(1).getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));

@@ -58,10 +58,9 @@ public class SubqueryTransformer {
         return subOpt;
     }
 
-    public ScalarOperator rewriteSubqueryScalarOperator(Expr predicate, OptExprBuilder subOpt, ExpressionMapping outer,
-                                                        List<ColumnRefOperator> correlation) {
+    public ScalarOperator rewriteSubqueryScalarOperator(Expr predicate, OptExprBuilder subOpt, List<ColumnRefOperator> correlation) {
         ScalarOperator scalarPredicate =
-                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), outer, correlation);
+                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation);
 
         ArrayList<InPredicate> inPredicates = new ArrayList<>();
         predicate.collect(InPredicate.class, inPredicates);

@@ -44,22 +44,26 @@ import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTransla
 class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
-    private final ExpressionMapping outer;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
-    QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer) {
+    public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
-        this.outer = outer;
     }
 
-    public LogicalPlan plan(SelectRelation queryBlock, Map<String, ExpressionMapping> cteContext) {
+    public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer,
+                            Map<String, ExpressionMapping> cteContext) {
         OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
+        if (outer != null) {
+            List<ColumnRefOperator> fieldsList = new ArrayList<>();
+            fieldsList.addAll(builder.getFieldMappings());
+            fieldsList.addAll(outer.getFieldMappings());
+            builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), fieldsList));
+        }
 
         builder = filter(builder, queryBlock.getPredicate());
-        builder =
-                aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(), queryBlock.getGroupingSetsList(),
-                        queryBlock.getGroupingFunctionCallExprs());
+        builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),
+                queryBlock.getGroupingSetsList(), queryBlock.getGroupingFunctionCallExprs());
         builder = filter(builder, queryBlock.getHaving());
         builder = window(builder, queryBlock.getOutputAnalytic());
 
@@ -176,7 +180,7 @@ class QueryTransformer {
         subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate);
 
         ScalarOperator scalarPredicate =
-                subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, outer, correlation);
+                subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, correlation);
 
         if (scalarPredicate != null) {
             LogicalFilterOperator filterOperator = new LogicalFilterOperator(scalarPredicate);
