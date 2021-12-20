@@ -12,6 +12,10 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
           _num_uncancelled_sinkers(num_sinkers) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
+        // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
+        if (instance_id.lo == -1) {
+            continue;
+        }
 
         auto it = _num_sinkers.find(instance_id.lo);
         if (it != _num_sinkers.end()) {
@@ -33,11 +37,11 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
             finst_id.set_lo(instance_id.lo);
             _instance_id2finst_id[instance_id.lo] = std::move(finst_id);
         }
+    }
 
-        _num_remaining_eos = 0;
-        for (auto& [_, num] : _num_sinkers) {
-            _num_remaining_eos += num;
-        }
+    _num_remaining_eos = 0;
+    for (auto& [_, num] : _num_sinkers) {
+        _num_remaining_eos += num;
     }
 }
 
