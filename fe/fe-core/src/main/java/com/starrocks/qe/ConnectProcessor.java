@@ -330,10 +330,8 @@ public class ConnectProcessor {
     private void handleFieldList() throws IOException {
         // Already get command code.
         String tableName = null;
-        String pattern = null;
         try {
             tableName = new String(MysqlProto.readNulTerminateString(packetBuf), "UTF-8");
-            pattern = new String(MysqlProto.readEofString(packetBuf), "UTF-8");
         } catch (UnsupportedEncodingException e) {
             // Impossible!!!
             LOG.error("Unknown UTF-8 character set.");

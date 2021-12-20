@@ -799,6 +799,15 @@ public class StmtExecutor {
                     sendFields(colNames, outputExprs);
                     isSendFields = true;
                 }
+                if (channel.isSendBufferNull()) {
+                    int bufferSize = 0;
+                    for (ByteBuffer row : batch.getBatch().getRows()) {
+                        bufferSize += (row.position() - row.limit());
+                    }
+                    // +8 for header size
+                    channel.initBuffer(bufferSize + 8);
+                }
+
                 for (ByteBuffer row : batch.getBatch().getRows()) {
                     channel.sendOnePacket(row);
                 }
