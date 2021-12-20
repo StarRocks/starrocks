@@ -166,11 +166,7 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
     // this time, because we will filter chunks before initialize permutations, so we just check memory usage.
     if (!_init_merged_segment) {
         // this time, Just initialized permutations.second.
-        try {
-            permutation_second.resize(row_count);
-        } catch (std::bad_alloc const&) {
-            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
-        }
+        permutation_second.resize(row_count);
 
         uint32_t perm_index = 0;
         for (uint32_t i = 0; i < segments.size(); ++i) {

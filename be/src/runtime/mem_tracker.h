@@ -155,8 +155,8 @@ public:
     /// are updated.
     /// Returns true if the try succeeded.
     WARN_UNUSED_RESULT
-    bool try_consume(int64_t bytes) {
-        if (UNLIKELY(bytes <= 0)) return true;
+    MemTracker* try_consume(int64_t bytes) {
+        if (UNLIKELY(bytes <= 0)) return nullptr;
         int64_t i;
         // Walk the tracker tree top-down.
         for (i = _all_trackers.size() - 1; i >= 0; --i) {
@@ -172,13 +172,13 @@ public:
                     for (int64_t j = _all_trackers.size() - 1; j > i; --j) {
                         _all_trackers[j]->_consumption->add(-bytes);
                     }
-                    return false;
+                    return tracker;
                 }
             }
         }
         // Everyone succeeded, return.
         DCHECK_EQ(i, -1);
-        return true;
+        return nullptr;
     }
 
     /// Decreases consumption of this tracker and its ancestors by 'bytes'.
@@ -270,6 +270,8 @@ public:
     Status MemLimitExceeded(RuntimeState* state, const std::string& details, int64_t failed_allocation = 0);
 
     Status check_mem_limit(const std::string& msg) const;
+
+    std::string err_msg(const std::string& msg) const;
 
     static const std::string COUNTER_NAME;
 

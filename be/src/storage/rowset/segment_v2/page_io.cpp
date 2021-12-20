@@ -112,6 +112,8 @@ Status PageIO::write_page(fs::WritableBlock* wblock, const std::vector<Slice>& b
 
 Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
                                         PageFooterPB* footer) {
+    RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("read and decompress page"));
+
     opts.sanity_check();
     opts.stats->total_pages_num++;
 

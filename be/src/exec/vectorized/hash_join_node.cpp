@@ -18,6 +18,7 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
@@ -176,23 +177,13 @@ Status HashJoinNode::open(RuntimeState* state) {
         {
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
-            try {
-                RETURN_IF_ERROR(_ht.append_chunk(state, chunk));
-                RETURN_IF_ERROR(state->check_mem_limit("HashJoinNode"));
-            } catch (std::bad_alloc const&) {
-                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
-            }
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.append_chunk(state, chunk)));
         }
     }
 
     {
-        try {
-            // build hash table: compute key columns, and then build the hash table.
-            RETURN_IF_ERROR(_build(state));
-            RETURN_IF_ERROR(state->check_mem_limit("HashJoinNode"));
-        } catch (std::bad_alloc const&) {
-            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
-        }
+        // build hash table: compute key columns, and then build the hash table.
+        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_build(state)));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
     }
