@@ -5103,14 +5103,4 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("equal join conjunct: 2: v2 = 5: v5"));
         Assert.assertTrue(plan.contains("1:EMPTYSET"));
     }
-
-    @Test
-    public void testMultiCrossJoinReorder() throws Exception {
-        // check multi cross join reorder without exception
-        ConnectContext.get().getSessionVariable().setMaxTransformReorderJoins(4);
-        String sql = "select count(*) from t0,t1,t2,t3,t0 as t4, t1 as t5 where true";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("19:CROSS JOIN"));
-        ConnectContext.get().getSessionVariable().setMaxTransformReorderJoins(8);
-    }
 }
