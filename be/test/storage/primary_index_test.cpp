@@ -15,9 +15,6 @@ using namespace starrocks::vectorized;
 
 namespace starrocks {
 
-// remove this line after the PR which move the same line from primary_index.cpp to primary_index.h
-const uint32_t ROWID_MASK = 0xffffffff;
-
 template <FieldType field_type, typename DatumType>
 void test_integral_pk() {
     auto f = std::make_shared<vectorized::Field>(0, "c0", field_type, false);
