@@ -24,7 +24,6 @@
 #include "exec/tablet_info.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/tuple_row.h"
 #include "storage/vectorized/delta_writer.h"
 #include "storage/vectorized/memtable.h"
 #include "util/starrocks_metrics.h"

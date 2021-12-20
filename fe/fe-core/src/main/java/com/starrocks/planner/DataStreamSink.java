@@ -34,6 +34,8 @@ public class DataStreamSink extends DataSink {
 
     private DataPartition outputPartition;
 
+    private boolean isMerge;
+
     public DataStreamSink(PlanNodeId exchNodeId) {
         this.exchNodeId = exchNodeId;
     }
@@ -50,6 +52,10 @@ public class DataStreamSink extends DataSink {
 
     public void setPartition(DataPartition partition) {
         outputPartition = partition;
+    }
+
+    public void setMerge(boolean isMerge) {
+        this.isMerge = isMerge;
     }
 
     @Override
@@ -79,6 +85,7 @@ public class DataStreamSink extends DataSink {
         TDataSink result = new TDataSink(TDataSinkType.DATA_STREAM_SINK);
         TDataStreamSink tStreamSink =
                 new TDataStreamSink(exchNodeId.asInt(), outputPartition.toThrift());
+        tStreamSink.setIs_merge(isMerge);
         result.setStream_sink(tStreamSink);
         return result;
     }

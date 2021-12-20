@@ -32,7 +32,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple_row.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/types.h"

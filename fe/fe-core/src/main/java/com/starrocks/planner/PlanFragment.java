@@ -206,6 +206,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             // we're streaming to an exchange node
             DataStreamSink streamSink = new DataStreamSink(destNode.getId());
             streamSink.setPartition(outputPartition);
+            streamSink.setMerge(destNode.isMerge());
             streamSink.setFragment(this);
             sink = streamSink;
         } else {
@@ -228,6 +229,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             // we're streaming to an exchange node
             DataStreamSink streamSink = new DataStreamSink(destNode.getId());
             streamSink.setPartition(outputPartition);
+            streamSink.setMerge(destNode.isMerge());
             streamSink.setFragment(this);
             sink = streamSink;
         } else {

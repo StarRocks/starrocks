@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_AGENT_AGENT_SERVER_H
-#define STARROCKS_BE_SRC_AGENT_AGENT_SERVER_H
-
+#pragma once
 #include <memory>
 #include <string>
 #include <vector>
@@ -87,5 +85,3 @@ private:
 };
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_AGENT_AGENT_SERVER_H

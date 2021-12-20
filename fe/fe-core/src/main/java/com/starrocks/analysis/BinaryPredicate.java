@@ -30,7 +30,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.Reference;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.analyzer.ExprVisitor;
@@ -415,17 +414,7 @@ public class BinaryPredicate extends Predicate implements Writable {
         fn = getBuiltinFunction(analyzer, opName, collectChildReturnTypes(), Function.CompareMode.IS_SUPERTYPE_OF);
         Preconditions.checkArgument(fn != null, String.format("Unsupported binary predicate %s", toSql()));
 
-        // determine selectivity
-        Reference<SlotRef> slotRefRef = new Reference<SlotRef>();
-        if (op == Operator.EQ && isSingleColumnPredicate(slotRefRef,
-                null) && slotRefRef.getRef().getNumDistinctValues() > 0) {
-            Preconditions.checkState(slotRefRef.getRef() != null);
-            selectivity = 1.0 / slotRefRef.getRef().getNumDistinctValues();
-            selectivity = Math.max(0, Math.min(1, selectivity));
-        } else {
-            // TODO: improve using histograms, once they show up
-            selectivity = Expr.DEFAULT_SELECTIVITY;
-        }
+        selectivity = Expr.DEFAULT_SELECTIVITY;
     }
 
     public boolean isValidDate(LiteralExpr expr) {
