@@ -109,7 +109,7 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public boolean isNullable() {
-        return fn.isNullable();
+        return fn == null || fn.isNullable();
     }
 
     public ColumnRefSet getUsedColumns() {
