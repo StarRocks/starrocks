@@ -729,7 +729,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     if (tablet->tablet_state() == TABLET_SHUTDOWN) {
         LOG(INFO) << "Loaded shutdown tablet " << tablet_id;
         std::unique_lock shutdown_tablets_wlock(_shutdown_tablets_lock);
-        DroppedTabletInfo info{.tablet = std::move(tablet), .flag = kMoveFilesToTrash};
+        DroppedTabletInfo info{.tablet = tablet, .flag = kMoveFilesToTrash};
         _shutdown_tablets.emplace(tablet->tablet_id(), std::move(info));
         return Status::NotFound("tablet state is shutdown");
     }
