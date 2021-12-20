@@ -9,7 +9,6 @@
 #include "common/status.h"
 #include "exprs/base64.h"
 #include "exprs/expr.h"
-#include "runtime/tuple_row.h"
 #include "util/aes_util.h"
 #include "util/debug_util.h"
 #include "util/md5.h"

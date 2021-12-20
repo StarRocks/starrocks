@@ -21,7 +21,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple_row.h"
 #include "service/brpc.h"
 #include "util/block_compression.h"
 #include "util/compression_utils.h"

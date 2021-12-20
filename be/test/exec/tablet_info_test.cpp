@@ -25,7 +25,6 @@
 
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/tuple_row.h"
 
 namespace starrocks {
 

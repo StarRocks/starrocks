@@ -48,7 +48,6 @@ class ObjectPool;
 class RuntimeState;
 class SlotRef;
 class TPlan;
-class TupleRow;
 class DataSink;
 
 namespace pipeline {
