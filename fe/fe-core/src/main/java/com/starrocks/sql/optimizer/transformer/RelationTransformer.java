@@ -474,7 +474,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             }
 
             ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-            onPredicate = Utils.compoundAnd(scalarRewriter.rewrite(Utils.compoundAnd(Utils.compoundAnd(eqConj)),
+            onPredicate = Utils.compoundAnd(scalarRewriter.rewrite(Utils.compoundAnd(eqConj),
                     ScalarOperatorRewriter.DEFAULT_REWRITE_RULES), onPredicate);
         }
 
