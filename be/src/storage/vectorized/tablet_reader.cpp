@@ -8,6 +8,7 @@
 #include "gutil/stl_util.h"
 #include "service/backend_options.h"
 #include "storage/tablet.h"
+#include "storage/types.h"
 #include "storage/vectorized/aggregate_iterator.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/column_predicate.h"
@@ -279,7 +280,15 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         if (input.is_null(i)) {
             continue;
         }
-        RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), &_mempool));
+        // If the type of the storage level is CHAR,
+        // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
+        // CHAR type strings are truncated at the storage level after '\0'.
+        if (f->type()->type() == OLAP_FIELD_TYPE_CHAR) {
+            RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_VARCHAR).get(), &values.back(),
+                                              input.get_value(i), &_mempool));
+        } else {
+            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), &_mempool));
+        }
     }
     *tuple = SeekTuple(std::move(schema), std::move(values));
     return Status::OK();
