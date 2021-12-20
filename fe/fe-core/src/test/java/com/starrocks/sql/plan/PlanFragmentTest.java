@@ -16,6 +16,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -5101,5 +5102,15 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("equal join conjunct: 2: v2 = 5: v5"));
         Assert.assertTrue(plan.contains("1:EMPTYSET"));
+    }
+
+    @Test
+    public void testMultiCrossJoinReorder() throws Exception {
+        // check multi cross join reorder without exception
+        ConnectContext.get().getSessionVariable().setMaxTransformReorderJoins(4);
+        String sql = "select count(*) from t0,t1,t2,t3,t0 as t4, t1 as t5 where true";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("19:CROSS JOIN"));
+        ConnectContext.get().getSessionVariable().setMaxTransformReorderJoins(8);
     }
 }
