@@ -828,7 +828,7 @@ public class FunctionCallExpr extends Expr {
 
     // TODO(kks): improve this
     public boolean isNullable() {
-        return !CallOperator.AlwaysReturnNonNullableFunctions.contains(fnName.getFunction());
+        return !FunctionSet.alwaysReturnNonNullableFunctions.contains(fnName.getFunction());
     }
 
     public static FunctionCallExpr createMergeAggCall(

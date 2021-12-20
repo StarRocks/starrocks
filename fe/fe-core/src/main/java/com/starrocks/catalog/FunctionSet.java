@@ -187,6 +187,26 @@ public class FunctionSet {
            "trim",
            "upper");
 
+    public static final Set<String> alwaysReturnNonNullableFunctions =
+            ImmutableSet.<String>builder()
+                    .add(FunctionSet.COUNT)
+                    .add(FunctionSet.MULTI_DISTINCT_COUNT)
+                    .add(FunctionSet.NULL_OR_EMPTY)
+                    .add(FunctionSet.HLL_HASH)
+                    .add(FunctionSet.HLL_UNION_AGG)
+                    .add(FunctionSet.NDV)
+                    .add(FunctionSet.APPROX_COUNT_DISTINCT)
+                    .add(FunctionSet.BITMAP_UNION_INT)
+                    .add(FunctionSet.BITMAP_UNION_COUNT)
+                    .add(FunctionSet.BITMAP_COUNT)
+                    .add(FunctionSet.CURDATE)
+                    .add(FunctionSet.CURRENT_TIMESTAMP)
+                    .add(FunctionSet.CURRENT_TIME)
+                    .add(FunctionSet.NOW)
+                    .add(FunctionSet.UNIX_TIMESTAMP)
+                    .add(FunctionSet.UTC_TIMESTAMP)
+                    .build();
+
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
     }
@@ -331,7 +351,7 @@ public class FunctionSet {
             return;
         }
         fn.setCouldApplyDictOptimize(couldApplyDictOptimizationFunctions.contains(fn.functionName()));
-
+        fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
     }
