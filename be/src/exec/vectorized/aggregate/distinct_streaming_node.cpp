@@ -7,6 +7,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
+#include "runtime/current_thread.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -65,10 +66,11 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
                 if (false) {
                 }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                       \
-            _aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, input_chunk_size);
+#define HASH_MAP_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, input_chunk_size));                                             \
+    }
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                 else {
@@ -103,10 +105,11 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
                     if (false) {
                     }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                       \
-            _aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, input_chunk_size);
+#define HASH_MAP_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, input_chunk_size));                                             \
+    }
                     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                     else {
@@ -130,10 +133,12 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
                         if (false) {
                         }
-#define HASH_MAP_METHOD(NAME)                                                                                       \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) _aggregator                        \
-            ->build_hash_set_with_selection<typename decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, input_chunk_size);
+#define HASH_MAP_METHOD(NAME)                                                             \
+    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) {        \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection<typename decltype( \
+                                    _aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, input_chunk_size));                \
+    }
                         APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                         else {

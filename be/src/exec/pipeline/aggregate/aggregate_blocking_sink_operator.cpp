@@ -2,6 +2,8 @@
 
 #include "aggregate_blocking_sink_operator.h"
 
+#include "runtime/current_thread.h"
+
 namespace starrocks::pipeline {
 
 Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
@@ -61,10 +63,11 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
     if (!_aggregator->is_none_group_by_exprs()) {
         if (false) {
         }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_map_variant().type == vectorized::HashMapVariant::Type::NAME)           \
-            _aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, chunk->num_rows());
+#define HASH_MAP_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_map_variant().type == vectorized::HashMapVariant::Type::NAME) {                         \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
+                *_aggregator->hash_map_variant().NAME, chunk->num_rows()));                                            \
+    }
         APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 

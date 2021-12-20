@@ -7,6 +7,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks::vectorized {
 
@@ -49,10 +50,11 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (false) {
             }
-#define HASH_SET_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                       \
-            _aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, chunk->num_rows());
+#define HASH_SET_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, chunk->num_rows()));                                            \
+    }
             APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
