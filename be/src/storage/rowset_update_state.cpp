@@ -249,7 +249,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
                 (t_rewrite - t_start) / 1000000);
     }
     for (size_t i = 0; i < num_segments; i++) {
-        RETURN_IF_ERROR(Env::Default()->rename_file(rewrite_files[i].first, rewrite_files[i].second));
+        RETURN_IF_ERROR(Env::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
     }
     // clean this to prevent DeferOp clean files
     rewrite_files.clear();
