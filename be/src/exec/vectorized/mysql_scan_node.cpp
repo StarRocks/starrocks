@@ -16,7 +16,6 @@
 #include "runtime/decimalv3.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "runtime/tuple_row.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {

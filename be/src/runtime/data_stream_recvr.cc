@@ -32,6 +32,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "exec/sort_exec_exprs.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"

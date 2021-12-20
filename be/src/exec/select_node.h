@@ -28,7 +28,6 @@
 namespace starrocks {
 
 class Tuple;
-class TupleRow;
 
 // Node that evaluates conjuncts and enforces a limit but otherwise passes along
 // the rows pulled from its child unchanged.

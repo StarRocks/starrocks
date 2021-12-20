@@ -32,7 +32,6 @@ class Env;
 class ExprContext;
 class FileBuilder;
 class RuntimeProfile;
-class TupleRow;
 class WritableFile;
 
 struct ResultFileOptions {

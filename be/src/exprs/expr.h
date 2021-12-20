@@ -37,7 +37,6 @@
 #include "runtime/string_value.h"
 #include "runtime/string_value.hpp"
 #include "runtime/tuple.h"
-#include "runtime/tuple_row.h"
 #include "runtime/types.h"
 #include "udf/udf.h"
 

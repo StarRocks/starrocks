@@ -34,7 +34,6 @@
 #include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple_row.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 #include "util/date_func.h"

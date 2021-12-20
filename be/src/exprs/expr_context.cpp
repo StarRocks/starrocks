@@ -141,10 +141,6 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root
     return root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
 }
 
-void* ExprContext::get_value(TupleRow* row) {
-    return nullptr;
-}
-
 bool ExprContext::is_nullable() {
     if (_root->is_slotref()) {
         return SlotRef::is_nullable(_root);
