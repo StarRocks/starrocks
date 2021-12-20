@@ -189,7 +189,7 @@ std::atomic<int64_t> g_mem_usage(0);
 #define MEMORY_RELEASE_SIZE(size) g_mem_usage.fetch_sub(size)
 #define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(tc_malloc_size(ptr))
 #define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(tc_malloc_size(ptr))
-#define TRY_MEM_CONSUME(size) g_mem_usage.fetch_add(size)
+#define TRY_MEM_CONSUME(size, err_ret) g_mem_usage.fetch_add(size)
 #define SET_EXCEED_MEM_TRACKER() (void)0
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
