@@ -84,33 +84,6 @@ TEST_F(OlapTablePartitionParamTest, to_protobuf) {
     }
 }
 
-TEST_F(OlapTablePartitionParamTest, unknown_partition_column) {
-    TDescriptorTable t_desc_tbl;
-    auto t_schema = get_schema(&t_desc_tbl);
-    std::shared_ptr<OlapTableSchemaParam> schema(new OlapTableSchemaParam());
-    auto st = schema->init(t_schema);
-    ASSERT_TRUE(st.ok());
-
-    // (-oo, 10] | [10.50) | [60, +oo)
-    TOlapTablePartitionParam t_partition_param;
-    t_partition_param.db_id = 1;
-    t_partition_param.table_id = 2;
-    t_partition_param.version = 0;
-    t_partition_param.__set_partition_column("c4");
-    t_partition_param.__set_distributed_columns({"c1", "c3"});
-    t_partition_param.partitions.resize(1);
-    t_partition_param.partitions[0].id = 10;
-    t_partition_param.partitions[0].num_buckets = 1;
-    t_partition_param.partitions[0].indexes.resize(2);
-    t_partition_param.partitions[0].indexes[0].index_id = 4;
-    t_partition_param.partitions[0].indexes[0].tablets = {21};
-    t_partition_param.partitions[0].indexes[1].index_id = 5;
-
-    vectorized::OlapTablePartitionParam part(schema, t_partition_param);
-    st = part.init();
-    ASSERT_FALSE(st.ok());
-}
-
 TEST_F(OlapTablePartitionParamTest, unknown_distributed_col) {
     TDescriptorTable t_desc_tbl;
     auto t_schema = get_schema(&t_desc_tbl);
