@@ -16,7 +16,8 @@ import org.junit.rules.ExpectedException;
 import java.util.UUID;
 
 public class SelectStmtWithDecimalTypesNewPlannerTest {
-    private static final String runningDir = "fe/mocked/DecimalDemoTestNewPlanner/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir =
+            "fe/mocked/DecimalDemoTestNewPlanner/" + UUID.randomUUID().toString() + "/";
     private static ConnectContext ctx;
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
@@ -125,6 +126,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String expectString = "TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:5))]), opcode:MULTIPLY, num_children:2," +
                 " output_scale:-1, output_column:-1, use_vectorized:true, has_nullable_child:true, is_nullable:true, is_monotonic:true)," +
+                " TExprNode(node_type:CAST_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:3))])," +
+                " opcode:INVALID_OPCODE, num_children:1, output_scale:-1, output_column:-1, child_type:DECIMAL128, use_vectorized:true, has_nullable_child:true, is_nullable:true, is_monotonic:true)," +
                 " TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType" +
                 "(type:DECIMAL128, precision:20, scale:3))]), num_children:0, slot_ref:TSlotRef(slot_id:3, tuple_id:0)," +
                 " output_scale:-1, output_column:-1, use_vectorized:true, has_nullable_child:false, is_nullable:true, is_monotonic:true)," +
@@ -133,15 +136,17 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "TDecimalLiteral(value:3.14), output_scale:-1, use_vectorized:true, has_nullable_child:false," +
                 " is_nullable:false, is_monotonic:true)";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        System.out.println(thrift);
+
         Assert.assertTrue(thrift.contains(expectString));
     }
 
     @Test
     public void testMod() throws Exception {
         String sql = "select mod(0.022330165, NULL) as result from db1.decimal_table";
-	String expectString = "TScalarType(type:DECIMAL32, precision:9, scale:9))";
-	String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
-	Assert.assertTrue(thrift.contains(expectString));
+        String expectString = "TScalarType(type:DECIMAL32, precision:9, scale:9))";
+        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        Assert.assertTrue(thrift.contains(expectString));
     }
 
     @Test

@@ -5200,4 +5200,12 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1"));
     }
+
+    @Test
+    public void testJoinOnPredicateRewrite() throws Exception {
+        String sql = "select * from t0 left outer join t1 on v1=v4 and cast(v2 as bigint) = v5 and false";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("equal join conjunct: 2: v2 = 5: v5"));
+        Assert.assertTrue(plan.contains("1:EMPTYSET"));
+    }
 }
