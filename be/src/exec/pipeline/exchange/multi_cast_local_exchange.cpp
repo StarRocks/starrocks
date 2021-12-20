@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "exec/pipeline/exchange/mcast_local_exchange.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 
 #include "util/logging.h"
 
