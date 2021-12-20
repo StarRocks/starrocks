@@ -331,4 +331,11 @@ inline std::ostream& operator<<(std::ostream& os, const Status& st) {
         }                                 \
     } while (0)
 
+#define RETURN_IF_UNLIKELY(cond, ret) \
+    do {                              \
+        if (UNLIKELY(cond)) {         \
+            return ret;               \
+        }                             \
+    } while (0)
+
 #define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
