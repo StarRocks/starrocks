@@ -9,9 +9,11 @@ namespace starrocks {
 CurrentThread::~CurrentThread() {
     StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
     if (UNLIKELY(storage_engine != nullptr && storage_engine->bg_worker_stopped())) {
+        tls_is_thread_status_init = false;
         return;
     }
     commit();
+    tls_is_thread_status_init = false;
 }
 
 } // namespace starrocks
