@@ -166,7 +166,7 @@ public:
     // Returns a string representation in DFS order of the plan rooted at this.
     std::string debug_string() const;
 
-    virtual void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized);
+    virtual void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs);
     virtual void push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector);
     void push_down_join_runtime_filter_to_children(RuntimeState* state,
                                                    vectorized::RuntimeFilterProbeCollector* collector);

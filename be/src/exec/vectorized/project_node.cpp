@@ -202,7 +202,7 @@ Status ProjectNode::close(RuntimeState* state) {
     return Status::OK();
 }
 
-void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
+void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
     for (const auto& ctx : (*expr_ctxs)) {
         if (!ctx->root()->is_bound(_tuple_ids)) {
             continue;
@@ -225,7 +225,7 @@ void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext
         }
     }
 
-    ExecNode::push_down_predicate(state, expr_ctxs, is_vectorized);
+    ExecNode::push_down_predicate(state, expr_ctxs);
 }
 
 void ProjectNode::push_down_join_runtime_filter(RuntimeState* state,

@@ -580,10 +580,6 @@ void Expr::close(const std::vector<Expr*>& exprs) {
     for (Expr* expr : exprs) expr->close();
 }
 
-bool Expr::is_vectorized() const {
-    return false;
-}
-
 ColumnPtr Expr::evaluate_const(ExprContext* context) {
     if (!is_constant()) {
         return nullptr;
