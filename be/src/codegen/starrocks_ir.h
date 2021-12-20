@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_CODGEN_STARROCKS_IR_H
-#define STARROCKS_BE_SRC_QUERY_CODGEN_STARROCKS_IR_H
+#pragma once
 #ifdef IR_COMPILE
 // For cross compiling to IR, we need functions decorated in specific ways.  For
 // functions that we will replace with codegen, we need them not inlined (otherwise
@@ -34,5 +33,4 @@
 #else
 #define IR_NO_INLINE
 #define IR_ALWAYS_INLINE
-#endif
 #endif

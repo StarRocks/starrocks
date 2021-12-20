@@ -77,6 +77,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -495,7 +496,9 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                 }
             }
 
-            onPredicate = Utils.compoundAnd(Utils.compoundAnd(eqConj), onPredicate);
+            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            onPredicate = Utils.compoundAnd(scalarRewriter.rewrite(Utils.compoundAnd(eqConj),
+                    ScalarOperatorRewriter.DEFAULT_REWRITE_RULES), onPredicate);
         }
 
         ExpressionMapping outputExpressionMapping;

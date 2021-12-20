@@ -7455,7 +7455,7 @@ public class Catalog {
                         List<Replica> replicas = tablet.getReplicas();
                         for (Replica replica : replicas) {
                             long backendId = replica.getBackendId();
-                            DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash);
+                            DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
                             batchTask.addTask(dropTask);
                         } // end for replicas
                     } // end for tablets

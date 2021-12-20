@@ -209,10 +209,14 @@ Status MemTracker::check_mem_limit(const std::string& msg) const {
         return Status::OK();
     }
 
+    return Status::MemoryLimitExceeded(tracker->err_msg(msg));
+}
+
+std::string MemTracker::err_msg(const std::string& msg) const {
     std::stringstream str;
     str << "Memory exceed limit. " << msg << " ";
-    str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";
-    switch (tracker->type()) {
+    str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
+    switch (type()) {
     case MemTracker::NO_SET:
         break;
     case MemTracker::QUERY:
@@ -234,7 +238,7 @@ Status MemTracker::check_mem_limit(const std::string& msg) const {
     default:
         break;
     }
-    return Status::MemoryLimitExceeded(str.str());
+    return str.str();
 }
 
 } // end namespace starrocks

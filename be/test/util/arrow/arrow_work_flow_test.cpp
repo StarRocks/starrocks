@@ -37,7 +37,6 @@
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/thread_resource_mgr.h"
-#include "runtime/tuple_row.h"
 #include "util/arrow/row_batch.h"
 #include "util/cpu_info.h"
 #include "util/debug_util.h"

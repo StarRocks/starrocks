@@ -269,13 +269,18 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
         starrocks::DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink);
         auto dop = _fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
-        std::shared_ptr<SinkBuffer> sink_buffer =
-                std::make_shared<SinkBuffer>(_fragment_ctx->runtime_state(), sender->destinations(), dop);
+        auto& t_stream_sink = t_datasink.stream_sink;
+        bool is_dest_merge = false;
+        if (t_stream_sink.__isset.is_merge && t_stream_sink.is_merge) {
+            is_dest_merge = true;
+        }
+        std::shared_ptr<SinkBuffer> sink_buffer = std::make_shared<SinkBuffer>(
+                _fragment_ctx->runtime_state(), sender->destinations(), is_dest_merge, dop);
 
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
-                context->next_operator_id(), t_datasink.stream_sink.dest_node_id, sink_buffer,
-                sender->get_partition_type(), sender->destinations(), sender->sender_id(), sender->get_dest_node_id(),
-                sender->get_partition_exprs(), _fragment_ctx);
+                context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
+                sender->destinations(), sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(),
+                _fragment_ctx);
         _fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
 
     } else if (typeid(*datasink) == typeid(starrocks::MultiCastDataStreamSink)) {
@@ -292,6 +297,7 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
         // Further workflow explanation is in mcast_local_exchange.h file.
         starrocks::MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink);
         const auto& sinks = mcast_sink->get_sinks();
+        auto& t_multi_case_stream_sink = t_datasink.multi_cast_stream_sink;
 
         // === create exchange ===
         auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(sinks.size());
@@ -311,14 +317,20 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
             OpFactories ops;
             // it's okary to set arbitrary dop.
             const size_t dop = 1;
+            bool is_dest_merge = false;
+            auto& t_stream_sink = t_multi_case_stream_sink.sinks[i];
+            if (t_stream_sink.__isset.is_merge && t_stream_sink.is_merge) {
+                is_dest_merge = true;
+            }
+
             // source op
             auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
                     context->next_operator_id(), pseudo_plan_node_id, i, mcast_local_exchanger);
             source_op->set_degree_of_parallelism(dop);
 
             // sink op
-            auto sink_buffer =
-                    std::make_shared<SinkBuffer>(_fragment_ctx->runtime_state(), sender->destinations(), dop);
+            auto sink_buffer = std::make_shared<SinkBuffer>(_fragment_ctx->runtime_state(), sender->destinations(),
+                                                            is_dest_merge, dop);
             auto sink_op = std::make_shared<ExchangeSinkOperatorFactory>(
                     context->next_operator_id(), -1, sink_buffer, sender->get_partition_type(), sender->destinations(),
                     sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(), _fragment_ctx);

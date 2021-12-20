@@ -80,18 +80,13 @@ public:
     // no-op when this channel has been closed or cancelled
     Status cancel();
 
-    // upper application may call this to try to reduce the mem usage of this channel.
-    // eg. flush the largest memtable async.
-    // no-op when this channel has been closed or cancelled.
-    // return Status::OK if flush async success or no-op.
-    Status reduce_mem_usage_async(const std::set<int64_t>& flush_tablet_ids, int64_t* tablet_id,
-                                  int64_t* tablet_mem_consumption);
-    // wait tablet memtables in flush queue to be flushed.
-    Status wait_mem_usage_reduced(int64_t tablet_id);
-
-    int64_t mem_consumption() const { return _mem_tracker->consumption(); }
-
 private:
+    enum State {
+        kInitialized,
+        kOpened,
+        kFinished // closed or cancelled
+    };
+
     // open all writer
     Status _open_all_writers(const PTabletWriterOpenRequest& params);
 
@@ -100,17 +95,13 @@ private:
     // id of this load channel
     TabletsChannelKey _key;
 
+    State _state;
+    MemTracker* _mem_tracker;
+
     // make execute sequece
     std::mutex _global_lock;
     static constexpr int k_shard_size = 127;
     std::array<std::mutex, k_shard_size + 1> _tablet_locks;
-
-    enum State {
-        kInitialized,
-        kOpened,
-        kFinished // closed or cancelled
-    };
-    State _state;
 
     // initialized in open function
     int64_t _txn_id = -1;
@@ -130,14 +121,12 @@ private:
 
     std::unordered_set<int64_t> _partition_ids;
 
-    std::unique_ptr<MemTracker> _mem_tracker;
-
     static std::atomic<uint64_t> _s_tablet_writer_count;
 
     vectorized::RuntimeChunkMeta _chunk_meta;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel
-    std::unordered_map<int64_t, vectorized::DeltaWriter*> _delta_writers;
+    std::unordered_map<int64_t, std::unique_ptr<vectorized::DeltaWriter>> _delta_writers;
 
     vectorized::GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;

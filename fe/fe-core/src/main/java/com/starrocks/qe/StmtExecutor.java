@@ -694,6 +694,15 @@ public class StmtExecutor {
                     sendFields(colNames, outputExprs);
                     isSendFields = true;
                 }
+                if (channel.isSendBufferNull()) {
+                    int bufferSize = 0;
+                    for (ByteBuffer row : batch.getBatch().getRows()) {
+                        bufferSize += (row.position() - row.limit());
+                    }
+                    // +8 for header size
+                    channel.initBuffer(bufferSize + 8);
+                }
+
                 for (ByteBuffer row : batch.getBatch().getRows()) {
                     channel.sendOnePacket(row);
                 }
@@ -975,7 +984,8 @@ public class StmtExecutor {
     }
 
     private boolean supportedByNewPlanner(StatementBase statement, ConnectContext context) {
-        return statement instanceof QueryStmt || statement instanceof InsertStmt || statement instanceof CreateTableAsSelectStmt;
+        return statement instanceof QueryStmt || statement instanceof InsertStmt ||
+                statement instanceof CreateTableAsSelectStmt;
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {

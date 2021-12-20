@@ -27,7 +27,6 @@
 
 namespace starrocks {
 
-class TupleRow;
 class ExprContext;
 class MysqlRowBuffer;
 class BufferControlBlock;
@@ -58,10 +57,7 @@ public:
 
 private:
     void _init_profile();
-    // convert one tuple row
-    Status _add_one_row(TupleRow* row);
 
-private:
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;
     MysqlRowBuffer* _row_buffer;

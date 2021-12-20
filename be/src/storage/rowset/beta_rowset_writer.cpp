@@ -96,6 +96,12 @@ OLAPStatus BetaRowsetWriter::init() {
 }
 
 RowsetSharedPtr BetaRowsetWriter::build() {
+    if (_num_rows_written > 0) {
+        if (auto st = _context.env->sync_dir(_context.rowset_path_prefix); !st.ok()) {
+            LOG(ERROR) << "Fail to sync directory " << _context.rowset_path_prefix << ": " << st;
+            return nullptr;
+        }
+    }
     _rowset_meta->set_num_rows(_num_rows_written);
     _rowset_meta->set_total_row_size(_total_row_size);
     _rowset_meta->set_total_disk_size(_total_data_size);
@@ -403,7 +409,6 @@ RowsetSharedPtr HorizontalBetaRowsetWriter::build() {
             return nullptr;
         }
     }
-
     // When building a rowset, we must ensure that the current _segment_writer has been
     // flushed, that is, the current _segment_wirter is nullptr
     DCHECK(_segment_writer == nullptr) << "segment must be null when build rowset";
@@ -721,7 +726,6 @@ OLAPStatus VerticalBetaRowsetWriter::final_flush() {
     if (_segment_writers.empty()) {
         return OLAP_SUCCESS;
     }
-
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         Status s = segment_writer->finalize_footer(&segment_size);

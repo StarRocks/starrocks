@@ -21,16 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 
 import java.util.Map;
 
@@ -65,40 +58,9 @@ public class CreateClusterStmt extends DdlStmt {
         this.clusterName = clusterName;
     }
 
-    public boolean isSetIfNotExists() {
-        return ifNotExists;
-    }
-
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
-        if (Config.disable_cluster_feature) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "CREATE CLUSTER");
-        }
-        FeNameFormat.checkDbName(clusterName);
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.OPERATOR)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_AUTHORITY, analyzer.getQualifiedUser());
-        }
-
-        if (properties == null || properties.size() == 0 || !properties.containsKey(CLUSTER_INSTANCE_NUM)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_PARAMETER);
-        }
-
-        try {
-            instanceNum = Integer.parseInt(properties.get(CLUSTER_INSTANCE_NUM));
-        } catch (NumberFormatException e) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_PARAMETER);
-        }
-
-        if (instanceNum < 0) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_CREATE_INSTANCE_NUM_ERROR);
-        }
-
-        final String password = passwd;
-        if (!Strings.isNullOrEmpty(password)) {
-            scramblePassword = MysqlPassword.makeScrambledPassword(password);
-        } else {
-            scramblePassword = new byte[0];
-        }
+        ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "CREATE CLUSTER");
     }
 
     @Override
@@ -115,10 +77,6 @@ public class CreateClusterStmt extends DdlStmt {
 
     public int getInstanceNum() {
         return instanceNum;
-    }
-
-    public void setInstanceNum(int instanceNum) {
-        this.instanceNum = instanceNum;
     }
 
     public byte[] getPassword() {

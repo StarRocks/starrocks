@@ -22,10 +22,8 @@
 #pragma once
 
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 #include "common/object_pool.h"
@@ -33,7 +31,6 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
-#include "runtime/raw_value.h"
 #include "runtime/tuple.h"
 
 namespace starrocks {
@@ -77,9 +74,9 @@ public:
     std::string debug_string() const;
 
 private:
-    int64_t _db_id;
-    int64_t _table_id;
-    int64_t _version;
+    int64_t _db_id = 0;
+    int64_t _table_id = 0;
+    int64_t _version = 0;
 
     TupleDescriptor* _tuple_desc = nullptr;
     mutable POlapTableSchemaParam* _proto_schema = nullptr;
@@ -93,103 +90,6 @@ using OlapTableIndexTablets = TOlapTableIndexTablets;
 //     2: required list<i64> tablets
 // }
 
-struct OlapTablePartition {
-    int64_t id = 0;
-    Tuple* start_key = nullptr;
-    Tuple* end_key = nullptr;
-    int64_t num_buckets = 0;
-    std::vector<OlapTableIndexTablets> indexes;
-
-    std::string debug_string(TupleDescriptor* tuple_desc) const;
-};
-
-class OlapTablePartKeyComparator {
-public:
-    OlapTablePartKeyComparator(std::vector<SlotDescriptor*> slot_descs) : _slot_descs(std::move(slot_descs)) {}
-    // return true if lhs < rhs
-    // 'nullptr' is max value, but 'null' is min value
-    bool operator()(const Tuple* lhs, const Tuple* rhs) const {
-        if (lhs == nullptr) {
-            return false;
-        } else if (rhs == nullptr) {
-            return true;
-        }
-
-        for (auto slot_desc : _slot_descs) {
-            bool lhs_null = lhs->is_null(slot_desc->null_indicator_offset());
-            bool rhs_null = rhs->is_null(slot_desc->null_indicator_offset());
-            if (lhs_null && rhs_null) {
-                continue;
-            }
-            if (lhs_null || rhs_null) {
-                return !rhs_null;
-            }
-
-            auto lhs_value = lhs->get_slot(slot_desc->tuple_offset());
-            auto rhs_value = rhs->get_slot(slot_desc->tuple_offset());
-
-            int res = RawValue::compare(lhs_value, rhs_value, slot_desc->type());
-            if (res != 0) {
-                return res < 0;
-            }
-        }
-        // equal, return false
-        return false;
-    }
-
-private:
-    std::vector<SlotDescriptor*> _slot_descs;
-};
-
-// store an olap table's tablet information
-class OlapTablePartitionParam {
-public:
-    OlapTablePartitionParam(std::shared_ptr<OlapTableSchemaParam> schema, const TOlapTablePartitionParam& param);
-    ~OlapTablePartitionParam();
-
-    Status init();
-
-    int64_t db_id() const { return _t_param.db_id; }
-    int64_t table_id() const { return _t_param.table_id; }
-    int64_t version() const { return _t_param.version; }
-
-    // return true if we found this tuple in partition
-    bool find_tablet(Tuple* tuple, const OlapTablePartition** partitions, uint32_t* dist_hash) const;
-
-    const std::vector<OlapTablePartition*>& get_partitions() const { return _partitions; }
-    std::string debug_string() const;
-
-private:
-    Status _create_partition_keys(const std::vector<TExprNode>& t_exprs, Tuple** part_key);
-
-    Status _create_partition_key(const TExprNode& t_expr, Tuple* tuple, SlotDescriptor* slot_desc);
-
-    uint32_t _compute_dist_hash(Tuple* key) const;
-
-    // check if this partition contain this key
-    bool _part_contains(OlapTablePartition* part, Tuple* key) const {
-        if (part->start_key == nullptr) {
-            // start_key is nullptr means the lower bound is boundless
-            return true;
-        }
-        OlapTablePartKeyComparator comparator(_partition_slot_descs);
-        return !comparator(key, part->start_key);
-    }
-
-private:
-    // this partition only valid in this schema
-    std::shared_ptr<OlapTableSchemaParam> _schema;
-    TOlapTablePartitionParam _t_param;
-
-    std::vector<SlotDescriptor*> _partition_slot_descs;
-    std::vector<SlotDescriptor*> _distributed_slot_descs;
-
-    ObjectPool _obj_pool;
-    std::unique_ptr<MemPool> _mem_pool;
-    std::vector<OlapTablePartition*> _partitions;
-    std::unique_ptr<std::map<Tuple*, OlapTablePartition*, OlapTablePartKeyComparator>> _partitions_map;
-};
-
 using TabletLocation = TTabletLocation;
 // struct TTabletLocation {
 //     1: required i64 tablet_id
@@ -198,7 +98,7 @@ using TabletLocation = TTabletLocation;
 
 class OlapTableLocationParam {
 public:
-    OlapTableLocationParam(const TOlapTableLocationParam& t_param) : _t_param(t_param) {
+    explicit OlapTableLocationParam(const TOlapTableLocationParam& t_param) : _t_param(t_param) {
         for (auto& location : _t_param.tablets) {
             _tablets.emplace(location.tablet_id, &location);
         }
@@ -228,13 +128,13 @@ struct NodeInfo {
     std::string host;
     int32_t brpc_port;
 
-    NodeInfo(const TNodeInfo& tnode)
+    explicit NodeInfo(const TNodeInfo& tnode)
             : id(tnode.id), option(tnode.option), host(tnode.host), brpc_port(tnode.async_internal_port) {}
 };
 
 class StarRocksNodesInfo {
 public:
-    StarRocksNodesInfo(const TNodesInfo& t_nodes) {
+    explicit StarRocksNodesInfo(const TNodesInfo& t_nodes) {
         for (auto& node : t_nodes.nodes) {
             _nodes.emplace(node.id, node);
         }
