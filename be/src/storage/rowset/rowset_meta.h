@@ -150,12 +150,6 @@ public:
 
     void set_index_disk_size(size_t index_disk_size) { _rowset_meta_pb.set_index_disk_size(index_disk_size); }
 
-    void zone_maps(std::vector<ZoneMap>* zone_maps) {
-        for (const ZoneMap& zone_map : _rowset_meta_pb.zone_maps()) {
-            zone_maps->push_back(zone_map);
-        }
-    }
-
     bool has_delete_predicate() const { return _rowset_meta_pb.has_delete_predicate(); }
 
     const DeletePredicatePB& delete_predicate() const { return _rowset_meta_pb.delete_predicate(); }

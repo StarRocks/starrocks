@@ -28,12 +28,6 @@ option java_package = "com.starrocks.proto";
 import "olap_common.proto";
 import "types.proto";
 
-message ZoneMap {
-    required bytes min = 1;
-    required bytes max = 2;
-    optional bool null_flag = 3;
-}
-
 enum RowsetTypePB {
     ALPHA_ROWSET = 0; // Deleted
     BETA_ROWSET  = 1;
@@ -93,7 +87,6 @@ message RowsetMetaPB {
     // calculated sum(segmentgroup.index_size)
     optional int64 index_disk_size = 14;
     // rowset level column min/max/null statistics, not not used currently
-    repeated ZoneMap zone_maps = 15;
     optional DeletePredicatePB delete_predicate = 16;
     // calculated from segment group
     optional bool empty = 17;

@@ -27,7 +27,7 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
-#include "storage/rowset/segment_v2/segment.h"
+#include "storage/rowset/segment.h"
 
 namespace starrocks {
 
@@ -91,7 +91,7 @@ public:
 
     bool check_path(const std::string& path) override;
 
-    std::vector<segment_v2::SegmentSharedPtr>& segments() { return _segments; }
+    std::vector<SegmentSharedPtr>& segments() { return _segments; }
 
     int64_t mem_usage() const {
         int64_t size = sizeof(BetaRowset);
@@ -112,7 +112,7 @@ protected:
 private:
     friend class RowsetFactory;
     friend class BetaRowsetReader;
-    std::vector<segment_v2::SegmentSharedPtr> _segments;
+    std::vector<SegmentSharedPtr> _segments;
 };
 
 } // namespace starrocks

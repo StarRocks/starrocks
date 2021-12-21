@@ -27,7 +27,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "gen_cpp/segment_v2.pb.h"
+#include "gen_cpp/segment.pb.h"
 #include "util/debug_util.h"
 #include "util/faststring.h"
 #include "util/slice.h"
@@ -134,7 +134,7 @@ public:
 
     uint64_t size() { return _key_buf.size() + _offset_buf.size(); }
 
-    Status finalize(uint32_t num_rows, std::vector<Slice>* body, segment_v2::PageFooterPB* footer);
+    Status finalize(uint32_t num_rows, std::vector<Slice>* body, PageFooterPB* footer);
 
 private:
     uint32_t _segment_id;
@@ -211,7 +211,7 @@ public:
     ShortKeyIndexDecoder() {}
 
     // client should assure that body is available when this class is used
-    Status parse(const Slice& body, const segment_v2::ShortKeyFooterPB& footer);
+    Status parse(const Slice& body, const ShortKeyFooterPB& footer);
 
     ShortKeyIndexIterator begin() const {
         DCHECK(_parsed);
@@ -274,7 +274,7 @@ private:
     bool _parsed{false};
 
     // All following fields are only valid after parse has been executed successfully
-    segment_v2::ShortKeyFooterPB _footer;
+    ShortKeyFooterPB _footer;
     std::vector<uint32_t> _offsets;
     Slice _key_data;
 };
