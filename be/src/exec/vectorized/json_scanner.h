@@ -17,6 +17,7 @@ namespace starrocks::vectorized {
 
 struct JsonPath;
 class JsonReader;
+class JsonParser;
 class JsonScanner : public FileScanner {
 public:
     JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
@@ -77,16 +78,6 @@ public:
 private:
     Status _read_and_parse_json();
 
-    // _next_row forwards iterator, returns false when EOF is got.
-    Status _next_row();
-
-    // get_row returns row pointed by iterator.
-    Status _get_row(simdjson::ondemand::object* row, bool* empty);
-
-    Status _get_row_from_array(simdjson::ondemand::object* row);
-
-    Status _get_row_from_document_stream(simdjson::ondemand::object* row, bool* empty);
-
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                           const std::vector<SlotDescriptor*>& slot_descs);
 
@@ -115,16 +106,8 @@ private:
 
     std::unique_ptr<uint8_t[]> _json_binary_ptr;
 
-    simdjson::ondemand::parser _parser;
-
-    bool _stream_is_empty = true;
-    simdjson::ondemand::document_stream _doc_stream;
-    simdjson::ondemand::document_stream::iterator _doc_stream_itr;
-
-    bool _array_is_empty = true;
-    simdjson::ondemand::array_iterator _array_begin;
-    simdjson::ondemand::array_iterator _array_end;
-
+    std::unique_ptr<JsonParser> _parser;
+    bool _empty_parser = true;
     // only used in unit test.
     // TODO: The semantics of Streaming Load And Routine Load is non-consistent.
     //       Import a json library supporting streaming parse.
@@ -132,6 +115,45 @@ private:
     size_t _buf_size = 1048576; // 1MB, the buf size for parsing json in unit test
     raw::RawVector<char> _buf;
 #endif
+};
+
+class JsonParser {
+public:
+    JsonParser() = default;
+    virtual ~JsonParser() = default;
+    virtual Status parse(uint8_t* data, size_t len, size_t allocated) = 0;
+    virtual Status get_next(simdjson::ondemand::object* row) = 0;
+};
+
+class JsonDocumentStreamParser : public JsonParser {
+public:
+    Status parse(uint8_t* data, size_t len,size_t allocated) override;
+    Status get_next(simdjson::ondemand::object* row) override;
+
+private:
+    uint8_t* _data;
+    simdjson::ondemand::parser _parser;
+
+    // _first_shot denotes wheather the first element of the document stream would be returned.
+    bool _first_shot = false;
+    simdjson::ondemand::document_stream _doc_stream;
+    simdjson::ondemand::document_stream::iterator _doc_stream_itr;
+};
+
+class JsonArrayParser : public JsonParser {
+public:
+    Status parse(uint8_t* data, size_t len, size_t allocated) override;
+    Status get_next(simdjson::ondemand::object* row) override;
+
+private:
+    uint8_t* _data;
+    simdjson::ondemand::parser _parser;
+
+    // _first_shot denotes wheather the first element of the array would be returned.
+    bool _first_shot = false;
+    simdjson::ondemand::document _doc;
+    simdjson::ondemand::array _array;
+    simdjson::ondemand::array_iterator _array_itr;
 };
 
 } // namespace starrocks::vectorized

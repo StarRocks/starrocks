@@ -85,7 +85,7 @@ public:
     // If _total_length == -1, this should be a Kafka routine load task,
     // just get the next buffer directly from the buffer queue, because one buffer contains a complete piece of data.
     // Otherwise, this should be a stream load task that needs to read the specified amount of data.
-    Status read_one_message(std::unique_ptr<uint8_t[]>* data, size_t* length) override {
+    Status read_one_message(std::unique_ptr<uint8_t[]>* data, size_t* length, size_t padding) override {
         if (_total_length < -1) {
             std::stringstream ss;
             ss << "invalid, _total_length is: " << _total_length;
@@ -101,7 +101,7 @@ public:
         }
 
         // _total_length > 0, read the entire data
-        data->reset(new uint8_t[_total_length]);
+        data->reset(new uint8_t[_total_length + padding]);
         *length = _total_length;
         bool eof = false;
         Status st = read(data->get(), length, &eof);
