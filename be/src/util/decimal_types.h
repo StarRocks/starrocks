@@ -128,6 +128,6 @@ using DecimalType = std::enable_if_t<is_underlying_type_of_decimal<T>, T>;
 template <typename T>
 using FloatType = std::enable_if_t<std::is_floating_point_v<T>, T>;
 template <typename T>
-using IntegerType = std::enable_if_t<starrocks::is_signed_integer<T>, T>;
+using IntegerType = std::enable_if_t<is_signed_integer<T>, T>;
 
 } // namespace starrocks

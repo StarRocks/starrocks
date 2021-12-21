@@ -698,7 +698,7 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
         precision += exponent - scale;
         int shift = exponent - scale;
         if (shift <= decimal_precision_limit<T>) {
-            value *= starrocks::get_scale_factor<T>(exponent - scale);
+            value *= get_scale_factor<T>(exponent - scale);
             scale = 0;
         } else {
             *result = ParseResult::PARSE_FAILURE;
@@ -752,6 +752,6 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
     return is_negative ? -value : value;
 }
 
-} // end namespace starrocks
+} // namespace starrocks
 
 #endif // end of STARROCKS_BE_SRC_COMMON_UTIL_STRING_PARSER_HPP

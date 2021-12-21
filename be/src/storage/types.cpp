@@ -120,11 +120,11 @@ TypeInfoPtr get_type_info(FieldType field_type) {
     return ScalarTypeInfoResolver::instance()->get_type_info(field_type);
 }
 
-TypeInfoPtr get_type_info(const segment_v2::ColumnMetaPB& column_meta_pb) {
+TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
     FieldType type = static_cast<FieldType>(column_meta_pb.type());
     TypeInfoPtr type_info;
     if (type == OLAP_FIELD_TYPE_ARRAY) {
-        const segment_v2::ColumnMetaPB& child = column_meta_pb.children_columns(0);
+        const ColumnMetaPB& child = column_meta_pb.children_columns(0);
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info.reset(new ArrayTypeInfo(child_type_info));
         return type_info;

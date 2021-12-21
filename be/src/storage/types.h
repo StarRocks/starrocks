@@ -31,7 +31,7 @@
 #include <unordered_map>
 
 #include "column/datum.h"
-#include "gen_cpp/segment_v2.pb.h" // for ColumnMetaPB
+#include "gen_cpp/segment.pb.h" // for ColumnMetaPB
 #include "gutil/strings/numbers.h"
 #include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
@@ -403,7 +403,7 @@ const ScalarTypeInfo* get_scalar_type_info(FieldType t);
 
 TypeInfoPtr get_type_info(FieldType field_type);
 
-TypeInfoPtr get_type_info(const segment_v2::ColumnMetaPB& column_meta_pb);
+TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb);
 
 TypeInfoPtr get_type_info(const TabletColumn& col);
 

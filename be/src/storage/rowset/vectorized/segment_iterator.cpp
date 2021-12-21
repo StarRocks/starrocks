@@ -18,14 +18,14 @@
 #include "simd/simd.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
-#include "storage/rowset/segment_v2/column_decoder.h"
-#include "storage/rowset/segment_v2/column_reader.h"
-#include "storage/rowset/segment_v2/common.h"
-#include "storage/rowset/segment_v2/default_value_column_iterator.h"
-#include "storage/rowset/segment_v2/dictcode_column_iterator.h"
-#include "storage/rowset/segment_v2/scalar_column_iterator.h"
-#include "storage/rowset/segment_v2/segment.h"
+#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/rowset/column_decoder.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/common.h"
+#include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/dictcode_column_iterator.h"
+#include "storage/rowset/scalar_column_iterator.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
@@ -43,12 +43,6 @@
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
-
-using segment_v2::BitmapIndexIterator;
-using segment_v2::ColumnIterator;
-using segment_v2::ColumnIteratorOptions;
-using segment_v2::rowid_t;
-using segment_v2::Segment;
 
 constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
 
@@ -103,7 +97,7 @@ private:
             _final_chunk.reset();
         }
 
-        Status seek_columns(segment_v2::ordinal_t pos) {
+        Status seek_columns(ordinal_t pos) {
             for (auto iter : _column_iterators) {
                 RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
             }
@@ -226,7 +220,7 @@ private:
     std::shared_ptr<Segment> _segment;
     vectorized::SegmentReadOptions _opts;
     std::vector<ColumnIterator*> _column_iterators;
-    std::vector<segment_v2::ColumnDecoder> _column_decoders;
+    std::vector<ColumnDecoder> _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
@@ -744,7 +738,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
 void SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
-        const segment_v2::ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
+        const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
         for (ColumnIterator* iter : to->_column_iterators) {
             iter->seek_to_ordinal(ordinal);
         }
@@ -925,10 +919,9 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             auto f2 = std::make_shared<Field>(cid, name, kDictCodeType, -1, -1, f->is_nullable());
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
-                iter = new segment_v2::GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
-                                                                    _opts.global_dictmaps->at(cid));
+                iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid], _opts.global_dictmaps->at(cid));
             } else {
-                iter = new segment_v2::DictCodeColumnIterator(cid, _column_iterators[cid]);
+                iter = new DictCodeColumnIterator(cid, _column_iterators[cid]);
             }
 
             _obj_pool.add(iter);
@@ -1035,8 +1028,7 @@ Status SegmentIterator::_init_global_dict_decoder() {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         if (_can_using_global_dict(f)) {
-            auto iter = new segment_v2::GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
-                                                                     _opts.global_dictmaps->at(cid));
+            auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid], _opts.global_dictmaps->at(cid));
             _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);
         }
@@ -1324,8 +1316,8 @@ inline Schema reorder_schema(const Schema& input, const std::unordered_map<Colum
     return output;
 }
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<segment_v2::Segment>& segment,
-                                      const vectorized::Schema& schema, const vectorized::SegmentReadOptions& options) {
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const vectorized::Schema& schema,
+                                      const vectorized::SegmentReadOptions& options) {
     if (options.predicates.empty() || options.predicates.size() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
     } else {

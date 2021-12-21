@@ -7,8 +7,8 @@
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
-#include "storage/rowset/segment_v2/bloom_filter.h"
+#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/rowset/bloom_filter.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/in_predicate_utils.h"
 
@@ -86,13 +86,13 @@ public:
         return false;
     }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         range->clear();
         for (auto value : _values) {
             bool exact_match = false;
             Status s = iter->seek_dictionary(&value, &exact_match);
             if (s.ok() && exact_match) {
-                segment_v2::rowid_t seeked_ordinal = iter->current_ordinal();
+                rowid_t seeked_ordinal = iter->current_ordinal();
                 range->add(Range(seeked_ordinal, seeked_ordinal + 1));
             } else if (!s.ok() && !s.is_not_found()) {
                 return s;
@@ -103,7 +103,7 @@ public:
 
     bool support_bloom_filter() const override { return true; }
 
-    bool bloom_filter(const segment_v2::BloomFilter* bf) const override {
+    bool bloom_filter(const BloomFilter* bf) const override {
         static_assert(field_type != OLAP_FIELD_TYPE_HLL, "TODO");
         static_assert(field_type != OLAP_FIELD_TYPE_OBJECT, "TODO");
         static_assert(field_type != OLAP_FIELD_TYPE_PERCENTILE, "TODO");
@@ -252,14 +252,14 @@ public:
         return false;
     }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         range->clear();
         for (const std::string& s : _zero_padded_strs) {
             Slice padded_value(s);
             bool exact_match = false;
             Status st = iter->seek_dictionary(&padded_value, &exact_match);
             if (st.ok() && exact_match) {
-                segment_v2::rowid_t seeked_ordinal = iter->current_ordinal();
+                rowid_t seeked_ordinal = iter->current_ordinal();
                 range->add(Range(seeked_ordinal, seeked_ordinal + 1));
             } else if (!st.ok() && !st.is_not_found()) {
                 return st;
@@ -270,7 +270,7 @@ public:
 
     bool support_bloom_filter() const override { return true; }
 
-    bool bloom_filter(const segment_v2::BloomFilter* bf) const override {
+    bool bloom_filter(const BloomFilter* bf) const override {
         for (const auto& str : _zero_padded_strs) {
             Slice v(str);
             RETURN_IF(bf->test_bytes(v.data, v.size), true);

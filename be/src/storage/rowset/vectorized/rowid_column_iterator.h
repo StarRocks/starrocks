@@ -3,8 +3,8 @@
 #pragma once
 
 #include "gutil/casts.h"
-#include "storage/rowset/segment_v2/column_iterator.h"
-#include "storage/rowset/segment_v2/common.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/common.h"
 #include "storage/vectorized/range.h"
 #include "util/raw_container.h"
 
@@ -13,11 +13,11 @@ namespace starrocks::vectorized {
 // Instead of return a batch of column values, RowIdColumnIterator just return a batch
 // of row id when you call `next_batch`.
 // This is used for late materialization, check `SegmentIterator` for a reference.
-class RowIdColumnIterator final : public starrocks::segment_v2::ColumnIterator {
-    using ColumnIterator = starrocks::segment_v2::ColumnIterator;
-    using ColumnIteratorOptions = starrocks::segment_v2::ColumnIteratorOptions;
-    using ordinal_t = starrocks::segment_v2::ordinal_t;
-    using rowid_t = starrocks::segment_v2::rowid_t;
+class RowIdColumnIterator final : public starrocks::ColumnIterator {
+    using ColumnIterator = starrocks::ColumnIterator;
+    using ColumnIteratorOptions = starrocks::ColumnIteratorOptions;
+    using ordinal_t = starrocks::ordinal_t;
+    using rowid_t = starrocks::rowid_t;
 
 public:
     RowIdColumnIterator() {}

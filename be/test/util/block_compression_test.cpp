@@ -25,7 +25,7 @@
 
 #include <iostream>
 
-#include "gen_cpp/segment_v2.pb.h"
+#include "gen_cpp/segment.pb.h"
 
 namespace starrocks {
 class BlockCompressionTest : public testing::Test {
