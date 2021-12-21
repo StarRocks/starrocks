@@ -13,6 +13,7 @@
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "gutil/casts.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks::vectorized {
 
@@ -157,20 +158,11 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         timer.start();
         if (chunk != nullptr && chunk->num_rows() > 0) {
             ChunkPtr materialize_chunk = _materialize_chunk_before_sort(chunk.get());
-            try {
-                RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk));
-                RETURN_IF_ERROR(state->check_mem_limit("Sort"));
-            } catch (std::bad_alloc const&) {
-                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
-            }
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk)));
         }
     } while (!eos);
-    try {
-        RETURN_IF_ERROR(_chunks_sorter->done(state));
-        RETURN_IF_ERROR(state->check_mem_limit("Sort"));
-    } catch (std::bad_alloc const&) {
-        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
-    }
+
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->done(state)));
     return Status::OK();
 }
 

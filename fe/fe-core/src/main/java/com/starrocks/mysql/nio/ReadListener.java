@@ -48,23 +48,36 @@ public class ReadListener implements ChannelListener<ConduitStreamSourceChannel>
         XnioIoThread.requireCurrentThread();
         ctx.suspendAcceptQuery();
         // start async query handle in task thread.
-        channel.getWorker().execute(() -> {
-            ctx.setThreadLocalInfo();
-            try {
-                connectProcessor.processOnce();
-                if (!ctx.isKilled()) {
-                    ctx.resumeAcceptQuery();
-                } else {
-                    ctx.stopAcceptQuery();
+        try {
+            channel.getWorker().execute(() -> {
+                ctx.setThreadLocalInfo();
+                try {
+                    connectProcessor.processOnce();
+                    if (!ctx.isKilled()) {
+                        ctx.resumeAcceptQuery();
+                    } else {
+                        ctx.stopAcceptQuery();
+                        ctx.cleanup();
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Exception happened in one session(" + ctx + ").", e);
+                    ctx.setKilled();
                     ctx.cleanup();
+                } finally {
+                    ConnectContext.remove();
                 }
-            } catch (Exception e) {
-                LOG.warn("Exception happened in one session(" + ctx + ").", e);
-                ctx.setKilled();
-                ctx.cleanup();
-            } finally {
-                ConnectContext.remove();
+            });
+        } catch (Throwable e) {
+            if (e instanceof Error) {
+                LOG.error("connect processor exception because ", e);
+            } else {
+                // should be unexpected exception, so print warn log
+                LOG.warn("connect processor exception because ", e);
             }
-        });
+            ctx.setKilled();
+            ctx.cleanup();
+            ConnectContext.remove();
+        }
+
     }
 }

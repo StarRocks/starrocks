@@ -17,6 +17,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf.h"
 #include "util/runtime_profile.h"
@@ -315,33 +316,29 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
     size_t chunk_size = child_chunk->num_rows();
     _analytor->update_input_rows(chunk_size);
 
-    try {
-        for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
-            for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
-                ColumnPtr column = _analytor->agg_expr_ctxs()[i][j]->evaluate(child_chunk.get());
-                // Currently, only lead and lag window function have multi args.
-                // For performance, we do this special handle.
-                // In future, if need, we could remove this if else easily.
-                if (j == 0) {
-                    _analytor->append_column(chunk_size, _analytor->agg_intput_columns()[i][j].get(), column);
-                } else {
-                    _analytor->agg_intput_columns()[i][j]->append(*column, 0, column->size());
-                }
+    for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
+        for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
+            ColumnPtr column = _analytor->agg_expr_ctxs()[i][j]->evaluate(child_chunk.get());
+            // Currently, only lead and lag window function have multi args.
+            // For performance, we do this special handle.
+            // In future, if need, we could remove this if else easily.
+            if (j == 0) {
+                TRY_CATCH_BAD_ALLOC(
+                        _analytor->append_column(chunk_size, _analytor->agg_intput_columns()[i][j].get(), column));
+            } else {
+                TRY_CATCH_BAD_ALLOC(_analytor->agg_intput_columns()[i][j]->append(*column, 0, column->size()));
             }
         }
+    }
 
-        for (size_t i = 0; i < _analytor->partition_ctxs().size(); i++) {
-            ColumnPtr column = _analytor->partition_ctxs()[i]->evaluate(child_chunk.get());
-            _analytor->append_column(chunk_size, _analytor->partition_columns()[i].get(), column);
-        }
+    for (size_t i = 0; i < _analytor->partition_ctxs().size(); i++) {
+        ColumnPtr column = _analytor->partition_ctxs()[i]->evaluate(child_chunk.get());
+        TRY_CATCH_BAD_ALLOC(_analytor->append_column(chunk_size, _analytor->partition_columns()[i].get(), column));
+    }
 
-        for (size_t i = 0; i < _analytor->order_ctxs().size(); i++) {
-            ColumnPtr column = _analytor->order_ctxs()[i]->evaluate(child_chunk.get());
-            _analytor->append_column(chunk_size, _analytor->order_columns()[i].get(), column);
-        }
-        RETURN_IF_ERROR(state->check_mem_limit("AnalyticNode"));
-    } catch (std::bad_alloc const&) {
-        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
+    for (size_t i = 0; i < _analytor->order_ctxs().size(); i++) {
+        ColumnPtr column = _analytor->order_ctxs()[i]->evaluate(child_chunk.get());
+        TRY_CATCH_BAD_ALLOC(_analytor->append_column(chunk_size, _analytor->order_columns()[i].get(), column));
     }
 
     _analytor->input_chunks().emplace_back(std::move(child_chunk));

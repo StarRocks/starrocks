@@ -554,4 +554,13 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)"));
     }
+
+    @Test
+    public void testMultiCrossJoinReorder() throws Exception {
+        // check multi cross join reorder without exception
+        String sql = "select count(*) from t0,t1,t2,t3,t0 as t4, t1 as t5 where true";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("17:CROSS JOIN"));
+    }
 }

@@ -25,23 +25,6 @@ DIAGNOSTIC_POP
 
 namespace starrocks::vectorized {
 
-// Before a thread exit, the corresponding thread-local column pool will be destroyed and the following
-// bvar's will be updated too. This is ok in the production environment, because no column pool exists
-// in the main thread, in other words, accessing a bvar is safe when destroying a thread-local column pool.
-// But it's NOT true when running unit tests, because unit tests usually run in the main thread and a local
-// column pool will be created in the main thread. When destroying the column pool in the main thread, the
-// bvar's may have been destroyed, so it's unsafe to update bvar when destroying a column pool.
-// To work around this, we simply do not update bvar's in unit tests.
-inline bvar::Adder<uint64_t> g_column_pool_oversized_columns("column_pool", "oversized_columns");
-inline bvar::Adder<int64_t> g_column_pool_total_local_bytes("column_pool", "total_local_bytes");
-inline bvar::Adder<int64_t> g_column_pool_total_central_bytes("column_pool", "total_central_bytes");
-
-#ifndef BE_TEST
-#define UPDATE_BVAR(bvar_name, value) (bvar_name) << (value)
-#else
-#define UPDATE_BVAR(bvar_name, value) (void)(value) /* avoid compiler warning: unused variable */
-#endif
-
 template <typename T>
 struct ColumnPoolBlockSize {
     static const size_t value = 256;
@@ -126,22 +109,18 @@ class CACHELINE_ALIGNED ColumnPool {
         }
 
         ~LocalPool() {
-            auto freed_bytes = _curr_free.bytes;
             if (_curr_free.nfree > 0 && !_pool->_push_free_block(_curr_free)) {
                 for (size_t i = 0; i < _curr_free.nfree; i++) {
                     ASAN_UNPOISON_MEMORY_REGION(_curr_free.ptrs[i], sizeof(T));
                     delete _curr_free.ptrs[i];
                 }
             }
-            UPDATE_BVAR(g_column_pool_total_local_bytes, -freed_bytes);
             _pool->_clear_from_destructor_of_local_pool();
         }
 
         inline T* get_object() {
             if (_curr_free.nfree == 0) {
-                if (_pool->_pop_free_block(&_curr_free)) {
-                    UPDATE_BVAR(g_column_pool_total_local_bytes, _curr_free.bytes);
-                } else {
+                if (!_pool->_pop_free_block(&_curr_free)) {
                     return nullptr;
                 }
             }
@@ -149,7 +128,6 @@ class CACHELINE_ALIGNED ColumnPool {
             ASAN_UNPOISON_MEMORY_REGION(obj, sizeof(T));
             auto bytes = column_bytes(obj);
             _curr_free.bytes -= bytes;
-            UPDATE_BVAR(g_column_pool_total_local_bytes, -bytes);
 
             tls_thread_status.mem_consume(bytes);
             _pool->mem_tracker()->release(bytes);
@@ -159,7 +137,6 @@ class CACHELINE_ALIGNED ColumnPool {
 
         inline void return_object(T* ptr) {
             if (UNLIKELY(column_reserved_size(ptr) > config::vector_chunk_size)) {
-                UPDATE_BVAR(g_column_pool_oversized_columns, 1);
                 delete ptr;
                 return;
             }
@@ -172,12 +149,10 @@ class CACHELINE_ALIGNED ColumnPool {
                 tls_thread_status.mem_release(bytes);
                 _pool->mem_tracker()->consume(bytes);
 
-                UPDATE_BVAR(g_column_pool_total_local_bytes, bytes);
                 return;
             }
             if (_pool->_push_free_block(_curr_free)) {
                 ASAN_POISON_MEMORY_REGION(ptr, sizeof(T));
-                UPDATE_BVAR(g_column_pool_total_local_bytes, -_curr_free.bytes);
                 _curr_free.nfree = 1;
                 _curr_free.ptrs[0] = ptr;
                 _curr_free.bytes = bytes;
@@ -185,7 +160,6 @@ class CACHELINE_ALIGNED ColumnPool {
                 tls_thread_status.mem_release(bytes);
                 _pool->mem_tracker()->consume(bytes);
 
-                UPDATE_BVAR(g_column_pool_total_local_bytes, bytes);
                 return;
             }
             delete ptr;
@@ -199,7 +173,6 @@ class CACHELINE_ALIGNED ColumnPool {
                 ASAN_POISON_MEMORY_REGION(_curr_free.ptrs[i], sizeof(T));
             }
             _curr_free.bytes -= freed_bytes;
-            UPDATE_BVAR(g_column_pool_total_local_bytes, -freed_bytes);
         }
 
         static inline void delete_local_pool(void* arg) { delete (LocalPool*)arg; }
@@ -263,7 +236,6 @@ public:
         _mem_tracker->release(freed_bytes);
         tls_thread_status.mem_consume(freed_bytes);
 
-        UPDATE_BVAR(g_column_pool_total_central_bytes, -freed_bytes);
         return freed_bytes;
     }
 
@@ -352,7 +324,6 @@ private:
         if (UNLIKELY(p == nullptr)) {
             return false;
         }
-        UPDATE_BVAR(g_column_pool_total_central_bytes, blk.bytes);
         p->nfree = blk.nfree;
         p->bytes = blk.bytes;
         memcpy(p->ptrs, blk.ptrs, sizeof(*blk.ptrs) * blk.nfree);
@@ -378,7 +349,6 @@ private:
         blk->nfree = p->nfree;
         blk->bytes = p->bytes;
         free(p);
-        UPDATE_BVAR(g_column_pool_total_central_bytes, -blk->bytes);
         return true;
     }
 

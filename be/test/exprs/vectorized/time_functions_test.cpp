@@ -6,6 +6,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
@@ -1340,6 +1341,26 @@ TEST_F(TimeFunctionsTest, date_fomrat) {
         ColumnPtr result = TimeFunctions::datetime_format(ctx, columns);
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_EQ(true, result->is_null(0));
+    }
+    {
+        // Test(const,var)
+        auto datetime_col =
+                ColumnHelper::create_const_column<TYPE_DATETIME>(TimestampValue::create(2020, 12, 18, 10, 9, 8), 2);
+        auto string_col = BinaryColumn::create();
+        string_col->append_string(std::string("a"));
+        string_col->append_string(std::string("b"));
+
+        Columns columns;
+        columns.emplace_back(datetime_col);
+        columns.emplace_back(string_col);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::datetime_format(ctx, columns);
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+
+        ASSERT_FALSE(result->is_constant());
+        auto binary_col = down_cast<BinaryColumn*>(result.get());
+        ASSERT_EQ(Slice("a"), binary_col->get_slice(0));
+        ASSERT_EQ(Slice("b"), binary_col->get_slice(1));
     }
 }
 

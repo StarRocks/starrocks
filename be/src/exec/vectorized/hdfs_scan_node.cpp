@@ -165,7 +165,7 @@ Status HdfsScanNode::_start_scan_thread(RuntimeState* state) {
     int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    _fill_chunk_pool(chunks);
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks));
 
     // start scanner
     std::lock_guard<std::mutex> l(_mtx);
@@ -461,7 +461,7 @@ Status HdfsScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     if (_result_chunks.blocking_get(chunk)) {
-        _fill_chunk_pool(1);
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1));
 
         eval_join_runtime_filters(chunk);
 
