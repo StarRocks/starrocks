@@ -138,7 +138,7 @@ public class QueryAnalyzer {
 
                 List<Field> fields = new ArrayList<>();
                 for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
-                    fields.add(new Field("column_" + fieldIdx, outputTypes[fieldIdx], null, null));
+                    fields.add(new Field("column_" + fieldIdx, outputTypes[fieldIdx], null, rows.get(0).get(fieldIdx)));
                 }
 
                 queryRelation = new ValuesRelation(rows,
@@ -428,7 +428,8 @@ public class QueryAnalyzer {
                         withQuery.getColLabels() == null ? originField.getName() :
                                 withQuery.getColLabels().get(fieldIdx),
                         originField.getType(),
-                        tableName, originField.getOriginExpression()));
+                        tableName,
+                        originField.getOriginExpression()));
             }
 
             CTERelation cteRelation = new CTERelation(
@@ -575,8 +576,8 @@ public class QueryAnalyzer {
             if (item.isStar()) {
                 if (item.getTblName() == null) {
                     outputFields.addAll(scope.getRelationFields().getAllFields().stream().map(f ->
-                            new Field(f.getName(), f.getType(), f.getRelationAlias(), f.getOriginExpression(),
-                                    f.isVisible())).collect(Collectors.toList()));
+                            new Field(f.getName(), f.getType(), f.getRelationAlias(),
+                                    f.getOriginExpression(), f.isVisible())).collect(Collectors.toList()));
                 } else {
                     outputFields.addAll(scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName())
                             .stream().map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
@@ -603,12 +604,13 @@ public class QueryAnalyzer {
         return outputScope;
     }
 
-    private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right,
-                                  TableName leftTableName, TableName rightTableName) {
+    private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right) {
         Expr joinEqual = null;
         for (String colName : usingColNames) {
-            left.resolveField(new SlotRef(leftTableName, colName));
-            right.resolveField(new SlotRef(rightTableName, colName));
+            TableName leftTableName =
+                    left.resolveField(new SlotRef(null, colName)).getField().getRelationAlias();
+            TableName rightTableName =
+                    right.resolveField(new SlotRef(null, colName)).getField().getRelationAlias();
 
             // create predicate "<left>.colName = <right>.colName"
             BinaryPredicate resolvedUsing = new BinaryPredicate(BinaryPredicate.Operator.EQ,
@@ -658,9 +660,7 @@ public class QueryAnalyzer {
                 Expr joinEqual = tableRef.getOnClause();
                 if (tableRef.getUsingColNames() != null) {
                     Expr resolvedUsing = analyzeJoinUsing(tableRef.getUsingColNames(),
-                            new Scope(RelationId.of(sourceRelation), sourceRelation.getRelationFields()),
-                            new Scope(RelationId.of(relation), relation.getRelationFields()),
-                            lastTableRef.getAliasAsName(), tableRef.getAliasAsName());
+                            sourceRelation.getScope(), relation.getScope());
                     if (joinEqual == null) {
                         joinEqual = resolvedUsing;
                     } else {
@@ -840,20 +840,6 @@ public class QueryAnalyzer {
 
         //Olap table
         Table table = resolveTable(tableRef);
-        ImmutableList.Builder<Field> fields = ImmutableList.builder();
-        ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
-
-        for (Column column : table.getFullSchema()) {
-            Field field;
-            if (table.getBaseSchema().contains(column)) {
-                field = new Field(column.getName(), column.getType(), tableName, null, true);
-            } else {
-                field = new Field(column.getName(), column.getType(), tableName, null, false);
-            }
-            columns.put(field, column);
-            fields.add(field);
-        }
-
         if (table instanceof View) {
             View view = (View) table;
             QueryRelation query = transformQueryStmt(view.getQueryStmt(), scope);
@@ -870,6 +856,15 @@ public class QueryAnalyzer {
             return subqueryRelation;
         } else {
             if (isSupportedTable(table)) {
+                ImmutableList.Builder<Field> fields = ImmutableList.builder();
+                ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
+                for (Column column : table.getFullSchema()) {
+                    Field field = table.getBaseSchema().contains(column) ?
+                            new Field(column.getName(), column.getType(), tableName, null, true) :
+                            new Field(column.getName(), column.getType(), tableName, null, false);
+                    columns.put(field, column);
+                    fields.add(field);
+                }
                 TableRelation tableRelation = new TableRelation(tableName, table, columns.build(),
                         tableRef.getPartitionNames(), tableRef.getTabletIds(), tableRef.isMetaQuery());
                 tableRelation.setScope(new Scope(RelationId.of(tableRelation), new RelationFields(fields.build())));
@@ -1118,7 +1113,23 @@ public class QueryAnalyzer {
     }
 
     private Scope computeAndAssignOrderScope(AnalyzeState analyzeState, Scope sourceScope, Scope outputScope) {
-        Scope orderScope = new Scope(outputScope.getRelationId(), outputScope.getRelationFields());
+        // The Scope used by order by allows parsing of the same column,
+        // such as 'select v1 as v, v1 as v from t0 order by v'
+        // but normal parsing does not allow it. So add a de-duplication operation here.
+        List<Field> allFields = new ArrayList<>();
+        for (Field field : outputScope.getRelationFields().getAllFields()) {
+            if (field.getName() != null && field.getOriginExpression() != null &&
+                    allFields.stream().anyMatch(f ->
+                            f.getOriginExpression() != null &&
+                                    f.getName() != null &&
+                                    field.getName().equals(f.getName()) &&
+                                    field.getOriginExpression().equals(f.getOriginExpression()))) {
+                continue;
+            }
+            allFields.add(field);
+        }
+
+        Scope orderScope = new Scope(outputScope.getRelationId(), new RelationFields(allFields));
         /*
          * ORDER BY or HAVING should "see" both output and FROM fields
          * Because output scope and source scope may contain the same columns,
