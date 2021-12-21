@@ -47,28 +47,6 @@ public class Scope {
     private Optional<ResolvedField> resolveField(SlotRef expression, int fieldIndexOffset) {
         List<Field> matchFields = relationFields.resolveFields(expression);
         if (matchFields.size() > 1) {
-
-            boolean sameField = true;
-            for (int i = 0; i < matchFields.size() - 1; ++i) {
-                if (matchFields.get(i).getOriginExpression() != null &&
-                        matchFields.get(i + 1).getOriginExpression() != null) {
-                    if (!matchFields.get(i).getOriginExpression()
-                            .equals(matchFields.get(i + 1).getOriginExpression())) {
-                        sameField = false;
-                    }
-                }
-
-                if (matchFields.get(i).getRelationAlias() != null &&
-                        matchFields.get(i + 1).getRelationAlias() != null) {
-                    if (!matchFields.get(i).getRelationAlias().equals(matchFields.get(i + 1).getRelationAlias())) {
-                        sameField = false;
-                    }
-                }
-            }
-            if (sameField) {
-                return Optional.of(asResolvedField(matchFields.get(0), fieldIndexOffset));
-            }
-
             throw new SemanticException("Column '%s' is ambiguous", expression.getColumnName());
         } else if (matchFields.size() == 1) {
             return Optional.of(asResolvedField(matchFields.get(0), fieldIndexOffset));
