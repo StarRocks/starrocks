@@ -48,7 +48,8 @@ bool MultiCastLocalExchanger::can_push_chunk() const {
     return true;
 }
 
-Status MultiCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) {
+Status MultiCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence,
+                                           MultiCastLocalExchangeSinkOperator* sink_operator) {
     if (chunk->num_rows() == 0) return Status::OK();
 
     auto* cell = new Cell();
@@ -71,6 +72,7 @@ Status MultiCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, in
         _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
         _peak_memory_usage_counter->set(_current_memory_usage);
         _peak_buffer_row_size_counter->set(_current_row_size);
+        sink_operator->update_counter(_current_memory_usage, _current_row_size);
     }
 
     return Status::OK();
@@ -175,8 +177,8 @@ void MultiCastLocalExchanger::_update_progress(Cell* fast) {
 Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _exchanger->open_source_operator(_mcast_consumer_index);
-    // attach exchange profile to this operator.
-    _runtime_profile->add_child(_exchange->runtime_profile(), true, nullptr);
+    // attach exchange profile to this operator.(not work, can not be added multiple times)
+    // _runtime_profile->add_child(_exchanger->runtime_profile(), true, nullptr);
     return Status::OK();
 }
 
@@ -204,6 +206,9 @@ bool MultiCastLocalExchangeSourceOperator::has_output() const {
 Status MultiCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _exchanger->open_sink_operator();
+    _peak_memory_usage_counter = _runtime_profile->AddHighWaterMarkCounter("ExchangerPeakMemoryUsage", TUnit::BYTES);
+    _peak_buffer_row_size_counter =
+            _runtime_profile->AddHighWaterMarkCounter("ExchangerPeakBufferRowSize", TUnit::UNIT);
     return Status::OK();
 }
 
@@ -219,11 +224,16 @@ void MultiCastLocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* state) {
-    return Status::InternalError("Should not pull_chunk in mcast_local_exchange_sink");
+    return Status::InternalError("Should not pull_chunk in MultiCastLocalExchangeSinkOperator");
 }
 
 Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    return _exchanger->push_chunk(chunk, _driver_sequence);
+    return _exchanger->push_chunk(chunk, _driver_sequence, this);
+}
+
+void MultiCastLocalExchangeSinkOperator::update_counter(size_t memory_usage, size_t buffer_row_size) {
+    _peak_memory_usage_counter->set(memory_usage);
+    _peak_buffer_row_size_counter->set(buffer_row_size);
 }
 
 } // namespace pipeline

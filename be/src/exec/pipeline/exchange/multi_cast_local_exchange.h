@@ -27,6 +27,7 @@ namespace pipeline {
 // 2. can throw chunk or not. we can only throw any chunk when all consumers have consumed that chunk.
 // 3. can pull chiunk. we maintain the progress of consumers.
 
+class MultiCastLocalExchangeSinkOperator;
 // ===== exchanger =====
 class MultiCastLocalExchanger {
 public:
@@ -34,13 +35,14 @@ public:
     ~MultiCastLocalExchanger();
     bool can_pull_chunk(int32_t mcast_consumer_index) const;
     bool can_push_chunk() const;
-    Status push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence);
+    Status push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequenc,
+                      MultiCastLocalExchangeSinkOperator* sink_operator);
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consuemr_index);
     void open_source_operator(int32_t mcast_consumer_index);
     void close_source_operator(int32_t mcast_consumer_index);
     void open_sink_operator();
     void close_sink_operator();
-    RuntimeProfile* runtime_profile() { return _runtime_profile; }
+    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
 
 private:
     struct Cell {
@@ -78,7 +80,7 @@ public:
     MultiCastLocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                          int32_t mcast_consumer_index,
                                          std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : SourceOperator(factory, id, "mcast_local_exchange_source", plan_node_id),
+            : SourceOperator(factory, id, "multi_cast_local_exchange_source", plan_node_id),
               _mcast_consumer_index(mcast_consumer_index),
               _exchanger(exchanger) {}
 
@@ -102,7 +104,7 @@ class MultiCastLocalExchangeSourceOperatorFactory final : public SourceOperatorF
 public:
     MultiCastLocalExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, int32_t mcast_consumer_index,
                                                 std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : SourceOperatorFactory(id, "mcast_local_exchange_source", plan_node_id),
+            : SourceOperatorFactory(id, "multi_cast_local_exchange_source", plan_node_id),
               _mcast_consumer_index(mcast_consumer_index),
               _exchanger(exchanger) {}
     ~MultiCastLocalExchangeSourceOperatorFactory() override = default;
@@ -123,7 +125,7 @@ public:
     MultiCastLocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                        const int32_t driver_sequence,
                                        std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : Operator(factory, id, "mcast_local_exchange_sink", plan_node_id),
+            : Operator(factory, id, "multi_cast_local_exchange_sink", plan_node_id),
               _driver_sequence(driver_sequence),
               _exchanger(exchanger) {}
 
@@ -143,17 +145,21 @@ public:
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
+    void update_counter(size_t memory_usage, size_t buffer_row_size);
+
 private:
     bool _is_finished = false;
     const int32_t _driver_sequence;
     const std::shared_ptr<MultiCastLocalExchanger> _exchanger;
+    RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
 };
 
 class MultiCastLocalExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
     MultiCastLocalExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                               std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : OperatorFactory(id, "mcast_local_exchange_sink", plan_node_id), _exchanger(exchanger) {}
+            : OperatorFactory(id, "multi_cast_local_exchange_sink", plan_node_id), _exchanger(exchanger) {}
 
     ~MultiCastLocalExchangeSinkOperatorFactory() override = default;
 
