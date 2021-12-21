@@ -558,7 +558,6 @@ public class ReportHandler extends Daemon {
                         continue;
                     }
 
-                    // check report version again
                     long currentBackendReportVersion =
                             Catalog.getCurrentSystemInfo().getBackendReportVersion(backendId);
                     if (backendReportVersion < currentBackendReportVersion) {
