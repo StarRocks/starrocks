@@ -367,11 +367,6 @@ void SystemMetrics::_update_memory_metrics() {
     UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_date_bytes, DateColumn)
     UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_datetime_bytes, TimestampColumn)
 
-    int64_t central_bytes = vectorized::g_column_pool_total_central_bytes.get_value();
-    int64_t local_bytes = vectorized::g_column_pool_total_local_bytes.get_value();
-    _memory_metrics->column_pool_central_bytes.set_value(central_bytes);
-    _memory_metrics->column_pool_local_bytes.set_value(local_bytes);
-    _memory_metrics->column_pool_total_bytes.set_value(central_bytes + local_bytes);
 #undef UPDATE_COLUMN_POOL_METRIC
 #endif
 }
