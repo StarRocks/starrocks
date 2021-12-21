@@ -31,7 +31,6 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
-#include "runtime/tuple.h"
 
 namespace starrocks {
 

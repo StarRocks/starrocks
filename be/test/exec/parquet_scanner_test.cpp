@@ -34,7 +34,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks {
