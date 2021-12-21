@@ -744,13 +744,13 @@ public class DeleteHandler implements Writable {
         if (deleteInfo == null) {
             return;
         }
+        long dbId = deleteInfo.getDbId();
+        updateTableDeleteInfo(catalog, dbId, deleteInfo.getTableId());
         if ((System.currentTimeMillis() - deleteInfo.getCreateTimeMs()) / 1000 > Config.label_keep_max_second) {
             LOG.info("delete info outdated, create time: {}, ignore", deleteInfo.getCreateTimeMs());
             return;
         }
-        long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
-        updateTableDeleteInfo(catalog, dbId, deleteInfo.getTableId());
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
         lock.writeLock().lock();
@@ -766,13 +766,13 @@ public class DeleteHandler implements Writable {
         if (deleteInfo == null) {
             return;
         }
+        long dbId = deleteInfo.getDbId();
+        updateTableDeleteInfo(catalog, dbId, deleteInfo.getTableId());
         if ((System.currentTimeMillis() - deleteInfo.getCreateTimeMs()) / 1000 > Config.label_keep_max_second) {
             LOG.info("delete info outdated, create time: {}, ignore", deleteInfo.getCreateTimeMs());
             return;
         }
-        long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
-        updateTableDeleteInfo(catalog, dbId, deleteInfo.getTableId());
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
         lock.writeLock().lock();
