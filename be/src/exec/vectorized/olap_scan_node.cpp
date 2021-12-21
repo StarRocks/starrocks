@@ -134,7 +134,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // is the first time of calling `get_next`, pass the second argument of `_fill_chunk_pool` as
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
-        _fill_chunk_pool(1, first_call);
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call));
         *chunk = std::shared_ptr<Chunk>(ptr);
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
@@ -494,7 +494,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    _fill_chunk_pool(chunks, true);
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));
