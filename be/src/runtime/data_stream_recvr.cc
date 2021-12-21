@@ -32,6 +32,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "exec/sort_exec_exprs.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
@@ -502,9 +503,11 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
 
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
                                                         faststring* uncompressed_buffer) {
+    size_t serialized_size = pchunk.serialized_size();
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-        RETURN_IF_ERROR(chunk->deserialize((const uint8_t*)pchunk.data().data(), pchunk.data().size(), _chunk_meta));
+        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(chunk->deserialize((const uint8_t*)pchunk.data().data(),
+                                                               pchunk.data().size(), _chunk_meta, serialized_size)));
     } else {
         size_t uncompressed_size = 0;
         {
@@ -512,13 +515,14 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
             const BlockCompressionCodec* codec = nullptr;
             RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
             uncompressed_size = pchunk.uncompressed_size();
-            uncompressed_buffer->resize(uncompressed_size);
+            TRY_CATCH_BAD_ALLOC(uncompressed_buffer->resize(uncompressed_size));
             Slice output{uncompressed_buffer->data(), uncompressed_size};
             RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
         }
         {
             SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-            RETURN_IF_ERROR(chunk->deserialize(uncompressed_buffer->data(), uncompressed_size, _chunk_meta));
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(
+                    chunk->deserialize(uncompressed_buffer->data(), uncompressed_size, _chunk_meta, serialized_size)));
         }
     }
     return Status::OK();

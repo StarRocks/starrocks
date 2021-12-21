@@ -59,4 +59,7 @@ message ChunkPB {
     repeated bool is_consts = 6; // column is const
     repeated int32 tuple_id_map = 7; // tuple id to column id map
     optional int64 data_size = 8; // used to record size using brpc attachment
+    // for some object column types like bitmap/hll/percentile
+    // we may estimate larger serialized_size but actually don't use that much space.
+    optional int64 serialized_size  = 9; // how many bytes are really written into data.
 };

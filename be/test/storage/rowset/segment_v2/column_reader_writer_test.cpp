@@ -46,6 +46,7 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/range.h"
 
 using std::string;
 
@@ -163,7 +164,6 @@ protected:
                 {
                     st = iter->seek_to_first();
                     ASSERT_TRUE(st.ok()) << st.to_string();
-
                     vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
                     // will do direct copy to column
                     size_t rows_read = src.size();
@@ -196,6 +196,36 @@ protected:
                                     << datum_to_string(type_info.get(), src.get(rowid + i)) << " vs "
                                     << datum_to_string(type_info.get(), dst->get(i));
                         }
+                    }
+                }
+
+                {
+                    st = iter->seek_to_first();
+                    ASSERT_TRUE(st.ok());
+
+                    vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
+                    vectorized::SparseRange read_range;
+                    size_t write_num = src.size();
+                    read_range.add(vectorized::Range(0, write_num / 3));
+                    read_range.add(vectorized::Range(write_num / 2, (write_num * 2 / 3)));
+                    read_range.add(vectorized::Range((write_num * 3 / 4), write_num));
+                    size_t read_num = read_range.span_size();
+
+                    st = iter->next_batch(read_range, dst.get());
+                    ASSERT_TRUE(st.ok());
+                    ASSERT_EQ(read_num, dst->size());
+
+                    size_t offset = 0;
+                    vectorized::SparseRangeIterator read_iter = read_range.new_iterator();
+                    while (read_iter.has_more()) {
+                        vectorized::Range r = read_iter.next(read_num);
+                        for (int i = 0; i < r.span_size(); ++i) {
+                            ASSERT_EQ(0, type_info->cmp(src.get(r.begin() + i), dst->get(i + offset)))
+                                    << " row " << r.begin() + i << ": "
+                                    << datum_to_string(type_info.get(), src.get(r.begin() + i)) << " vs "
+                                    << datum_to_string(type_info.get(), dst->get(i + offset));
+                        }
+                        offset += r.span_size();
                     }
                 }
             }

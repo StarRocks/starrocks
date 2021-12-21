@@ -341,14 +341,16 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
             worker_pool_this->_tasks.pop_front();
         }
 
+        bool force_drop = drop_tablet_req.__isset.force && drop_tablet_req.force;
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
         TStatus task_status;
-        TabletSharedPtr dropped_tablet =
-                StorageEngine::instance()->tablet_manager()->get_tablet(drop_tablet_req.tablet_id);
+
+        auto dropped_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(drop_tablet_req.tablet_id);
         if (dropped_tablet != nullptr) {
-            Status drop_status = StorageEngine::instance()->tablet_manager()->drop_tablet(drop_tablet_req.tablet_id);
-            if (!drop_status.ok()) {
+            TabletDropFlag flag = force_drop ? kDeleteFiles : kMoveFilesToTrash;
+            auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(drop_tablet_req.tablet_id, flag);
+            if (!st.ok()) {
                 LOG(WARNING) << "drop table failed! signature: " << agent_task_req.signature;
                 error_msgs.emplace_back("drop table failed!");
                 status_code = TStatusCode::RUNTIME_ERROR;

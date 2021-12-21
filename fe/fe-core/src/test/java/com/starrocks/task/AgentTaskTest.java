@@ -119,7 +119,7 @@ public class AgentTaskTest {
                 false, TTabletType.TABLET_TYPE_DISK);
 
         // drop
-        dropTask = new DropReplicaTask(backendId1, tabletId1, schemaHash1);
+        dropTask = new DropReplicaTask(backendId1, tabletId1, schemaHash1, false);
 
         // push
         pushTask =
@@ -266,7 +266,7 @@ public class AgentTaskTest {
         Assert.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));
 
         dropTask.failed();
-        DropReplicaTask dropTask2 = new DropReplicaTask(backendId2, tabletId1, schemaHash1);
+        DropReplicaTask dropTask2 = new DropReplicaTask(backendId2, tabletId1, schemaHash1, false);
         AgentTaskQueue.addTask(dropTask2);
         dropTask2.failed();
         Assert.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));

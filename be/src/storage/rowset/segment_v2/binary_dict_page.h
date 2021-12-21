@@ -35,6 +35,7 @@
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/types.h"
+#include "storage/vectorized/range.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -124,6 +125,8 @@ public:
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+
     size_t count() const override { return _data_page_decoder->count(); }
 
     size_t current_index() const override { return _data_page_decoder->current_index(); }
@@ -133,6 +136,8 @@ public:
     void set_dict_decoder(PageDecoder* dict_decoder);
 
     Status next_dict_codes(size_t* n, vectorized::Column* dst) override;
+
+    Status next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
 private:
     Slice _data;

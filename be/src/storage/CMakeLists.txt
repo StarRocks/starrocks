@@ -30,12 +30,10 @@ add_subdirectory(fs)
 
 add_library(Storage STATIC
     base_tablet.cpp
-    comparison_predicate.cpp
     decimal12.cpp
     delete_handler.cpp
     del_vector.cpp
     hll.cpp
-    in_list_predicate.cpp
     key_coder.cpp
     lru_cache.cpp
     memtable_flush_executor.cpp

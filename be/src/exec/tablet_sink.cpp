@@ -34,7 +34,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple_row.h"
 #include "service/brpc.h"
 #include "simd/simd.h"
 #include "storage/hll.h"
@@ -469,8 +468,6 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _tuple_desc_id = table_sink.tuple_id;
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
-    _partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
-    RETURN_IF_ERROR(_partition->init());
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
     RETURN_IF_ERROR(_vectorized_partition->init());
     _location = _pool->add(new OlapTableLocationParam(table_sink.location));
@@ -566,7 +563,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _load_mem_limit = state->get_load_mem_limit();
 
     // open all channels
-    const auto& partitions = _partition->get_partitions();
+    const auto& partitions = _vectorized_partition->get_partitions();
     for (int i = 0; i < _schema->indexes().size(); ++i) {
         // collect all tablets belong to this rollup
         std::vector<TTabletWithPartition> tablets;

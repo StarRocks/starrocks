@@ -19,7 +19,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks {

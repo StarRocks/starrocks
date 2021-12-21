@@ -693,7 +693,7 @@ public class ReportHandler extends Daemon {
 
                 if (needDelete) {
                     // drop replica
-                    DropReplicaTask task = new DropReplicaTask(backendId, tabletId, backendTabletInfo.getSchema_hash());
+                    DropReplicaTask task = new DropReplicaTask(backendId, tabletId, backendTabletInfo.getSchema_hash(), false);
                     batchTask.addTask(task);
                     LOG.warn("delete tablet[" + tabletId + " - " + backendTabletInfo.getSchema_hash()
                             + "] from backend[" + backendId + "] because not found in meta");
@@ -705,7 +705,7 @@ public class ReportHandler extends Daemon {
                 // this tablet is found in meta but with invalid schema hash.
                 // delete it.
                 int schemaHash = foundTabletsWithInvalidSchema.get(tabletId).getSchema_hash();
-                DropReplicaTask task = new DropReplicaTask(backendId, tabletId, schemaHash);
+                DropReplicaTask task = new DropReplicaTask(backendId, tabletId, schemaHash, false);
                 batchTask.addTask(task);
                 LOG.warn("delete tablet[" + tabletId + " - " + schemaHash + "] from backend[" + backendId
                         + "] because invalid schema hash");

@@ -21,16 +21,10 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 
 @Deprecated
 public class LinkDbStmt extends DdlStmt {
@@ -65,26 +59,7 @@ public class LinkDbStmt extends DdlStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        if (Config.disable_cluster_feature) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "LINK DATABASE");
-        }
-
-        src.analyze(analyzer);
-        dest.analyze(analyzer);
-
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                    "ADMIN");
-        }
-
-        if (Strings.isNullOrEmpty(src.getCluster()) || Strings.isNullOrEmpty(dest.getCluster())
-                || Strings.isNullOrEmpty(src.getDb()) || Strings.isNullOrEmpty(dest.getDb())) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_PARAMETER);
-        }
-        srcCluster = src.getCluster();
-        srcDb = ClusterNamespace.getFullName(srcCluster, src.getDb());
-        destCluster = dest.getCluster();
-        destDb = ClusterNamespace.getFullName(destCluster, dest.getDb());
+        ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "LINK DATABASE");
     }
 
     @Override

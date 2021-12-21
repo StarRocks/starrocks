@@ -32,6 +32,7 @@
 #include "storage/rowset/segment_v2/page_builder.h"
 #include "storage/rowset/segment_v2/page_decoder.h"
 #include "storage/types.h"
+#include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks {
 namespace segment_v2 {
@@ -102,6 +103,32 @@ public:
             if (src[i] != decoded[i]) {
                 FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << decoded[i];
             }
+        }
+
+        auto column = vectorized::ChunkHelper::column_from_field_type(Type, false);
+        page_decoder.seek_to_position_in_page(0);
+        ASSERT_EQ(0, page_decoder.current_index());
+
+        vectorized::SparseRange read_range;
+        read_range.add(vectorized::Range(0, size / 3));
+        read_range.add(vectorized::Range(size / 2, (size * 2 / 3)));
+        read_range.add(vectorized::Range((size * 3 / 4), size));
+        size_t read_num = read_range.span_size();
+        status = page_decoder.next_batch(read_range, column.get());
+        ASSERT_TRUE(status.ok());
+
+        const CppType* decoded_data = reinterpret_cast<const CppType*>(column->raw_data());
+        vectorized::SparseRangeIterator read_iter = read_range.new_iterator();
+        size_t offset = 0;
+        while (read_iter.has_more()) {
+            vectorized::Range r = read_iter.next(read_num);
+            for (uint i = 0; i < r.span_size(); ++i) {
+                if (src[r.begin() + i] != decoded_data[i + offset]) {
+                    FAIL() << "Fail at index " << i + offset << " inserted=" << src[r.begin() + i]
+                           << " got=" << decoded_data[i + offset];
+                }
+            }
+            offset += r.span_size();
         }
 
         // Test Seek within block by ordinal

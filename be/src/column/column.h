@@ -7,6 +7,7 @@
 #include <string>
 #include <type_traits>
 
+#include "column/column_visitor.h"
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
@@ -338,6 +339,8 @@ public:
 
     virtual bool reach_capacity_limit() const = 0;
 
+    virtual Status accept(ColumnVisitor* visitor) const = 0;
+
 protected:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
@@ -389,6 +392,8 @@ public:
     typename AncestorBaseType::Ptr clone_shared() const override {
         return typename AncestorBase::Ptr(new Derived(*derived()));
     }
+
+    Status accept(ColumnVisitor* visitor) const override { return visitor->visit(*static_cast<const Derived*>(this)); }
 };
 
 } // namespace vectorized

@@ -104,7 +104,7 @@ public:
         _meta.reset();
         FileUtils::remove_all(_root_path);
         if (_tablet) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
         }
     }

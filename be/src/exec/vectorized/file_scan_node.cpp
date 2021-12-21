@@ -19,7 +19,6 @@
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
-#include "util/scoped_cleanup.h"
 
 namespace starrocks::vectorized {
 
@@ -38,7 +37,7 @@ FileScanNode::~FileScanNode() {
 }
 
 Status FileScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
-    RETURN_IF_ERROR(ScanNode::init(tnode));
+    RETURN_IF_ERROR(ScanNode::init(tnode, state));
     return Status::OK();
 }
 
@@ -274,7 +273,7 @@ void FileScanNode::scanner_worker(int start_idx, int length) {
 
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
-    MakeScopedCleanup([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
+    DeferOp close_exprs([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
     auto status = Expr::clone_if_not_exists(_conjunct_ctxs, runtime_state(), &scanner_expr_ctxs);
 
     if (!status.ok()) {

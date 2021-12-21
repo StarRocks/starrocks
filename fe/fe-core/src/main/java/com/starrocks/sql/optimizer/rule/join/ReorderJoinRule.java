@@ -267,13 +267,17 @@ public class ReorderJoinRule extends Rule {
 
         @Override
         public OptExpression visitLogicalJoin(OptExpression optExpression, Void context) {
-            ColumnRefSet outputColumns = new ColumnRefSet(optExpression.getOp().getProjection().getOutputColumns());
             ColumnRefSet childInputColumns = new ColumnRefSet();
             optExpression.getInputs().forEach(opt -> childInputColumns.union(
                     ((LogicalOperator) opt.getOp()).getOutputColumns(new ExpressionContext(opt))));
 
             OptExpression left = rewrite(optExpression.inputAt(0));
             OptExpression right = rewrite(optExpression.inputAt(1));
+
+            ColumnRefSet outputColumns = new ColumnRefSet();
+            if (optExpression.getOp().getProjection() != null) {
+                outputColumns = new ColumnRefSet(optExpression.getOp().getProjection().getOutputColumns());
+            }
 
             if (childInputColumns.equals(outputColumns)) {
                 LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder().withOperator(

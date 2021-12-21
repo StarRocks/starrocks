@@ -21,7 +21,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple_row.h"
 #include "service/brpc.h"
 #include "util/block_compression.h"
 #include "util/compression_utils.h"
@@ -472,7 +471,8 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
             uncompressed_size = src->serialize_size();
             // TODO(kks): resize without initializing the new bytes
             dst->mutable_data()->resize(uncompressed_size);
-            src->serialize((uint8_t*)dst->mutable_data()->data());
+            size_t written_size = src->serialize((uint8_t*)dst->mutable_data()->data());
+            dst->set_serialized_size(written_size);
         }
     }
 

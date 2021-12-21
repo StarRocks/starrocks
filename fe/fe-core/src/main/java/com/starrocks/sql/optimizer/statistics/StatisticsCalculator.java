@@ -170,8 +170,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
             Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
-                // derive stats from child
-                // use clone here because it will be rewrite later
                 ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                 pruneBuilder.addColumnStatistic(columnRefOperator,
                         ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
@@ -557,8 +555,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         allBuilder.addColumnStatistics(inputStatistics.getColumnStatistics());
 
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
-            // derive stats from child
-            // use clone here because it will be rewrite later
             ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator);
             ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
             builder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
@@ -678,8 +674,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 rightStatistics.getUsedColumns(),
                 Utils.extractConjuncts(joinOnPredicate));
 
-        // TODO(ywb): now join node statistics only care obout the row count, but the column statistics will also change
-        //  after join operation
         Statistics crossJoinStats = crossBuilder.build();
         double innerRowCount = -1;
         // For unknown column Statistics
@@ -744,8 +738,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             case FULL_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(1, leftRowCount + rightRowCount - innerRowCount));
-                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics, joinStatsBuilder);
-                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
+                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics,
+                        joinStatsBuilder);
+                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics,
+                        joinStatsBuilder);
                 break;
             default:
                 throw new StarRocksPlannerException("Not support join type : " + joinType,
