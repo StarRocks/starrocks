@@ -73,7 +73,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFi
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAssertOneRowProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitJoinRule;
@@ -255,10 +254,6 @@ public class RuleSet {
         transformRules.add(new SemiReorderRule());
         transformRules.add(JoinCommutativityRule.getInstance());
         transformRules.add(JoinAssociativityRule.getInstance());
-    }
-
-    public void addPushDownJoinToAggRule() {
-        transformRules.add(PushDownJoinAggRule.getInstance());
     }
 
     public void addJoinCommutativityWithOutInnerRule() {
