@@ -10,7 +10,6 @@
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
 #include "hdfs/hdfs.h"
-#include "runtime/tuple.h"
 
 namespace starrocks::vectorized {
 
