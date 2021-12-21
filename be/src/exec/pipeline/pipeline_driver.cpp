@@ -320,23 +320,12 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 void PipelineDriver::_update_overhead_timer() {
     int64_t overhead_time = _active_timer->value();
     RuntimeProfile* profile = _runtime_profile.get();
-    for (;;) {
-        std::vector<RuntimeProfile*> children;
-        profile->get_children(&children);
-
-        if (children.empty()) {
-            break;
-        }
-
-        DCHECK_EQ(children.size(), 1);
-        RuntimeProfile* child_profile = children[0];
-
+    std::vector<RuntimeProfile*> children;
+    profile->get_children(&children);
+    for (auto* child_profile : children) {
         auto* total_timer = child_profile->get_counter("OperatorTotalTime");
-        if (total_timer != nullptr) {
-            overhead_time -= total_timer->value();
-        }
-
-        profile = child_profile;
+        if (total_timer != nullptr) continue;
+        overhead_time -= total_timer->value();
     }
 
     COUNTER_UPDATE(_overhead_timer, overhead_time);
