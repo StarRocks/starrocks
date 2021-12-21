@@ -229,13 +229,7 @@ public class ReportHandler extends Daemon {
                 ReportHandler.diskReport(beId, disks);
             }
             if (tablets != null) {
-                long backendReportVersion = Catalog.getCurrentSystemInfo().getBackendReportVersion(beId);
-                if (reportVersion < backendReportVersion) {
-                    LOG.warn("out of date report version {} from backend[{}]. current report version[{}]",
-                            reportVersion, beId, backendReportVersion);
-                } else {
-                    ReportHandler.tabletReport(beId, tablets, reportVersion);
-                }
+                ReportHandler.tabletReport(beId, tablets, reportVersion);
             }
         }
     }
