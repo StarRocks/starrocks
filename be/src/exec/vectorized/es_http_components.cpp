@@ -51,7 +51,7 @@ std::string json_value_to_string(const rapidjson::Value& value) {
             std::stringstream ss;                                             \
             ss << "Expected value of type: " << type_to_string(type)          \
                << "; but found type: " << json_type_to_raw_str(col.GetType()) \
-               << "; Docuemnt slice is : " << json_value_to_string(col);      \
+               << "; Document slice is : " << json_value_to_string(col);      \
             return Status::RuntimeError(ss.str());                            \
         }                                                                     \
     } while (false)
@@ -62,7 +62,7 @@ std::string json_value_to_string(const rapidjson::Value& value) {
             std::stringstream ss;                                               \
             ss << "Expected value of type: " << type_to_string(type)            \
                << "; but found type: " << json_type_to_raw_str(col.GetType())   \
-               << "; Docuemnt source slice is : " << json_value_to_string(col); \
+               << "; Document source slice is : " << json_value_to_string(col); \
             return Status::RuntimeError(ss.str());                              \
         }                                                                       \
     } while (false)
@@ -84,7 +84,7 @@ std::string json_value_to_string(const rapidjson::Value& value) {
             std::stringstream ss;                                               \
             ss << "Expected value of type: " << type_to_string(type)            \
                << "; but found type: " << json_type_to_raw_str(col.GetType())   \
-               << "; Docuemnt source slice is : " << json_value_to_string(col); \
+               << "; Document source slice is : " << json_value_to_string(col); \
             return Status::RuntimeError(ss.str());                              \
         }                                                                       \
     } while (false)
@@ -94,7 +94,7 @@ std::string json_value_to_string(const rapidjson::Value& value) {
         std::stringstream ss;                                             \
         ss << "Expected value of type: " << type_to_string(type)          \
            << "; but found type: " << json_type_to_raw_str(col.GetType()) \
-           << "; Docuemnt slice is : " << json_value_to_string(col);      \
+           << "; Document slice is : " << json_value_to_string(col);      \
         return Status::RuntimeError(ss.str());                            \
     } while (false)
 
@@ -120,7 +120,7 @@ Status ScrollParser::parse(const std::string& scroll_result, bool exactly_once) 
     }
 
     if (!exactly_once && !_document_node.HasMember(FIELD_SCROLL_ID)) {
-        LOG(WARNING) << "Document has not a scroll id field scroll reponse:" << scroll_result;
+        LOG(WARNING) << "Document has not a scroll id field scroll response:" << scroll_result;
         return Status::InternalError("Document has not a scroll id field");
     }
 

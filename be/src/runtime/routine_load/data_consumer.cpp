@@ -245,9 +245,9 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
         RdKafka::ErrorCode err =
                 _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, 5000);
         if (err != RdKafka::ERR_NO_ERROR) {
-            LOG(WARNING) << "failed to query wartermark offset of topic: " << _topic << " partition: " << p_id
+            LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
                          << ", err: " << RdKafka::err2str(err);
-            return Status::InternalError("failed to query wartermark offset, err: " + RdKafka::err2str(err));
+            return Status::InternalError("failed to query watermark offset, err: " + RdKafka::err2str(err));
         }
         beginning_offsets->push_back(beginning_offset);
         latest_offsets->push_back(latest_offset);

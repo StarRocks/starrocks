@@ -124,7 +124,7 @@ Status ColumnChunkReader::_parse_page_data() {
         return Status::InternalError("There are two dictionary page in this column");
     default:
         return Status::NotSupported(
-                strings::Substitute("Not supproted page type: $0", _page_reader->current_header()->type));
+                strings::Substitute("Not supported page type: $0", _page_reader->current_header()->type));
         break;
     }
     _page_parse_state = PAGE_DATA_PARSED;

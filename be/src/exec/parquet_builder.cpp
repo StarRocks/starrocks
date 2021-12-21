@@ -84,12 +84,12 @@ ParquetBuilder::~ParquetBuilder() = default;
 
 Status ParquetBuilder::add_chunk(vectorized::Chunk* chunk) {
     // TODO(c1oudman): implement
-    return Status::NotSupported("Parquest builder not supported yet");
+    return Status::NotSupported("Parquet builder not supported yet");
 }
 
 Status ParquetBuilder::finish() {
     // TODO(cmy): implement
-    return Status::NotSupported("Parquest builder not supported yet");
+    return Status::NotSupported("Parquet builder not supported yet");
 }
 
 } // namespace starrocks

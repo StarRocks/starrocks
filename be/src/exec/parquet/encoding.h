@@ -69,7 +69,7 @@ public:
 
     // Currently, this function is only used to read dictionary values.
     virtual Status next_batch(size_t count, uint8_t* dst) {
-        return Status::NotSupported("next_batch is not supportted");
+        return Status::NotSupported("next_batch is not supported");
     }
 };
 

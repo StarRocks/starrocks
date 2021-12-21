@@ -13,7 +13,7 @@ class ChunksSorterFullSort : public ChunksSorter {
 public:
     /**
      * Constructor.
-     * @param sort_exprs     The order-by columns or columns with expresion. This sorter will use but not own the object.
+     * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
      * @param is_asc         Orders on each column.
      * @param is_null_first  NULL values should at the head or tail.
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
