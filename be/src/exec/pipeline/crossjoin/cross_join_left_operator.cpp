@@ -98,6 +98,7 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_build(vectorized::
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
         vectorized::ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        DCHECK(_curr_build_chunk != nullptr);
         vectorized::ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
     }
@@ -237,7 +238,7 @@ void CrossJoinLeftOperator::_select_build_chunk(const int32_t unprocessed_build_
 
     // Reset the indexes for traversing on _curr_build_chunk and _probe_chunk.
     if (_curr_build_index < num_build_chunks) {
-        DCHECK(_curr_build_chunk != nullptr);
+        DCHECK(_curr_build_chunk != nullptr && _curr_build_chunk->num_rows() > 0);
 
         _curr_total_build_rows = _curr_build_chunk->num_rows();
         _curr_build_rows_threshold = (_curr_total_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
@@ -326,6 +327,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
             // step policy decision:
             DCHECK_EQ(_within_threshold_build_rows_index, _curr_build_rows_threshold);
 
+            bool has_build_chunk = true;
             if (_curr_build_rows_threshold != 0) {
                 // scan right chunk_size rows for next row of left chunk.
                 ++_probe_chunk_index;
@@ -335,6 +337,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
                     // if right table is all about chunks, means _probe_chunk is done.
                     if (_curr_build_rows_threshold == _curr_total_build_rows) {
                         _select_build_chunk(_curr_build_index + 1);
+                        has_build_chunk = !_is_curr_probe_chunk_finished();
                     } else {
                         _beyond_threshold_build_rows_index = _curr_build_rows_threshold;
                         _probe_rows_index = 0;
@@ -346,7 +349,10 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
                 _beyond_threshold_build_rows_index = _curr_build_rows_threshold;
                 _probe_rows_index = 0;
             }
-            continue;
+
+            if (has_build_chunk) {
+                continue;
+            }
         }
 
         // When the chunk is full or the current probe chunk is finished
