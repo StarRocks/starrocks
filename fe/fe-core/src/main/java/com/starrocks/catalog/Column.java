@@ -452,24 +452,33 @@ public class Column implements Writable {
     // else for a batch of every row different like uuid(). return null
     // consistency requires ConnectContext.get() != null to assurance
     public String getCalculatedDefaultValue() {
-        if (ConnectContext.get() != null) {
-            return getCalculatedDefaultValueWithTime(ConnectContext.get().getStartTime());
-        } else {
-            // should not run up here
-            LOG.warn("The calculation of the default value time does not use session time.");
-            return getCalculatedDefaultValueWithTime(System.currentTimeMillis());
-        }
-    }
-
-    // if the column have a default value or default expr can be calculated like now(). return calculated value
-    // else for a batch of every row different like uuid(). return null
-    // require specify startTime
-    public String getCalculatedDefaultValueWithTime(long startTime) {
         if (defaultValue != null) {
             return defaultValue;
         }
         if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            LocalDateTime localDateTime = Instant.ofEpochMilli(startTime)
+            // current transaction time
+            if (ConnectContext.get() != null) {
+                LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                return localDateTime.toString();
+            } else {
+                // should not run up here
+                return LocalDateTime.now().toString();
+            }
+        }
+        return null;
+    }
+
+    // if the column have a default value or default expr can be calculated like now(). return calculated value
+    // else for a batch of every row different like uuid(). return null
+    // require specify currentTimestamp. this will get the default value of the incoming time
+    // base on the incoming time
+    public String getCalculatedDefaultValueWithTime(long currentTimestamp) {
+        if (defaultValue != null) {
+            return defaultValue;
+        }
+        if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+            LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
                         .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
             return localDateTime.toString();
         }

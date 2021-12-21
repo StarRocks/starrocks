@@ -574,7 +574,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
         // expr like uuid() will support later
-        if (defaultValueType == Column.DefaultValueType.VARY && newColumn.getDefaultExpr() != null) {
+        if (defaultValueType == Column.DefaultValueType.VARY) {
             throw new DdlException("Schema change currently not supported default expr:"
                     + newColumn.getDefaultExpr().getExpr());
         }

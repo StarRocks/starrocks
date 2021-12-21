@@ -1153,11 +1153,13 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                     uint32_t old_unique_id = base_tablet->tablet_schema().column(old_col_idx).unique_id();
                     col_idx_to_unique_id[new_col_idx] = old_unique_id;
                     // schema change for default value may query meta for historical data
-                    // if meta of default_value is changed the history data will also be changed
+                    // if meta of default_value is changed the history data will also be changed,
                     // so we refuse to modify history default value to ensure that historical
                     // data will not be modified.
-                    norm_request.tablet_schema.columns[new_col_idx].default_value =
-                            base_tablet->tablet_schema().column(old_col_idx).default_value();
+                    if (base_tablet->tablet_schema().column(old_col_idx).has_default_value()) {
+                        norm_request.tablet_schema.columns[new_col_idx].__set_default_value(
+                                base_tablet->tablet_schema().column(old_col_idx).default_value());
+                    }
                     break;
                 }
             }
