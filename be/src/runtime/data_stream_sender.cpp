@@ -72,8 +72,7 @@ public:
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(DataStreamSender* parent, const RowDescriptor& row_desc, const TNetworkAddress& brpc_dest,
             const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
-            bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through,
-            const PassThroughChunkBufferPtr& pass_through_chunk_buffer)
+            bool send_query_statistics_with_every_batch)
             : _parent(parent),
               _row_desc(row_desc),
               _fragment_instance_id(fragment_instance_id),
@@ -83,9 +82,7 @@ public:
               _need_close(false),
               _brpc_dest_addr(brpc_dest),
               _is_transfer_chain(is_transfer_chain),
-              _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch),
-              _enable_exchange_pass_through(enable_exchange_pass_through),
-              _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id) {}
+              _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch) {}
 
     virtual ~Channel() {
         if (_closure != nullptr && _closure->unref()) {
@@ -138,8 +135,6 @@ public:
 
     TUniqueId get_fragment_instance_id() { return _fragment_instance_id; }
 
-    bool use_pass_through() const { return _use_pass_through; }
-
 private:
     inline Status _wait_prev_request() {
         SCOPED_TIMER(_parent->_wait_response_timer);
@@ -162,9 +157,6 @@ private:
     Status _do_send_chunk_rpc(PTransmitChunkParams* request, const butil::IOBuf& attachment);
 
     Status close_internal();
-
-    bool _check_use_pass_through();
-    void _prepare_pass_through();
 
     DataStreamSender* _parent;
 
@@ -204,10 +196,6 @@ private:
     bool _is_transfer_chain;
     bool _send_query_statistics_with_every_batch;
     bool _is_inited = false;
-
-    bool _enable_exchange_pass_through = false;
-    bool _use_pass_through = false;
-    PassThroughContext _pass_through_context;
 };
 
 Status DataStreamSender::Channel::init(RuntimeState* state) {
@@ -245,8 +233,6 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
     }
     _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
 
-    _prepare_pass_through();
-
     _need_close = true;
     _is_inited = true;
 
@@ -258,16 +244,9 @@ Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk,
 
     // If chunk is not null, append it to request
     if (chunk != nullptr) {
-        if (_use_pass_through) {
-            size_t chunk_size = chunk->serialize_size();
-            _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size);
-            _current_request_bytes += chunk_size;
-            COUNTER_UPDATE(_parent->_pass_through_bytes_counter, chunk_size);
-        } else {
-            auto pchunk = _chunk_request.add_chunks();
-            RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
-            _current_request_bytes += pchunk->data().size();
-        }
+        auto pchunk = _chunk_request.add_chunks();
+        RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
+        _current_request_bytes += pchunk->data().size();
     }
 
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
@@ -280,7 +259,6 @@ Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk,
         // RPC first.
         RETURN_IF_ERROR(_wait_prev_request());
         _chunk_request.set_eos(eos);
-        _chunk_request.set_use_pass_through(_use_pass_through);
         // we will send the current request now
         butil::IOBuf attachment;
         _parent->construct_brpc_attachment(&_chunk_request, &attachment);
@@ -300,7 +278,6 @@ Status DataStreamSender::Channel::send_chunk_request(PTransmitChunkParams* param
     params->set_node_id(_dest_node_id);
     params->set_sender_id(_parent->_sender_id);
     params->set_be_number(_parent->_be_number);
-    params->set_use_pass_through(_use_pass_through);
     auto status = _do_send_chunk_rpc(params, attachment);
     params->release_finst_id();
     return status;
@@ -395,24 +372,6 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     _chunk.reset();
 }
 
-bool DataStreamSender::Channel::_check_use_pass_through() {
-    if (!_enable_exchange_pass_through) {
-        return false;
-    }
-    if (BackendOptions::get_localhost() != _brpc_dest_addr.hostname) {
-        return false;
-    }
-    if (config::brpc_port != _brpc_dest_addr.port) {
-        return false;
-    }
-    return true;
-}
-
-void DataStreamSender::Channel::_prepare_pass_through() {
-    _pass_through_context.init();
-    _use_pass_through = _check_use_pass_through();
-}
-
 DataStreamSender::DataStreamSender(RuntimeState* state, bool is_vectorized, int sender_id,
                                    const RowDescriptor& row_desc, const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
@@ -441,8 +400,6 @@ DataStreamSender::DataStreamSender(RuntimeState* state, bool is_vectorized, int 
     // TODO: use something like google3's linked_ptr here (std::unique_ptr isn't copyable
 
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
-    auto pass_through_chunk_buffer = state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
-    DCHECK(pass_through_chunk_buffer.get() != nullptr);
     for (int i = 0; i < destinations.size(); ++i) {
         // Select first dest as transfer chain.
         bool is_transfer_chain = (i == 0);
@@ -450,8 +407,7 @@ DataStreamSender::DataStreamSender(RuntimeState* state, bool is_vectorized, int 
         if (fragment_id_to_channel_index.find(fragment_instance_id.lo) == fragment_id_to_channel_index.end()) {
             _channel_shared_ptrs.emplace_back(
                     new Channel(this, row_desc, destinations[i].brpc_server, fragment_instance_id, sink.dest_node_id,
-                                per_channel_buffer_size, is_transfer_chain, send_query_statistics_with_every_batch,
-                                enable_exchange_pass_through, pass_through_chunk_buffer));
+                                per_channel_buffer_size, is_transfer_chain, send_query_statistics_with_every_batch));
             fragment_id_to_channel_index.insert({fragment_instance_id.lo, _channel_shared_ptrs.size() - 1});
             _channels.push_back(_channel_shared_ptrs.back().get());
         } else {
@@ -547,8 +503,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_sent_counter = ADD_COUNTER(profile(), "BytesSent", TUnit::BYTES);
-    _pass_through_bytes_counter = ADD_COUNTER(profile(), "BytesPassThrough", TUnit::BYTES);
-    _uncompressed_bytes_counter = ADD_COUNTER(profile(), "BytesUncompressed", TUnit::BYTES);
+    _bytes_uncompressed_counter = ADD_COUNTER(profile(), "BytesUncompressed", TUnit::BYTES);
     _ignore_rows = ADD_COUNTER(profile(), "IgnoreRows", TUnit::UNIT);
     _serialize_batch_timer = ADD_TIMER(profile(), "SerializeBatchTime");
     _compress_timer = ADD_TIMER(profile(), "CompressTime");
@@ -599,40 +554,22 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
     }
     // Unpartition or _channel size
     if (_part_type == TPartitionType::UNPARTITIONED || _channels.size() == 1) {
-        // If we have any channel which can pass through chunks, we use `send_one_chunk`(without serialization)
-        int has_not_pass_through = false;
-        for (auto idx : _channel_indices) {
-            if (_channels[idx]->use_pass_through()) {
-                bool is_real_sent = false;
-                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk, false, &is_real_sent));
-            } else {
-                has_not_pass_through = true;
+        // We use sender request to avoid serialize chunk many times.
+        // 1. create a new chunk PB to serialize
+        ChunkPB* pchunk = _chunk_request.add_chunks();
+        // 2. serialize input chunk to pchunk
+        RETURN_IF_ERROR(serialize_chunk(chunk, pchunk, &_is_first_chunk, _channels.size()));
+        _current_request_bytes += pchunk->data().size();
+        // 3. if request bytes exceede the threshold, send current request
+        if (_current_request_bytes > _request_bytes_threshold) {
+            butil::IOBuf attachment;
+            construct_brpc_attachment(&_chunk_request, &attachment);
+            for (auto idx : _channel_indices) {
+                RETURN_IF_ERROR(_channels[idx]->send_chunk_request(&_chunk_request, attachment));
             }
+            _current_request_bytes = 0;
+            _chunk_request.clear_chunks();
         }
-
-        // And if we find if there are other channels can not pass through, we have to use old way.
-        // Do serialization once, and send serialized data.
-        if (has_not_pass_through) {
-            // We use sender request to avoid serialize chunk many times.
-            // 1. create a new chunk PB to serialize
-            ChunkPB* pchunk = _chunk_request.add_chunks();
-            // 2. serialize input chunk to pchunk
-            RETURN_IF_ERROR(serialize_chunk(chunk, pchunk, &_is_first_chunk, _channels.size()));
-            _current_request_bytes += pchunk->data().size();
-            // 3. if request bytes exceede the threshold, send current request
-            if (_current_request_bytes > _request_bytes_threshold) {
-                butil::IOBuf attachment;
-                construct_brpc_attachment(&_chunk_request, &attachment);
-                for (auto idx : _channel_indices) {
-                    if (!_channels[idx]->use_pass_through()) {
-                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(&_chunk_request, attachment));
-                    }
-                }
-                _current_request_bytes = 0;
-                _chunk_request.clear_chunks();
-            }
-        }
-
     } else if (_part_type == TPartitionType::RANDOM) {
         // Round-robin batches among channels. Wait for the current channel to finish its
         // rpc before overwriting its batch.
@@ -803,7 +740,7 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
     VLOG_ROW << "chunk data size " << chunk_size;
 
     COUNTER_UPDATE(_bytes_sent_counter, chunk_size * num_receivers);
-    COUNTER_UPDATE(_uncompressed_bytes_counter, uncompressed_size * num_receivers);
+    COUNTER_UPDATE(_bytes_uncompressed_counter, uncompressed_size * num_receivers);
     return Status::OK();
 }
 
