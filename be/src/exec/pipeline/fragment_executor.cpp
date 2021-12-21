@@ -7,7 +7,7 @@
 #include "exec/exchange_node.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
-#include "exec/pipeline/exchange/mcast_local_exchange.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/morsel.h"
@@ -23,7 +23,7 @@
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/mcast_data_stream_sink.h"
+#include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/result_sink.h"
 #include "util/pretty_printer.h"
 #include "util/uid_util.h"
@@ -180,7 +180,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         if (sink_profile != nullptr) {
             runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
         }
-        _convert_data_sink_to_operator(&context, fragment.output_sink, sink.get());
+        _decompose_data_sink_to_operator(runtime_state, &context, fragment.output_sink, sink.get());
     }
 
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
@@ -253,8 +253,8 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     return Status::OK();
 }
 
-void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* context, const TDataSink& t_datasink,
-                                                      DataSink* datasink) {
+void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
+                                                        const TDataSink& t_datasink, DataSink* datasink) {
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
         starrocks::ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink);
         // Result sink doesn't have plan node id;
@@ -297,7 +297,7 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
         auto& t_multi_case_stream_sink = t_datasink.multi_cast_stream_sink;
 
         // === create exchange ===
-        auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(sinks.size());
+        auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(runtime_state, sinks.size());
 
         // === create sink op ====
         auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();

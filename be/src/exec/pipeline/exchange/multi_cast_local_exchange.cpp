@@ -9,8 +9,9 @@ namespace pipeline {
 
 static const size_t kBufferedRowSizeScaleFactor = 16;
 
-MultiCastLocalExchanger::MultiCastLocalExchanger(size_t consumer_number)
-        : _mutex(),
+MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number)
+        : _runtime_state(runtime_state),
+          _mutex(),
           _consumer_number(consumer_number),
           _current_accumulated_row_size(0),
           _progress(consumer_number),
@@ -27,6 +28,7 @@ MultiCastLocalExchanger::MultiCastLocalExchanger(size_t consumer_number)
 MultiCastLocalExchanger::~MultiCastLocalExchanger() {
     while (_head != nullptr) {
         auto* t = _head->next;
+        _current_memory_usage -= _head->memory_usage;
         delete _head;
         _head = t;
     }
@@ -46,19 +48,25 @@ bool MultiCastLocalExchanger::can_push_chunk() const {
 Status MultiCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) {
     if (chunk->num_rows() == 0) return Status::OK();
 
-    std::unique_lock l(_mutex);
-
-    int32_t closed_source_number = (_consumer_number - _opened_source_number);
-
     auto* cell = new Cell();
     cell->chunk = chunk;
-    cell->used_count = closed_source_number;
-    cell->accumulated_row_size = _current_accumulated_row_size;
-    cell->next = nullptr;
+    cell->memory_usage = chunk->memory_usage();
 
-    _tail->next = cell;
-    _tail = cell;
-    _current_accumulated_row_size += chunk->num_rows();
+    {
+        std::unique_lock l(_mutex);
+
+        int32_t closed_source_number = (_consumer_number - _opened_source_number);
+
+        cell->used_count = closed_source_number;
+        cell->accumulated_row_size = _current_accumulated_row_size;
+        cell->next = nullptr;
+
+        _tail->next = cell;
+        _tail = cell;
+        _current_accumulated_row_size += chunk->num_rows();
+        _current_memory_usage += cell->memory_usage;
+        _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
+    }
 
     return Status::OK();
 }
@@ -149,8 +157,12 @@ void MultiCastLocalExchanger::_update_progress(Cell* fast) {
     while (_head && _head->used_count == _consumer_number) {
         Cell* t = _head->next;
         if (t == nullptr) break;
+        _current_memory_usage -= _head->memory_usage;
         delete _head;
         _head = t;
+    }
+    if (_head != nullptr) {
+        _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
     }
 }
 

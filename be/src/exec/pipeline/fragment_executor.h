@@ -10,6 +10,7 @@ class DataSink;
 class ExecEnv;
 class RuntimeProfile;
 class TPlanFragmentExecParams;
+class RuntimeState;
 
 namespace pipeline {
 class FragmentContext;
@@ -21,8 +22,8 @@ public:
     Status execute(ExecEnv* exec_env);
 
 private:
-    void _convert_data_sink_to_operator(PipelineBuilderContext* context, const TDataSink& t_datasink,
-                                        DataSink* datasink);
+    void _decompose_data_sink_to_operator(RuntimeState* state, PipelineBuilderContext* context,
+                                          const TDataSink& t_datasink, DataSink* datasink);
     QueryContext* _query_ctx = nullptr;
     FragmentContext* _fragment_ctx = nullptr;
 };

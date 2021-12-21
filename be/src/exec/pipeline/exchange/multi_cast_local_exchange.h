@@ -30,7 +30,7 @@ namespace pipeline {
 // ===== exchanger =====
 class MultiCastLocalExchanger {
 public:
-    MultiCastLocalExchanger(size_t consumer_number);
+    MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number);
     ~MultiCastLocalExchanger();
     bool can_pull_chunk(int32_t mcast_consumer_index) const;
     bool can_push_chunk() const;
@@ -45,12 +45,14 @@ private:
     struct Cell {
         vectorized::ChunkPtr chunk = nullptr;
         Cell* next = nullptr;
+        size_t memory_usage = 0;
         size_t accumulated_row_size = 0;
         // how many consumers have used this chunk
         int32_t used_count = 0;
     };
     void _update_progress(Cell* fast = nullptr);
     void _closer_consumer(int32_t mcast_consumer_index);
+    RuntimeState* _runtime_state;
     mutable std::mutex _mutex;
     size_t _consumer_number;
     size_t _current_accumulated_row_size = 0;
@@ -62,6 +64,8 @@ private:
     int32_t _opened_sink_number = 0;
     Cell* _head = nullptr;
     Cell* _tail = nullptr;
+    size_t _current_memory_usage = 0;
+    size_t _current_row_size = 0;
 };
 
 // ===== source op =====
