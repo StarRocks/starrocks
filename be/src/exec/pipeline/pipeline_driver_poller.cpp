@@ -55,6 +55,8 @@ void PipelineDriverPoller::run_internal() {
 
             if (driver->pending_finish()) {
                 if (driver->is_still_pending_finish()) {
+                    // The driver maybe becomes pending finish before the fragment is cancelled,
+                    // so we need call set_cancelled of operators of this driver here.
                     if (driver->fragment_ctx()->is_canceled()) {
                         driver->cancel_operators(driver->fragment_ctx()->runtime_state());
                         if (!driver->is_still_pending_finish()) {
