@@ -88,7 +88,7 @@ public:
     ~DatetimeToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -111,7 +111,7 @@ public:
     ~TimestampToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -134,7 +134,7 @@ public:
     ~IntToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -162,7 +162,7 @@ public:
     ~DateV2ToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -228,7 +228,7 @@ public:
     ~DateToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -248,7 +248,7 @@ public:
     ~DateToDatetimeFieldConveter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -271,7 +271,7 @@ public:
     ~DateV2ToDatetimeFieldConveter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -294,7 +294,7 @@ public:
     ~TimestampToDatetimeTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -373,7 +373,7 @@ public:
     ~DatetimeToTimestampTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -393,7 +393,7 @@ public:
     ~FloatToDoubleTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -416,7 +416,7 @@ public:
     ~DecimalToDecimal12TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -437,7 +437,7 @@ public:
     ~Decimal12ToDecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -497,7 +497,7 @@ public:
     ~DecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -524,7 +524,7 @@ public:
     ~DecimalV3TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -560,7 +560,7 @@ public:
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
                          MemPool* mem_pool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 };
 
@@ -573,7 +573,7 @@ public:
     ~StringToOtherTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -602,7 +602,7 @@ public:
     ~OtherToStringTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -1402,7 +1402,7 @@ const MaterializeTypeConverter* get_materialized_converter(FieldType from_type, 
         return &s_converter;
     }
     default:
-        LOG(WARNING) << "unknown materilized type";
+        LOG(WARNING) << "unknown materialized type";
         break;
     }
     return nullptr;

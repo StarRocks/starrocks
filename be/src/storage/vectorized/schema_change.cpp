@@ -905,7 +905,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (new_tablet->tablet_state() != TABLET_NOTREADY) {
         Status st = _validate_alter_result(new_tablet, request);
         LOG(INFO) << "tablet's state=" << new_tablet->tablet_state()
-                  << " the convert job alreay finished, check its version"
+                  << " the convert job already finished, check its version"
                   << " res=" << st.to_string();
         return Status::InternalError("new tablet's meta is invalid");
     }
@@ -1197,7 +1197,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         LOG(INFO) << "new rowset has " << new_rowset->num_segments() << " segments";
         status = sc_params.new_tablet->add_rowset(new_rowset, false);
         if (status.is_already_exist()) {
-            LOG(WARNING) << "version already exist, version revert occured. "
+            LOG(WARNING) << "version already exist, version revert occurred. "
                          << "tablet=" << sc_params.new_tablet->full_name() << ", version='" << sc_params.version.first
                          << "-" << sc_params.version.second;
             StorageEngine::instance()->add_unused_rowset(new_rowset);

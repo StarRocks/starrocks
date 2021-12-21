@@ -310,7 +310,7 @@ private:                                 \
     } while (0)
 
 #ifndef BUILD_VERSION
-#define BUILD_VERSION "Unknow"
+#define BUILD_VERSION "Unknown"
 #endif
 
 } // namespace starrocks

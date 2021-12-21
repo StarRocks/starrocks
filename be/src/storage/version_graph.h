@@ -43,7 +43,7 @@ public:
     void construct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version);
     /// Reconstruct the graph, begin construction the vertex vec and edges list will be cleared.
     void reconstruct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version);
-    /// Add a version to this graph, graph will add the vesion and edge in version.
+    /// Add a version to this graph, graph will add the version and edge in version.
     void add_version_to_graph(const Version& version);
     /// Delete a version from graph. Notice that this del operation only remove this edges and
     /// remain the vertex.
@@ -104,7 +104,7 @@ using TimestampedVersionSharedPtr = std::shared_ptr<TimestampedVersion>;
 /// will compare with the version timestamp and be refreshed.
 class TimestampedVersionPathContainer {
 public:
-    /// TimestampedVersionPathContainer construction function, max_create_time is assgined to 0.
+    /// TimestampedVersionPathContainer construction function, max_create_time is assigned to 0.
     TimestampedVersionPathContainer() {}
 
     /// Return the max create time in a path version.

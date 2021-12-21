@@ -462,10 +462,10 @@ Status TabletMetaManager::build_primary_meta(DataDir* store, rapidjson::Document
         return Status::IOError("clear delvec add to batch failed");
     }
     if (!clear_rowset(store, &batch, tablet_id).ok()) {
-        return Status::IOError("clear rowset add to batch faied");
+        return Status::IOError("clear rowset add to batch failed");
     }
     if (!clear_pending_rowset(store, &batch, tablet_id).ok()) {
-        return Status::IOError("clear rowset add to batch faied");
+        return Status::IOError("clear rowset add to batch failed");
     }
 
     if (doc.HasMember("applied_rs_metas") && doc["applied_rs_metas"].IsArray()) {
@@ -834,7 +834,7 @@ Status TabletMetaManager::get_del_vector(KVStore* meta, TTabletId tablet_id, uin
     };
     st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper, traverse_versions);
     if (!st.ok()) {
-        LOG(WARNING) << "fail to iterate rockdb delvecs. tablet_id=" << tablet_id << " segment_id=" << segment_id
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id << " segment_id=" << segment_id
                      << " error_code=" << st.to_string();
         return st;
     }
@@ -867,7 +867,7 @@ StatusOr<DeleteVectorList> TabletMetaManager::list_del_vector(KVStore* meta, TTa
                                       return true;
                                   });
     if (!st.ok()) {
-        LOG(WARNING) << "fail to iterate rockdb delvecs. tablet_id=" << tablet_id;
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
         return st;
     }
     return std::move(ret);
@@ -1137,10 +1137,10 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
             LOG(WARNING) << "clear delvec add to batch failed";
         }
         if (!clear_rowset(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear rowset add to batch faied";
+            LOG(WARNING) << "clear rowset add to batch failed";
         }
         if (!clear_pending_rowset(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear rowset add to batch faied";
+            LOG(WARNING) << "clear rowset add to batch failed";
         }
     }
     return meta->write_batch(&batch);

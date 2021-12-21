@@ -332,7 +332,7 @@ Status JsonReader::close() {
  * For example:
  *  [{"colunm1":"value1", "colunm2":10}, {"colunm1":"value2", "colunm2":30}]
  * Result:
- *      colunm1    colunm2
+ *      column1    column2
  *      ------------------
  *      value1     10
  *      value2     30
@@ -347,7 +347,7 @@ Status JsonReader::close() {
  * JsonRoot = "$.RECORDS"
  * JsonPaths = "[$.column1, $.column2]"
  * Result:
- *      colunm1    colunm2
+ *      column1    column2
  *      ------------------
  *      value1     10
  *      value2     30

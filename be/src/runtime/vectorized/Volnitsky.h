@@ -103,7 +103,7 @@ public:
         auto callback = [this](const VolnitskyTraits::Ngram ngram, const int offset) {
             return this->putNGramBase(ngram, offset);
         };
-        /// ssize_t is used here because unsigned can't be used with condition like `i >= 0`, unsigned always >= 0
+        /// size_t is used here because unsigned can't be used with condition like `i >= 0`, unsigned always >= 0
         /// And also adding from the end guarantees that we will find first occurrence because we will lookup bigger offsets first.
         for (auto i = static_cast<ssize_t>(needle_size - sizeof(VolnitskyTraits::Ngram)); i >= 0; --i)
             VolnitskyTraits::putNGram(this->needle + i, i + 1, callback);
