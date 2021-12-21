@@ -17,7 +17,7 @@ public:
         }
         auto st = ThreadPoolBuilder("AsyncDeltaWriterExecutor")
                           .set_min_threads(config::number_tablet_writer_threads / 2)
-                          .set_max_threads(config::number_tablet_writer_threads)
+                          .set_max_threads(std::max<int>(1, config::number_tablet_writer_threads))
                           .set_max_queue_size(40960)
                           .set_idle_timeout(MonoDelta::FromMilliseconds(5 * 60 * 1000))
                           .build(&_thread_pool);
