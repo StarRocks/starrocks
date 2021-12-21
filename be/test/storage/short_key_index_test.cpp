@@ -43,10 +43,10 @@ TEST_F(ShortKeyIndexTest, buider) {
         num_items++;
     }
     std::vector<Slice> slices;
-    segment_v2::PageFooterPB footer;
+    PageFooterPB footer;
     auto st = builder.finalize(9000 * 1024, &slices, &footer);
     ASSERT_TRUE(st.ok());
-    ASSERT_EQ(segment_v2::SHORT_KEY_PAGE, footer.type());
+    ASSERT_EQ(SHORT_KEY_PAGE, footer.type());
     ASSERT_EQ(num_items, footer.short_key_page_footer().num_items());
 
     std::string buf;

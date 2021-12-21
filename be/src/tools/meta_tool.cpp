@@ -30,7 +30,7 @@
 #include "common/status.h"
 #include "env/env.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "gen_cpp/segment_v2.pb.h"
+#include "gen_cpp/segment.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
@@ -38,9 +38,9 @@
 #include "storage/data_dir.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
-#include "storage/rowset/segment_v2/binary_plain_page.h"
-#include "storage/rowset/segment_v2/column_iterator.h"
-#include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/binary_plain_page.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/utils.h"
@@ -61,14 +61,14 @@ using starrocks::Slice;
 using starrocks::RandomAccessFile;
 using starrocks::MemTracker;
 using strings::Substitute;
-using starrocks::segment_v2::SegmentFooterPB;
-using starrocks::segment_v2::ColumnReader;
-using starrocks::segment_v2::BinaryPlainPageDecoder;
-using starrocks::segment_v2::PageHandle;
-using starrocks::segment_v2::PagePointer;
-using starrocks::segment_v2::ColumnReaderOptions;
-using starrocks::segment_v2::ColumnIteratorOptions;
-using starrocks::segment_v2::PageFooterPB;
+using starrocks::SegmentFooterPB;
+using starrocks::ColumnReader;
+using starrocks::BinaryPlainPageDecoder;
+using starrocks::PageHandle;
+using starrocks::PagePointer;
+using starrocks::ColumnReaderOptions;
+using starrocks::ColumnIteratorOptions;
+using starrocks::PageFooterPB;
 
 const std::string HEADER_PREFIX = "tabletmeta_";
 

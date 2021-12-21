@@ -33,9 +33,7 @@ namespace fs {
 class WritableBlock;
 }
 
-namespace segment_v2 {
 class SegmentWriter;
-} // namespace segment_v2
 
 class BetaRowsetWriter : public RowsetWriter {
 public:
@@ -99,13 +97,13 @@ public:
     RowsetSharedPtr build() override;
 
 private:
-    std::unique_ptr<segment_v2::SegmentWriter> _create_segment_writer();
+    std::unique_ptr<SegmentWriter> _create_segment_writer();
 
-    OLAPStatus _flush_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* segment_writer);
+    OLAPStatus _flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer);
 
     Status _final_merge();
 
-    std::unique_ptr<segment_v2::SegmentWriter> _segment_writer;
+    std::unique_ptr<SegmentWriter> _segment_writer;
 };
 
 // Chunk contains partial columns data corresponding to column_indexes.
@@ -123,12 +121,11 @@ public:
     OLAPStatus final_flush() override;
 
 private:
-    std::unique_ptr<segment_v2::SegmentWriter> _create_segment_writer(const std::vector<uint32_t>& column_indexes,
-                                                                      bool is_key);
+    std::unique_ptr<SegmentWriter> _create_segment_writer(const std::vector<uint32_t>& column_indexes, bool is_key);
 
-    OLAPStatus _flush_columns(std::unique_ptr<segment_v2::SegmentWriter>* segment_writer);
+    OLAPStatus _flush_columns(std::unique_ptr<SegmentWriter>* segment_writer);
 
-    std::vector<std::unique_ptr<segment_v2::SegmentWriter>> _segment_writers;
+    std::vector<std::unique_ptr<SegmentWriter>> _segment_writers;
     size_t _current_writer_index = 0;
 };
 

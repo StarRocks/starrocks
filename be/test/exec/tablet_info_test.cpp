@@ -20,10 +20,10 @@
 // under the License.
 
 #include "exec/tablet_info.h"
-#include "exec/vectorized/tablet_info.h"
 
 #include <gtest/gtest.h>
 
+#include "exec/vectorized/tablet_info.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 
