@@ -227,10 +227,10 @@ public:
     /// @return Reference to the modified object.
     MonoTime& operator+=(const MonoDelta& delta);
 
-    /// Substract a delta from the point in time represented by the object.
+    /// Subtract a delta from the point in time represented by the object.
     ///
     /// @param [in] delta
-    ///   The delta to substract.
+    ///   The delta to subtract.
     /// @return Reference to the modified object.
     MonoTime& operator-=(const MonoDelta& delta);
     ///@}

@@ -519,8 +519,8 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
             break;
         }
         default:
-            DCHECK(false) << "unsupport type:" << expr->type().type;
-            return Status::InternalError("unsupport type to push down to ES");
+            DCHECK(false) << "unsupported type:" << expr->type().type;
+            return Status::InternalError("unsupported type to push down to ES");
         }
 
         std::string col = slot_desc->col_name();

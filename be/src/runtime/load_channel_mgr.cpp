@@ -205,7 +205,7 @@ Status LoadChannelMgr::_start_load_channels_clean() {
     // eg: MemTracker in load channel
     for (auto& channel : timeout_channels) {
         channel->cancel();
-        LOG(INFO) << "Deleted timedout channel. load id=" << channel->load_id() << " timeout=" << channel->timeout();
+        LOG(INFO) << "Deleted timeout channel. load id=" << channel->load_id() << " timeout=" << channel->timeout();
     }
 
     // this log print every 1 min, so that we could observe the mem consumption of load process

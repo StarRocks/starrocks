@@ -77,7 +77,7 @@ public:
         } else if (type == PLAIN_ENCODING) {
             return Status::OK();
         } else {
-            LOG(WARNING) << "invalide encoding type:" << type;
+            LOG(WARNING) << "invalid encoding type:" << type;
             return Status::Corruption(strings::Substitute("invalid encoding type:$0", type));
         }
     }

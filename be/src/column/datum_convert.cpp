@@ -25,7 +25,7 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
         bool v;
         auto st = type_info->from_string(&v, str);
         if (st != OLAP_SUCCESS) {
-            return Status::InvalidArgument(Substitute("Failed to conert $0 to Bool type", str));
+            return Status::InvalidArgument(Substitute("Failed to convert $0 to Bool type", str));
         }
         dst->set_int8(v);
         return Status::OK();
