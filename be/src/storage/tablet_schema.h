@@ -37,12 +37,9 @@ namespace starrocks {
 
 class TabletSchemaMap;
 class MemTracker;
-
-namespace segment_v2 {
 class SegmentReaderWriterTest;
 class SegmentReaderWriterTest_estimate_segment_size_Test;
 class SegmentReaderWriterTest_TestStringDict_Test;
-} // namespace segment_v2
 
 class TabletColumn {
     struct ExtraFields {
@@ -271,9 +268,9 @@ public:
     bool shared() const { return _schema_map != nullptr; }
 
 private:
-    friend class segment_v2::SegmentReaderWriterTest;
-    FRIEND_TEST(segment_v2::SegmentReaderWriterTest, estimate_segment_size);
-    FRIEND_TEST(segment_v2::SegmentReaderWriterTest, TestStringDict);
+    friend class SegmentReaderWriterTest;
+    FRIEND_TEST(SegmentReaderWriterTest, estimate_segment_size);
+    FRIEND_TEST(SegmentReaderWriterTest, TestStringDict);
 
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
