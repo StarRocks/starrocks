@@ -5,7 +5,6 @@
 #include <bthread/execution_queue.h>
 #include <google/protobuf/service.h>
 
-#include "gutil/macros.h"
 #include "storage/vectorized/delta_writer.h"
 
 namespace starrocks::vectorized {
@@ -27,7 +26,8 @@ public:
 
     ~AsyncDeltaWriter();
 
-    DISALLOW_COPY_AND_ASSIGN(AsyncDeltaWriter);
+    AsyncDeltaWriter(const AsyncDeltaWriter&) = delete; // DISALLOW COPY
+    void operator=(const AsyncDeltaWriter&) = delete;   // DISALLOW ASSIGN
 
     // REQUIRE:
     //  - |cb| cannot be NULL
