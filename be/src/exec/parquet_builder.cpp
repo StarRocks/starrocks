@@ -35,7 +35,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/tuple.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {

@@ -12,7 +12,6 @@
 
 namespace starrocks {
 
-class Tuple;
 class TupleDescriptor;
 class RuntimeState;
 class MemPool;
@@ -78,8 +77,6 @@ private:
     // Pool for allocating tuple data, including all varying-length slots.
     std::unique_ptr<MemPool> _tuple_pool;
     std::unique_ptr<MysqlScanner> _mysql_scanner;
-    // Current tuple.
-    Tuple* _tuple = nullptr;
 };
 } // namespace vectorized
 } // namespace starrocks

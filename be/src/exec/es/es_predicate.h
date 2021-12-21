@@ -31,7 +31,6 @@
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
-#include "runtime/tuple.h"
 
 namespace starrocks {
 

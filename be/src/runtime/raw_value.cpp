@@ -23,8 +23,8 @@
 
 #include <sstream>
 
+#include "runtime/mem_pool.h"
 #include "runtime/string_value.hpp"
-#include "runtime/tuple.h"
 #include "storage/utils.h"
 #include "util/types.h"
 
@@ -367,15 +367,6 @@ void RawValue::write(const void* value, const TypeDescriptor& type, void* dst, u
 
     default:
         DCHECK(false) << "RawValue::write(): bad type: " << type.debug_string();
-    }
-}
-
-void RawValue::write(const void* value, Tuple* tuple, const SlotDescriptor* slot_desc, MemPool* pool) {
-    if (value == nullptr) {
-        tuple->set_null(slot_desc->null_indicator_offset());
-    } else {
-        void* slot = tuple->get_slot(slot_desc->tuple_offset());
-        RawValue::write(value, slot, slot_desc->type(), pool);
     }
 }
 
