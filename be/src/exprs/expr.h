@@ -279,6 +279,7 @@ protected:
     /// doesn't call RegisterFunctionContext().
     int _fn_context_index;
 
+    std::once_flag _constant_column_evaluate_once;
     ColumnPtr _constant_column;
 
     /// Simple debug string that provides no expr subclass-specific information
