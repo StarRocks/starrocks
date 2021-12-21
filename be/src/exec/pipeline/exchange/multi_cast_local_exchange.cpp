@@ -23,6 +23,9 @@ MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, si
         _progress[i] = _tail;
         _opened_source_opcount[i] = 0;
     }
+    _runtime_profile = std::make_unique<RuntimeProfile>("MultiCastLocalExchanger");
+    _peak_memory_usage_counter = _runtime_profile->AddHighWaterMarkCounter("PeakMemoryUsage", TUnit::BYTES);
+    _peak_buffer_row_size_counter = _runtime_profile->AddHighWaterMarkCounter("PeakBufferRowSize", TUnit::UNIT);
 }
 
 MultiCastLocalExchanger::~MultiCastLocalExchanger() {
@@ -66,6 +69,8 @@ Status MultiCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, in
         _current_accumulated_row_size += chunk->num_rows();
         _current_memory_usage += cell->memory_usage;
         _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
+        _peak_memory_usage_counter->set(_current_memory_usage);
+        _peak_buffer_row_size_counter->set(_current_row_size);
     }
 
     return Status::OK();
@@ -170,6 +175,8 @@ void MultiCastLocalExchanger::_update_progress(Cell* fast) {
 Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _exchanger->open_source_operator(_mcast_consumer_index);
+    // attach exchange profile to this operator.
+    _runtime_profile->add_child(_exchange->runtime_profile(), true, nullptr);
     return Status::OK();
 }
 

@@ -40,6 +40,7 @@ public:
     void close_source_operator(int32_t mcast_consumer_index);
     void open_sink_operator();
     void close_sink_operator();
+    RuntimeProfile* runtime_profile() { return _runtime_profile; }
 
 private:
     struct Cell {
@@ -66,6 +67,9 @@ private:
     Cell* _tail = nullptr;
     size_t _current_memory_usage = 0;
     size_t _current_row_size = 0;
+    std::unique_ptr<RuntimeProfile> _runtime_profile;
+    RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
 };
 
 // ===== source op =====
