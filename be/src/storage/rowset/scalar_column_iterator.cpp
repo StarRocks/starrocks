@@ -193,7 +193,8 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
     size_t end_ord = _page->first_ordinal() + _page->num_rows();
     bool contain_deleted_row = (dst->delete_state() != DEL_NOT_SATISFIED);
     vectorized::SparseRange read_range;
-    DCHECK_EQ(range.begin(), _current_ordinal);
+    // range is empty should only occur when array column is nullable
+    DCHECK(range.empty() || (range.begin() == _current_ordinal));
 
     // read data from discontinuous ranges in multiple pages
     // data in the same data page will be read together in one function call

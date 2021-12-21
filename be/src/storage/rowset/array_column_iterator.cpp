@@ -145,14 +145,14 @@ Status ArrayColumnIterator::next_batch(const vectorized::SparseRange& range, vec
     vectorized::SparseRangeIterator iter = range.new_iterator();
     size_t to_read = range.span_size();
 
-    DCHECK_EQ(range.begin(), _array_size_iterator->get_current_ordinal());
+    // array column can be nested, range may be empty
+    DCHECK(range.empty() || (range.begin() == _array_size_iterator->get_current_ordinal()));
     vectorized::SparseRange element_read_range;
     while (iter.has_more()) {
         vectorized::Range r = iter.next(to_read);
 
         RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
         size_t element_ordinal = _array_size_iterator->element_ordinal();
-        //RETURN_IF_ERROR(next_batch(&n, dst));
         // 2. Read offset column
         // [1, 2, 3], [4, 5, 6]
         // In memory, it will be transformed to actual offset(0, 3, 6)
@@ -176,7 +176,8 @@ Status ArrayColumnIterator::next_batch(const vectorized::SparseRange& range, vec
         element_read_range.add(vectorized::Range(element_ordinal, element_ordinal + num_to_read));
     }
 
-    DCHECK_EQ(element_read_range.begin(), _element_iterator->get_current_ordinal());
+    // if array column is nullable, element_read_range may be empty
+    DCHECK(element_read_range.empty() || (element_read_range.begin() == _element_iterator->get_current_ordinal()));
     RETURN_IF_ERROR(_element_iterator->next_batch(element_read_range, array_column->elements_column().get()));
 
     return Status::OK();
