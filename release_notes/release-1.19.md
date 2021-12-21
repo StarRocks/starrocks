@@ -1,6 +1,6 @@
 # StarRocks version 1.19
 
-## v1.19.0
+## 1.19.0
 
 发布日期：2021年10月25日
 
@@ -37,7 +37,7 @@
 * 修复set_var针对session生效而不是针对语句生效的问题。
 * 修复Hive分区外表`select count(*)` 返回异常的问题。
 
-## v1.19.1
+## 1.19.1
 
 发布日期： 2021年11月2日
 
@@ -52,3 +52,65 @@
 * 修复Thrift协议兼容性问题，解决hive外表对接Kerberos的问题 [# 184](https://github.com/StarRocks/starrocks/pull/184) [# 947](https://github.com/StarRocks/starrocks/pull/947) [# 995](https://github.com/StarRocks/starrocks/pull/995) [# 999](https://github.com/StarRocks/starrocks/pull/999)
 * 修复view创建的若干bug [# 972](https://github.com/StarRocks/starrocks/pull/972) [# 987](https://github.com/StarRocks/starrocks/pull/987)[# 1001](https://github.com/StarRocks/starrocks/pull/1001)
 * 修复FE无法灰度升级的问题 [# 485](https://github.com/StarRocks/starrocks/pull/485) [# 890](https://github.com/StarRocks/starrocks/pull/890)
+
+## 1.19.2
+
+发布日期： 2021年11月20日
+
+### Improvement
+
+* bucket shuffle join 支持right join和 full outer join [# 1209](https://github.com/StarRocks/starrocks/pull/1209)  [# 31234](https://github.com/StarRocks/starrocks/pull/1234)
+
+### Major Bugfix
+
+* 修复 repeat node 无法进行谓词下推的问题[# 1410](https://github.com/StarRocks/starrocks/pull/1410) [# 1417](https://github.com/StarRocks/starrocks/pull/1417)
+* 修复routine load在集群切主场景下可能导入丢失数据的问题 [# 1074](https://github.com/StarRocks/starrocks/pull/1074) [# 1272](https://github.com/StarRocks/starrocks/pull/1272)
+* 修复创建视图无法支持union的问题 [# 1083](https://github.com/StarRocks/starrocks/pull/1083)
+* 修复一些Hive外表稳定性问题[# 1408](https://github.com/StarRocks/starrocks/pull/1408)
+* 修复一个group by视图的问题[# 1231](https://github.com/StarRocks/starrocks/pull/1231)
+
+## 1.19.3
+
+发布日期： 2021年11月30日
+
+### Improvement
+
+* 升级jprotobuf版本提升安全性 [# 1506](https://github.com/StarRocks/starrocks/issues/1506)
+
+### Major Bugfix
+
+* 修复部分group by结果正确性问题
+* 修复grouping sets部分问题[# 1395](https://github.com/StarRocks/starrocks/issues/1395) [# 1119](https://github.com/StarRocks/starrocks/pull/1119)
+* 修复date_format的部分参数问题
+* 修复一个聚合streamming的边界条件问题[# 1584](https://github.com/StarRocks/starrocks/pull/1584)
+* 详细内容参考[链接](https://github.com/StarRocks/starrocks/compare/1.19.2...1.19.3)
+
+## 1.19.4
+
+发布日期： 2021年12月09日
+
+### Improvement
+
+* 支持 cast(varchar as bitmap) [# 1941](https://github.com/StarRocks/starrocks/pull/1941)
+* 更新hive外表访问策略 [# 1394](https://github.com/StarRocks/starrocks/pull/1394) [# 1807](https://github.com/StarRocks/starrocks/pull/1807)
+
+Bugfix
+
+* 修复带谓词Cross Join查询结果错误bug [# 1918](https://github.com/StarRocks/starrocks/pull/1918)
+* 修复decimal类型，time类型转换bug [# 1709](https://github.com/StarRocks/starrocks/pull/1709) [# 1738](https://github.com/StarRocks/starrocks/pull/1738)
+* 修复colocate join/replicate join选错bug [# 1727](https://github.com/StarRocks/starrocks/pull/1727)
+* 修复若干plan cost计算问题
+
+## 1.19.5
+
+发布日期： 2021年12月20日
+
+### Imporvement
+
+* 优化shuffle join的一个规划 [# 2184](https://github.com/StarRocks/starrocks/pull/2184)
+* 优化多个大文件导入 [# 2067](https://github.com/StarRocks/starrocks/pull/2067)
+
+### Bugfix
+
+* 升级Log4j2 到2.17.0， 修复安全漏洞[# 2284](https://github.com/StarRocks/starrocks/pull/2284)[# 2290](https://github.com/StarRocks/starrocks/pull/2290)
+* 修复Hive外表的空分区的问题 [# 707](https://github.com/StarRocks/starrocks/pull/707)[# 2082](https://github.com/StarRocks/starrocks/pull/2082)
