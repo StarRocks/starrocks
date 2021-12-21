@@ -127,7 +127,7 @@ public:
 
 class JsonDocumentStreamParser : public JsonParser {
 public:
-    Status parse(uint8_t* data, size_t len,size_t allocated) override;
+    Status parse(uint8_t* data, size_t len, size_t allocated) override;
     Status get_next(simdjson::ondemand::object* row) override;
 
 private:
