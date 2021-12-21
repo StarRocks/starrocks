@@ -38,7 +38,7 @@ Status SchemaVariablesScanner::start(RuntimeState* state) {
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::show_varialbes(*(_param->ip), _param->port, var_params, &_var_result));
     } else {
-        return Status::InternalError("IP or port dosn't exists");
+        return Status::InternalError("IP or port doesn't exists");
     }
     _begin = _var_result.variables.begin();
     return Status::OK();

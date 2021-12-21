@@ -34,7 +34,7 @@ Status SchemaSchemaPrivilegesScanner::start(RuntimeState* state) {
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::get_db_privs(*(_param->ip), _param->port, db_privs_params, &_db_privs_result));
     } else {
-        return Status::InternalError("IP or port dosn't exists");
+        return Status::InternalError("IP or port doesn't exists");
     }
     return Status::OK();
 }

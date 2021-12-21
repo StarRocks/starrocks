@@ -95,7 +95,7 @@ Status BaseCompaction::pick_rowsets_to_compact() {
 
     if (cumulative_base_ratio > base_cumulative_delta_ratio) {
         LOG(INFO) << "satisfy the base compaction policy. tablet=" << _tablet->full_name()
-                  << ", cumualtive_total_size=" << cumulative_total_size << ", base_size=" << base_size
+                  << ", cumulative_total_size=" << cumulative_total_size << ", base_size=" << base_size
                   << ", cumulative_base_ratio=" << cumulative_base_ratio
                   << ", policy_ratio=" << base_cumulative_delta_ratio;
         return Status::OK();
@@ -122,7 +122,7 @@ Status BaseCompaction::pick_rowsets_to_compact() {
 Status BaseCompaction::_check_rowset_overlapping(const std::vector<RowsetSharedPtr>& rowsets) {
     for (auto& rs : rowsets) {
         if (rs->rowset_meta()->is_segments_overlapping()) {
-            return Status::InternalError("base compaction segments overlappinng error.");
+            return Status::InternalError("base compaction segments overlapping error.");
         }
     }
     return Status::OK();

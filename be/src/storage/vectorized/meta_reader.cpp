@@ -276,7 +276,7 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vec
 // collect dict
 Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, FieldType type) {
     if (!_column_iterators[cid]) {
-        return Status::InvalidArgument("Invalid Collet Params.");
+        return Status::InvalidArgument("Invalid Collect Params.");
     }
 
     std::vector<Slice> words;

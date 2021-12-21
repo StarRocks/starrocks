@@ -117,7 +117,7 @@ std::shared_ptr<GroupReader> FileReader::_row_group(int i) {
 Status FileReader::_check_magic(const uint8_t* file_magic) {
     static const char* s_magic = "PAR1";
     if (!memequal(reinterpret_cast<const char*>(file_magic), 4, s_magic, 4)) {
-        return Status::Corruption("Paruqet file magic not match");
+        return Status::Corruption("Parquet file magic not match");
     }
     return Status::OK();
 }

@@ -81,7 +81,7 @@ inline CompareLargeFunc get_compare_func(PrimitiveType type) {
         return compare_large<StringValue>;
 
     default:
-        CHECK(false) << "Unsupport Compare type";
+        CHECK(false) << "Unsupported Compare type";
     }
 }
 

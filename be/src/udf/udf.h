@@ -199,7 +199,7 @@ public:
     starrocks::FunctionContextImpl* impl() { return _impl; }
 
     /// Methods for maintaining state across UDF/UDA function calls. SetFunctionState() can
-    /// be used to store a pointer that can then be retreived via GetFunctionState(). If
+    /// be used to store a pointer that can then be retrieved via GetFunctionState(). If
     /// GetFunctionState() is called when no pointer is set, it will return
     /// NULL. SetFunctionState() does not take ownership of 'ptr'; it is up to the UDF/UDA
     /// to clean up any function state if necessary.

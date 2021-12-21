@@ -72,7 +72,7 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
             _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
             if (!dict_ctx.could_apply_dict_optimize) {
                 return Status::InternalError(
-                        fmt::format("Not found dict for function-called cid:{} it may cause by unsupport function",
+                        fmt::format("Not found dict for function-called cid:{} it may cause by unsupported function",
                                     need_encode_cid));
             }
             _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, need_encode_cid);

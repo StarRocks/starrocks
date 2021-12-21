@@ -173,7 +173,7 @@ public:
         }
     }
 
-    std::string get_name() const override { return "deviatation from average"; }
+    std::string get_name() const override { return "deviation from average"; }
 };
 
 template <PrimitiveType PT, bool is_sample, typename T = RunTimeCppType<PT>,

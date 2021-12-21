@@ -388,7 +388,7 @@ public:
         std::unique_ptr<ZSTD_CStream, decltype(deleter)> stream{ZSTD_createCStream(), deleter};
         auto ret = ZSTD_initCStream(stream.get(), ZSTD_CLEVEL_DEFAULT);
         if (ZSTD_isError(ret)) {
-            return Status::InvalidArgument(strings::Substitute("ZSTD ceate compress stream failed: $0", ret));
+            return Status::InvalidArgument(strings::Substitute("ZSTD create compress stream failed: $0", ret));
         }
 
         ZSTD_outBuffer out_buf;

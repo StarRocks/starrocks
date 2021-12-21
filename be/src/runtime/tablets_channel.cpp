@@ -81,11 +81,11 @@ Status TabletsChannel::add_chunk(const PTabletWriterAddChunkRequest& params) {
         auto next_seq = _next_seqs[params.sender_id()];
         // check packet
         if (params.packet_seq() < next_seq) {
-            LOG(INFO) << "packet has already recept before, expect_seq=" << next_seq
-                      << ", recept_seq=" << params.packet_seq();
+            LOG(INFO) << "packet has already received before, expect_seq=" << next_seq
+                      << ", received_seq=" << params.packet_seq();
             return Status::OK();
         } else if (params.packet_seq() > next_seq) {
-            LOG(WARNING) << "lost data packet, expect_seq=" << next_seq << ", recept_seq=" << params.packet_seq();
+            LOG(WARNING) << "lost data packet, expect_seq=" << next_seq << ", received_seq=" << params.packet_seq();
             return Status::InternalError("lost data packet");
         }
     }
