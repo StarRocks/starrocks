@@ -199,7 +199,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
 
         auto* closure =
                 new DisposableClosure<PTransmitChunkResult, ClosureContext>({instance_id, request.params->sequence()});
-        closure->addFailedHandler([this, closure](const ClosureContext& ctx) noexcept {
+        closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;
             {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -207,10 +207,10 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
             --_total_in_flight_rpc;
-            LOG(WARNING) << " transmit chunk rpc failed";
+            LOG(WARNING) << "transmit chunk rpc failed";
         });
         closure->addSuccessHandler(
-                [this, closure](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
+                [this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
                     Status status(result.status());
                     {
                         std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -219,7 +219,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
                     }
                     if (!status.ok()) {
                         _is_finishing = true;
-                        LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
+                        LOG(WARNING) << "transmit chunk rpc failed, " << status.message();
                     } else {
                         std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
                         _process_send_window(ctx.instance_id, ctx.sequence);
