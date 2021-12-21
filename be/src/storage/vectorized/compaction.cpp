@@ -504,7 +504,8 @@ Status Compaction::check_correctness(const Statistics& stats) {
     if (_input_row_num != _output_rowset->num_rows() + stats.merged_rows + stats.filtered_rows) {
         LOG(WARNING) << "row_num does not match between cumulative input and output! "
                      << "input_row_num=" << _input_row_num << ", merged_row_num=" << stats.merged_rows
-                     << ", filtered_row_num=" << stats.filtered_rows << ", output_row_num=" << _output_rowset->num_rows();
+                     << ", filtered_row_num=" << stats.filtered_rows
+                     << ", output_row_num=" << _output_rowset->num_rows();
 
         return Status::InternalError("cumulative compaction check lines error.");
     }
