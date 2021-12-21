@@ -209,24 +209,23 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             --_total_in_flight_rpc;
             LOG(WARNING) << "transmit chunk rpc failed";
         });
-        closure->addSuccessHandler(
-                [this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
-                    Status status(result.status());
-                    {
-                        std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
-                        ++_num_finished_rpcs[ctx.instance_id.lo];
-                        --_num_in_flight_rpcs[ctx.instance_id.lo];
-                    }
-                    if (!status.ok()) {
-                        _is_finishing = true;
-                        LOG(WARNING) << "transmit chunk rpc failed, " << status.message();
-                    } else {
-                        std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
-                        _process_send_window(ctx.instance_id, ctx.sequence);
-                        _try_to_send_rpc(ctx.instance_id);
-                    }
-                    --_total_in_flight_rpc;
-                });
+        closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
+            Status status(result.status());
+            {
+                std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                ++_num_finished_rpcs[ctx.instance_id.lo];
+                --_num_in_flight_rpcs[ctx.instance_id.lo];
+            }
+            if (!status.ok()) {
+                _is_finishing = true;
+                LOG(WARNING) << "transmit chunk rpc failed, " << status.message();
+            } else {
+                std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                _process_send_window(ctx.instance_id, ctx.sequence);
+                _try_to_send_rpc(ctx.instance_id);
+            }
+            --_total_in_flight_rpc;
+        });
 
         ++_total_in_flight_rpc;
         ++_num_in_flight_rpcs[instance_id.lo];
