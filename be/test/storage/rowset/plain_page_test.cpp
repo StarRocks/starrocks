@@ -35,7 +35,6 @@
 #include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks {
-namespace starrocks {
 
 class PlainPageTest : public testing::Test {
 public:
@@ -425,5 +424,4 @@ TEST_F(PlainPageTest, TestDoubleMultiplePages) {
     test_multi_pages<OLAP_FIELD_TYPE_DOUBLE, PlainPageBuilder<OLAP_FIELD_TYPE_DOUBLE>>(doubles.get(), size);
 }
 
-} // namespace starrocks
 } // namespace starrocks

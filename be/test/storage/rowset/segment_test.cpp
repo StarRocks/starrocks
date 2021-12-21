@@ -51,7 +51,6 @@
     } while (0)
 
 namespace starrocks {
-namespace starrocks {
 
 using std::string;
 using std::shared_ptr;
@@ -494,5 +493,4 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     EXPECT_EQ(count, num_rows);
 }
 
-} // namespace starrocks
 } // namespace starrocks

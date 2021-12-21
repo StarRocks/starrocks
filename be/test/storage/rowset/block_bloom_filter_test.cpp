@@ -26,7 +26,6 @@
 #include "storage/rowset/bloom_filter.h"
 
 namespace starrocks {
-namespace starrocks {
 
 class BlockBloomFilterTest : public testing::Test {
 public:
@@ -178,5 +177,4 @@ TEST_F(BlockBloomFilterTest, slice) {
     ASSERT_FALSE(bf->test_bytes(s.data, s.size));
 }
 
-} // namespace starrocks
 } // namespace starrocks

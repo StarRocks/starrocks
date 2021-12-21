@@ -34,7 +34,6 @@
 #include "util/file_utils.h"
 
 namespace starrocks {
-namespace starrocks {
 
 const std::string kTestDir = "/bloom_filter_index_reader_writer_test";
 
@@ -288,5 +287,4 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_decimal) {
     delete[] val;
 }
 
-} // namespace starrocks
 } // namespace starrocks

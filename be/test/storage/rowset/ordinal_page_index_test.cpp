@@ -34,7 +34,6 @@
 #include "storage/page_cache.h"
 
 namespace starrocks {
-namespace starrocks {
 
 class OrdinalPageIndexTest : public testing::Test {
 public:
@@ -164,5 +163,4 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
     }
 }
 
-} // namespace starrocks
 } // namespace starrocks

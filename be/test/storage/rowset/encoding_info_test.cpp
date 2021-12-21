@@ -30,7 +30,6 @@
 #include "storage/types.h"
 
 namespace starrocks {
-namespace starrocks {
 
 class EncodingInfoTest : public testing::Test {
 public:
@@ -53,5 +52,4 @@ TEST_F(EncodingInfoTest, no_encoding) {
     ASSERT_FALSE(status.ok());
 }
 
-} // namespace starrocks
 } // namespace starrocks

@@ -33,7 +33,6 @@
 #include "util/file_utils.h"
 
 namespace starrocks {
-namespace starrocks {
 
 #define ASSERT_OK(expr)                                   \
     do {                                                  \
@@ -184,5 +183,4 @@ TEST_F(ColumnZoneMapTest, NormalTestCharPage) {
     delete field;
 }
 
-} // namespace starrocks
 } // namespace starrocks

@@ -35,7 +35,6 @@
 #include "util/file_utils.h"
 
 namespace starrocks {
-namespace starrocks {
 
 class BitmapIndexTest : public testing::Test {
 public:
@@ -236,5 +235,4 @@ TEST_F(BitmapIndexTest, test_null) {
     delete[] val;
 }
 
-} // namespace starrocks
 } // namespace starrocks
