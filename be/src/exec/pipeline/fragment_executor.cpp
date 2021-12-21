@@ -123,7 +123,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         exec_env->runtime_filter_worker()->open_query(query_id, request.query_options, params.runtime_filter_params,
                                                       true);
     }
-    exec_env->stream_mgr()->open_query(query_id);
+    exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(query_id);
 
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();

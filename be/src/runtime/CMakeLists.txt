@@ -31,7 +31,7 @@ set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
     client_cache.cpp
-    data_stream_common.cpp
+    local_pass_through_buffer.cpp
     data_stream_mgr.cpp
     data_stream_sender.cpp
     mcast_data_stream_sink.cpp

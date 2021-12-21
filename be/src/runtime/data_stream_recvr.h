@@ -26,8 +26,8 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
-#include "runtime/data_stream_common.h"
 #include "runtime/descriptors.h"
+#include "runtime/local_pass_through_buffer.h"
 #include "runtime/query_statistics.h"
 #include "util/runtime_profile.h"
 

@@ -14,7 +14,7 @@ QueryContext::~QueryContext() {
         if (_is_runtime_filter_coordinator) {
             _exec_env->runtime_filter_worker()->close_query(_query_id);
         }
-        _exec_env->stream_mgr()->close_query(_query_id);
+        _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
     }
 }
 FragmentContextManager* QueryContext::fragment_mgr() {

@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "runtime/data_stream_common.h"
+#include "runtime/local_pass_through_buffer.h"
 
 #include "column/chunk.h"
 #include "common/logging.h"

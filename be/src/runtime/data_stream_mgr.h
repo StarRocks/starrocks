@@ -31,8 +31,8 @@
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/doris_internal_service.pb.h"
-#include "runtime/data_stream_common.h"
 #include "runtime/descriptors.h" // for PlanNodeId
+#include "runtime/local_pass_through_buffer.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "util/runtime_profile.h"
@@ -90,8 +90,8 @@ public:
     // Closes all receivers registered for fragment_instance_id immediately.
     void cancel(const TUniqueId& fragment_instance_id);
 
-    void open_query(const TUniqueId& query_id);
-    void close_query(const TUniqueId& query_id);
+    void prepare_pass_through_chunk_buffer(const TUniqueId& query_id);
+    void destroy_pass_through_chunk_buffer(const TUniqueId& query_id);
     PassThroughChunkBufferPtr get_pass_through_chunk_buffer(const TUniqueId& query_id);
 
 private:

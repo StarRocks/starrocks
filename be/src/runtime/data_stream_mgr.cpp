@@ -225,7 +225,7 @@ void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
     }
 }
 
-void DataStreamMgr::open_query(const TUniqueId& query_id) {
+void DataStreamMgr::prepare_pass_through_chunk_buffer(const TUniqueId& query_id) {
     {
         std::unique_lock _l(_pass_through_chunk_lock);
         if (_pass_through_chunk_buffer_manager.find(query_id) == _pass_through_chunk_buffer_manager.end()) {
@@ -235,7 +235,7 @@ void DataStreamMgr::open_query(const TUniqueId& query_id) {
     }
 }
 
-void DataStreamMgr::close_query(const TUniqueId& query_id) {
+void DataStreamMgr::destroy_pass_through_chunk_buffer(const TUniqueId& query_id) {
     {
         std::unique_lock _l(_pass_through_chunk_lock);
         auto it = _pass_through_chunk_buffer_manager.find(query_id);
