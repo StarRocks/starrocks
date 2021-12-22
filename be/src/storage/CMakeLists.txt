@@ -107,6 +107,7 @@ add_library(Storage STATIC
     task/engine_alter_tablet_task.cpp
     column_vector.cpp
     vectorized/aggregate_iterator.cpp
+    vectorized/async_delta_writer.cpp
     vectorized/chunk_helper.cpp
     vectorized/column_eq_predicate.cpp
     vectorized/column_ge_predicate.cpp
