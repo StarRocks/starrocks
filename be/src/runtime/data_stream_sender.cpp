@@ -356,8 +356,8 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
         auto st = _wait_prev_request();
         if (!st.ok()) {
             LOG(WARNING) << "fail to close channel, st=" << st.to_string()
-                         << ", instance_id=" << print_id(_fragment_instance_id)
-                         << ", dest=" << _brpc_dest_addr.hostname << ":" << _brpc_dest_addr.port;
+                         << ", instance_id=" << print_id(_fragment_instance_id) << ", dest=" << _brpc_dest_addr.hostname
+                         << ":" << _brpc_dest_addr.port;
             if (_parent->_close_status.ok()) {
                 _parent->_close_status = st;
             }

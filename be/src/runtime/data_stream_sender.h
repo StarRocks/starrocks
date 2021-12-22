@@ -66,10 +66,9 @@ public:
     // and is specified in bytes.
     // The RowDescriptor must live until close() is called.
     // NOTE: supported partition types are UNPARTITIONED (broadcast) and HASH_PARTITIONED
-    DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc,
-                     const TDataStreamSink& sink, const std::vector<TPlanFragmentDestination>& destinations,
-                     int per_channel_buffer_size, bool send_query_statistics_with_every_batch,
-                     bool enable_exchange_pass_through);
+    DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc, const TDataStreamSink& sink,
+                     const std::vector<TPlanFragmentDestination>& destinations, int per_channel_buffer_size,
+                     bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through);
     ~DataStreamSender() override;
 
     Status init(const TDataSink& thrift_sink) override;
