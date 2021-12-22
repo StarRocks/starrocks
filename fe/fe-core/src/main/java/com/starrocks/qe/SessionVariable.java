@@ -28,6 +28,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileMode;
 import com.starrocks.thrift.TQueryOptions;
@@ -113,6 +114,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
     public static final String PIPELINE_DOP = "pipeline_dop";
+
+    public static final String PIPELINE_BROADCAST_BUILD_BYTES_SUP_LIMIT = "pipeline_broadcast_build_bytes_sup_limit";
+
+    public static final String PIPELINE_BROADCAST_PROBE_BYTES_INF_LIMIT = "pipeline_broadcast_probe_bytes_inf_limit";
 
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
@@ -307,6 +312,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
+
+    @VariableMgr.VarAttr(name = PIPELINE_BROADCAST_BUILD_BYTES_SUP_LIMIT)
+    private long pipelineBroadcastBuildBytesSupLimit = 67108864;
+
+    @VariableMgr.VarAttr(name = PIPELINE_BROADCAST_PROBE_BYTES_INF_LIMIT)
+    private long pipelineBroadCastProbeBytesInfLimit = 67108864;
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
     private String pipelineProfileMode = "brief";
@@ -535,8 +546,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableColocateJoin;
     }
 
+    // when pipeline engine is enabled
+    // in case of pipeline_dop > 0: return pipeline_dop;
+    // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
+    // in case of pipeline_dop <= 0 and avgNumCores >=2; return avgNumCores/2;
     public int getParallelExecInstanceNum() {
-        return parallelExecInstanceNum;
+        if (enablePipelineEngine) {
+            if (pipelineDop > 0) {
+                return pipelineDop;
+            }
+            int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+            return avgNumOfCores < 2 ? 1 : avgNumOfCores / 2;
+        } else {
+            return parallelExecInstanceNum;
+        }
     }
 
     public void setParallelExecInstanceNum(int parallelExecInstanceNum) {
@@ -693,6 +716,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
+    }
+
+    public long getPipelineBroadCastBuildBytesSupLimit() {
+        return this.pipelineBroadcastBuildBytesSupLimit;
+    }
+
+    public long getPipelineBroadCastProbeBytesInfLimit() {
+        return this.pipelineBroadCastProbeBytesInfLimit;
     }
 
     public boolean isEnableReplicationJoin() {

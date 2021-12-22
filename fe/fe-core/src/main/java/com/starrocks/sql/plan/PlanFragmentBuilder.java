@@ -1262,6 +1262,127 @@ public class PlanFragmentBuilder {
             }
         }
 
+        private void estimateDopOfBroadcastJoinInPipeline(PlanFragment fragment) {
+            if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+                return;
+            }
+            if (fragment.isDopEstimated()) {
+                return;
+            }
+            Preconditions.checkArgument(fragment.getPlanRoot() instanceof HashJoinNode);
+            HashJoinNode hashJoinNode = (HashJoinNode) fragment.getPlanRoot();
+            HashJoinNode.DistributionMode distributionMode = hashJoinNode.getDistributionMode();
+            if (!distributionMode.equals(HashJoinNode.DistributionMode.BROADCAST) ||
+                    !distributionMode.equals(HashJoinNode.DistributionMode.REPLICATED)) {
+                return;
+            }
+            final long buildBytesSupLimit = ConnectContext.get().getSessionVariable().getPipelineBroadCastBuildBytesSupLimit();
+            final long probeBytesInfLimit = ConnectContext.get().getSessionVariable().getPipelineBroadCastProbeBytesInfLimit();
+            final int defaultDop = fragment.getParallelExecNum();
+
+            PlanNode leftNode = hashJoinNode.getChild(0);
+            PlanNode rightNode = hashJoinNode.getChild(1);
+            int bestInstanceNum = defaultDop;
+            int bestDop = 1;
+            HashJoinNode.DistributionMode bestDistributionMode = HashJoinNode.DistributionMode.BROADCAST;
+
+            double cost = Double.MAX_VALUE;
+            long leftRowCount = leftNode.getLimit() == -1 ? leftNode.getCardinality()
+                    : Math.min(leftNode.getLimit(), leftNode.getCardinality());
+            double leftCost = leftRowCount * leftNode.getAvgRowSize();
+            long rightRowCount = rightNode.getLimit() == -1 ? rightNode.getCardinality()
+                    : Math.min(rightNode.getLimit(), rightNode.getCardinality());
+            double rightCost = rightRowCount * rightNode.getAvgRowSize();
+
+            // case 1: instance_num=1, dop=1..defaultDop, local shuffle join
+            // CPU_COST = COST(RIGHT)/DOP + COST(LEFT)/DOP + COST(RIGHT)/DOP + COST(LEFT)/DOP
+            // MEM_COST = COST(RIGHT) + COST(LEFT)
+            double memCost = rightCost;
+            if (memCost <= buildBytesSupLimit) {
+                for (int dop = 1; dop <= defaultDop; ++dop) {
+                    if (leftCost > probeBytesInfLimit && leftCost / dop > probeBytesInfLimit) {
+                        continue;
+                    }
+                    double cpuCost = (rightCost / dop + leftCost / dop) * 2;
+                    if (cpuCost < cost) {
+                        cost = cpuCost;
+                        bestInstanceNum = 1;
+                        bestDop = dop;
+                        bestDistributionMode = HashJoinNode.DistributionMode.PARTITIONED;
+                    }
+                }
+            }
+
+            // case 2: instance_num=1..defaultDop, dop=1, local broadcast join
+            // CPU_COST = COST(RIGHT)/N + COST(LEFT)/N
+            // CPU_COST = COST(RIGHT)*N + COST(LEFT)
+            for (int instanceNum = 1; instanceNum <= defaultDop; ++instanceNum) {
+                memCost = rightCost * instanceNum;
+                if (memCost > buildBytesSupLimit) {
+                    continue;
+                }
+                if (leftCost > probeBytesInfLimit && leftCost / instanceNum > probeBytesInfLimit) {
+                    continue;
+                }
+                double cpuCost = rightCost / instanceNum + leftCost / instanceNum;
+                if (cpuCost < cost) {
+                    cost = cpuCost;
+                    bestInstanceNum = instanceNum;
+                    bestDop = 1;
+                    bestDistributionMode = HashJoinNode.DistributionMode.BROADCAST;
+                }
+            }
+
+            // case 3: instance_num=1..defaultDop, dop=defaultDop/instance_num, local shuffle join
+            // CPU_COST: COST(RIGHT)/N/DOP + COST(LEFT)/N/DOP + COST(RIGHT)/N + COST(LEFT)/N
+            // MEM_COST: COST(RIGHT) + COST(LEFT)
+            for (int instanceNum = 1; instanceNum <= defaultDop; ++instanceNum) {
+                for (int dop = defaultDop; dop > 0; --dop) {
+                    memCost = rightCost * instanceNum;
+                    if (memCost > buildBytesSupLimit) {
+                        continue;
+                    }
+                    if (leftCost > probeBytesInfLimit && leftCost / instanceNum > probeBytesInfLimit) {
+                        continue;
+                    }
+                    double cpuCost = rightCost / instanceNum / dop + leftCost / instanceNum / dop
+                            + rightCost / instanceNum + leftCost / instanceNum;
+                    if (cpuCost < cost) {
+                        cost = cpuCost;
+                        bestInstanceNum = instanceNum;
+                        bestDop = dop;
+                        bestDistributionMode = HashJoinNode.DistributionMode.PARTITIONED;
+                    }
+                }
+            }
+
+            // case 4: instance_num=1..defaultDop, dop=defaultDop/instance_num, local broadcast join
+            // CPU_COST: COST(RIGHT)/N + COST(LEFT)/N/DOP
+            // MEM_COST: COST(RIGHT)*N*DOP +COST(LEFT)
+            for (int instanceNum = 1; instanceNum <= defaultDop; ++instanceNum) {
+                for (int dop = defaultDop; dop > 0; --dop) {
+                    memCost = rightCost * instanceNum * dop;
+                    if (memCost > buildBytesSupLimit) {
+                        continue;
+                    }
+                    if (leftCost > probeBytesInfLimit && leftCost / instanceNum > probeBytesInfLimit) {
+                        continue;
+                    }
+                    double cpuCost = rightCost / instanceNum + leftCost / instanceNum / dop;
+                    if (cpuCost < cost) {
+                        cost = cpuCost;
+                        bestInstanceNum = instanceNum;
+                        bestDop = dop;
+                        bestDistributionMode = HashJoinNode.DistributionMode.BROADCAST;
+                    }
+                }
+            }
+            fragment.setParallelExecNum(bestInstanceNum);
+            fragment.setPipelineDop(bestDop);
+            fragment.setDopEstimated();
+            hashJoinNode.setPipelineDistributionMode(bestDistributionMode);
+        }
+
         @Override
         public PlanFragment visitPhysicalHashJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
@@ -1439,6 +1560,7 @@ public class PlanFragmentBuilder {
                     leftFragment.setPlanRoot(hashJoinNode);
                     leftFragment.addChild(rightFragment.getChild(0));
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+                    estimateDopOfBroadcastJoinInPipeline(leftFragment);
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
@@ -1501,6 +1623,7 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(leftFragment);
 
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+                    estimateDopOfBroadcastJoinInPipeline(leftFragment);
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();

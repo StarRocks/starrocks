@@ -123,6 +123,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // specification of the number of parallel when fragment is executed
     // default value is 1
     protected int parallelExecNum = 1;
+    protected int pipelineDop = 1;
+    protected boolean dopEstimated = false;
 
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
@@ -188,6 +190,21 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     public void setParallelExecNum(int parallelExecNum) {
         this.parallelExecNum = parallelExecNum;
+    }
+
+    public void setPipelineDop(int dop) {
+        this.pipelineDop = dop;
+    }
+
+    public int getPipelineDop() {
+        return pipelineDop;
+    }
+
+    public void setDopEstimated() {
+        dopEstimated = true;
+    }
+    public boolean isDopEstimated() {
+        return dopEstimated;
     }
 
     public void setOutputExprs(List<Expr> outputExprs) {

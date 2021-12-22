@@ -70,6 +70,7 @@ public class HashJoinNode extends PlanNode {
     private List<Expr> otherJoinConjuncts;
     private boolean isPushDown;
     private DistributionMode distrMode;
+    private DistributionMode pipelineDistrMode = DistributionMode.PARTITIONED;
     private String colocateReason = ""; // if can not do colocate join, set reason here
     // the flag for local bucket shuffle join
     private boolean isLocalHashBucket = false;
@@ -219,6 +220,22 @@ public class HashJoinNode extends PlanNode {
         this.distrMode = distrMode;
     }
 
+    public DistributionMode getDistributionMode() {
+        return this.distrMode;
+    }
+
+    public void setPipelineDistributionMode(DistributionMode pipelineDistrMode) {
+        this.pipelineDistrMode = pipelineDistrMode;
+    }
+
+    public DistributionMode getPipelineDistributionMode() {
+        return this.pipelineDistrMode;
+    }
+
+    public boolean isBroadcast() {
+        return this.distrMode == DistributionMode.BROADCAST;
+    }
+
     public boolean isLocalHashBucket() {
         return isLocalHashBucket;
     }
@@ -360,7 +377,7 @@ public class HashJoinNode extends PlanNode {
         msg.node_type = TPlanNodeType.HASH_JOIN_NODE;
         msg.hash_join_node = new THashJoinNode();
         msg.hash_join_node.join_op = joinOp.toThrift();
-        msg.hash_join_node.distribution_mode = distrMode.toThrift();
+        msg.hash_join_node.distribution_mode = pipelineDistrMode.toThrift();
         StringBuilder sqlJoinPredicatesBuilder = new StringBuilder();
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             TEqJoinCondition eqJoinCondition = new TEqJoinCondition(eqJoinPredicate.getChild(0).treeToThrift(),

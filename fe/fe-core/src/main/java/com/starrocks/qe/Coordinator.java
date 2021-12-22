@@ -1903,6 +1903,7 @@ public class Coordinator {
                     if (isEnablePipelineEngine) {
                         params.setIs_pipeline(
                                 fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                        params.setPipeline_dop(fragment.getPipelineDop());
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {
