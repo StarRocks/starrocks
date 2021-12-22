@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef BE_EXEC_ES_PREDICATE_H
-#define BE_EXEC_ES_PREDICATE_H
-
+#pragma once
 #include <string>
 #include <utility>
 #include <vector>
@@ -33,7 +31,6 @@
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
-#include "runtime/tuple.h"
 
 namespace starrocks {
 
@@ -218,5 +215,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

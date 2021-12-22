@@ -4,11 +4,13 @@ package com.starrocks.sql.optimizer.transformer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FieldReference;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -32,11 +34,23 @@ public class ExpressionMapping {
      */
     private final Scope scope;
     private ColumnRefOperator[] fieldMappings;
+    private RelationId outerScopeRelationId;
 
     public ExpressionMapping(Scope scope, List<ColumnRefOperator> fieldMappings) {
         this.scope = scope;
         this.fieldMappings = new ColumnRefOperator[fieldMappings.size()];
         fieldMappings.toArray(this.fieldMappings);
+    }
+
+    public ExpressionMapping(Scope scope, List<ColumnRefOperator> fieldMappings, ExpressionMapping outer) {
+        this.scope = scope;
+        List<ColumnRefOperator> fieldsList = new ArrayList<>(fieldMappings);
+        if (outer != null) {
+            fieldsList.addAll(outer.getFieldMappings());
+        }
+        this.fieldMappings = new ColumnRefOperator[fieldsList.size()];
+        fieldsList.toArray(this.fieldMappings);
+        this.outerScopeRelationId = outer.getScope().getRelationId();
     }
 
     public ExpressionMapping(Scope scope) {
@@ -65,6 +79,10 @@ public class ExpressionMapping {
                     ErrorType.INTERNAL_ERROR);
         }
         return fieldMappings[fieldIndex];
+    }
+
+    public RelationId getOuterScopeRelationId() {
+        return outerScopeRelationId;
     }
 
     public void setFieldMappings(List<ColumnRefOperator> fieldMappings) {

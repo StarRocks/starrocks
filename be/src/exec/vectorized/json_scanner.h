@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "env/env.h"
 #include "env/env_stream_pipe.h"
@@ -65,8 +66,8 @@ private:
 // return other error Status if encounter other errors.
 class JsonReader {
 public:
-    JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner,
-               std::shared_ptr<SequentialFile> file);
+    JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner, std::shared_ptr<SequentialFile> file,
+               bool strict_mode);
     ~JsonReader();
 
     Status read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
@@ -76,28 +77,32 @@ public:
 private:
     Status _read_and_parse_json();
 
-    void _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc);
+    // _next_row forwards iterator, returns false when EOF is got.
+    Status _next_row();
 
-    Status _process_array(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::array& arr);
+    // get_row returns row pointed by iterator.
+    Status _get_row(simdjson::ondemand::object* row, bool* empty);
 
-    Status _process_array_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
-                                         simdjson::ondemand::array& arr);
+    Status _get_row_from_array(simdjson::ondemand::object* row);
 
-    Status _process_object(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
-                           simdjson::ondemand::object& obj);
+    Status _get_row_from_document_stream(simdjson::ondemand::object* row, bool* empty);
 
-    Status _process_object_with_json_path(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
-                                          simdjson::ondemand::object& obj);
+    Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk,
+                          const std::vector<SlotDescriptor*>& slot_descs);
+
+    Status _filter_row_with_jsonroot(simdjson::ondemand::object* row);
+
+    Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
+                             const std::string& col_name);
 
     // Reorder column to accelerate simdjson iteration.
-    void _reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdjson::ondemand::document_reference* doc);
-
-    Status _filter_object_with_json_root(simdjson::ondemand::object* obj);
+    void _reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdjson::ondemand::object& obj);
 
 private:
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
     JsonScanner* _scanner = nullptr;
+    bool _strict_mode = false;
 
     std::shared_ptr<SequentialFile> _file;
     int _next_line;
@@ -111,8 +116,14 @@ private:
     std::unique_ptr<uint8_t[]> _json_binary_ptr;
 
     simdjson::ondemand::parser _parser;
+
+    bool _stream_is_empty = true;
     simdjson::ondemand::document_stream _doc_stream;
     simdjson::ondemand::document_stream::iterator _doc_stream_itr;
+
+    bool _array_is_empty = true;
+    simdjson::ondemand::array_iterator _array_begin;
+    simdjson::ondemand::array_iterator _array_end;
 
     // only used in unit test.
     // TODO: The semantics of Streaming Load And Routine Load is non-consistent.

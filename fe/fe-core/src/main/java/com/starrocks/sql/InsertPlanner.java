@@ -150,7 +150,7 @@ public class InsertPlanner {
             if (insertRelation.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
-                        row.set(columnIdx, new StringLiteral(targetColumn.getCalculatedDefaultValue()));
+                        row.set(columnIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                     }
                     row.set(columnIdx, TypeManager.addCastExpr(row.get(columnIdx), targetColumn.getType()));
                 }
@@ -160,7 +160,7 @@ public class InsertPlanner {
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (row.get(idx) instanceof DefaultValueExpr) {
-                            row.set(idx, new StringLiteral(targetColumn.getCalculatedDefaultValue()));
+                            row.set(idx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                         }
                         row.set(idx, TypeManager.addCastExpr(row.get(idx), targetColumn.getType()));
                     }
@@ -189,7 +189,7 @@ public class InsertPlanner {
                     if (defaultValueType == Column.DefaultValueType.NULL) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                     } else if (defaultValueType == Column.DefaultValueType.CONST)  {
-                        scalarOperator = ConstantOperator.createVarchar(targetColumn.getCalculatedDefaultValue());
+                        scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
                         throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                                     + targetColumn.getDefaultExpr().getExpr());
@@ -273,7 +273,7 @@ public class InsertPlanner {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
                 } else if (defaultValueType == Column.DefaultValueType.CONST) {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(
-                            targetColumn.getCalculatedDefaultValue()));
+                            targetColumn.calculatedDefaultValue()));
                 } else if (defaultValueType == Column.DefaultValueType.VARY) {
                     throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                             + targetColumn.getDefaultExpr().getExpr());

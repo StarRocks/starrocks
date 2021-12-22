@@ -42,6 +42,7 @@
 #include "env/env.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "storage/async_delta_writer_executor.h"
 #include "storage/data_dir.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/lru_cache.h"
@@ -161,8 +162,11 @@ Status StorageEngine::_open() {
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
 
+    _async_delta_writer_executor = std::make_unique<AsyncDeltaWriterExecutor>();
+    RETURN_IF_ERROR_WITH_WARN(_async_delta_writer_executor->init(), "init AsyncDeltaWriterExecutor failed");
+
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
-    RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init memtable_flush_executor failed");
+    RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
 
     return Status::OK();
 }
@@ -544,9 +548,9 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
 }
 
 void StorageEngine::_start_clean_fd_cache() {
-    VLOG(10) << "Cleaning file descritpor cache";
+    VLOG(10) << "Cleaning file descriptor cache";
     _file_cache->prune();
-    VLOG(10) << "Cleaned file descritpor cache";
+    VLOG(10) << "Cleaned file descriptor cache";
 }
 
 Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {

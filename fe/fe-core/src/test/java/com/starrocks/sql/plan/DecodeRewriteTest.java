@@ -447,7 +447,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "WHERE (NOT (true));";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  5:Decode\n" +
-                "  |  <dict id 34> : <string id 17>\n" +
+                "  |  <dict id 34> : <string id 33>\n" +
                 "  |  \n" +
                 "  4:Project\n" +
                 "  |  <slot 34> : 34: S_ADDRESS"));
@@ -516,7 +516,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "dict_string_id_to_int_ids:{20=28}"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
-        Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]))), " +
+        Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]), is_merge:false)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
     }
 
@@ -646,10 +646,11 @@ public class DecodeRewriteTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
 
-        sql = "SELECT SUM(count) FROM (SELECT CAST((CAST((s_address) BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) " +
-                "AND (s_address) AS BOOLEAN) = true) AND (CAST((s_address) " +
-                "BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) AND (s_address) AS BOOLEAN) IS NOT NULL) AS INT) " +
-                "as count FROM supplier ) t;";
+        sql =
+                "SELECT SUM(count) FROM (SELECT CAST((CAST((s_address) BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) " +
+                        "AND (s_address) AS BOOLEAN) = true) AND (CAST((s_address) " +
+                        "BETWEEN (((CAST(s_address AS STRING ) )||(\"\"))) AND (s_address) AS BOOLEAN) IS NOT NULL) AS INT) " +
+                        "as count FROM supplier ) t;";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
     }
@@ -682,11 +683,10 @@ public class DecodeRewriteTest extends PlanTestBase {
     public void testProjectWithUnionEmptySet() throws Exception {
         String sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
-        Assert.assertTrue(plan.contains("3:Project\n" +
-                "  |  <slot 11> : 1\n" +
-                "  |  \n" +
-                "  2:Decode\n" +
-                "  |  <dict id 16> : <string id 1>"));
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 16> : <string id 15>"));
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 16> : 16: t1a"));
     }
+
 }

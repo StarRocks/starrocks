@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_AGENT_STATUS_H
-#define STARROCKS_BE_SRC_AGENT_STATUS_H
+#pragma once
 
 namespace starrocks {
 
@@ -48,4 +47,3 @@ enum AgentStatus {
     STARROCKS_DISK_REACH_CAPACITY_LIMIT = -903,
 };
 } // namespace starrocks
-#endif // STARROCKS_BE_SRC_AGENT_STATUS_H

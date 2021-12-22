@@ -122,13 +122,7 @@ public class ReplayFromDumpTest {
 
     private Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
             throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
-        if (sessionVariable != null) {
-            queryDumpInfo.setSessionVariable(sessionVariable);
-        }
-        return new Pair<>(queryDumpInfo,
-                UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
-                        getExplainString(TExplainLevel.COSTS));
+        return getPlanFragment(dumpJsonStr, sessionVariable, TExplainLevel.COSTS);
     }
 
     private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
@@ -179,13 +173,13 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds02"));
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
-        Assert.assertTrue(replayPair.second.contains("|----24:EXCHANGE\n" +
+        Assert.assertTrue(replayPair.second.contains("  |----24:EXCHANGE\n" +
                 "  |       cardinality: 73049\n" +
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      [143, INT, true] | [164, DECIMAL64(7,2), true]\n" +
-                "  |      [179, INT, true] | [200, DECIMAL64(7,2), true]\n"));
+                "  |      [177, INT, true] | [198, DECIMAL64(7,2), true]"));
     }
 
     @Test
@@ -320,5 +314,23 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains(" 33:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), multi_distinct_count(128: case), max(103: count)"));
+    }
+
+    @Test
+    public void testJoinWithPipelineDop() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("24:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)"));
+    }
+
+    @Test
+    public void test() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("  12:Decode\n" +
+                "  |  <dict id 42> : <string id 18>"));
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 }

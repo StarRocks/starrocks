@@ -582,7 +582,7 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
     // If we already have IN value range, we can put `value` into it.
     if (is_fixed_value_range()) {
         if (_fixed_op != FILTER_IN) {
-            return Status::InternalError(strings::Substitute("Add Range Fail! Unsupport SQLFilterOp $0", op));
+            return Status::InternalError(strings::Substitute("Add Range Fail! Unsupported SQLFilterOp $0", op));
         }
         std::pair<iterator_type, iterator_type> bound_pair = _fixed_values.equal_range(value);
 
@@ -608,7 +608,7 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
             break;
         }
         default: {
-            return Status::InternalError(strings::Substitute("Add Range Fail! Unsupport SQLFilterOp $0", op));
+            return Status::InternalError(strings::Substitute("Add Range Fail! Unsupported SQLFilterOp $0", op));
         }
         }
 
@@ -663,7 +663,7 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
                 break;
             }
             default: {
-                return Status::InternalError(strings::Substitute("Add Range Fail! Unsupport SQLFilterOp $0", op));
+                return Status::InternalError(strings::Substitute("Add Range Fail! Unsupported SQLFilterOp $0", op));
             }
             }
         }
@@ -705,7 +705,7 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
     bool has_converted = false;
     if (range.is_fixed_value_range()) {
         const size_t mul = std::max<size_t>(1, _begin_scan_keys.size());
-        if (range.get_fixed_value_size() * mul > max_scan_key_num) {
+        if (range.get_fixed_value_size() > max_scan_key_num / mul) {
             if (range.is_range_value_convertible()) {
                 range.convert_to_range_value();
             } else {
@@ -714,7 +714,7 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
         }
     } else if (range.is_fixed_value_convertible() && _is_convertible) {
         const size_t mul = std::max<size_t>(1, _begin_scan_keys.size());
-        if (range.get_convertible_fixed_value_size() * mul <= max_scan_key_num) {
+        if (range.get_convertible_fixed_value_size() <= max_scan_key_num / mul) {
             if (range.is_low_value_mininum() && range.is_high_value_maximum()) {
                 has_converted = true;
             }

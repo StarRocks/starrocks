@@ -32,7 +32,8 @@ Status AggregateBaseNode::close(RuntimeState* state) {
         return Status::OK();
     }
     if (_aggregator != nullptr) {
-        RETURN_IF_ERROR(_aggregator->close(state));
+        _aggregator->close(state);
+        _aggregator.reset();
     }
     return ExecNode::close(state);
 }

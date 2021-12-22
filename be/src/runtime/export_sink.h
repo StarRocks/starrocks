@@ -40,7 +40,6 @@ class ExprContext;
 class MemTracker;
 class FileWriter;
 class Status;
-class TupleRow;
 class FileBuilder;
 
 // This class is a sinker, which put export data to external storage by broker.

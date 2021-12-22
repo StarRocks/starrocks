@@ -28,7 +28,7 @@
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
 #include "runtime/query_statistics.h"
-#include "util/tuple_row_compare.h"
+#include "util/runtime_profile.h"
 
 namespace google::protobuf {
 class Closure;
@@ -44,6 +44,7 @@ class DataStreamMgr;
 class MemTracker;
 class RuntimeProfile;
 class PTransmitChunkParams;
+class SortExecExprs;
 
 // Single receiver of an m:n data stream.
 // DataStreamRecvr maintains one or more queues of row batches received by a

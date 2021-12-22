@@ -63,8 +63,7 @@ public:
         return OLAP_SUCCESS;
     }
 
-    OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                           bool is_key) {
+    OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
         if (is_key) {
             all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         } else {
@@ -156,7 +155,7 @@ public:
 
     void TearDown() override {
         if (_tablet) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
         }
     }
@@ -253,7 +252,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     const int max_segments = 8;
-    const int num_segment = 1 + rand() % max_segments;
+    const int num_segment = 2 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
     cfg.chunk_size = 1000 + rand() % 2000;
@@ -342,7 +341,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     const int max_segments = 8;
-    const int num_segment = 1 + rand() % max_segments;
+    const int num_segment = 2 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
     cfg.chunk_size = 100 + rand() % 2000;

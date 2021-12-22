@@ -135,7 +135,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // is the first time of calling `get_next`, pass the second argument of `_fill_chunk_pool` as
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
-        _fill_chunk_pool(1, first_call);
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call));
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -213,13 +213,17 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
         tls_thread_status.set_mem_tracker(prev_tracker);
         _running_threads.fetch_sub(1, std::memory_order_release);
     });
-
     tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
 
     Status status = scanner->open(_runtime_state);
     if (!status.ok()) {
         QUERY_LOG_IF(ERROR, !status.is_end_of_file()) << status;
         _update_status(status);
+    } else {
+        status = scanner->runtime_state()->check_mem_limit("olap scanner");
+        if (!status.ok()) {
+            _update_status(status);
+        }
     }
     scanner->set_keep_priority(false);
     // Because we use thread pool to scan data from storage. One scanner can't
@@ -504,7 +508,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    _fill_chunk_pool(chunks, true);
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));

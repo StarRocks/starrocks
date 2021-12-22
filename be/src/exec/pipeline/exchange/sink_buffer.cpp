@@ -5,12 +5,17 @@
 namespace starrocks::pipeline {
 
 SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations,
-                       size_t num_sinkers)
+                       bool is_dest_merge, size_t num_sinkers)
         : _mem_tracker(state->instance_mem_tracker()),
           _brpc_timeout_ms(std::min(3600, state->query_options().query_timeout) * 1000),
+          _is_dest_merge(is_dest_merge),
           _num_uncancelled_sinkers(num_sinkers) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
+        // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
+        if (instance_id.lo == -1) {
+            continue;
+        }
 
         auto it = _num_sinkers.find(instance_id.lo);
         if (it != _num_sinkers.end()) {
@@ -32,11 +37,11 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
             finst_id.set_lo(instance_id.lo);
             _instance_id2finst_id[instance_id.lo] = std::move(finst_id);
         }
+    }
 
-        _num_remaining_eos = 0;
-        for (auto& [_, num] : _num_sinkers) {
-            _num_remaining_eos += num;
-        }
+    _num_remaining_eos = 0;
+    for (auto& [_, num] : _num_sinkers) {
+        _num_remaining_eos += num;
     }
 }
 
@@ -99,6 +104,11 @@ void SinkBuffer::cancel_one_sinker() {
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {
+    // Both sender side and receiver side can tolerate disorder of tranmission
+    // if receiver side is not ExchangeMergeSortSourceOperator
+    if (!_is_dest_merge) {
+        return;
+    }
     auto& seqs = _discontinuous_acked_seqs[instance_id.lo];
     seqs.insert(sequence);
     auto& max_continuous_acked_seq = _max_continuous_acked_seqs[instance_id.lo];
@@ -120,12 +130,18 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
 
         auto& buffer = _buffers[instance_id.lo];
 
-        // discontinuous_acked_window_size means that we are not received all the ack
-        // with sequence from _max_continuous_acked_seqs[x] to _request_seqs[x]
-        // Limit the size of the window to avoid buffering too much out-of-order data at the receiving side
-        int64_t discontinuous_acked_window_size =
-                _request_seqs[instance_id.lo] - _max_continuous_acked_seqs[instance_id.lo];
-        if (buffer.empty() || discontinuous_acked_window_size >= config::pipeline_sink_brpc_dop) {
+        bool too_much_brpc_process = false;
+        if (_is_dest_merge) {
+            // discontinuous_acked_window_size means that we are not received all the ack
+            // with sequence from _max_continuous_acked_seqs[x] to _request_seqs[x]
+            // Limit the size of the window to avoid buffering too much out-of-order data at the receiving side
+            int64_t discontinuous_acked_window_size =
+                    _request_seqs[instance_id.lo] - _max_continuous_acked_seqs[instance_id.lo];
+            too_much_brpc_process = discontinuous_acked_window_size >= config::pipeline_sink_brpc_dop;
+        } else {
+            too_much_brpc_process = _num_in_flight_rpcs[instance_id.lo] >= config::pipeline_sink_brpc_dop;
+        }
+        if (buffer.empty() || too_much_brpc_process) {
             return;
         }
 
@@ -183,7 +199,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
 
         auto* closure =
                 new DisposableClosure<PTransmitChunkResult, ClosureContext>({instance_id, request.params->sequence()});
-        closure->addFailedHandler([this, closure](const ClosureContext& ctx) noexcept {
+        closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;
             {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -191,26 +207,25 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
             --_total_in_flight_rpc;
-            LOG(WARNING) << " transmit chunk rpc failed";
+            LOG(WARNING) << "transmit chunk rpc failed";
         });
-        closure->addSuccessHandler(
-                [this, closure](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
-                    Status status(result.status());
-                    {
-                        std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
-                        ++_num_finished_rpcs[ctx.instance_id.lo];
-                        --_num_in_flight_rpcs[ctx.instance_id.lo];
-                    }
-                    if (!status.ok()) {
-                        _is_finishing = true;
-                        LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
-                    } else {
-                        std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
-                        _process_send_window(ctx.instance_id, ctx.sequence);
-                        _try_to_send_rpc(ctx.instance_id);
-                    }
-                    --_total_in_flight_rpc;
-                });
+        closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
+            Status status(result.status());
+            {
+                std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                ++_num_finished_rpcs[ctx.instance_id.lo];
+                --_num_in_flight_rpcs[ctx.instance_id.lo];
+            }
+            if (!status.ok()) {
+                _is_finishing = true;
+                LOG(WARNING) << "transmit chunk rpc failed, " << status.message();
+            } else {
+                std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                _process_send_window(ctx.instance_id, ctx.sequence);
+                _try_to_send_rpc(ctx.instance_id);
+            }
+            --_total_in_flight_rpc;
+        });
 
         ++_total_in_flight_rpc;
         ++_num_in_flight_rpcs[instance_id.lo];

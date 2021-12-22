@@ -25,10 +25,8 @@
 #include <roaring/roaring.hh>
 
 #include "storage/column_block.h"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
+#include "storage/rowset/bitmap_index_reader.h"
 #include "storage/selection_vector.h"
-
-using namespace starrocks::segment_v2;
 
 namespace starrocks {
 

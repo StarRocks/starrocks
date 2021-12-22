@@ -60,10 +60,10 @@ public class SubqueryTransformer {
         return subOpt;
     }
 
-    public ScalarOperator rewriteSubqueryScalarOperator(Expr predicate, OptExprBuilder subOpt, ExpressionMapping outer,
+    public ScalarOperator rewriteSubqueryScalarOperator(Expr predicate, OptExprBuilder subOpt,
                                                         List<ColumnRefOperator> correlation) {
         ScalarOperator scalarPredicate =
-                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), outer, correlation);
+                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation);
 
         ArrayList<InPredicate> inPredicates = new ArrayList<>();
         predicate.collect(InPredicate.class, inPredicates);
@@ -228,9 +228,9 @@ public class SubqueryTransformer {
             } else if (CompoundPredicate.Operator.AND == node.getOp()) {
                 // And Scope extend from parents
                 builder = node.getChild(0)
-                        .accept(this, new SubqueryContext(builder, context.useSemiAnti, context.cteContext));
+                        .accept(this, new SubqueryContext(builder, context.useSemiAnti));
                 builder = node.getChild(1)
-                        .accept(this, new SubqueryContext(builder, context.useSemiAnti, context.cteContext));
+                        .accept(this, new SubqueryContext(builder, context.useSemiAnti));
             } else {
                 builder = node.getChild(0).accept(this, new SubqueryContext(builder, false, context.cteContext));
             }

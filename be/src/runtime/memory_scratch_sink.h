@@ -47,7 +47,6 @@ class BufferControlBlock;
 class ExprContext;
 class ResultWriter;
 class MemTracker;
-class TupleRow;
 
 // used to push data to blocking queue
 class MemoryScratchSink : public DataSink {

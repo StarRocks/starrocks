@@ -12,7 +12,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "runtime/tuple_row.h"
 #include "util/debug_util.h"
 #include "util/network_util.h"
 #include "util/runtime_profile.h"

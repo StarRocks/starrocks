@@ -14,12 +14,16 @@
 
 namespace starrocks {
 namespace pipeline {
+
 using HashJoiner = starrocks::vectorized::HashJoiner;
+
 class HashJoinBuildOperator final : public Operator {
 public:
     HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name, int32_t plan_node_id,
                           HashJoinerPtr hash_joiner, size_t driver_sequence,
-                          PartialRuntimeFilterMerger* partial_rf_merger);
+                          PartialRuntimeFilterMerger* partial_rf_merger,
+                          const TJoinDistributionMode::type distribution_mode,
+                          std::atomic<bool>& any_broadcast_builder_finished);
     ~HashJoinBuildOperator() = default;
 
     Status prepare(RuntimeState* state) override;
@@ -46,11 +50,16 @@ private:
     size_t _driver_sequence;
     PartialRuntimeFilterMerger* _partial_rf_merger;
     bool _is_finished = false;
+
+    const TJoinDistributionMode::type _distribution_mode;
+    std::atomic<bool>& _any_broadcast_builder_finished;
 };
+
 class HashJoinBuildOperatorFactory final : public OperatorFactory {
 public:
     HashJoinBuildOperatorFactory(int32_t id, int32_t plan_node_id, HashJoinerFactoryPtr hash_joiner_factory,
-                                 std::unique_ptr<PartialRuntimeFilterMerger>&& partial_rf_merger);
+                                 std::unique_ptr<PartialRuntimeFilterMerger>&& partial_rf_merger,
+                                 const TJoinDistributionMode::type distribution_mode);
     ~HashJoinBuildOperatorFactory() = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -60,6 +69,10 @@ private:
     HashJoinerFactoryPtr _hash_joiner_factory;
     RuntimeFilterPort* _runtime_filter_port;
     std::unique_ptr<PartialRuntimeFilterMerger> _partial_rf_merger;
+
+    const TJoinDistributionMode::type _distribution_mode;
+    std::atomic<bool> _any_broadcast_builder_finished{false};
 };
+
 } // namespace pipeline
 } // namespace starrocks

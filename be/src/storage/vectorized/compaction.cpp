@@ -8,8 +8,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/rowset/beta_rowset.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/tablet_reader.h"
 #include "util/defer_op.h"
@@ -489,7 +489,7 @@ Status Compaction::check_version_continuity(const std::vector<RowsetSharedPtr>& 
         const RowsetSharedPtr& rowset = rowsets[i];
         if (rowset->start_version() != prev_rowset->end_version() + 1) {
             LOG(WARNING) << "There are missed versions among rowsets. "
-                         << "prev_rowset verison=" << prev_rowset->start_version() << "-" << prev_rowset->end_version()
+                         << "prev_rowset version=" << prev_rowset->start_version() << "-" << prev_rowset->end_version()
                          << ", rowset version=" << rowset->start_version() << "-" << rowset->end_version();
             return Status::InternalError("cumulative compaction miss version error.");
         }
@@ -504,7 +504,8 @@ Status Compaction::check_correctness(const Statistics& stats) {
     if (_input_row_num != _output_rowset->num_rows() + stats.merged_rows + stats.filtered_rows) {
         LOG(WARNING) << "row_num does not match between cumulative input and output! "
                      << "input_row_num=" << _input_row_num << ", merged_row_num=" << stats.merged_rows
-                     << ", filted_row_num=" << stats.filtered_rows << ", output_row_num=" << _output_rowset->num_rows();
+                     << ", filtered_row_num=" << stats.filtered_rows
+                     << ", output_row_num=" << _output_rowset->num_rows();
 
         return Status::InternalError("cumulative compaction check lines error.");
     }

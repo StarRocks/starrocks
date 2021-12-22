@@ -67,6 +67,10 @@ public class LimitPruneTabletsRule extends TransformationRule {
                         break;
                     }
                 }
+                // Needn't select empty tablet
+                if (tabletRowCount == 0) {
+                    continue;
+                }
                 totalRow += tabletRowCount;
 
                 result.add(tablet.getId());
@@ -76,7 +80,9 @@ public class LimitPruneTabletsRule extends TransformationRule {
             }
         }
 
-        if (result.equals(olapScanOperator.getSelectedTabletId())) {
+        // 1. Don't select any tablet
+        // 2. selected tablets don't change
+        if (result.isEmpty() || result.equals(olapScanOperator.getSelectedTabletId())) {
             return Collections.emptyList();
         }
 

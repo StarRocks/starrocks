@@ -573,8 +573,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                    Set<String> newColNameSet) throws DdlException {
 
         Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
-        // expr like now() or uuid() will support later
-        if (defaultValueType == Column.DefaultValueType.CONST && newColumn.getDefaultExpr() != null) {
+        // expr like uuid() will support later
+        if (defaultValueType == Column.DefaultValueType.VARY) {
             throw new DdlException("Schema change currently not supported default expr:"
                     + newColumn.getDefaultExpr().getExpr());
         }
@@ -969,6 +969,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 new SchemaChangeJobV2(jobId, dbId, olapTable.getId(), olapTable.getName(), timeoutSecond * 1000);
         schemaChangeJob.setBloomFilterInfo(hasBfChange, bfColumns, bfFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChange, indexes);
+        schemaChangeJob.setStartTime(ConnectContext.get().getStartTime());
 
         // If StorageFormat is set to TStorageFormat.V2
         // which will create tablet with preferred_rowset_type set to BETA

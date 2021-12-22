@@ -34,7 +34,7 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/segment_v2/segment_writer.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/aggregate_iterator.h"
@@ -96,6 +96,12 @@ OLAPStatus BetaRowsetWriter::init() {
 }
 
 RowsetSharedPtr BetaRowsetWriter::build() {
+    if (_num_rows_written > 0) {
+        if (auto st = _context.env->sync_dir(_context.rowset_path_prefix); !st.ok()) {
+            LOG(ERROR) << "Fail to sync directory " << _context.rowset_path_prefix << ": " << st;
+            return nullptr;
+        }
+    }
     _rowset_meta->set_num_rows(_num_rows_written);
     _rowset_meta->set_total_row_size(_total_row_size);
     _rowset_meta->set_total_disk_size(_total_data_size);
@@ -226,7 +232,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
     }
 }
 
-std::unique_ptr<segment_v2::SegmentWriter> HorizontalBetaRowsetWriter::_create_segment_writer() {
+std::unique_ptr<SegmentWriter> HorizontalBetaRowsetWriter::_create_segment_writer() {
     std::lock_guard<std::mutex> l(_lock);
     std::string path;
     if ((_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
@@ -249,12 +255,12 @@ std::unique_ptr<segment_v2::SegmentWriter> HorizontalBetaRowsetWriter::_create_s
     }
 
     DCHECK(wblock != nullptr);
-    segment_v2::SegmentWriterOptions writer_options;
+    SegmentWriterOptions writer_options;
     writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
-    std::unique_ptr<segment_v2::SegmentWriter> segment_writer =
-            std::make_unique<segment_v2::SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
+    std::unique_ptr<SegmentWriter> segment_writer =
+            std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
     auto s = segment_writer->init();
     if (!s.ok()) {
         LOG(WARNING) << "Fail to init segment writer, " << s.to_string();
@@ -313,7 +319,7 @@ OLAPStatus HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Ch
 }
 
 OLAPStatus HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
-    std::unique_ptr<segment_v2::SegmentWriter> segment_writer = _create_segment_writer();
+    std::unique_ptr<SegmentWriter> segment_writer = _create_segment_writer();
     if (segment_writer == nullptr) {
         return OLAP_ERR_INIT_FAILED;
     }
@@ -403,7 +409,6 @@ RowsetSharedPtr HorizontalBetaRowsetWriter::build() {
             return nullptr;
         }
     }
-
     // When building a rowset, we must ensure that the current _segment_writer has been
     // flushed, that is, the current _segment_wirter is nullptr
     DCHECK(_segment_writer == nullptr) << "segment must be null when build rowset";
@@ -445,9 +450,9 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         std::string tmp_segment_file =
                 BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
 
-        auto segment_ptr = segment_v2::Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(),
-                                                     fs::fs_util::block_manager(), tmp_segment_file, seg_id,
-                                                     _context.tablet_schema);
+        auto segment_ptr =
+                Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs::fs_util::block_manager(),
+                              tmp_segment_file, seg_id, _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
             return segment_ptr.status();
@@ -545,8 +550,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     return Status::OK();
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::_flush_segment_writer(
-        std::unique_ptr<segment_v2::SegmentWriter>* segment_writer) {
+OLAPStatus HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer) {
     uint64_t segment_size;
     uint64_t index_size;
     Status s = (*segment_writer)->finalize(&segment_size, &index_size);
@@ -617,7 +621,7 @@ OLAPStatus VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
     size_t chunk_num_rows = chunk.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);
-        std::unique_ptr<segment_v2::SegmentWriter> segment_writer = _create_segment_writer(column_indexes, is_key);
+        std::unique_ptr<SegmentWriter> segment_writer = _create_segment_writer(column_indexes, is_key);
         if (segment_writer == nullptr) {
             return OLAP_ERR_INIT_FAILED;
         }
@@ -629,7 +633,7 @@ OLAPStatus VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
         if (_segment_writers[_current_writer_index]->num_rows_written() + chunk_num_rows >=
             _context.max_rows_per_segment) {
             RETURN_NOT_OK(_flush_columns(&_segment_writers[_current_writer_index]));
-            std::unique_ptr<segment_v2::SegmentWriter> segment_writer = _create_segment_writer(column_indexes, is_key);
+            std::unique_ptr<SegmentWriter> segment_writer = _create_segment_writer(column_indexes, is_key);
             if (segment_writer == nullptr) {
                 return OLAP_ERR_INIT_FAILED;
             }
@@ -721,7 +725,6 @@ OLAPStatus VerticalBetaRowsetWriter::final_flush() {
     if (_segment_writers.empty()) {
         return OLAP_SUCCESS;
     }
-
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         Status s = segment_writer->finalize_footer(&segment_size);
@@ -752,7 +755,7 @@ OLAPStatus VerticalBetaRowsetWriter::final_flush() {
     return OLAP_SUCCESS;
 }
 
-std::unique_ptr<segment_v2::SegmentWriter> VerticalBetaRowsetWriter::_create_segment_writer(
+std::unique_ptr<SegmentWriter> VerticalBetaRowsetWriter::_create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     std::lock_guard<std::mutex> l(_lock);
     std::string path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
@@ -765,12 +768,12 @@ std::unique_ptr<segment_v2::SegmentWriter> VerticalBetaRowsetWriter::_create_seg
     }
 
     DCHECK(wblock != nullptr);
-    segment_v2::SegmentWriterOptions writer_options;
+    SegmentWriterOptions writer_options;
     writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
-    std::unique_ptr<segment_v2::SegmentWriter> segment_writer =
-            std::make_unique<segment_v2::SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
+    std::unique_ptr<SegmentWriter> segment_writer =
+            std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
     auto s = segment_writer->init(column_indexes, is_key);
     if (!s.ok()) {
         LOG(WARNING) << "Fail to init segment writer, " << s.to_string();
@@ -781,7 +784,7 @@ std::unique_ptr<segment_v2::SegmentWriter> VerticalBetaRowsetWriter::_create_seg
     return segment_writer;
 }
 
-OLAPStatus VerticalBetaRowsetWriter::_flush_columns(std::unique_ptr<segment_v2::SegmentWriter>* segment_writer) {
+OLAPStatus VerticalBetaRowsetWriter::_flush_columns(std::unique_ptr<SegmentWriter>* segment_writer) {
     uint64_t index_size = 0;
     Status s = (*segment_writer)->finalize_columns(&index_size);
     if (!s.ok()) {

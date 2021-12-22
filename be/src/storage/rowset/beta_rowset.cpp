@@ -75,8 +75,8 @@ Status BetaRowset::do_load() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = segment_v2::Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path,
-                                             seg_id, _schema, &footer_size_hint);
+        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
+                                 _schema, &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -89,7 +89,7 @@ Status BetaRowset::do_load() {
 
 OLAPStatus BetaRowset::remove() {
     // TODO should we close and remove all segment reader first?
-    VLOG(1) << "Removing files in rowsset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
+    VLOG(1) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     bool success = true;
     for (int i = 0; i < num_segments(); ++i) {

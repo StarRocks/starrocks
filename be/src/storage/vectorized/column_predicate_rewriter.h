@@ -7,7 +7,7 @@
 #include "column/schema.h"
 #include "common/object_pool.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/conjunctive_predicates.h"
 
@@ -19,7 +19,7 @@ namespace starrocks::vectorized {
 // column predicate rewrite in SegmentIter->init-> rewrite stage
 class ColumnPredicateRewriter {
 public:
-    using ColumnIterators = std::vector<segment_v2::ColumnIterator*>;
+    using ColumnIterators = std::vector<ColumnIterator*>;
     using PushDownPredicates = std::unordered_map<ColumnId, PredicateList>;
 
     ColumnPredicateRewriter(ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
@@ -38,8 +38,8 @@ private:
     bool _rewrite_predicate(ObjectPool* pool, const FieldPtr& field);
     bool _rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate*, const ColumnPtr& dict_column,
                                  const ColumnPtr& code_column, bool field_nullable, ColumnPredicate** ptr);
-    void _get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, segment_v2::ColumnIterator* iter);
-    void _get_segment_dict_vec(segment_v2::ColumnIterator* iter, ColumnPtr* dict_column, ColumnPtr* code_column,
+    void _get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, ColumnIterator* iter);
+    void _get_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column, ColumnPtr* code_column,
                                bool field_nullable);
 
     ColumnIterators& _column_iterators;

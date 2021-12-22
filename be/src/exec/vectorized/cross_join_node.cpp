@@ -10,6 +10,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -426,6 +427,13 @@ Status CrossJoinNode::close(RuntimeState* state) {
         return Status::OK();
     }
 
+    if (_build_chunk != nullptr) {
+        _build_chunk->reset();
+    }
+    if (_probe_chunk != nullptr) {
+        _probe_chunk->reset();
+    }
+
     child(0)->close(state);
     return ExecNode::close(state);
 }
@@ -477,15 +485,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
                 // merge chunks from child(1) (the right table) into a big chunk, which can reduce
                 // the complexity and time of cross-join chunks from left table with small chunks
                 // from right table.
-                size_t col_number = chunk->num_columns();
-                try {
-                    for (size_t col = 0; col < col_number; ++col) {
-                        _build_chunk->get_column_by_index(col)->append(*(chunk->get_column_by_index(col).get()), 0,
-                                                                       row_number);
-                    }
-                } catch (std::bad_alloc const&) {
-                    return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
-                }
+                TRY_CATCH_BAD_ALLOC(_build_chunk->append(*chunk));
             }
         }
     }

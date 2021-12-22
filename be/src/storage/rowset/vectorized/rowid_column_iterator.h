@@ -3,8 +3,8 @@
 #pragma once
 
 #include "gutil/casts.h"
-#include "storage/rowset/segment_v2/column_iterator.h"
-#include "storage/rowset/segment_v2/common.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/common.h"
 #include "storage/vectorized/range.h"
 #include "util/raw_container.h"
 
@@ -13,11 +13,11 @@ namespace starrocks::vectorized {
 // Instead of return a batch of column values, RowIdColumnIterator just return a batch
 // of row id when you call `next_batch`.
 // This is used for late materialization, check `SegmentIterator` for a reference.
-class RowIdColumnIterator final : public starrocks::segment_v2::ColumnIterator {
-    using ColumnIterator = starrocks::segment_v2::ColumnIterator;
-    using ColumnIteratorOptions = starrocks::segment_v2::ColumnIteratorOptions;
-    using ordinal_t = starrocks::segment_v2::ordinal_t;
-    using rowid_t = starrocks::segment_v2::rowid_t;
+class RowIdColumnIterator final : public starrocks::ColumnIterator {
+    using ColumnIterator = starrocks::ColumnIterator;
+    using ColumnIteratorOptions = starrocks::ColumnIteratorOptions;
+    using ordinal_t = starrocks::ordinal_t;
+    using rowid_t = starrocks::rowid_t;
 
 public:
     RowIdColumnIterator() {}
@@ -48,6 +48,25 @@ public:
             ptr[i] = _current_rowid + i;
         }
         _current_rowid += *n;
+        return Status::OK();
+    }
+
+    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override {
+        vectorized::SparseRangeIterator iter = range.new_iterator();
+        size_t to_read = range.span_size();
+        while (to_read > 0) {
+            _current_rowid = iter.begin();
+            vectorized::Range r = iter.next(to_read);
+            Buffer<rowid_t>& v = down_cast<FixedLengthColumn<rowid_t>*>(dst)->get_data();
+            const size_t sz = v.size();
+            raw::stl_vector_resize_uninitialized(&v, sz + r.span_size());
+            rowid_t* ptr = &v[sz];
+            for (size_t i = 0; i < r.span_size(); i++) {
+                ptr[i] = _current_rowid + i;
+            }
+            _current_rowid += r.span_size();
+            to_read -= r.span_size();
+        }
         return Status::OK();
     }
 

@@ -523,7 +523,7 @@ void FragmentMgr::cancel_worker() {
         }
         for (auto& id : to_delete) {
             cancel(id, PPlanFragmentCancelReason::TIMEOUT);
-            LOG(INFO) << "FragmentMgr cancel worker going to cancel timouet fragment " << print_id(id);
+            LOG(INFO) << "FragmentMgr cancel worker going to cancel timeout fragment " << print_id(id);
         }
 
         // check every 1 seconds

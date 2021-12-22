@@ -6,8 +6,8 @@
 
 #include "column/datum_convert.h"
 #include "storage/rowset/beta_rowset.h"
-#include "storage/rowset/segment_v2/column_iterator.h"
-#include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
 
@@ -103,7 +103,7 @@ Status MetaReader::_build_collect_context(const MetaReaderParams& read_params) {
 }
 
 Status MetaReader::_init_seg_meta_collecters(const MetaReaderParams& params) {
-    std::vector<segment_v2::SegmentSharedPtr> segments;
+    std::vector<SegmentSharedPtr> segments;
     RETURN_IF_ERROR(_get_segments(params.tablet, params.version, &segments));
 
     for (auto& segment : segments) {
@@ -118,7 +118,7 @@ Status MetaReader::_init_seg_meta_collecters(const MetaReaderParams& params) {
 }
 
 Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& version,
-                                 std::vector<segment_v2::SegmentSharedPtr>* segments) {
+                                 std::vector<SegmentSharedPtr>* segments) {
     if (tablet->updates() != nullptr) {
         LOG(INFO) << "Skipped Update tablet";
         return Status::OK();
@@ -215,7 +215,7 @@ bool MetaReader::has_more() {
     return _has_more;
 }
 
-SegmentMetaCollecter::SegmentMetaCollecter(segment_v2::SegmentSharedPtr segment) : _segment(segment) {}
+SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(segment) {}
 
 SegmentMetaCollecter::~SegmentMetaCollecter() {}
 
@@ -241,7 +241,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
                 RETURN_IF_ERROR(_segment->new_column_iterator(cid, &_column_iterators[cid]));
                 _obj_pool.add(_column_iterators[cid]);
 
-                segment_v2::ColumnIteratorOptions iter_opts;
+                ColumnIteratorOptions iter_opts;
                 iter_opts.check_dict_encoding = true;
                 iter_opts.rblock = _rblock.get();
                 iter_opts.stats = &_stats;
@@ -276,7 +276,7 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vec
 // collect dict
 Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, FieldType type) {
     if (!_column_iterators[cid]) {
-        return Status::InvalidArgument("Invalid Collet Params.");
+        return Status::InvalidArgument("Invalid Collect Params.");
     }
 
     std::vector<Slice> words;
@@ -317,14 +317,14 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Colu
     if (cid >= _segment->num_columns()) {
         return Status::NotFound("");
     }
-    const segment_v2::ColumnReader* col_reader = _segment->column(cid);
+    const ColumnReader* col_reader = _segment->column(cid);
     if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
         return Status::NotFound("");
     }
     if (col_reader->column_type() != type) {
         return Status::InternalError("column type mismatch");
     }
-    const segment_v2::ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
+    const ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
     if constexpr (!is_max) {
         vectorized::Datum min;

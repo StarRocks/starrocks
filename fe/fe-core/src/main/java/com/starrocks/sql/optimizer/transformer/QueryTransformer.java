@@ -44,25 +44,21 @@ import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTransla
 class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
-    private final ExpressionMapping outer;
-    private final Map<String, ExpressionMapping> cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
-    QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
-                     Map<String, ExpressionMapping> cteContext) {
+    public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
-        this.outer = outer;
-        this.cteContext = cteContext;
     }
 
-    public LogicalPlan plan(SelectRelation queryBlock) {
-        OptExprBuilder builder = planFrom(queryBlock.getRelation());
+    public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer,
+                            Map<String, ExpressionMapping> cteContext) {
+        OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
+        builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), builder.getFieldMappings(), outer));
 
         builder = filter(builder, queryBlock.getPredicate());
-        builder =
-                aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(), queryBlock.getGroupingSetsList(),
-                        queryBlock.getGroupingFunctionCallExprs());
+        builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),
+                queryBlock.getGroupingSetsList(), queryBlock.getGroupingFunctionCallExprs());
         builder = filter(builder, queryBlock.getHaving());
         builder = window(builder, queryBlock.getOutputAnalytic());
 
@@ -107,8 +103,8 @@ class QueryTransformer {
         return outputs;
     }
 
-    private OptExprBuilder planFrom(Relation node) {
-        return new RelationTransformer(columnRefFactory, session, outer, cteContext).visit(node).getRootBuilder();
+    private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
+        return new RelationTransformer(columnRefFactory, session, outer, cteContext).visit(node);
     }
 
     private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,
@@ -179,7 +175,7 @@ class QueryTransformer {
         subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate, cteContext);
 
         ScalarOperator scalarPredicate =
-                subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, outer, correlation);
+                subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, correlation);
 
         if (scalarPredicate != null) {
             LogicalFilterOperator filterOperator = new LogicalFilterOperator(scalarPredicate);

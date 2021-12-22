@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_COMMON_OBJECT_POOL_H
-#define STARROCKS_BE_SRC_COMMON_COMMON_OBJECT_POOL_H
+#pragma once
 
 #include <mutex>
 #include <vector>
@@ -79,5 +78,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

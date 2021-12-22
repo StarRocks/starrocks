@@ -87,6 +87,7 @@ private:
     bool _build_runtime_filters_from_planner;
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
+    TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
 
     bool _is_push_down = false;
 

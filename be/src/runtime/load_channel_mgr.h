@@ -58,17 +58,6 @@ public:
     Status cancel(const PTabletWriterCancelRequest& request);
 
 private:
-    // check if the total load mem consumption exceeds limit.
-    // If yes, it will pick several load channels to try to reduce memory consumption to limit.
-    void _handle_mem_exceed_limit(const std::shared_ptr<LoadChannel>& data_channel);
-
-    // find a load channel to reduce memory consumption
-    // 1. select the load channel that consume this batch data if limit exceeded.
-    // 2. select the largest limit exceeded load channel.
-    // 3. select the largest consumption load channel.
-    bool _find_candidate_load_channel(const std::shared_ptr<LoadChannel>& data_channel,
-                                      std::shared_ptr<LoadChannel>* candidate_channel);
-
     Status _start_bg_worker();
 
     // lock protect the load channel map

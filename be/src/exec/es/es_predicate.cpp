@@ -42,7 +42,6 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "runtime/tuple_row.h"
 #include "service/backend_options.h"
 #include "storage/olap_common.h"
 #include "storage/utils.h"
@@ -520,8 +519,8 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
             break;
         }
         default:
-            DCHECK(false) << "unsupport type:" << expr->type().type;
-            return Status::InternalError("unsupport type to push down to ES");
+            DCHECK(false) << "unsupported type:" << expr->type().type;
+            return Status::InternalError("unsupported type to push down to ES");
         }
 
         std::string col = slot_desc->col_name();

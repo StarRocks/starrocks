@@ -54,7 +54,7 @@ public:
     /**
      * @param: 
      * @paramType columns: [TYPE_OBJECT]
-     * @return TYPE_VARCHA
+     * @return TYPE_VARCHAR
      */
     DEFINE_VECTORIZED_FN(bitmap_to_string);
 

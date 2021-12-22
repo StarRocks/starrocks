@@ -40,7 +40,6 @@
 #include "runtime/global_dicts.h"
 #include "util/bitmap.h"
 #include "util/ref_count_closure.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
@@ -48,7 +47,6 @@ class Bitmap;
 class MemTracker;
 class RuntimeProfile;
 class RowDescriptor;
-class Tuple;
 class TupleDescriptor;
 class ExprContext;
 class TExpr;
@@ -350,7 +348,6 @@ private:
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;
-    OlapTablePartitionParam* _partition = nullptr;
     OlapTableLocationParam* _location = nullptr;
     StarRocksNodesInfo* _nodes_info = nullptr;
 
