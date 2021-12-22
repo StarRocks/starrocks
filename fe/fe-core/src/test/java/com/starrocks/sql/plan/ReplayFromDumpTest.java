@@ -323,4 +323,14 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("24:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
     }
+
+    @Test
+    public void test() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("  12:Decode\n" +
+                "  |  <dict id 42> : <string id 18>"));
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
+    }
 }
