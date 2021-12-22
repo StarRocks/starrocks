@@ -94,21 +94,22 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
     private final ConnectContext session;
 
     private final ExpressionMapping outer;
-    public Map<String, ExpressionMapping> cteContext = new HashMap<>();
+    private final Map<String, ExpressionMapping> cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.outer = new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
+        this.cteContext = new HashMap<>();
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
                                Map<String, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
-        this.outer = outer;
         this.cteContext = cteContext;
+        this.outer = outer;
     }
 
     public LogicalPlan transform(Relation relation) {
@@ -143,8 +144,9 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
             LogicalCTEAnchorOperator anchorOperator = new LogicalCTEAnchorOperator(cteRelation.getCteId());
             LogicalCTEProduceOperator produceOperator = new LogicalCTEProduceOperator(cteRelation.getCteId());
             LogicalPlan producerPlan =
-                    new RelationTransformer(columnRefFactory, session, null, cteContext).transform(
-                            cteRelation.getCteQuery());
+                    new RelationTransformer(columnRefFactory, session,
+                            new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                            cteContext).transform(cteRelation.getCteQuery());
             OptExprBuilder produceOptBuilder =
                     new OptExprBuilder(produceOperator, Lists.newArrayList(producerPlan.getRootBuilder()),
                             producerPlan.getRootBuilder().getExpressionMapping());
@@ -174,7 +176,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session).plan(node, outer, cteContext);
+        return new QueryTransformer(columnRefFactory, session, cteContext).plan(node, outer);
     }
 
     @Override
@@ -290,7 +292,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
     @Override
     public LogicalPlan visitValues(ValuesRelation node, ExpressionMapping context) {
-        return new ValuesTransformer(columnRefFactory, session).plan(node);
+        return new ValuesTransformer(columnRefFactory, session, cteContext).plan(node);
     }
 
     @Override

@@ -14,6 +14,8 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.analyzer.relation.SelectRelation;
@@ -45,14 +47,16 @@ class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
+    private final Map<String, ExpressionMapping> cteContext;
 
-    public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
+    public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
+                            Map<String, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
+        this.cteContext = cteContext;
     }
 
-    public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer,
-                            Map<String, ExpressionMapping> cteContext) {
+    public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
         OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
         builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), builder.getFieldMappings(), outer));
 
@@ -104,7 +108,12 @@ class QueryTransformer {
     }
 
     private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
-        return new RelationTransformer(columnRefFactory, session, outer, cteContext).visit(node);
+        // This must be a copy of the context, because the new Relation may contain cte with the same name,
+        // and the internal cte with the same name will overwrite the original mapping
+        Map<String, ExpressionMapping> newCTEContext = Maps.newHashMap(cteContext);
+        return new RelationTransformer(columnRefFactory, session,
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCTEContext).visit(
+                node).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,

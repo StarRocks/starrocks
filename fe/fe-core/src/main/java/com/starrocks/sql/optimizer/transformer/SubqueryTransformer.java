@@ -228,9 +228,9 @@ public class SubqueryTransformer {
             } else if (CompoundPredicate.Operator.AND == node.getOp()) {
                 // And Scope extend from parents
                 builder = node.getChild(0)
-                        .accept(this, new SubqueryContext(builder, context.useSemiAnti));
+                        .accept(this, new SubqueryContext(builder, context.useSemiAnti, context.cteContext));
                 builder = node.getChild(1)
-                        .accept(this, new SubqueryContext(builder, context.useSemiAnti));
+                        .accept(this, new SubqueryContext(builder, context.useSemiAnti, context.cteContext));
             } else {
                 builder = node.getChild(0).accept(this, new SubqueryContext(builder, false, context.cteContext));
             }
