@@ -21,7 +21,7 @@ class Chunk {
 public:
     using ChunkPtr = std::shared_ptr<Chunk>;
     using SlotHashMap = phmap::flat_hash_map<SlotId, size_t, StdHash<SlotId>>;
-    using CidHashMap = phmap::flat_hash_map<ColumnId, size_t, StdHash<SlotId>>;
+    using ColumnIdHashMap = phmap::flat_hash_map<ColumnId, size_t, StdHash<SlotId>>;
     using TupleHashMap = phmap::flat_hash_map<TupleId, size_t, StdHash<TupleId>>;
 
     Chunk();
@@ -252,7 +252,7 @@ private:
 
     Columns _columns;
     std::shared_ptr<Schema> _schema;
-    CidHashMap _cid_to_index;
+    ColumnIdHashMap _cid_to_index;
     // For compatibility
     SlotHashMap _slot_id_to_index;
     TupleHashMap _tuple_id_to_index;
