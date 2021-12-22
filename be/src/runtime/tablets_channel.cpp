@@ -209,9 +209,9 @@ Status TabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
         return Status::InternalError("pb_chunk meta could not be empty");
     }
 
-    _chunk_meta.slot_id_to_index.init(pb_chunk.slot_id_map().size());
+    _chunk_meta.slot_id_to_index.reserve(pb_chunk.slot_id_map().size());
     for (int i = 0; i < pb_chunk.slot_id_map().size(); i += 2) {
-        _chunk_meta.slot_id_to_index.insert(pb_chunk.slot_id_map()[i], pb_chunk.slot_id_map()[i + 1]);
+        _chunk_meta.slot_id_to_index[pb_chunk.slot_id_map()[i]] = pb_chunk.slot_id_map()[i + 1];
     }
 
     _chunk_meta.is_nulls.resize(pb_chunk.is_nulls().size());

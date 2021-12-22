@@ -212,13 +212,17 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
         tls_thread_status.set_mem_tracker(prev_tracker);
         _running_threads.fetch_sub(1, std::memory_order_release);
     });
-
     tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
 
     Status status = scanner->open(_runtime_state);
     if (!status.ok()) {
         QUERY_LOG_IF(ERROR, !status.is_end_of_file()) << status;
         _update_status(status);
+    } else {
+        status = scanner->runtime_state()->check_mem_limit("olap scanner");
+        if (!status.ok()) {
+            _update_status(status);
+        }
     }
     scanner->set_keep_priority(false);
     // Because we use thread pool to scan data from storage. One scanner can't
