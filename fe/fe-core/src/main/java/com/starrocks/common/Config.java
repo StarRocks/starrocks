@@ -525,7 +525,7 @@ public class Config extends ConfigBase {
      * TODO this parameter is the default value for all job and the DBA could specify it for separate job
      */
     @ConfField(mutable = true)
-    public static int load_straggler_wait_second = 10;
+    public static int load_straggler_wait_second = 300;
 
     /**
      * The load scheduler running interval.
@@ -1240,7 +1240,7 @@ public class Config extends ConfigBase {
      * Used to limit num of partition for one batch partition clause
      */
     @ConfField(mutable = true)
-    public static long max_partitions_in_one_batch = 40960;
+    public static long max_partitions_in_one_batch = 4096;
 
     /**
      * num of thread to handle hive meta load concurrency.
