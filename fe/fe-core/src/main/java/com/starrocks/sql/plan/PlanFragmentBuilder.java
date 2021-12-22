@@ -936,7 +936,7 @@ public class PlanFragmentBuilder {
                 aggregationNode =
                         new AggregationNode(context.getPlanCtx().getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
-                aggregationNode.setIsPreagg(context.getPlanCtx());
+                aggregationNode.setIsPreagg(node.isUseStreamingPreAgg());
                 aggregationNode.setIntermediateTuple();
 
                 if (!partitionExpressions.isEmpty()) {
@@ -1023,7 +1023,7 @@ public class PlanFragmentBuilder {
                 aggregationNode =
                         new AggregationNode(context.getPlanCtx().getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
-                aggregationNode.setIsPreagg(context.getPlanCtx());
+                aggregationNode.setIsPreagg(node.isUseStreamingPreAgg());
                 aggregationNode.setIntermediateTuple();
             } else {
                 throw unsupportedException("Not support aggregate type : " + node.getType());
