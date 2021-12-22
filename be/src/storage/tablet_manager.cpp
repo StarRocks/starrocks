@@ -1135,10 +1135,9 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                 if (old_name == column.column_name) {
                     uint32_t old_unique_id = base_tablet->tablet_schema().column(old_col_idx).unique_id();
                     col_idx_to_unique_id[new_col_idx] = old_unique_id;
-                    // schema change for default value may query meta for historical data
-                    // if meta of default_value is changed the history data will also be changed,
-                    // so we refuse to modify history default value to ensure that historical
-                    // data will not be modified.
+                    // During linked schema change, the now() default value is stored in TabletMeta.
+                    // When receiving a new schema change request, the last default value stored should be
+                    // remained instead of changing.
                     if (base_tablet->tablet_schema().column(old_col_idx).has_default_value()) {
                         norm_request.tablet_schema.columns[new_col_idx].__set_default_value(
                                 base_tablet->tablet_schema().column(old_col_idx).default_value());

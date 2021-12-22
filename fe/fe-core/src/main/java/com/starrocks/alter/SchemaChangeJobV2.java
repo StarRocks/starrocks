@@ -259,7 +259,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                         if (defaultValueType == Column.DefaultValueType.CONST) {
                             Column copiedColumn = new Column(column);
-                            copiedColumn.setDefaultValue(column.getCalculatedDefaultValueWithTime(startTime));
+                            copiedColumn.setDefaultValue(column.calculatedDefaultValueWithTime(startTime));
                             copiedShadowSchema.add(copiedColumn);
                         } else {
                             copiedShadowSchema.add(column);

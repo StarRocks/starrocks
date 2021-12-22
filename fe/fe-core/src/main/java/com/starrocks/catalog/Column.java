@@ -451,7 +451,9 @@ public class Column implements Writable {
     // if the column have a default value or default expr can be calculated like now(). return calculated value
     // else for a batch of every row different like uuid(). return null
     // consistency requires ConnectContext.get() != null to assurance
-    public String getCalculatedDefaultValue() {
+    // This function is only used to a const default value like "-1" or now().
+    // If the default value is uuid(), this function is not suitable.
+    public String calculatedDefaultValue() {
         if (defaultValue != null) {
             return defaultValue;
         }
@@ -473,7 +475,9 @@ public class Column implements Writable {
     // else for a batch of every row different like uuid(). return null
     // require specify currentTimestamp. this will get the default value of the incoming time
     // base on the incoming time
-    public String getCalculatedDefaultValueWithTime(long currentTimestamp) {
+    // This function is only used to a const default value like "-1" or now().
+    // If the default value is uuid(), this function is not suitable.
+    public String calculatedDefaultValueWithTime(long currentTimestamp) {
         if (defaultValue != null) {
             return defaultValue;
         }

@@ -652,7 +652,7 @@ public class InsertStmt extends DdlStmt {
                     throw new AnalysisException(
                             "Column has no default value, column=" + column.getName());
                 } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                    expr = new StringLiteral(column.getCalculatedDefaultValue());
+                    expr = new StringLiteral(column.calculatedDefaultValue());
                 } else if (defaultValueType == Column.DefaultValueType.VARY) {
                     throw new AnalysisException("unsupported default value=" +
                             column.getDefaultExpr().getExpr() + ", column=" + column.getName());
@@ -758,7 +758,7 @@ public class InsertStmt extends DdlStmt {
                     resultExprs.add(NullLiteral.create(col.getType()));
                 } else if (defaultValueType == Column.DefaultValueType.CONST){
                     resultExprs.add(checkTypeCompatibility(col,
-                            new StringLiteral(col.getCalculatedDefaultValue())));
+                            new StringLiteral(col.calculatedDefaultValue())));
                 } else if (defaultValueType == Column.DefaultValueType.VARY) {
                     throw new AnalysisException("Column " + col.getName() + " has unsupported default value:" +
                             col.getDefaultExpr().getExpr());
