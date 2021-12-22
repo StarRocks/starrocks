@@ -1890,10 +1890,15 @@ public class Coordinator {
                 }
                 params.params.setInstances_number(hostToNumbers.get(instanceExecParams.get(i).host));
                 // For broker load, the ConnectContext.get() is null
-                if (ConnectContext.get() != null &&
-                        ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-                    params.setIs_pipeline(
-                            fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                if (ConnectContext.get() != null) {
+                    SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+                    if (sessionVariable.isEnablePipelineEngine()) {
+                        params.setIs_pipeline(
+                                fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                    }
+                    if (sessionVariable.isEnableExchangePassThrough()) {
+                        params.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
+                    }
                 }
                 paramsList.add(params);
             }

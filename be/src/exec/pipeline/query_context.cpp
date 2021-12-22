@@ -2,15 +2,23 @@
 #include "exec/pipeline/query_context.h"
 
 #include "exec/pipeline/fragment_context.h"
+#include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 QueryContext::QueryContext()
-        : _fragment_mgr(new FragmentContextManager()), _num_fragments(0), _num_active_fragments(0) {}
+        : _fragment_mgr(new FragmentContextManager()),
+          _total_fragments(0),
+          _num_fragments(0),
+          _num_active_fragments(0),
+          _deadline(0) {}
 
 QueryContext::~QueryContext() {
-    if (_is_runtime_filter_coordinator) {
-        _exec_env->runtime_filter_worker()->close_query(_query_id);
+    if (_exec_env != nullptr) {
+        if (_is_runtime_filter_coordinator) {
+            _exec_env->runtime_filter_worker()->close_query(_query_id);
+        }
+        _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
     }
 }
 FragmentContextManager* QueryContext::fragment_mgr() {
