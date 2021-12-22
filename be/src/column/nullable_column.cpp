@@ -238,15 +238,16 @@ void NullableColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size
     }
 }
 
-uint8_t* NullableColumn::serialize_column(uint8_t* dst) {
-    dst = _null_column->serialize_column(dst);
-    return _data_column->serialize_column(dst);
+bool NullableColumn::serialize_column(io::ZeroCopyOutputStream* out) {
+    if (!_null_column->serialize_column(out)) return false;
+    if (!_data_column->serialize_column(out)) return false;
+    return true;
 }
 
-const uint8_t* NullableColumn::deserialize_column(const uint8_t* src) {
-    src = _null_column->deserialize_column(src);
-    _has_null = SIMD::count_nonzero(_null_column->get_data());
-    return _data_column->deserialize_column(src);
+bool NullableColumn::deserialize_column(io::ZeroCopyInputStream* in) {
+    if (!_null_column->deserialize_column(in)) return false;
+    if (!_data_column->deserialize_column(in)) return false;
+    return true;
 }
 
 // Note: the hash function should be same with RawValue::get_hash_value_fvn

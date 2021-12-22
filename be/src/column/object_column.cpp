@@ -166,34 +166,35 @@ size_t ObjectColumn<T>::serialize_size() const {
 }
 
 template <typename T>
-uint8_t* ObjectColumn<T>::serialize_column(uint8_t* dst) {
-    encode_fixed32_le(dst, _pool.size());
-    dst += sizeof(uint32_t);
-
+bool ObjectColumn<T>::serialize_column(io::ZeroCopyOutputStream* out) {
+    io::CodedOutputStream os(out);
+    os.WriteLittleEndian32(static_cast<uint32_t>(_pool.size()));
     for (int i = 0; i < _pool.size(); ++i) {
-        uint64_t actual = _pool[i].serialize(dst + sizeof(uint64_t));
-        encode_fixed64_le(dst, actual);
-
-        dst += sizeof(uint64_t);
-        dst += actual;
+        auto size = _pool[i].serialize_size();
+        std::unique_ptr<uint8_t[]> buff(new uint8_t[size]); // TODO: fixme
+        uint64_t actual_size = _pool[i].serialize(buff.get());
+        os.WriteLittleEndian64(actual_size);
+        os.WriteRaw(buff.get(), static_cast<int>(actual_size));
     }
-    return dst;
+    return !os.HadError();
 }
 
 template <typename T>
-const uint8_t* ObjectColumn<T>::deserialize_column(const uint8_t* src) {
-    uint32_t count = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
+bool ObjectColumn<T>::deserialize_column(io::ZeroCopyInputStream* in) {
+    io::CodedInputStream is(in);
+    uint32_t count{};
+    if (!is.ReadLittleEndian32(&count)) return false;
     for (int i = 0; i < count; ++i) {
-        uint64_t size = decode_fixed64_le(src);
-        src += sizeof(uint64_t);
-
-        _pool.emplace_back(Slice(src, size));
-        src += size;
+        uint64_t size{};
+        if (!is.ReadLittleEndian64(&size)) return false;
+        const void* buff;
+        int buff_size{};
+        if (!is.GetDirectBufferPointer(&buff, &buff_size)) return false;
+        if (buff_size < size) return false;
+        _pool.emplace_back(Slice(static_cast<const uint8_t*>(buff), size));
+        if (!is.Skip(size)) return false;
     }
-
-    return src;
+    return true;
 }
 
 template <typename T>

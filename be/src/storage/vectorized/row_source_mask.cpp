@@ -113,13 +113,11 @@ Status RowSourceMaskBuffer::_serialize_masks() {
         PLOG(WARNING) << "fail to write masks size to mask file. write size=" << w_size;
         return Status::InternalError("fail to write masks size to mask file");
     }
-
-    string content;
-    content.resize(content_size);
-    _mask_column->serialize_column((uint8_t*)(content.data()));
-    w_size = ::write(_tmp_file_fd, content.data(), content_size);
-    if (w_size != content_size) {
-        PLOG(WARNING) << "fail to write masks to mask file. write size=" << w_size;
+    io::FileOutputStream os(_tmp_file_fd);
+    if (!_mask_column->serialize_column(&os)) {
+        return Status::InternalError("column serialization failed");
+    }
+    if (!os.Flush()) {
         return Status::InternalError("fail to write masks to mask file");
     }
     return Status::OK();
@@ -142,7 +140,10 @@ Status RowSourceMaskBuffer::_deserialize_masks() {
         PLOG(WARNING) << "fail to read masks from mask file. read size=" << r_size;
         return Status::InternalError("fail to read masks from mask file");
     }
-    _mask_column->deserialize_column((uint8_t*)(content.data()));
+    io::ArrayInputStream is(content.data(), static_cast<int>(content.size()));
+    if (!_mask_column->deserialize_column(&is)) {
+        return Status::InternalError("fail to read masks from mask file");
+    }
     return Status::OK();
 }
 

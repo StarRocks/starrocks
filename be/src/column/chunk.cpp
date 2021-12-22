@@ -138,22 +138,19 @@ size_t Chunk::serialize_size() const {
     return size;
 }
 
-size_t Chunk::serialize(uint8_t* dst) const {
-    uint8_t* head = dst;
+bool Chunk::serialize(io::ZeroCopyOutputStream* out) const {
     uint32_t version = 1;
-    encode_fixed32_le(dst, version);
-    dst += sizeof(uint32_t);
-
-    encode_fixed32_le(dst, num_rows());
-    dst += sizeof(uint32_t);
-
+    io::CodedOutputStream os(out);
+    os.WriteLittleEndian32(version);
+    os.WriteLittleEndian32(num_rows());
+    os.Trim();
     for (const auto& column : _columns) {
-        dst = column->serialize_column(dst);
+        if (!column->serialize_column(out)) return false;
     }
-    return dst - head;
+    return true;
 }
 
-size_t Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
+bool Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
     chunk->clear_slot_id_map();
     chunk->mutable_slot_id_map()->Reserve(static_cast<int>(_slot_id_to_index.size()) * 2);
     for (const auto& kv : _slot_id_to_index) {
@@ -184,30 +181,34 @@ size_t Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
 
     size_t size = serialize_size();
     chunk->mutable_data()->resize(size);
-    size_t written_size = serialize((uint8_t*)chunk->mutable_data()->data());
-    chunk->set_serialized_size(written_size);
+    io::ArrayOutputStream os(chunk->mutable_data()->data(), static_cast<int>(size));
+    if (!serialize(&os)) return false;
+    chunk->mutable_data()->resize(os.ByteCount());
+    chunk->set_serialized_size(os.ByteCount());
     return size;
 }
 
-Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta, size_t serialized_size) {
+bool Chunk::deserialize(io::ZeroCopyInputStream* in, const RuntimeChunkMeta& meta) {
     _slot_id_to_index = meta.slot_id_to_index;
     _tuple_id_to_index = meta.tuple_id_to_index;
     _columns.resize(_slot_id_to_index.size() + _tuple_id_to_index.size());
 
-    const uint8_t* head = src;
-    uint32_t version = decode_fixed32_le(src);
-    DCHECK_EQ(version, 1);
-    src += sizeof(uint32_t);
+    uint32_t version{};
+    uint32_t rows{};
 
-    size_t rows = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
+    {
+        io::CodedInputStream is(in);
+        if (!is.ReadLittleEndian32(&version)) return false;
+        if (version != 1) return false;
+        if (!is.ReadLittleEndian32(&rows)) return false;
+    }
 
     for (size_t i = 0; i < meta.is_nulls.size(); ++i) {
         _columns[i] = ColumnHelper::create_column(meta.types[i], meta.is_nulls[i], meta.is_consts[i], rows);
     }
 
     for (const auto& column : _columns) {
-        src = column->deserialize_column(src);
+        if (!column->deserialize_column(in)) return false;
     }
 
     // The logic is a bit confusing here.
@@ -219,17 +220,17 @@ Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta
     // We compare "real" serialized size first. It may fails because of backward compatibility. For old version of BE,
     // there is no "serialized_size" this field(which means the value is zero), and we fallback to compare "estimated" serialized size.
     // And for new version of BE, the "real" serialized size always matches, and we can save the cost of calling `serialzied_size`.
-    size_t read_size = src - head;
-    if (UNLIKELY(read_size != serialized_size)) {
-        size_t expected = serialize_size();
-        if (UNLIKELY(len != expected)) {
-            return Status::InternalError(strings::Substitute(
-                    "deserialize chunk data failed. len: $0, expected: $1, ser_size: $2, deser_size: $3", len, expected,
-                    serialized_size, read_size));
-        }
-    }
+    //    size_t read_size = src - head;
+    //    if (UNLIKELY(read_size != serialized_size)) {
+    //        size_t expected = serialize_size();
+    //        if (UNLIKELY(len != expected)) {
+    //            return Status::InternalError(strings::Substitute(
+    //                    "deserialize chunk data failed. len: $0, expected: $1, ser_size: $2, deser_size: $3", len, expected,
+    //                    serialized_size, read_size));
+    //        }
+    //    }
     DCHECK_EQ(rows, num_rows());
-    return Status::OK();
+    return true;
 }
 
 std::unique_ptr<Chunk> Chunk::clone_empty() const {

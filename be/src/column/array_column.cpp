@@ -192,16 +192,16 @@ size_t ArrayColumn::serialize_size() const {
     return _offsets->serialize_size() + _elements->serialize_size();
 }
 
-uint8_t* ArrayColumn::serialize_column(uint8_t* dst) {
-    dst = _offsets->serialize_column(dst);
-    dst = _elements->serialize_column(dst);
-    return dst;
+bool ArrayColumn::serialize_column(io::ZeroCopyOutputStream* out) {
+    RETURN_IF(!_offsets->serialize_column(out), false);
+    RETURN_IF(!_elements->serialize_column(out), false);
+    return true;
 }
 
-const uint8_t* ArrayColumn::deserialize_column(const uint8_t* src) {
-    src = _offsets->deserialize_column(src);
-    src = _elements->deserialize_column(src);
-    return src;
+bool ArrayColumn::deserialize_column(io::ZeroCopyInputStream* in) {
+    RETURN_IF(!_offsets->deserialize_column(in), false);
+    RETURN_IF(!_elements->deserialize_column(in), false);
+    return true;
 }
 
 MutableColumnPtr ArrayColumn::clone_empty() const {

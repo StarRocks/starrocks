@@ -689,16 +689,21 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
         dst->set_compress_type(CompressionTypePB::NO_COMPRESSION);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            uncompressed_size = src->serialize_with_meta(dst);
+            if (!src->serialize_with_meta(dst)) {
+                return Status::InternalError("chunk serialization failed");
+            }
             *is_first_chunk = false;
         } else {
             dst->clear_is_nulls();
             dst->clear_is_consts();
             dst->clear_slot_id_map();
             uncompressed_size = src->serialize_size();
-            // TODO(kks): resize without initializing the new bytes
-            dst->mutable_data()->resize(uncompressed_size);
-            src->serialize((uint8_t*)dst->mutable_data()->data());
+            std::string* data = dst->mutable_data();
+            raw::stl_string_resize_uninitialized(data, uncompressed_size);
+            io::ArrayOutputStream os(data->data(), static_cast<int>(uncompressed_size));
+            if (!src->serialize(&os)) {
+                return Status::InternalError("chunk serialization failed");
+            }
         }
     }
 

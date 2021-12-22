@@ -114,9 +114,9 @@ public:
 
     size_t serialize_size() const override;
 
-    uint8_t* serialize_column(uint8_t* dst) override;
+    bool serialize_column(io::ZeroCopyOutputStream* out) override;
 
-    const uint8_t* deserialize_column(const uint8_t* src) override;
+    bool deserialize_column(io::ZeroCopyInputStream* in) override;
 
     MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
 

@@ -5,6 +5,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "gutil/casts.h"
+#include "io/zero_copy_stream.h"
 #include "runtime/large_int_value.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
@@ -167,25 +168,22 @@ void FixedLengthColumnBase<T>::deserialize_and_append_batch(std::vector<Slice>& 
 }
 
 template <typename T>
-uint8_t* FixedLengthColumnBase<T>::serialize_column(uint8_t* dst) {
+bool FixedLengthColumnBase<T>::serialize_column(io::ZeroCopyOutputStream* out) {
     uint32_t size = byte_size();
-    encode_fixed32_le(dst, size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _data.data(), size);
-    dst += size;
-    return dst;
+    io::CodedOutputStream os(out);
+    os.WriteLittleEndian32(size);
+    os.WriteRaw(_data.data(), static_cast<int>(size));
+    return !os.HadError();
 }
 
 template <typename T>
-const uint8_t* FixedLengthColumnBase<T>::deserialize_column(const uint8_t* src) {
-    uint32_t size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
+bool FixedLengthColumnBase<T>::deserialize_column(io::ZeroCopyInputStream* in) {
+    uint32_t size{};
+    io::CodedInputStream is(in);
+    if (!is.ReadLittleEndian32(&size)) return false;
     raw::make_room(&_data, size / sizeof(ValueType));
-    strings::memcpy_inlined(_data.data(), src, size);
-    src += size;
-    return src;
+    if (!is.ReadRaw(_data.data(), static_cast<int>(size))) return false;
+    return true;
 }
 
 template <typename T>

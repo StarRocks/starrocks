@@ -151,14 +151,9 @@ public:
     // The serialize bytes size when serialize by directly copy whole column data
     size_t serialize_size() const override;
 
-    // Serialize whole column data to dst
-    // The return value is dst + column serialize_size
-    uint8_t* serialize_column(uint8_t* dst) override;
+    bool serialize_column(io::ZeroCopyOutputStream* out) override;
 
-    // Deserialize whole column from the src
-    // The return value is src + column serialize_size
-    // TODO(kks): validate the input src column data
-    const uint8_t* deserialize_column(const uint8_t* src) override;
+    bool deserialize_column(io::ZeroCopyInputStream* in) override;
 
     // return new empty column with the same type
     MutableColumnPtr clone_empty() const override;

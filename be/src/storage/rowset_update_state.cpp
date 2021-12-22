@@ -52,7 +52,11 @@ Status RowsetUpdateState::_do_load(Rowset* rowset) {
         Slice read_slice(read_buffer);
         rblock->read(0, read_slice);
         auto col = pk_column->clone();
-        col->deserialize_column((uint8_t*)(read_buffer.data()));
+        // TODO: using FileInputStream
+        io::ArrayInputStream is(read_buffer.data(), read_buffer.size());
+        if (!col->deserialize_column(&is)) {
+            return Status::InternalError("column deserialization failed");
+        }
         _deletes.emplace_back(std::move(col));
     }
 

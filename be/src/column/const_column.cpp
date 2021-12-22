@@ -57,18 +57,21 @@ int ConstColumn::compare_at(size_t left, size_t right, const Column& rhs, int na
     return _data->compare_at(0, 0, *rhs_data, nan_direction_hint);
 }
 
-uint8_t* ConstColumn::serialize_column(uint8_t* dst) {
-    encode_fixed64_le(dst, _size);
-    dst += sizeof(size_t);
-
-    return _data->serialize_column(dst);
+bool ConstColumn::serialize_column(io::ZeroCopyOutputStream* out) {
+    {
+        io::CodedOutputStream os(out);
+        os.WriteLittleEndian64(_size);
+        if (os.HadError()) return false;
+    }
+    return _data->serialize_column(out);
 }
 
-const uint8_t* ConstColumn::deserialize_column(const uint8_t* src) {
-    _size = decode_fixed64_le(src);
-    src += sizeof(size_t);
-
-    return _data->deserialize_column(src);
+bool ConstColumn::deserialize_column(io::ZeroCopyInputStream* in) {
+    {
+        io::CodedInputStream is(in);
+        if (!is.ReadLittleEndian64(&_size)) return false;
+    }
+    return _data->deserialize_column(in);
 }
 
 } // namespace starrocks::vectorized

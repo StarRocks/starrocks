@@ -462,7 +462,9 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         dst->set_compress_type(CompressionTypePB::NO_COMPRESSION);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            uncompressed_size = src->serialize_with_meta(dst);
+            if (!src->serialize_with_meta(dst)) {
+                return Status::InternalError("chunk serialization failed");
+            }
             *is_first_chunk = false;
         } else {
             dst->clear_is_nulls();
@@ -471,8 +473,11 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
             uncompressed_size = src->serialize_size();
             // TODO(kks): resize without initializing the new bytes
             dst->mutable_data()->resize(uncompressed_size);
-            size_t written_size = src->serialize((uint8_t*)dst->mutable_data()->data());
-            dst->set_serialized_size(written_size);
+            io::ArrayOutputStream os(dst->mutable_data()->data(), static_cast<int>(uncompressed_size));
+            if (!src->serialize(&os)) {
+                return Status::InternalError("chunk serialization failed");
+            }
+            dst->set_serialized_size(os.ByteCount());
         }
     }
 
