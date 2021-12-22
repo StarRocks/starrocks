@@ -703,7 +703,7 @@ public class ExpressionAnalyzer {
             QueryAnalyzer queryAnalyzer = new QueryAnalyzer(catalog, session);
             QueryRelation queryBlock = queryAnalyzer.transformQueryStmt(stmt, context);
             node.setQueryBlock(queryBlock);
-            node.setType(queryBlock.getOutputExpr().get(0).getType());
+            node.setType(queryBlock.getRelationFields().getFieldByIndex(0).getType());
             return null;
         }
 

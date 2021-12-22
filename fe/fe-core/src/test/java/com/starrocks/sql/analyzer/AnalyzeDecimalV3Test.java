@@ -17,6 +17,7 @@ import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
 import com.starrocks.sql.analyzer.relation.SelectRelation;
+import com.starrocks.sql.analyzer.relation.ValuesRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -108,7 +109,7 @@ public class AnalyzeDecimalV3Test {
                 "limit 10;";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
         Assert.assertTrue(items.size() == 2 && items.get(1) != null);
         Type type = items.get(1).getType();
         Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2));
@@ -125,7 +126,7 @@ public class AnalyzeDecimalV3Test {
                 "limit 10;";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
         Assert.assertTrue(items.size() == 2 && items.get(1) != null);
         Type type = items.get(1).getType();
@@ -142,7 +143,7 @@ public class AnalyzeDecimalV3Test {
                 "limit 10;\n";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
         Assert.assertTrue(items.size() == 1 && items.get(0) != null);
         Type type = items.get(0).getType();
@@ -159,7 +160,7 @@ public class AnalyzeDecimalV3Test {
                 "limit 10;\n";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
         Assert.assertTrue(items.size() == 1 && items.get(0) != null);
         Type type = items.get(0).getType();
@@ -182,7 +183,7 @@ public class AnalyzeDecimalV3Test {
                 "from db1.decimal_table\n";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
         Type[] expectTypes = Arrays.asList(
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
@@ -226,7 +227,7 @@ public class AnalyzeDecimalV3Test {
                 "from db1.decimal_table\n";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
         Type[] expectArgTypes = Arrays.asList(
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
@@ -277,7 +278,7 @@ public class AnalyzeDecimalV3Test {
                 "from db1.decimal_table\n";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
         Assert.assertTrue(items.get(0).getType().isStringType());
     }
@@ -293,7 +294,7 @@ public class AnalyzeDecimalV3Test {
                 "from db1.decimal_table\n";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
         Assert.assertTrue(items.get(0).getType().isStringType());
         Assert.assertTrue(items.get(1).getType().isStringType());
@@ -311,7 +312,7 @@ public class AnalyzeDecimalV3Test {
                 "from db1.decimal_table\n";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
         Assert.assertTrue(items.get(0).getType().isFloatingPointType());
         Assert.assertTrue(items.get(1).getType().isFloatingPointType());
@@ -347,7 +348,7 @@ public class AnalyzeDecimalV3Test {
                 "from db1.decimal_table";
 
         QueryRelation queryRelation = analyzeSuccess(sql1);
-        List<Expr> items = queryRelation.getOutputExpr();
+        List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
         ScalarType targetDecimal32Type = ScalarType.createDecimalV3Type(
                 PrimitiveType.DECIMAL32, 7, 4);
@@ -797,7 +798,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
-            List<Expr> items = queryRelation.getOutputExpr();
+            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
             Assert.assertEquals(items.size(), 24);
             Type decimal128p38s9 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
@@ -824,7 +825,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
-            List<Expr> items = queryRelation.getOutputExpr();
+            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
@@ -850,7 +851,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
-            List<Expr> items = queryRelation.getOutputExpr();
+            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
             Assert.assertEquals(items.get(0).getType(), Type.BIGINT);
         }
     }
@@ -869,7 +870,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
-            List<Expr> items = queryRelation.getOutputExpr();
+            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
             Assert.assertEquals(items.get(0).getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 9));
             Assert.assertEquals(items.get(1).getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10));
@@ -893,7 +894,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             QueryRelation queryRelation = analyzeSuccess(sql);
-            List<Expr> items = queryRelation.getOutputExpr();
+            List<Expr> items = ((ValuesRelation) queryRelation).getOutputExpr();
             Assert.assertEquals(items.get(0).getType(), ScalarType.DOUBLE);
             Assert.assertEquals(items.get(1).getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));

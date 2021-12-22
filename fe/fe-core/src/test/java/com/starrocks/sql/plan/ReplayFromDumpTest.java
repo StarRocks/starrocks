@@ -173,13 +173,13 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds02"));
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
-        Assert.assertTrue(replayPair.second.contains("|----24:EXCHANGE\n" +
+        Assert.assertTrue(replayPair.second.contains("  |----24:EXCHANGE\n" +
                 "  |       cardinality: 73049\n" +
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      [143, INT, true] | [164, DECIMAL64(7,2), true]\n" +
-                "  |      [179, INT, true] | [200, DECIMAL64(7,2), true]\n"));
+                "  |      [177, INT, true] | [198, DECIMAL64(7,2), true]"));
     }
 
     @Test

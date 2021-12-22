@@ -42,7 +42,7 @@ UNION
     VALUES (1,2)
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:4: v1 | 5: v2
+OUTPUT EXPRS:6: v1 | 7: v2
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -86,27 +86,27 @@ RANDOM
 1:OlapScanNode
 TABLE: t0
 PREAGGREGATION: ON
-partitions=1/1
-rollup: t0
-tabletRatio=3/3
-tabletList=10006,10008,10010
-cardinality=1
-avgRowSize=2.0
-numNodes=0
+    partitions=1/1
+    rollup: t0
+    tabletRatio=3/3
+    tabletList=10006,10008,10010
+    cardinality=1
+    avgRowSize=2.0
+    numNodes=0
 [end]
 
 [sql]
 select v1,v2 from t0 union select 1,2
 [result]
-AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: v1, 5: v2]] having [null]
-    EXCHANGE SHUFFLE[4, 5]
-        AGGREGATE ([LOCAL] aggregate [{}] group by [[4: v1, 5: v2]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[6: v1, 7: v2]] having [null]
+    EXCHANGE SHUFFLE[6, 7]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[6: v1, 7: v2]] having [null]
             UNION
                 SCAN (columns[1: v1, 2: v2] predicate[null])
                 VALUES (1,2)
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:4: v1 | 5: v2
+OUTPUT EXPRS:6: v1 | 7: v2
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -115,14 +115,14 @@ RESULT SINK
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 4: v1, 5: v2
+PARTITION: HASH_PARTITIONED: 6: v1, 7: v2
 
 STREAM DATA SINK
 EXCHANGE ID: 08
 UNPARTITIONED
 
 7:AGGREGATE (merge finalize)
-|  group by: 4: v1, 5: v2
+|  group by: 6: v1, 7: v2
 |
 6:EXCHANGE
 
@@ -132,11 +132,11 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 06
-HASH_PARTITIONED: 4: v1, 5: v2
+HASH_PARTITIONED: 6: v1, 7: v2
 
 5:AGGREGATE (update serialize)
 |  STREAMING
-|  group by: 4: v1, 5: v2
+|  group by: 6: v1, 7: v2
 |
 0:UNION
 |
@@ -150,7 +150,7 @@ PARTITION: UNPARTITIONED
 
 STREAM DATA SINK
 EXCHANGE ID: 04
-HASH_PARTITIONED: <slot 6>, <slot 7>
+HASH_PARTITIONED: <slot 4>, <slot 5>
 
 3:UNION
 constant exprs:

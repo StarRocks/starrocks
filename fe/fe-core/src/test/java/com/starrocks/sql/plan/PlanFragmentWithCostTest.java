@@ -286,6 +286,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "select count(distinct v2) from t0 group by v3";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
                 + "  |  output: multi_distinct_count(2: v2)\n"
                 + "  |  group by: 3: v3"));
@@ -661,6 +662,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  0:INTERSECT\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
@@ -670,7 +672,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  2:EXCHANGE\n"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: <slot 5>\n" +
+                "    HASH_PARTITIONED: <slot 4>\n" +
                 "\n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
@@ -760,7 +762,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(unionPlan.contains("  0:UNION\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [11, BIGINT, true] | [9, BIGINT, true] | [10, BIGINT, true]\n" +
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n" +
                     "  |  cardinality: 800000"));
             Assert.assertTrue(unionPlan.contains("  4:OlapScanNode\n" +
@@ -771,7 +773,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     actualRows=0, avgRowSize=4.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (8: v4 + 2)"));
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(unionPlan.contains("  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
@@ -788,7 +790,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [11, BIGINT, true] | [9, BIGINT, true] | [10, BIGINT, true]\n" +
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  cardinality: 800000"));
             Assert.assertTrue(exceptPlan.contains("  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
@@ -798,7 +800,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     actualRows=0, avgRowSize=4.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (8: v4 + 2)"));
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(exceptPlan.contains("  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
@@ -815,7 +817,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [11, BIGINT, true] | [9, BIGINT, true] | [10, BIGINT, true]\n" +
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  cardinality: 400000"));
             Assert.assertTrue(intersectPlan.contains("  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
@@ -825,7 +827,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     actualRows=0, avgRowSize=4.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (8: v4 + 2)"));
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(intersectPlan.contains("  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
