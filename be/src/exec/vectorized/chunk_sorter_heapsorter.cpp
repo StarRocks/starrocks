@@ -192,14 +192,16 @@ void HeapChunkSorter::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder
         const auto* order_by_data = ColumnHelper::cast_to_raw<TYPE>(order_by_data_column)->get_data().data();
         auto* __restrict__ filter_data = filter->data();
 
+        // null compare flag
+        int null_compare_flag = _null_first_flag[0] * _sort_order_flag[0];
         for (int i = 0; i < row_sz; ++i) {
             // data is null
             if (null_data[i] && !top_is_null) {
-                filter_data[i] = _null_first_flag[0] * _sort_order_flag[0] < 0;
+                filter_data[i] = null_compare_flag < 0;
             } else if (null_data[i] && top_is_null) {
                 // filter equal rows
             } else if (!null_data[i] && top_is_null) {
-                filter_data[i] = _null_first_flag[0] * _sort_order_flag[0] > 0;
+                filter_data[i] = null_compare_flag > 0;
             } else {
                 DCHECK(!null_data[i] && !top_is_null);
                 if (_sort_order_flag[0] > 0) {
