@@ -557,12 +557,24 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto source_id = scan_operator->plan_node_id();
     DCHECK(morsel_queues.count(source_id));
     auto& morsel_queue = morsel_queues[source_id];
-    // ScanOperator's degree_of_parallelism is not more than the number of morsels
-    // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
-    const auto degree_of_parallelism =
-            std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
-    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
-    operators.emplace_back(std::move(scan_operator));
+
+    // If dop is one, we use num_fragment_instance > 1 to parallelize the query execution.
+    // The scan may be still a bottleneck in this case, so we try to parallelize the scan operator.
+    if (context->degree_of_parallelism() == 1 && morsel_queue->num_morsels() >= 4) {
+        scan_operator->set_degree_of_parallelism(4);
+
+        operators.emplace_back(std::move(scan_operator));
+        operators = context->maybe_interpolate_local_passthrough_exchange(operators);
+    } else {
+        // ScanOperator's degree_of_parallelism is not more than the number of morsels
+        // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
+        const auto degree_of_parallelism =
+                std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
+        scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+
+        operators.emplace_back(std::move(scan_operator));
+    }
+
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
