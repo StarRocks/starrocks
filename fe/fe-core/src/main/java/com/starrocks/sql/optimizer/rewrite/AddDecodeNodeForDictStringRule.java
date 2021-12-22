@@ -204,12 +204,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public OptExpression visitPhysicalLimit(OptExpression optExpression, DecodeContext context) {
+            visitProjectionBefore(optExpression, context);
             OptExpression childExpr = optExpression.inputAt(0);
             context.hasEncoded = false;
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
             optExpression.setChild(0, newChildExpr);
-            return optExpression;
+            return visitProjectionAfter(optExpression, context);
         }
 
         @Override
