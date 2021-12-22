@@ -61,6 +61,10 @@ struct ArithmeticBinaryOperator {
         } else if constexpr (is_sub_op<Op>) {
             return l - r;
         } else if constexpr (is_mul_op<Op>) {
+            // avoid 0 mul a negative num, make result -0
+            if (UNLIKELY(l == LType(0) || r == RType(0))) {
+                return LType(0);
+            }
             return l * r;
         } else if constexpr (is_div_op<Op>) {
             // avoid 0 div a negative num, make result -0
