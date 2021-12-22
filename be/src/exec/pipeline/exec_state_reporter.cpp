@@ -111,8 +111,7 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
     Status fe_status;
     FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, &fe_status);
     if (!fe_status.ok()) {
-        std::stringstream ss;
-        ss << "couldn't get a client for " << fe_addr;
+        LOG(WARNING) << "Couldn't get a client for " << fe_addr;
         return fe_status;
     }
 
