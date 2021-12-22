@@ -60,6 +60,7 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TStorageFormat;
@@ -117,6 +118,10 @@ public class SchemaChangeJobV2Test {
         MetaContext metaContext = new MetaContext();
         metaContext.setMetaVersion(FeMetaVersion.VERSION_61);
         metaContext.setThreadLocalInfo();
+
+        ConnectContext context = new ConnectContext();
+        context.setStartTime();
+        context.setThreadLocalInfo();
 
         masterTransMgr = masterCatalog.getGlobalTransactionMgr();
         masterTransMgr.setEditLog(masterCatalog.getEditLog());

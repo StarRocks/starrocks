@@ -304,7 +304,7 @@ public class FileScanNode extends LoadScanNode {
                     Column column = destSlotDesc.getColumn();
                     Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                     if (defaultValueType == Column.DefaultValueType.CONST) {
-                        expr = new StringLiteral(column.getCalculatedDefaultValue());
+                        expr = new StringLiteral(column.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
                         throw new UserException("Column(" + column + ") has unsupported default value:"
                                 + column.getDefaultExpr().getExpr());
