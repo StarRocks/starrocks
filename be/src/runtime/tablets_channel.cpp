@@ -99,8 +99,11 @@ Status TabletsChannel::add_chunk(const PTabletWriterAddChunkRequest& params) {
     }
 
     vectorized::Chunk chunk;
-    RETURN_IF_ERROR(chunk.deserialize((const uint8_t*)pchunk.data().data(), pchunk.data().size(), _chunk_meta,
-                                      pchunk.serialized_size()));
+    io::ArrayInputStream is(reinterpret_cast<const uint8*>(pchunk.data().data()),
+                            static_cast<int>(pchunk.data().size()));
+    if (!chunk.deserialize(&is, _chunk_meta, pchunk.serialized_size())) {
+        return Status::Corruption("corrupted serialized chunk data");
+    }
     DCHECK_EQ(params.tablet_ids_size(), chunk.num_rows());
 
     size_t channel_size = _tablet_id_to_sorted_indexes.size();

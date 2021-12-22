@@ -179,8 +179,10 @@ PARALLEL_TEST(BinaryColumnTest, test_serde) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(c1->serialize_size());
-    c1->serialize_column(buffer.data());
-    c2->deserialize_column(buffer.data());
+    io::ArrayOutputStream os(buffer.data(), buffer.size());
+    ASSERT_TRUE(c1->serialize_column(&os));
+    io::ArrayInputStream is(buffer.data(), buffer.size());
+    ASSERT_TRUE(c2->deserialize_column(&is));
 
     for (size_t i = 0; i < c1->size(); i++) {
         ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));

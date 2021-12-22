@@ -458,12 +458,14 @@ PARALLEL_TEST(ArrayColumnTest, test_serde) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(column->serialize_size());
-    column->serialize_column(buffer.data());
+    io::ArrayOutputStream os(buffer.data(), static_cast<int>(buffer.size()));
+    ASSERT_TRUE(column->serialize_column(&os));
 
     auto offsets_2 = UInt32Column::create();
     auto elements_2 = Int32Column::create();
     auto column_2 = ArrayColumn::create(elements, offsets_2);
-    column_2->deserialize_column(buffer.data());
+    io::ArrayInputStream is(buffer.data(), static_cast<int>(buffer.size()));
+    ASSERT_TRUE(column_2->deserialize_column(&is));
 
     ASSERT_EQ("[1, 2, 3]", column_2->debug_item(0));
     ASSERT_EQ("[4, 5, 6]", column_2->debug_item(1));

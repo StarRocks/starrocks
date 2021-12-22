@@ -149,7 +149,9 @@ TEST_F(ChunkTest, test_serde) {
 
     std::string buffer;
     buffer.resize(chunk->serialize_size());
-    size_t written_size = chunk->serialize((uint8_t*)buffer.data());
+    io::ArrayOutputStream os(buffer.data(), static_cast<int>(buffer.size()));
+    ASSERT_TRUE(chunk->serialize(&os));
+    io::ArrayInputStream is(buffer.data(), static_cast<int>(buffer.size()));
 
     RuntimeChunkMeta meta;
     meta.slot_id_to_index.init(2);
@@ -162,7 +164,7 @@ TEST_F(ChunkTest, test_serde) {
     meta.types[1] = TypeDescriptor(PrimitiveType::TYPE_INT);
 
     std::unique_ptr<Chunk> new_chunk = chunk->clone_empty_with_schema();
-    new_chunk->deserialize((uint8_t*)buffer.data(), buffer.size(), meta, written_size);
+    ASSERT_TRUE(new_chunk->deserialize(&is, meta, os.ByteCount()));
 
     ASSERT_EQ(new_chunk->num_rows(), chunk->num_rows());
     for (size_t i = 0; i < chunk->columns().size(); ++i) {

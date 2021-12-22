@@ -506,8 +506,13 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
     size_t serialized_size = pchunk.serialized_size();
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(chunk->deserialize((const uint8_t*)pchunk.data().data(),
-                                                               pchunk.data().size(), _chunk_meta, serialized_size)));
+        io::ArrayInputStream is(reinterpret_cast<const uint8_t*>(pchunk.data().data()),
+                                static_cast<int>(pchunk.data().size()));
+        TRY_CATCH_BAD_ALLOC({
+            if (!chunk->deserialize(&is, _chunk_meta, serialized_size)) {
+                return Status::Corruption("chunk deserialization failed");
+            }
+        });
     } else {
         size_t uncompressed_size = 0;
         {
@@ -520,9 +525,13 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
             RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
         }
         {
+            io::ArrayInputStream is(uncompressed_buffer->data(), static_cast<int>(uncompressed_size));
             SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(
-                    chunk->deserialize(uncompressed_buffer->data(), uncompressed_size, _chunk_meta, serialized_size)));
+            TRY_CATCH_BAD_ALLOC({
+                if (!chunk->deserialize(&is, _chunk_meta, serialized_size)) {
+                    return Status::Corruption("chunk deserialization failed");
+                }
+            });
         }
     }
     return Status::OK();

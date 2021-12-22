@@ -106,23 +106,14 @@ public:
     // The size for serialize chunk meta and chunk data
     size_t serialize_size() const;
 
-    // Serialize chunk data and meta to ChunkPB
-    // The result value is the chunk data serialize size
-    size_t serialize_with_meta(starrocks::ChunkPB* chunk) const;
+    // TODO: move this interface to the outside of Chunk
+    bool serialize_with_meta(starrocks::ChunkPB* chunk) const;
 
-    // Only serialize chunk data to dst
-    // The serialize format:
-    //     version(4 byte)
-    //     num_rows(4 byte)
-    //     column 1 data
-    //     column 2 data
-    //     ...
-    //     column n data
-    // Note: You should ensure the dst buffer size is enough
-    size_t serialize(uint8_t* dst) const;
+    // TODO: move this interface to the outside of Chunk
+    bool serialize(io::ZeroCopyOutputStream* out) const;
 
-    // Deserialize chunk by |src| (chunk data) and |meta| (chunk meta)
-    Status deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta, size_t serialized_size);
+    // TODO: move this interface to the outside of Chunk
+    bool deserialize(io::ZeroCopyInputStream* in, const RuntimeChunkMeta& meta, int64_t serialized_size);
 
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     // not clone tuple column

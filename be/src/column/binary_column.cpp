@@ -373,38 +373,37 @@ void BinaryColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t
     }
 }
 
-uint8_t* BinaryColumn::serialize_column(uint8_t* dst) {
+bool BinaryColumn::serialize_column(io::ZeroCopyOutputStream* out) {
+    io::CodedOutputStream os(out);
     uint32_t bytes_size = _bytes.size() * sizeof(uint8_t);
-    encode_fixed32_le(dst, bytes_size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _bytes.data(), bytes_size);
-    dst += bytes_size;
-
     uint32_t offsets_size = _offsets.size() * sizeof(Offset);
-    encode_fixed32_le(dst, offsets_size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _offsets.data(), offsets_size);
-    dst += offsets_size;
-    return dst;
+    int buff_size = static_cast<int>(sizeof(bytes_size) + sizeof(offsets_size) + bytes_size + offsets_size);
+    uint8_t* buff = os.GetDirectBufferForNBytesAndAdvance(buff_size);
+    if (buff != nullptr) {
+        buff = io::CodedOutputStream::WriteLittleEndian32ToArray(bytes_size, buff);
+        buff = io::CodedOutputStream::WriteRawToArray(_bytes.data(), static_cast<int>(bytes_size), buff);
+        buff = io::CodedOutputStream::WriteLittleEndian32ToArray(offsets_size, buff);
+        buff = io::CodedOutputStream::WriteRawToArray(_offsets.data(), static_cast<int>(offsets_size), buff);
+    } else {
+        os.WriteLittleEndian32(bytes_size);
+        os.WriteRaw(_bytes.data(), static_cast<int>(bytes_size));
+        os.WriteLittleEndian32(offsets_size);
+        os.WriteRaw(_offsets.data(), static_cast<int>(offsets_size));
+    }
+    return !os.HadError();
 }
 
-const uint8_t* BinaryColumn::deserialize_column(const uint8_t* src) {
-    uint32_t bytes_size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
+bool BinaryColumn::deserialize_column(io::ZeroCopyInputStream* in) {
+    io::CodedInputStream is(in);
+    uint32_t bytes_size{};
+    uint32_t offsets_size{};
 
+    if (!is.ReadLittleEndian32(&bytes_size)) return false;
     _bytes.resize(bytes_size);
-    strings::memcpy_inlined(_bytes.data(), src, bytes_size);
-    src += bytes_size;
-
-    uint32_t offsets_size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
+    if (!is.ReadRaw(_bytes.data(), static_cast<int>(bytes_size))) return false;
+    if (!is.ReadLittleEndian32(&offsets_size)) return false;
     _offsets.resize(offsets_size / sizeof(Offset));
-    strings::memcpy_inlined(_offsets.data(), src, offsets_size);
-    src += offsets_size;
-    return src;
+    return is.ReadRaw(_offsets.data(), static_cast<int>(offsets_size));
 }
 
 void BinaryColumn::fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {

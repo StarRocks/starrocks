@@ -166,34 +166,46 @@ size_t ObjectColumn<T>::serialize_size() const {
 }
 
 template <typename T>
-uint8_t* ObjectColumn<T>::serialize_column(uint8_t* dst) {
-    encode_fixed32_le(dst, _pool.size());
-    dst += sizeof(uint32_t);
-
+bool ObjectColumn<T>::serialize_column(io::ZeroCopyOutputStream* out) {
+    io::CodedOutputStream os(out);
+    os.WriteLittleEndian32(static_cast<uint32_t>(_pool.size()));
     for (int i = 0; i < _pool.size(); ++i) {
-        uint64_t actual = _pool[i].serialize(dst + sizeof(uint64_t));
-        encode_fixed64_le(dst, actual);
-
-        dst += sizeof(uint64_t);
-        dst += actual;
+        auto size = _pool[i].serialize_size();
+        uint8_t* buffer = os.GetDirectBufferForNBytesAndAdvance(size);
+        if (buffer != nullptr) {
+            DCHECK_EQ(buffer + size, os.Cur());
+            uint64_t actual_size = _pool[i].serialize(buffer + sizeof(uint64_t));
+            buffer = io::CodedOutputStream ::WriteLittleEndian64ToArray(actual_size, buffer);
+            os.SetCur(buffer + actual_size);
+        } else {
+            // TODO: support serializing _pool[i] to io::CodedOutputStream directly
+            return false;
+        }
     }
-    return dst;
+    return !os.HadError();
 }
 
 template <typename T>
-const uint8_t* ObjectColumn<T>::deserialize_column(const uint8_t* src) {
-    uint32_t count = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
+bool ObjectColumn<T>::deserialize_column(io::ZeroCopyInputStream* in) {
+    io::CodedInputStream is(in);
+    uint32_t count{};
+    if (!is.ReadLittleEndian32(&count)) return false;
     for (int i = 0; i < count; ++i) {
-        uint64_t size = decode_fixed64_le(src);
-        src += sizeof(uint64_t);
+        uint64_t size{};
+        if (!is.ReadLittleEndian64(&size)) return false;
+        if (UNLIKELY(size > INT_MAX)) return false;
 
-        _pool.emplace_back(Slice(src, size));
-        src += size;
+        const void* buff;
+        int buff_size{};
+        if (is.GetDirectBufferPointer(&buff, &buff_size) && buff_size >= size) {
+            _pool.emplace_back(Slice(static_cast<const uint8_t*>(buff), size));
+            is.Skip(static_cast<int>(size));
+        } else {
+            // TODO: support deserializing _pool[i] from io::CodedInputStream directly
+            return false;
+        }
     }
-
-    return src;
+    return true;
 }
 
 template <typename T>

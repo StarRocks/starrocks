@@ -11,6 +11,7 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "io/zero_copy_stream.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 #include "util/slice.h"
 
@@ -247,14 +248,12 @@ public:
     // The serialize bytes size when serialize by directly copy whole column data
     virtual size_t serialize_size() const = 0;
 
-    // Serialize whole column data to dst
-    // The return value is dst + column serialize_size
-    virtual uint8_t* serialize_column(uint8_t* dst) = 0;
+    // Serialize whole column data to out
+    // TODO: move this interface to the outside of Column
+    virtual bool serialize_column(io::ZeroCopyOutputStream* out) = 0;
 
-    // Deserialize whole column from the src
-    // The return value is src + column serialize_size
-    // TODO(kks): validate the input src column data
-    virtual const uint8_t* deserialize_column(const uint8_t* src) = 0;
+    // TODO: move this interface to the outside of Column
+    virtual bool deserialize_column(io::ZeroCopyInputStream* in) = 0;
 
     // return new empty column with the same type
     virtual MutablePtr clone_empty() const = 0;

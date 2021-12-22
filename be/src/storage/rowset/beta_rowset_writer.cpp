@@ -352,7 +352,11 @@ OLAPStatus HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized
         // TODO(cbl): temp buffer doubles the memory usage, need to optimize
         string content;
         content.resize(sz);
-        const_cast<vectorized::Column&>(deletes).serialize_column((uint8_t*)(content.data()));
+        io::ArrayOutputStream os(content.data(), static_cast<int>(content.size()));
+        bool r = const_cast<vectorized::Column&>(deletes).serialize_column(&os);
+        if (!r) {
+            return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
+        }
         st = wblock->append(Slice(content.data(), content.size()));
         if (!st.ok()) {
             return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
