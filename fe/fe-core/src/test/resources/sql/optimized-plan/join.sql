@@ -242,7 +242,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
 [sql]
 select v1,v2,v3,v4 from t0 full outer join t1 on v1=v5 and 1>2 and v1=v1 and v2 > v3
 [result]
-FULL OUTER JOIN (join-predicate [1: v1 = 5: v5 AND 1: v1 = 1: v1 AND false] post-join-predicate [null])
+FULL OUTER JOIN (join-predicate [1: v1 = 5: v5 AND false] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE SHUFFLE[5]
         SCAN (columns[4: v4, 5: v5] predicate[null])
