@@ -33,7 +33,7 @@ namespace starrocks {
 // Update BE config.
 class UpdateConfigAction : public HttpHandler {
 public:
-    UpdateConfigAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+    explicit UpdateConfigAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
     ~UpdateConfigAction() override = default;
 
     void handle(HttpRequest* req) override;

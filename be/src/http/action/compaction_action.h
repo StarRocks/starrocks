@@ -32,7 +32,7 @@ enum CompactionActionType { SHOW_INFO = 1, RUN_COMPACTION = 2 };
 // See compaction-action.md for details.
 class CompactionAction : public HttpHandler {
 public:
-    CompactionAction(CompactionActionType type) : _type(type) {}
+    explicit CompactionAction(CompactionActionType type) : _type(type) {}
 
     ~CompactionAction() override = default;
 

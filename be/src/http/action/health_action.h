@@ -31,7 +31,7 @@ class ExecEnv;
 // Get BE health state from http API.
 class HealthAction : public HttpHandler {
 public:
-    HealthAction(ExecEnv* exec_env);
+    explicit HealthAction(ExecEnv* exec_env);
 
     ~HealthAction() override = default;
 
