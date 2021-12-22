@@ -323,4 +323,22 @@ public class ReplayFromDumpTest {
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), multi_distinct_count(128: case), max(103: count)"));
     }
+
+    @Test
+    public void testJoinWithPipelineDop() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("24:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)"));
+    }
+
+    @Test
+    public void test() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("  12:Decode\n" +
+                "  |  <dict id 42> : <string id 18>"));
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
+    }
 }
