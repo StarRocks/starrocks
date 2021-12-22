@@ -19,6 +19,7 @@
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
+#include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -117,6 +118,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         exec_env->runtime_filter_worker()->open_query(query_id, request.query_options, params.runtime_filter_params,
                                                       true);
     }
+    exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(query_id);
 
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();
@@ -172,7 +174,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     std::unique_ptr<DataSink> sink;
     if (fragment.__isset.output_sink) {
         RowDescriptor row_desc;
-        RETURN_IF_ERROR(DataSink::create_data_sink(obj_pool, fragment.output_sink, fragment.output_exprs, params,
+        RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, fragment.output_sink, fragment.output_exprs, params,
                                                    row_desc, &sink));
         RuntimeProfile* sink_profile = sink->profile();
         if (sink_profile != nullptr) {
@@ -275,7 +277,7 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
                 context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
                 sender->destinations(), sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(),
-                _fragment_ctx);
+                sender->get_enable_exchange_pass_through(), _fragment_ctx);
         _fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
 
     } else if (typeid(*datasink) == typeid(starrocks::MultiCastDataStreamSink)) {
@@ -328,7 +330,8 @@ void FragmentExecutor::_convert_data_sink_to_operator(PipelineBuilderContext* co
                                                             is_dest_merge, dop);
             auto sink_op = std::make_shared<ExchangeSinkOperatorFactory>(
                     context->next_operator_id(), -1, sink_buffer, sender->get_partition_type(), sender->destinations(),
-                    sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(), _fragment_ctx);
+                    sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(),
+                    sender->get_enable_exchange_pass_through(), _fragment_ctx);
 
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);

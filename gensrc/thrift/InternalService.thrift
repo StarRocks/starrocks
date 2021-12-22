@@ -219,6 +219,8 @@ struct TPlanFragmentExecParams {
   // Global runtime filters
   50: optional TRuntimeFilterParams runtime_filter_params
   51: optional i32 instances_number
+  // To enable pass through chunks between sink/exchange if they are in the same process.
+  52: optional bool enable_exchange_pass_through
 }
 
 // Global query parameters assigned by the coordinator.

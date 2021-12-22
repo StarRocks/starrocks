@@ -37,11 +37,13 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
+#include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
+#include "service/backend_options.h"
 #include "service/brpc.h"
 #include "util/block_compression.h"
 #include "util/brpc_stub_cache.h"
@@ -233,6 +235,7 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
 
     _need_close = true;
     _is_inited = true;
+
     return Status::OK();
 }
 
@@ -369,13 +372,15 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     _chunk.reset();
 }
 
-DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sender_id, const RowDescriptor& row_desc,
-                                   const TDataStreamSink& sink,
+DataStreamSender::DataStreamSender(RuntimeState* state, bool is_vectorized, int sender_id,
+                                   const RowDescriptor& row_desc, const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
-                                   int per_channel_buffer_size, bool send_query_statistics_with_every_batch)
+                                   int per_channel_buffer_size, bool send_query_statistics_with_every_batch,
+                                   bool enable_exchange_pass_through)
         : _is_vectorized(true),
           _sender_id(sender_id),
-          _pool(pool),
+          _state(state),
+          _pool(state->obj_pool()),
           _row_desc(row_desc),
           _current_channel_idx(0),
           _part_type(sink.output_partition.type),
@@ -384,7 +389,8 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
           _serialize_batch_timer(nullptr),
           _bytes_sent_counter(nullptr),
           _dest_node_id(sink.dest_node_id),
-          _destinations(destinations) {
+          _destinations(destinations),
+          _enable_exchange_pass_through(enable_exchange_pass_through) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
            sink.output_partition.type == TPartitionType::HASH_PARTITIONED ||
