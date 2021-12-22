@@ -152,7 +152,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // The san operator followed by an aggregate operator indicates the aggregating key is the same as
     // the bucket key of this table, so we needn't local shuffle for this case.
     auto* source_op = operators_with_sink[0].get();
-    if (operators_with_sink.size() > 1 || typeid(*source_op) != typeid(pipeline::ScanOperatorFactory)) {
+    if (typeid(*source_op) != typeid(pipeline::ScanOperatorFactory)) {
         operators_with_sink =
                 context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, partition_expr_ctxs);
     }
