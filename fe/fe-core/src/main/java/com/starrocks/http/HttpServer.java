@@ -150,6 +150,7 @@ public class HttpServer {
         ColocateMetaService.BucketSeqAction.registerAction(controller);
         ColocateMetaService.ColocateMetaAction.registerAction(controller);
         ColocateMetaService.MarkGroupStableAction.registerAction(controller);
+        ColocateMetaService.MarkGroupUnstableAction.registerAction(controller);
         ProfileAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
         ConnectionAction.registerAction(controller);
