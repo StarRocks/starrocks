@@ -1,11 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -13,7 +11,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
@@ -35,14 +32,6 @@ public class CallOperator extends ScalarOperator {
     private final Function fn;
     // The flag for distinct function
     private final boolean isDistinct;
-
-    public static final Set<String> nullableSameWithChildrenFunctions =
-            ImmutableSet.<String>builder()
-                    .add(FunctionSet.YEAR)
-                    .add(FunctionSet.MONTH)
-                    .add(FunctionSet.DAY)
-                    .add(FunctionSet.HOUR)
-                    .build();
 
     public CallOperator(String fnName, Type returnType, List<ScalarOperator> arguments) {
         this(fnName, returnType, arguments, null);
@@ -120,18 +109,7 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public boolean isNullable() {
-        if (fn == null) {
-            return true;
-        }
-        // check if fn always return non null
-        if (!fn.isNullable()) {
-            return false;
-        }
-        // check children nullable
-        if (nullableSameWithChildrenFunctions.contains(fnName)) {
-            return arguments.stream().anyMatch(ScalarOperator::isNullable);
-        }
-        return true;
+        return fn == null || fn.isNullable();
     }
 
     public ColumnRefSet getUsedColumns() {
