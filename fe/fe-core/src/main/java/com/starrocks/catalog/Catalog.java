@@ -2232,18 +2232,16 @@ public class Catalog {
         labelCleaner = new MasterDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
-                loadManager.removeOldLoadJob();
-                exportMgr.removeOldExportJobs();
-                deleteHandler.removeOldDeleteInfo();
+                clearExpiredLabel();
             }
         };
     }
 
     public void createTxnCleaner() {
-        txnCleaner = new MasterDaemon("txnCleaner", Config.transaction_clean_interval_second) {
+        txnCleaner = new MasterDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
             @Override
             protected void runAfterCatalogReady() {
-                globalTransactionMgr.removeExpiredAndTimeoutTxns();
+                globalTransactionMgr.abortTimeoutTxns();
             }
         };
     }
@@ -7486,5 +7484,10 @@ public class Catalog {
         this.imageJournalId = imageJournalId;
     }
 
+    public void clearExpiredLabel() {
+        loadManager.removeOldLoadJob();
+        exportMgr.removeOldExportJobs();
+        deleteHandler.removeOldDeleteInfo();
+        globalTransactionMgr.removeExpiredTxns();
+    }
 }
-

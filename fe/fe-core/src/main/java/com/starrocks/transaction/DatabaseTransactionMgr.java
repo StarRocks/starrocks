@@ -1127,7 +1127,6 @@ public class DatabaseTransactionMgr {
                 if (transactionState.isExpired(currentMillis)) {
                     finalStatusTransactionStateDeque.pop();
                     clearTransactionState(transactionState);
-                    editLog.logDeleteTransactionState(transactionState);
                     LOG.info("transaction [" + transactionState.getTransactionId() +
                             "] is expired, remove it from transaction manager");
                 } else {
@@ -1423,6 +1422,20 @@ public class DatabaseTransactionMgr {
 
     public void removeExpiredAndTimeoutTxns(long currentMillis) {
         removeExpiredTxns(currentMillis);
+        List<Long> timeoutTxns = getTimeoutTxns(currentMillis);
+        // abort timeout txns
+        for (Long txnId : timeoutTxns) {
+            try {
+                abortTransaction(txnId, "timeout by txn manager", null);
+                LOG.info("transaction [" + txnId + "] is timeout, abort it by transaction manager");
+            } catch (UserException e) {
+                // abort may be failed. it is acceptable. just print a log
+                LOG.warn("abort timeout txn {} failed. msg: {}", txnId, e.getMessage());
+            }
+        }
+    }
+
+    public void abortTimeoutTxns(long currentMillis) {
         List<Long> timeoutTxns = getTimeoutTxns(currentMillis);
         // abort timeout txns
         for (Long txnId : timeoutTxns) {
