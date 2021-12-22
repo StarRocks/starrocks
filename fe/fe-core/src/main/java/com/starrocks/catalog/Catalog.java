@@ -7489,5 +7489,6 @@ public class Catalog {
         exportMgr.removeOldExportJobs();
         deleteHandler.removeOldDeleteInfo();
         globalTransactionMgr.removeExpiredTxns();
+        routineLoadManager.cleanOldRoutineLoadJobs();
     }
 }
