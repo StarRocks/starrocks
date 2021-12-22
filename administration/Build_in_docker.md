@@ -59,7 +59,7 @@ Memroy: 8GB+
 
 1. Fail to compile StarRocks BE.
 
-```
+```shell
 g++: fatal error: Killed signal terminated program cc1plus
 compilation terminated.
 ```
@@ -67,4 +67,3 @@ compilation terminated.
 When you met above error message, it may be caused by lacking of memory.
 You should give more memory to the container.
 8GB is enough.
-
