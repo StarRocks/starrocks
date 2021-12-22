@@ -36,7 +36,7 @@ enum META_TYPE {
 // Get Meta Info
 class MetaAction : public HttpHandler {
 public:
-    MetaAction(META_TYPE meta_type) : _meta_type(meta_type) {}
+    explicit MetaAction(META_TYPE meta_type) : _meta_type(meta_type) {}
 
     ~MetaAction() override = default;
 

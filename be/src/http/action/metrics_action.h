@@ -32,7 +32,7 @@ class MetricRegistry;
 
 class MetricsAction : public HttpHandler {
 public:
-    MetricsAction(MetricRegistry* metrics) : _metrics(metrics) {}
+    explicit MetricsAction(MetricRegistry* metrics) : _metrics(metrics) {}
     ~MetricsAction() override = default;
 
     void handle(HttpRequest* req) override;

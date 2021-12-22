@@ -37,7 +37,7 @@ class StreamLoadContext;
 
 class StreamLoadAction : public HttpHandler {
 public:
-    StreamLoadAction(ExecEnv* exec_env);
+    explicit StreamLoadAction(ExecEnv* exec_env);
     ~StreamLoadAction() override;
 
     void handle(HttpRequest* req) override;
