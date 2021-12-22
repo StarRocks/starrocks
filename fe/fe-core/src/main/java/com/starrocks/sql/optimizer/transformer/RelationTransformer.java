@@ -77,7 +77,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -484,21 +484,15 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         if (onPredicate.isConstant() && onPredicate.getType().isBoolean()
                 && !node.getType().isCrossJoin() && !node.getType().isInnerJoin()) {
 
-            List<ScalarOperator> eqConj = new ArrayList<>();
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicateWithoutRewrite);
-            for (ScalarOperator conj : conjuncts) {
-                if (conj instanceof BinaryPredicateOperator && ((BinaryPredicateOperator) conj).getBinaryType()
-                        .equals(BinaryPredicateOperator.BinaryType.EQ)) {
-                    if (!Utils.extractColumnRef(conj.getChild(0)).isEmpty() && !Utils.extractColumnRef(conj.getChild(1))
-                            .isEmpty()) {
-                        eqConj.add(conj);
-                    }
-                }
-            }
 
-            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-            onPredicate = Utils.compoundAnd(scalarRewriter.rewrite(Utils.compoundAnd(eqConj),
-                    ScalarOperatorRewriter.DEFAULT_REWRITE_RULES), onPredicate);
+            List<BinaryPredicateOperator> eqPredicate = JoinPredicateUtils.getEqConj(
+                    new ColumnRefSet(leftPlan.getOutputColumn()),
+                    new ColumnRefSet(rightPlan.getOutputColumn()), conjuncts);
+
+            Preconditions.checkState(eqPredicate.size() > 0);
+
+            onPredicate = Utils.compoundAnd(eqPredicate.get(0), onPredicate);
         }
 
         ExpressionMapping outputExpressionMapping;
