@@ -346,4 +346,9 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
     return seg_iterators;
 }
 
+Status BetaRowset::reload() {
+    // TODO: impl
+    return Status::OK();
+}
+
 } // namespace starrocks
