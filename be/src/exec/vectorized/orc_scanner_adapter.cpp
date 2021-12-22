@@ -1101,7 +1101,7 @@ Status OrcScannerAdapter::init(std::unique_ptr<orc::Reader> reader) {
     try {
         _row_reader = _reader->createRowReader(_row_reader_options);
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcScannerAdpater::init failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcScannerAdapter::init failed. reason = $0", e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
@@ -1294,7 +1294,7 @@ Status OrcScannerAdapter::read_next() {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcScannerAdpater::read_next failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcScannerAdapter::read_next failed. reason = $0", e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }

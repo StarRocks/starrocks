@@ -25,7 +25,7 @@
 
 #include "common/status.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/segment_v2/common.h" // for ordinal_t
+#include "storage/rowset/common.h" // for ordinal_t
 #include "storage/types.h"
 #include "util/raw_container.h"
 

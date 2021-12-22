@@ -126,26 +126,25 @@ set(EXEC_FILES
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
-        ./storage/rowset/segment_v2/binary_dict_page_test.cpp
-        ./storage/rowset/segment_v2/binary_plain_page_test.cpp
-        ./storage/rowset/segment_v2/binary_prefix_page_test.cpp
-        ./storage/rowset/segment_v2/bitmap_index_test.cpp
-        ./storage/rowset/segment_v2/bitshuffle_page_test.cpp
-        ./storage/rowset/segment_v2/block_bloom_filter_test.cpp
-        ./storage/rowset/segment_v2/bloom_filter_index_reader_writer_test.cpp
-        ./storage/rowset/segment_v2/column_reader_writer_test.cpp
-        ./storage/rowset/segment_v2/encoding_info_test.cpp
-        ./storage/rowset/segment_v2/frame_of_reference_page_test.cpp
-        ./storage/rowset/segment_v2/ordinal_page_index_test.cpp
-        ./storage/rowset/segment_v2/plain_page_test.cpp
-        ./storage/rowset/segment_v2/rle_page_test.cpp
-        ./storage/rowset/segment_v2/segment_test.cpp
-        ./storage/rowset/segment_v2/zone_map_index_test.cpp
+        ./storage/rowset/binary_dict_page_test.cpp
+        ./storage/rowset/binary_plain_page_test.cpp
+        ./storage/rowset/binary_prefix_page_test.cpp
+        ./storage/rowset/bitmap_index_test.cpp
+        ./storage/rowset/bitshuffle_page_test.cpp
+        ./storage/rowset/block_bloom_filter_test.cpp
+        ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
+        ./storage/rowset/column_reader_writer_test.cpp
+        ./storage/rowset/encoding_info_test.cpp
+        ./storage/rowset/frame_of_reference_page_test.cpp
+        ./storage/rowset/ordinal_page_index_test.cpp
+        ./storage/rowset/plain_page_test.cpp
+        ./storage/rowset/rle_page_test.cpp
+        ./storage/rowset/segment_test.cpp
+        ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
-        ./storage/skiplist_test.cpp
         ./storage/storage_types_test.cpp
         ./storage/tablet_meta_test.cpp
         ./storage/tablet_meta_manager_test.cpp

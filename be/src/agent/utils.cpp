@@ -206,7 +206,7 @@ std::string AgentUtils::print_agent_status(AgentStatus status) {
     case STARROCKS_INTERNAL_ERROR:
         return "STARROCKS_INTERNAL_ERROR";
     default:
-        return "UNKNOWM";
+        return "UNKNOWN";
     }
 }
 

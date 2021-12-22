@@ -16,6 +16,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -5093,5 +5094,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1"));
+    }
+
+    @Test
+    public void testJoinOnPredicateRewrite() throws Exception {
+        String sql = "select * from t0 left outer join t1 on v1=v4 and cast(v2 as bigint) = v5 and false";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("equal join conjunct: 2: v2 = 5: v5"));
+        Assert.assertTrue(plan.contains("1:EMPTYSET"));
     }
 }

@@ -12,6 +12,10 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
           _num_uncancelled_sinkers(num_sinkers) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
+        // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
+        if (instance_id.lo == -1) {
+            continue;
+        }
 
         auto it = _num_sinkers.find(instance_id.lo);
         if (it != _num_sinkers.end()) {
@@ -33,11 +37,11 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
             finst_id.set_lo(instance_id.lo);
             _instance_id2finst_id[instance_id.lo] = std::move(finst_id);
         }
+    }
 
-        _num_remaining_eos = 0;
-        for (auto& [_, num] : _num_sinkers) {
-            _num_remaining_eos += num;
-        }
+    _num_remaining_eos = 0;
+    for (auto& [_, num] : _num_sinkers) {
+        _num_remaining_eos += num;
     }
 }
 
@@ -195,7 +199,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
 
         auto* closure =
                 new DisposableClosure<PTransmitChunkResult, ClosureContext>({instance_id, request.params->sequence()});
-        closure->addFailedHandler([this, closure](const ClosureContext& ctx) noexcept {
+        closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;
             {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -203,26 +207,25 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
             --_total_in_flight_rpc;
-            LOG(WARNING) << " transmit chunk rpc failed";
+            LOG(WARNING) << "transmit chunk rpc failed";
         });
-        closure->addSuccessHandler(
-                [this, closure](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
-                    Status status(result.status());
-                    {
-                        std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
-                        ++_num_finished_rpcs[ctx.instance_id.lo];
-                        --_num_in_flight_rpcs[ctx.instance_id.lo];
-                    }
-                    if (!status.ok()) {
-                        _is_finishing = true;
-                        LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
-                    } else {
-                        std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
-                        _process_send_window(ctx.instance_id, ctx.sequence);
-                        _try_to_send_rpc(ctx.instance_id);
-                    }
-                    --_total_in_flight_rpc;
-                });
+        closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
+            Status status(result.status());
+            {
+                std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                ++_num_finished_rpcs[ctx.instance_id.lo];
+                --_num_in_flight_rpcs[ctx.instance_id.lo];
+            }
+            if (!status.ok()) {
+                _is_finishing = true;
+                LOG(WARNING) << "transmit chunk rpc failed, " << status.message();
+            } else {
+                std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                _process_send_window(ctx.instance_id, ctx.sequence);
+                _try_to_send_rpc(ctx.instance_id);
+            }
+            --_total_in_flight_rpc;
+        });
 
         ++_total_in_flight_rpc;
         ++_num_in_flight_rpcs[instance_id.lo];

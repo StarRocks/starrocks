@@ -9,7 +9,7 @@
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
+#include "storage/rowset/bitmap_index_reader.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/in_predicate_utils.h"
 #include "util/string_parser.hpp"
@@ -80,7 +80,7 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }
 
@@ -217,7 +217,7 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }
 

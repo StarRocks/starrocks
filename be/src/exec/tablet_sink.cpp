@@ -407,7 +407,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPart
     for (const auto& tablet : tablets) {
         auto* location = _parent->_location->find_tablet(tablet.tablet_id);
         if (location == nullptr) {
-            LOG(WARNING) << "unknow tablet, tablet_id=" << tablet.tablet_id;
+            LOG(WARNING) << "unknown tablet, tablet_id=" << tablet.tablet_id;
             return Status::InternalError("unknown tablet");
         }
         std::vector<NodeChannel*> channels;
@@ -468,8 +468,6 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _tuple_desc_id = table_sink.tuple_id;
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
-    _partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
-    RETURN_IF_ERROR(_partition->init());
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
     RETURN_IF_ERROR(_vectorized_partition->init());
     _location = _pool->add(new OlapTableLocationParam(table_sink.location));
@@ -565,7 +563,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _load_mem_limit = state->get_load_mem_limit();
 
     // open all channels
-    const auto& partitions = _partition->get_partitions();
+    const auto& partitions = _vectorized_partition->get_partitions();
     for (int i = 0; i < _schema->indexes().size(); ++i) {
         // collect all tablets belong to this rollup
         std::vector<TTabletWithPartition> tablets;
@@ -750,7 +748,7 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
             channel->mark_as_failed(node);
         }
         if (channel->has_intolerable_failure()) {
-            return Status::InternalError("index channel has intoleralbe failure");
+            return Status::InternalError("index channel has intolerable failure");
         }
     }
     return Status::OK();
@@ -782,7 +780,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
                     if (!channel_status.ok()) {
                         LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info()
-                                     << ", errror_msg=" << channel_status.get_error_msg();
+                                     << ", error_msg=" << channel_status.get_error_msg();
                         index_channel->mark_as_failed(ch);
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &mem_exceeded_block_ns,
@@ -860,7 +858,7 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
 
 void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc) {
     std::stringstream ss;
-    ss << "decimal value is not valid for defination, column=" << desc->col_name() << ", value=" << decimal.to_string()
+    ss << "decimal value is not valid for definition, column=" << desc->col_name() << ", value=" << decimal.to_string()
        << ", precision=" << desc->type().precision << ", scale=" << desc->type().scale;
 #if BE_TEST
     LOG(INFO) << ss.str();

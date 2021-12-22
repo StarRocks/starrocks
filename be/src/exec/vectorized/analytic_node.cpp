@@ -345,6 +345,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
+
+    // analytic's dop must be 1 if with no partition clause
+    if (_tnode.analytic_node.partition_exprs.empty()) {
+        operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
+    }
     auto degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
@@ -367,8 +372,6 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    // TODO(hcf) Currently, the shared data structure analytor does not support concurrency.
-    // So the degree of parallism must set to 1, we'll fix it laterr
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;

@@ -137,7 +137,7 @@ Status StorageEngine::start_bg_threads() {
         LOG(INFO) << "path scan/gc threads started. number:" << get_stores().size();
     }
 
-    LOG(INFO) << "all storage engine's backgroud threads are started.";
+    LOG(INFO) << "all storage engine's background threads are started.";
     return Status::OK();
 }
 

@@ -53,7 +53,6 @@ set(RUNTIME_FILES
     decimal_value.cpp
     decimalv2_value.cpp
     large_int_value.cpp
-    tuple.cpp
     fragment_mgr.cpp
     dpp_sink_internal.cpp
     load_path_mgr.cpp

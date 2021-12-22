@@ -22,11 +22,7 @@ public class Field {
     private final Expr originExpression;
 
     public Field(String name, Type type, TableName relationAlias, Expr originExpression) {
-        this.name = name;
-        this.type = type;
-        this.relationAlias = relationAlias;
-        this.originExpression = originExpression;
-        this.visible = true;
+        this(name, type, relationAlias, originExpression, true);
     }
 
     public Field(String name, Type type, TableName relationAlias, Expr originExpression, boolean visible) {

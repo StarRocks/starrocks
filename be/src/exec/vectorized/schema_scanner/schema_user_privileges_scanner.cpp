@@ -34,7 +34,7 @@ Status SchemaUserPrivilegesScanner::start(RuntimeState* state) {
         RETURN_IF_ERROR(
                 SchemaHelper::get_user_privs(*(_param->ip), _param->port, user_privs_params, &_user_privs_result));
     } else {
-        return Status::InternalError("IP or port dosn't exists");
+        return Status::InternalError("IP or port doesn't exists");
     }
     return Status::OK();
 }

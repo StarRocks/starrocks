@@ -544,9 +544,9 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
 }
 
 void StorageEngine::_start_clean_fd_cache() {
-    VLOG(10) << "Cleaning file descritpor cache";
+    VLOG(10) << "Cleaning file descriptor cache";
     _file_cache->prune();
-    VLOG(10) << "Cleaned file descritpor cache";
+    VLOG(10) << "Cleaned file descriptor cache";
 }
 
 Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {

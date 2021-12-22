@@ -124,7 +124,7 @@ Status ColumnChunkReader::_parse_page_data() {
         return Status::InternalError("There are two dictionary page in this column");
     default:
         return Status::NotSupported(
-                strings::Substitute("Not supproted page type: $0", _page_reader->current_header()->type));
+                strings::Substitute("Not supported page type: $0", _page_reader->current_header()->type));
         break;
     }
     _page_parse_state = PAGE_DATA_PARSED;
@@ -142,7 +142,7 @@ void ColumnChunkReader::_reserve_uncompress_buf(size_t size) {
 
 Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size,
                                                          bool is_compressed) {
-    RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("read and decompress page"));
+    RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
     if (is_compressed && _compress_codec != nullptr) {
         Slice com_slice("", compressed_size);
         RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&com_slice.data, com_slice.size));

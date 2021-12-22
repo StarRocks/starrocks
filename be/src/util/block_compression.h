@@ -25,7 +25,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "gen_cpp/segment_v2.pb.h"
+#include "gen_cpp/segment.pb.h"
 #include "util/slice.h"
 
 namespace starrocks {

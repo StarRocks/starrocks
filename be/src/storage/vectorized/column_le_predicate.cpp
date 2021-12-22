@@ -7,7 +7,7 @@
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
+#include "storage/rowset/bitmap_index_reader.h"
 #include "storage/types.h"
 #include "storage/vectorized/column_predicate.h"
 
@@ -58,12 +58,12 @@ public:
         return (this->type_info()->cmp(Datum(_value), min) >= 0) & !max.is_null();
     }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&_value, &exact_match);
         if (st.ok()) {
-            segment_v2::rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
+            rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
             range->add(Range(0, seeked_ordinal));
         } else if (st.is_not_found()) {
             range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
@@ -171,13 +171,13 @@ public:
         return (this->type_info()->cmp(Datum(_value), min) >= 0) & !max.is_null();
     }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         Slice padded_value(_zero_padded_str);
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&padded_value, &exact_match);
         if (st.ok()) {
-            segment_v2::rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
+            rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
             range->add(Range(0, seeked_ordinal));
         } else if (st.is_not_found()) {
             range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));

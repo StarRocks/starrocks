@@ -11,10 +11,7 @@
 
 namespace starrocks {
 
-class RowsetUpdateState;
 class Tablet;
-class TabletMeta;
-using TabletSharedPtr = std::shared_ptr<Tablet>;
 class HashIndex;
 
 // An index to lookup a record's position(rowset->segment->rowid) by primary key.
@@ -72,6 +69,8 @@ public:
     //
     // [not thread-safe]
     void erase(const vectorized::Column& pks, DeletesMap* deletes);
+
+    void get(const vectorized::Column& pks, std::vector<uint64_t>* rowids);
 
     // [not thread-safe]
     std::size_t memory_usage() const;

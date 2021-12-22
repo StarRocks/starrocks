@@ -211,7 +211,7 @@ void ExportTaskMgr::report_to_master(PlanFragmentExecutor* executor) {
                          << master_address.port << ") because: " << e.what();
             status = client.reopen(config::thrift_rpc_timeout_ms);
             if (!status.ok()) {
-                LOG(WARNING) << "Client repoen failed. with address(" << master_address.hostname << ":"
+                LOG(WARNING) << "Client reopen failed. with address(" << master_address.hostname << ":"
                              << master_address.port << ")";
                 return;
             }
