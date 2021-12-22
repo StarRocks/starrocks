@@ -55,9 +55,11 @@ public:
         if constexpr (check_overflow) {
             return mul_overflow(a, b, c);
         } else {
-            if (UNLIKELY(a == Type(0) || b == Type(0))) {
-                *c = Type(0);
-                return false;
+            if constexpr (std::is_same<Type, double>::value || std::is_same<Type, float>::value) {
+                if (UNLIKELY(a == Type(0) || b == Type(0))) {
+                    *c = Type(0);
+                    return false;
+                }
             }
             *c = a * b;
             return false;
@@ -66,9 +68,11 @@ public:
 
     // check divide-by-zero before calling div and mod
     static inline bool div(Type const& a, Type const& b, Type* c) {
-        if (UNLIKELY(a == Type(0))) {
-            *c = Type(0);
-            return false;
+        if constexpr (std::is_same<Type, double>::value || std::is_same<Type, float>::value) {
+            if (UNLIKELY(a == Type(0))) {
+                *c = Type(0);
+                return false;
+            }
         }
         *c = a / b;
         return false;
