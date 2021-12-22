@@ -30,6 +30,8 @@ import com.starrocks.analysis.SqlScanner;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.SqlParserUtils;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -78,6 +80,8 @@ public class View extends Table {
     // 'queryStmtRef' is a soft reference, it is created from parsing query stmt, and it will be cleared if
     // JVM memory is not enough.
     private QueryStmt queryStmt;
+    @Deprecated
+    // Can't keep a cache in meta data
     private SoftReference<QueryStmt> queryStmtRef = new SoftReference<QueryStmt>(null);
 
     // Set if this View is from a WITH clause and not persisted in the catalog.
@@ -112,6 +116,10 @@ public class View extends Table {
         return isLocalView;
     }
 
+    @Deprecated
+    // It's really crazy
+    // 1. Write member variable in a readonly interface
+    // 2. Hold a temporary cache in the globally shared metadata
     public QueryStmt getQueryStmt() {
         if (queryStmt != null) {
             return queryStmt;
@@ -131,6 +139,35 @@ public class View extends Table {
             }
         }
         return retStmt;
+    }
+
+    public QueryStmt getQueryStmtWithParse() throws StarRocksPlannerException {
+        if (queryStmt != null) {
+            return queryStmt;
+        }
+
+        Preconditions.checkNotNull(inlineViewDef);
+        // Parse the expanded view definition SQL-string into a QueryStmt and
+        // populate a view definition.
+        SqlScanner input = new SqlScanner(new StringReader(inlineViewDef), sqlMode);
+        SqlParser parser = new SqlParser(input);
+        ParseNode node;
+        try {
+            node = SqlParserUtils.getFirstStmt(parser);
+        } catch (Exception e) {
+            LOG.warn("stmt is {}", inlineViewDef);
+            LOG.warn("exception because: ", e);
+            throw new StarRocksPlannerException(
+                    String.format("Failed to parse view-definition statement of view: %s", name),
+                    ErrorType.INTERNAL_ERROR);
+        }
+        // Make sure the view definition parses to a query statement.
+        if (!(node instanceof QueryStmt)) {
+            throw new StarRocksPlannerException(String.format("View definition of %s " +
+                    "is not a query statement", name), ErrorType.INTERNAL_ERROR);
+        }
+
+        return (QueryStmt) node;
     }
 
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
