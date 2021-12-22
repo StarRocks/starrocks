@@ -503,7 +503,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_sent_counter = ADD_COUNTER(profile(), "BytesSent", TUnit::BYTES);
-    _bytes_uncompressed_counter = ADD_COUNTER(profile(), "BytesUncompressed", TUnit::BYTES);
+    _uncompressed_bytes_counter = ADD_COUNTER(profile(), "UncompressedBytes", TUnit::BYTES);
     _ignore_rows = ADD_COUNTER(profile(), "IgnoreRows", TUnit::UNIT);
     _serialize_batch_timer = ADD_TIMER(profile(), "SerializeBatchTime");
     _compress_timer = ADD_TIMER(profile(), "CompressTime");
@@ -740,7 +740,7 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
     VLOG_ROW << "chunk data size " << chunk_size;
 
     COUNTER_UPDATE(_bytes_sent_counter, chunk_size * num_receivers);
-    COUNTER_UPDATE(_bytes_uncompressed_counter, uncompressed_size * num_receivers);
+    COUNTER_UPDATE(_uncompressed_bytes_counter, uncompressed_size * num_receivers);
     return Status::OK();
 }
 

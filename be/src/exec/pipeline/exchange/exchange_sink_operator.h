@@ -117,7 +117,7 @@ private:
     RuntimeProfile::Counter* _compress_timer{};
     RuntimeProfile::Counter* _bytes_sent_counter;
     RuntimeProfile::Counter* _bytes_pass_through_counter;
-    RuntimeProfile::Counter* _bytes_uncompressed_counter{};
+    RuntimeProfile::Counter* _uncompressed_bytes_counter{};
     RuntimeProfile::Counter* _ignore_rows{};
 
     RuntimeProfile::Counter* _send_request_timer{};
