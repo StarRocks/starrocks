@@ -656,7 +656,7 @@ public class Load {
                     } else {
                         Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                         if (defaultValueType == Column.DefaultValueType.CONST) {
-                            exprs.add(new StringLiteral(column.getCalculatedDefaultValue()));
+                            exprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
                             throw new UserException("Column(" + columnName + ") has unsupported default value:"
                                     + column.getDefaultExpr().getExpr());
@@ -679,7 +679,7 @@ public class Load {
                     } else {
                         Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                         if (defaultValueType == Column.DefaultValueType.CONST) {
-                            innerIfExprs.add(new StringLiteral(column.getCalculatedDefaultValue()));
+                            innerIfExprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
                             throw new UserException("Column(" + columnName + ") has unsupported default value:"
                                     + column.getDefaultExpr().getExpr());

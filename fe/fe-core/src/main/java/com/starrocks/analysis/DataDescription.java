@@ -531,7 +531,7 @@ public class DataDescription {
             if (defaultValueType == Column.DefaultValueType.NULL) {
                 throw new AnalysisException("Column " + column.getName() + " has no default value");
             } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                replaceValue = column.getCalculatedDefaultValue();
+                replaceValue = column.calculatedDefaultValue();
             } else if (defaultValueType == Column.DefaultValueType.VARY) {
                 throw new AnalysisException("Column " + column.getName() + " has unsupported default value:" +
                         column.getDefaultExpr().getExpr());

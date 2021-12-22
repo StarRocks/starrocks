@@ -1112,6 +1112,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                                                    TabletMetaSharedPtr* tablet_meta) {
     uint32_t next_unique_id = 0;
     std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+    TCreateTabletReq norm_request = request;
     if (!is_schema_change) {
         for (uint32_t col_idx = 0; col_idx < request.tablet_schema.columns.size(); ++col_idx) {
             col_idx_to_unique_id[col_idx] = col_idx;
@@ -1134,6 +1135,13 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                 if (old_name == column.column_name) {
                     uint32_t old_unique_id = base_tablet->tablet_schema().column(old_col_idx).unique_id();
                     col_idx_to_unique_id[new_col_idx] = old_unique_id;
+                    // During linked schema change, the now() default value is stored in TabletMeta.
+                    // When receiving a new schema change request, the last default value stored should be
+                    // remained instead of changing.
+                    if (base_tablet->tablet_schema().column(old_col_idx).has_default_value()) {
+                        norm_request.tablet_schema.columns[new_col_idx].__set_default_value(
+                                base_tablet->tablet_schema().column(old_col_idx).default_value());
+                    }
                     break;
                 }
             }
@@ -1151,7 +1159,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         return Status::InternalError("fail to get root path shard");
     }
     // We generate a new tablet_uid for this new tablet.
-    return TabletMeta::create(_mem_tracker, request, TabletUid::gen_uid(), shard_id, next_unique_id,
+    return TabletMeta::create(_mem_tracker, norm_request, TabletUid::gen_uid(), shard_id, next_unique_id,
                               col_idx_to_unique_id, RowsetTypePB::BETA_ROWSET, tablet_meta);
 }
 

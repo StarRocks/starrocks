@@ -301,7 +301,7 @@ public class SparkLoadPendingTask extends LoadTask {
                     column.getDefaultExpr().getExpr());
         }
         if (defaultValueType == Column.DefaultValueType.CONST) {
-            defaultValue = column.getCalculatedDefaultValue();
+            defaultValue = column.calculatedDefaultValue();
         }
         if (column.isAllowNull() && defaultValueType == Column.DefaultValueType.NULL) {
             defaultValue = "\\N";
