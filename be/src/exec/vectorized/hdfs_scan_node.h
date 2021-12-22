@@ -88,7 +88,7 @@ private:
     void _scanner_thread(HdfsScanner* scanner);
     void _update_status(const Status& status);
     Status _get_status();
-    void _fill_chunk_pool(int count);
+    void _fill_chunk_pool(int count, RuntimeState* state);
     void _close_pending_scanners();
     static int _compute_priority(int32_t num_submitted_tasks);
 

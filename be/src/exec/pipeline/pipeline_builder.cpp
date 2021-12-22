@@ -13,8 +13,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(O
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr =
-            std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size * num_receivers * num_receivers);
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(_fragment_context->runtime_state()->batch_size() *
+                                                                num_receivers * num_receivers);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto local_exchange = std::make_shared<BroadcastExchanger>(mem_mgr, local_exchange_source.get());
@@ -50,7 +50,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
     int buffer_size = std::max(num_receivers, static_cast<int>(source_operator->degree_of_parallelism()));
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size * buffer_size);
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(_fragment_context->runtime_state()->batch_size() *
+                                                                buffer_size);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
@@ -83,7 +84,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
 
     // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(shuffle_partitions_num * config::vector_chunk_size);
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(shuffle_partitions_num *
+                                                                _fragment_context->runtime_state()->batch_size());
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto local_shuffle = std::make_shared<PartitionExchanger>(
@@ -104,11 +106,11 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
 }
 
 OpFactories PipelineBuilderContext::gather_pipelines_to_one(std::vector<OpFactories>& pred_operators_list) {
-    // Approximately, each pred driver can output config::vector_chunk_size rows at the same time.
+    // Approximately, each pred driver can output _fragment_context->runtime_state()->batch_size() rows at the same time.
     size_t max_row_count = 0;
     for (const auto& pred_ops : pred_operators_list) {
         auto* source_operator = down_cast<SourceOperatorFactory*>(pred_ops[0].get());
-        max_row_count += source_operator->degree_of_parallelism() * config::vector_chunk_size;
+        max_row_count += source_operator->degree_of_parallelism() * _fragment_context->runtime_state()->batch_size();
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();

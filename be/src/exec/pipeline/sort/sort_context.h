@@ -60,14 +60,14 @@ public:
 
     // Dispatch logic for full sort and topn,
     // provide different index parrterns through lambda expression.
-    ChunkPtr pull_chunk() {
+    ChunkPtr pull_chunk(RuntimeState* state) {
         if (_limit < 0) {
-            return pull_chunk([](DataSegment* min_heap_entry) -> uint32_t {
+            return pull_chunk(state, [](DataSegment* min_heap_entry) -> uint32_t {
                 return (*min_heap_entry->_sorted_permutation)[min_heap_entry->_next_output_row++].index_in_chunk;
             });
         } else {
             return pull_chunk(
-                    [](DataSegment* min_heap_entry) -> uint32_t { return min_heap_entry->_next_output_row++; });
+                    state, [](DataSegment* min_heap_entry) -> uint32_t { return min_heap_entry->_next_output_row++; });
         }
     }
 
@@ -77,9 +77,9 @@ public:
      */
     // uint32_t UpdateFunc(DataSegment* min_heap_entry)
     template <class UpdateFunc>
-    ChunkPtr pull_chunk(UpdateFunc&& get_and_update_min_entry_func) {
+    ChunkPtr pull_chunk(RuntimeState* state, UpdateFunc&& get_and_update_min_entry_func) {
         // Get appropriate size
-        uint32_t needed_rows = std::min((uint64_t)config::vector_chunk_size, _require_rows - _next_output_row);
+        uint32_t needed_rows = std::min((uint64_t)state->batch_size(), _require_rows - _next_output_row);
 
         uint32_t rows_number = 0;
         if (rows_number >= needed_rows) {

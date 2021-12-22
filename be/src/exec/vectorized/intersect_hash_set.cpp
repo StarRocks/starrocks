@@ -12,12 +12,12 @@ Status IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr&
                                             const std::vector<ExprContext*>& exprs, MemPool* pool) {
     size_t chunk_size = chunkPtr->num_rows();
 
-    _slice_sizes.assign(config::vector_chunk_size, 0);
+    _slice_sizes.assign(state->batch_size(), 0);
     size_t cur_max_one_row_size = _get_max_serialize_size(chunkPtr, exprs);
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
-        _buffer = _mem_pool->allocate(_max_one_row_size * config::vector_chunk_size);
+        _buffer = _mem_pool->allocate(_max_one_row_size * state->batch_size());
         if (UNLIKELY(_buffer == nullptr)) {
             return Status::InternalError("Mem usage has exceed the limit of BE");
         }
@@ -42,12 +42,12 @@ template <typename HashSet>
 Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, const ChunkPtr& chunkPtr,
                                                        const std::vector<ExprContext*>& exprs, const int hit_times) {
     size_t chunk_size = chunkPtr->num_rows();
-    _slice_sizes.assign(config::vector_chunk_size, 0);
+    _slice_sizes.assign(state->batch_size(), 0);
     size_t cur_max_one_row_size = _get_max_serialize_size(chunkPtr, exprs);
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
-        _buffer = _mem_pool->allocate(_max_one_row_size * config::vector_chunk_size);
+        _buffer = _mem_pool->allocate(_max_one_row_size * state->batch_size());
         if (UNLIKELY(_buffer == nullptr)) {
             return Status::InternalError("Mem usage has exceed the limit of BE");
         }

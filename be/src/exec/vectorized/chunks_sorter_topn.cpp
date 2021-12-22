@@ -31,7 +31,7 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     if (chunk_number <= 0) {
         raw_chunks.push_back(chunk);
         chunk_number++;
-    } else if (raw_chunks[chunk_number - 1]->num_rows() + chunk->num_rows() > config::vector_chunk_size) {
+    } else if (raw_chunks[chunk_number - 1]->num_rows() + chunk->num_rows() > state->batch_size()) {
         raw_chunks.push_back(chunk);
         chunk_number++;
     } else {

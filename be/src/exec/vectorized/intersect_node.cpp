@@ -160,8 +160,8 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
     }
 
     int32_t read_index = 0;
-    _remained_keys.resize(config::vector_chunk_size);
-    while (_hash_set_iterator != _hash_set->end() && read_index < config::vector_chunk_size) {
+    _remained_keys.resize(state->batch_size());
+    while (_hash_set_iterator != _hash_set->end() && read_index < state->batch_size()) {
         if (_hash_set_iterator->hit_times == _intersect_times) {
             _remained_keys[read_index] = _hash_set_iterator->slice;
             ++read_index;
@@ -175,7 +175,7 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
         for (size_t i = 0; i < _types.size(); ++i) {
             result_columns[i] = // default NullableColumn
                     ColumnHelper::create_column(_types[i].result_type, _types[i].is_nullable);
-            result_columns[i]->reserve(config::vector_chunk_size);
+            result_columns[i]->reserve(state->batch_size());
         }
 
         {
@@ -198,7 +198,7 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
         *eos = true;
     }
 
-    DCHECK_LE(result_chunk->num_rows(), config::vector_chunk_size);
+    DCHECK_LE(result_chunk->num_rows(), state->batch_size());
     *chunk = std::move(result_chunk);
 
     DCHECK_CHUNK(*chunk);

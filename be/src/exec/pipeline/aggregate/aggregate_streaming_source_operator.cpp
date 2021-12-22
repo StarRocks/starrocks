@@ -66,13 +66,13 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
     // Even if it is streaming mode, the purpose of reading from hash table is to
     // correctly process the state of hash table(_is_ht_eos)
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    _output_chunk_from_hash_map(&chunk);
+    _output_chunk_from_hash_map(&chunk, state);
     eval_runtime_bloom_filters(chunk.get());
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
 
-void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::ChunkPtr* chunk) {
+void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         if (false) {
         }
@@ -92,7 +92,7 @@ void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::C
 #define HASH_MAP_METHOD(NAME)                                                                                     \
     else if (_aggregator->hash_map_variant().type == vectorized::HashMapVariant::Type::NAME)                      \
             _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, config::vector_chunk_size, chunk);
+                    *_aggregator->hash_map_variant().NAME, state->batch_size(), chunk);
     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {

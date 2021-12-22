@@ -36,10 +36,10 @@ Status IntersectContext::refine_chunk_from_ht(RuntimeState* state, const ChunkPt
 }
 
 StatusOr<vectorized::ChunkPtr> IntersectContext::pull_chunk(RuntimeState* state) {
-    // 1. Get at most *config::vector_chunk_size* remained keys from ht.
+    // 1. Get at most *state->batch_size()* remained keys from ht.
     size_t num_remained_keys = 0;
-    _remained_keys.resize(config::vector_chunk_size);
-    while (_next_processed_iter != _hash_set->end() && num_remained_keys < config::vector_chunk_size) {
+    _remained_keys.resize(state->batch_size());
+    while (_next_processed_iter != _hash_set->end() && num_remained_keys < state->batch_size()) {
         if (_next_processed_iter->hit_times == _intersect_times) {
             _remained_keys[num_remained_keys++] = _next_processed_iter->slice;
         }

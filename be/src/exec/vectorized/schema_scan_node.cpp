@@ -201,7 +201,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
             break;
         }
 
-        if (row_num >= config::vector_chunk_size) {
+        if (row_num >= state->batch_size()) {
             break;
         }
 

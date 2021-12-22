@@ -19,7 +19,7 @@ Status LocalMergeSortSourceOperator::close(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
-    return _sort_context->pull_chunk();
+    return _sort_context->pull_chunk(state);
 }
 
 void LocalMergeSortSourceOperator::set_finishing(RuntimeState* state) {

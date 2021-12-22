@@ -48,7 +48,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             continue;
         }
 
-        DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
+        DCHECK_LE(chunk->num_rows(), state->batch_size());
 
         _aggregator->evaluate_exprs(chunk.get());
 
@@ -131,7 +131,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = config::vector_chunk_size;
+    int32_t chunk_size = state->batch_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
         SCOPED_TIMER(_aggregator->get_results_timer());

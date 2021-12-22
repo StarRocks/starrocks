@@ -71,7 +71,8 @@ public:
     // This function will copy selective rows in chunks to batch.
     // indexes contains row index of chunk and this function will copy from input
     // 'from' and copy 'size' rows
-    Status add_rows_selective(vectorized::Chunk* chunk, const uint32_t* row_indexes, uint32_t from, uint32_t size);
+    Status add_rows_selective(vectorized::Chunk* chunk, const uint32_t* row_indexes, uint32_t from, uint32_t size,
+                              RuntimeState* state);
 
     // Flush buffered rows and close channel. This function don't wait the response
     // of close operation, client should call close_wait() to finish channel's close.
@@ -161,12 +162,12 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
 }
 
 Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chunk, const uint32_t* indexes,
-                                                         uint32_t from, uint32_t size) {
+                                                         uint32_t from, uint32_t size, RuntimeState* state) {
     if (UNLIKELY(_chunk == nullptr)) {
         _chunk = chunk->clone_empty_with_tuple();
     }
 
-    if (_chunk->num_rows() + size > config::vector_chunk_size) {
+    if (_chunk->num_rows() + size > state->batch_size()) {
         RETURN_IF_ERROR(send_one_chunk(_chunk.get(), false));
         // we only clear column data, because we need to reuse column schema
         _chunk->set_num_rows(0);
@@ -348,7 +349,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
         RETURN_IF_ERROR(_channel->init(state));
     }
 
-    _row_indexes.resize(config::vector_chunk_size);
+    _row_indexes.resize(state->batch_size());
 
     return Status::OK();
 }
@@ -483,7 +484,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                 // dest bucket is no used, continue
                 continue;
             }
-            RETURN_IF_ERROR(_channels[i]->add_rows_selective(chunk.get(), _row_indexes.data(), from, size));
+            RETURN_IF_ERROR(_channels[i]->add_rows_selective(chunk.get(), _row_indexes.data(), from, size, state));
         }
     }
     return Status::OK();

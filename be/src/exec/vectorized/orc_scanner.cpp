@@ -73,7 +73,7 @@ ORCScanner::ORCScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile
                        const TBrokerScanRange& scan_range, starrocks::vectorized::ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
-          _max_chunk_size(config::vector_chunk_size ? config::vector_chunk_size : 4096),
+          _max_chunk_size(state->batch_size() ? state->batch_size() : 4096),
           _next_range(0),
           _error_counter(0),
           _status_eof(false) {}

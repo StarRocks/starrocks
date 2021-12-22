@@ -87,9 +87,9 @@ private:
         return _curr_build_index < 0 || _curr_build_index >= _cross_join_context->num_build_chunks();
     }
 
-    void _select_build_chunk(int32_t build_index);
+    void _select_build_chunk(int32_t build_index, RuntimeState* state);
 
-    void _init_chunk(vectorized::ChunkPtr* chunk);
+    void _init_chunk(vectorized::ChunkPtr* chunk, RuntimeState* state);
 
     void _copy_joined_rows_with_index_base_build(vectorized::ChunkPtr& chunk, size_t row_count, size_t probe_index,
                                                  size_t build_index);

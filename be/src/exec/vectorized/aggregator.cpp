@@ -60,7 +60,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     }
     VLOG_ROW << "has_nullable_key " << _has_nullable_key;
 
-    _tmp_agg_states.resize(config::vector_chunk_size);
+    _tmp_agg_states.resize(state->batch_size());
 
     size_t agg_size = _tnode.agg_node.aggregate_functions.size();
     _agg_fn_ctxs.resize(agg_size);

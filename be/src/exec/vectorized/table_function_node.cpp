@@ -90,7 +90,7 @@ Status TableFunctionNode::open(RuntimeState* state) {
 Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    int chunk_size = config::vector_chunk_size;
+    int chunk_size = state->batch_size();
     int reserve_chunk_size = chunk_size;
     std::vector<ColumnPtr> output_columns;
 

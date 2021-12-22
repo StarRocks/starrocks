@@ -42,7 +42,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
         if (chunk->is_empty()) {
             continue;
         }
-        DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
+        DCHECK_LE(chunk->num_rows(), state->batch_size());
 
         _aggregator->evaluate_exprs(chunk.get());
 
@@ -101,7 +101,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = config::vector_chunk_size;
+    int32_t chunk_size = state->batch_size();
 
     if (false) {
     }

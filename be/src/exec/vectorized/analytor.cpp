@@ -171,7 +171,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                         _agg_expr_ctxs[i][j]->root()->type(), _agg_expr_ctxs[i][j]->root()->is_nullable(),
                         _agg_expr_ctxs[i][j]->root()->is_constant(), 0);
             }
-            _agg_intput_columns[i][j]->reserve(config::vector_chunk_size * BUFFER_CHUNK_NUMBER);
+            _agg_intput_columns[i][j]->reserve(state->batch_size() * BUFFER_CHUNK_NUMBER);
         }
 
         DCHECK(_agg_functions[i] != nullptr);
@@ -203,7 +203,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         _partition_columns[i] = vectorized::ColumnHelper::create_column(
                 _partition_ctxs[i]->root()->type(), _partition_ctxs[i]->root()->is_nullable() | has_outer_join_child,
                 _partition_ctxs[i]->root()->is_constant(), 0);
-        _partition_columns[i]->reserve(config::vector_chunk_size * BUFFER_CHUNK_NUMBER);
+        _partition_columns[i]->reserve(state->batch_size() * BUFFER_CHUNK_NUMBER);
     }
 
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs));
@@ -212,7 +212,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         _order_columns[i] = vectorized::ColumnHelper::create_column(
                 _order_ctxs[i]->root()->type(), _order_ctxs[i]->root()->is_nullable() | has_outer_join_child,
                 _order_ctxs[i]->root()->is_constant(), 0);
-        _order_columns[i]->reserve(config::vector_chunk_size * BUFFER_CHUNK_NUMBER);
+        _order_columns[i]->reserve(state->batch_size() * BUFFER_CHUNK_NUMBER);
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
