@@ -84,7 +84,6 @@ public:
 };
 
 const uint32_t PREFETCHN = 8;
-const uint32_t ROWID_MASK = 0xffffffff;
 
 template <typename Key>
 class HashIndexImpl : public HashIndex {
