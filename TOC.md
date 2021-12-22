@@ -293,18 +293,40 @@
   + [Error Code](/reference/Error_code.md)
   + [System Limit](/reference/System_limit.md)
 + Administration
-  + [Build in docker](/administration/Build_in_docker.md)
+  + [Build in Docker](/administration/Build_in_docker.md)
   + [Cluster Administration](/administration/Cluster_administration.md)
   + [Configuration](/administration/Configuration.md)
-  + [Scale up and down](/administration/Scale_up_down.md)
-  + [Backup and restore](/administration/Backup_and_restore.md)
+  + [Scale Up and Down](/administration/Scale_up_down.md)
+  + [Backup and Restore](/administration/Backup_and_restore.md)
   + Data Recovery
-    + [Data recovery](/administration/Data_recovery.md)
-    + [Metadata recovery](/administration/Metadata_recovery.md)
+    + [Data Recovery](/administration/Data_recovery.md)
+    + [Metadata Recovery](/administration/Metadata_recovery.md)
   + [Replica](/administration/Replica.md)
-  + [Query planning](/administration/Query_planning.md)
+  + [Query Planning](/administration/Query_planning.md)
+  + [Profiling](/administration/Profiling.md)
   + [Monitor and Alert](/administration/Monitor_and_Alert.md)
-  + [User privilege](/administration/User_privilege.md)
+  + [User Privilege](/administration/User_privilege.md)
   + [Authentication](/administration/Authentication.md)
+  + Resource Management
+    + [Query Management](/administration/Query_management.md)
+    + [Blacklist](/administration/Blacklist.md)
+    + [Memory Management](/administration/Memory_management.md)
+    + [Load Balance](/administration/Load_balance.md)
++ FAQs
+  + [Deploy](/faq/Deploy_faq.md)
+  + Data Migration
+    + Data Ingestion
+      + [Data Ingestion FAQ](/faq/loading/Loading_faq.md)
+      + [Stream Load](/faq/loading/Stream_load_faq.md)
+      + [Routine Load](/faq/loading/Routine_load_faq.md)
+      + [Broker Load](/faq/loading/Broker_load_faq.md)
+      + [Spark Load](/faq/loading/Spark_load_faq.md)
+      + [Insert Into](/faq/loading/Insert_into_faq.md)
+      + [Flink connector](/faq/loading/Flink_connector_faq.md)
+      + [DataX](/faq/loading/DataX_faq.md)
+      + [Others](/faq/loading/Others.md)
+    + [Data Export](/faq/Exporting_faq.md)
++ Benchmark
+  + [SSB Benchmark](/benchmarking/SSB_Benchmarking.md)
 + Release Notes
   + [v1.19](release_notes/release-1.19.md)

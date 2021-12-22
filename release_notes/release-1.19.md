@@ -1,6 +1,6 @@
 # StarRocks version 1.19
 
-## v1.19.0
+## 1.19.0
 
 Release date: Octorber 22, 2021
 
@@ -37,7 +37,7 @@ Release date: Octorber 22, 2021
 * Fix the problem that set_var takes effect for session but not for statements.
 * Fix the problem that select count(*) returns abnormality on the Hive partition external table.
 
-## v1.19.1
+## 1.19.1
 
 Release date: November 2, 2021
 
@@ -52,3 +52,65 @@ Release date: November 2, 2021
 * Fix the problem of Thrift protocol compatibility, so that the Hive external table can be connected with Kerberos. [# 184](https://github.com/StarRocks/starrocks/pull/184) [# 947](https://github.com/StarRocks/starrocks/pull/947) [# 995](https://github.com/StarRocks/starrocks/pull/995) [# 999](https://github.com/StarRocks/starrocks/pull/999)
 * Fix several bugs in view creation. [# 972](https://github.com/StarRocks/starrocks/pull/972) [# 987](https://github.com/StarRocks/starrocks/pull/987)[# 1001](https://github.com/StarRocks/starrocks/pull/1001)
 * Fix the problem that FE cannot be upgraded in grayscale. [# 485](https://github.com/StarRocks/starrocks/pull/485) [# 890](https://github.com/StarRocks/starrocks/pull/890)
+
+## 1.19.2
+
+Release date: November 20, 2021
+
+### Improvement
+
+* bucket shuffle join support right join and full outer join [# 1209](https://github.com/StarRocks/starrocks/pull/1209)  [# 31234](https://github.com/StarRocks/starrocks/pull/1234)
+
+### Major Bugfix
+
+* Fix the problem that repeat node cannot do predicate push-down[# 1410](https://github.com/StarRocks/starrocks/pull/1410) [# 1417](https://github.com/StarRocks/starrocks/pull/1417)
+* Repair the problem that routine load may lost data when the cluster alter master node during import.[# 1074](https://github.com/StarRocks/starrocks/pull/1074) [# 1272](https://github.com/StarRocks/starrocks/pull/1272)
+* Fix the problem that creation view cannot support union [# 1083](https://github.com/StarRocks/starrocks/pull/1083)
+* Fix some stability issues of Hive external table[# 1408](https://github.com/StarRocks/starrocks/pull/1408)
+* Fix an issue with group by view[# 1231](https://github.com/StarRocks/starrocks/pull/1231)
+
+## 1.19.3
+
+Release date: November 30, 2021
+
+### Improvement
+
+* Upgrade jprotobuf version to improve security [# 1506](https://github.com/StarRocks/starrocks/issues/1506)
+
+### Major Bugfix
+
+* Fix some problems with group by result correctness
+* Fix some problems with grouping sets[# 1395](https://github.com/StarRocks/starrocks/issues/1395) [# 1119](https://github.com/StarRocks/starrocks/pull/1119)
+* Fix the problem of some indicators of date_format
+* Fix a boundary condition issue with aggregated streamming[# 1584](https://github.com/StarRocks/starrocks/pull/1584)
+* For details, please refer to[link](https://github.com/StarRocks/starrocks/compare/1.19.2...1.19.3)
+
+## 1.19.4
+
+Release date: December 9, 2021
+
+### Improvement
+
+* Support cast(varchar as bitmap) [# 1941](https://github.com/StarRocks/starrocks/pull/1941)
+* Update access policy of hive external table [# 1394](https://github.com/StarRocks/starrocks/pull/1394) [# 1807](https://github.com/StarRocks/starrocks/pull/1807)
+
+### Bugfix
+
+* Fix the bug of wrong query result with predicate Cross Join [# 1918](https://github.com/StarRocks/starrocks/pull/1918)
+* Fix the bug of decimal type and time type conversion [# 1709](https://github.com/StarRocks/starrocks/pull/1709) [# 1738](https://github.com/StarRocks/starrocks/pull/1738)
+* Fix the bug of colocate join/replicate join selection error [# 1727](https://github.com/StarRocks/starrocks/pull/1727)
+* Fix several plan cost calculation problems
+
+## 1.19.5
+
+Release date: December 20, 2021
+
+### Imporvement
+
+* A plan to optimize shuffle join [# 2184](https://github.com/StarRocks/starrocks/pull/2184)
+* Optimize multiple large file imports [# 2067](https://github.com/StarRocks/starrocks/pull/2067)
+
+### Bugfix
+
+* Upgrade Log4j2 to 2.17.0, fix security vulnerabilities[# 2284](https://github.com/StarRocks/starrocks/pull/2284)[# 2290](https://github.com/StarRocks/starrocks/pull/2290)
+* Fix the problem of empty partition in Hive external table[# 707](https://github.com/StarRocks/starrocks/pull/707)[# 2082](https://github.com/StarRocks/starrocks/pull/2082)
