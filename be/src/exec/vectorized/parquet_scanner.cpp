@@ -117,7 +117,7 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
     {
         SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
         for (auto i = 0; i < _num_of_columns_from_file; ++i) {
-            SlotDescriptor *slot_desc = _src_slot_descriptors[i];
+            SlotDescriptor* slot_desc = _src_slot_descriptors[i];
             if (slot_desc == nullptr) {
                 continue;
             }
