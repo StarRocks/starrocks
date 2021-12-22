@@ -207,7 +207,9 @@ Status ExceptNode::close(RuntimeState* state) {
         _build_pool->free_all();
     }
 
-    _hash_set.reset();
+    if (_hash_set != nullptr) {
+        _hash_set.reset();
+    }
 
     return ExecNode::close(state);
 }
