@@ -388,8 +388,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         int has_not_pass_through = false;
         for (auto idx : _channel_indices) {
             if (_channels[idx]->use_pass_through()) {
-                bool is_real_sent = false;
-                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk.get(), false, &is_real_sent));
+                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk.get(), false));
             } else {
                 has_not_pass_through = true;
             }
