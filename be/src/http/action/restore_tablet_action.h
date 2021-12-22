@@ -35,7 +35,7 @@ class ExecEnv;
 
 class RestoreTabletAction : public HttpHandler {
 public:
-    RestoreTabletAction(ExecEnv* exec_env);
+    explicit RestoreTabletAction(ExecEnv* exec_env);
 
     ~RestoreTabletAction() override = default;
 

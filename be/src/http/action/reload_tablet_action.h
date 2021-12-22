@@ -31,7 +31,7 @@ class ExecEnv;
 
 class ReloadTabletAction : public HttpHandler {
 public:
-    ReloadTabletAction(ExecEnv* exec_env);
+    explicit ReloadTabletAction(ExecEnv* exec_env);
 
     ~ReloadTabletAction() override = default;
 
