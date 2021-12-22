@@ -17,20 +17,15 @@ public:
     using NullColumnPtr = NullColumn::Ptr;
     using DatumType = RunTimeCppType<Type>;
 
-    ColumnBuilder() {
+    explicit ColumnBuilder(int reserve_size = config::vector_chunk_size)
+            : _column(RunTimeColumnType<Type>::create()), _null_column(nullptr) {
         static_assert(!pt_is_decimal<Type>, "Not support Decimal32/64/128 types");
-        _has_null = false;
-        _column = RunTimeColumnType<Type>::create();
-        _null_column = NullColumn::create();
-        reserve(config::vector_chunk_size);
+        reserve(reserve_size);
     }
 
-    ColumnBuilder(int precision, int scale) {
-        _has_null = false;
-        _column = RunTimeColumnType<Type>::create();
-        _null_column = NullColumn::create();
-        reserve(config::vector_chunk_size);
-
+    ColumnBuilder(int precision, int scale, int reserve_size = config::vector_chunk_size)
+            : _column(RunTimeColumnType<Type>::create()), _null_column(nullptr) {
+        reserve(reserve_size);
         if constexpr (pt_is_decimal<Type>) {
             static constexpr auto max_precision = decimal_precision_limit<DatumType>;
             DCHECK(0 <= scale && scale <= precision && precision <= max_precision);
@@ -41,63 +36,77 @@ public:
     }
 
     ColumnBuilder(DataColumnPtr column, NullColumnPtr null_column, bool has_null)
-            : _column(std::move(column)), _null_column(std::move(null_column)), _has_null(has_null) {}
-    //do nothing ctor, members are initialized by its offsprings.
-    explicit ColumnBuilder<Type>(void*) {}
+            : _column(std::move(column)), _null_column(has_null ? std::move(null_column) : nullptr) {}
 
     void append(const DatumType& value) {
-        _null_column->append(DATUM_NOT_NULL);
         _column->append(value);
+        if (_null_column != nullptr) {
+            _null_column->append(DATUM_NOT_NULL);
+        }
     }
 
     void append(const DatumType& value, bool is_null) {
-        _has_null = _has_null | is_null;
-        _null_column->append(is_null);
+        if (is_null & (_null_column == nullptr)) {
+            //      ^ using '&' instead of '&&' intended
+            create_null_column();
+        }
+        if (_null_column != nullptr) {
+            _null_column->append(is_null);
+        }
         _column->append(value);
     }
 
     void append_null() {
-        _has_null = true;
+        if (_null_column == nullptr) {
+            create_null_column();
+        }
         _null_column->append(DATUM_NULL);
         _column->append_default();
     }
 
+    bool has_null() { return _null_column != nullptr; }
+
     ColumnPtr build(bool is_const) {
-        if (is_const && _has_null) {
+        if (is_const && has_null()) {
             return ColumnHelper::create_const_null_column(_column->size());
         }
 
         if (is_const) {
-            return ConstColumn::create(_column, _column->size());
-        } else if (_has_null) {
-            return NullableColumn::create(_column, _null_column);
+            return ConstColumn::create(std::move(_column), _column->size());
+        } else if (has_null()) {
+            DCHECK_EQ(_column->size(), _null_column->size());
+            return NullableColumn::create(std::move(_column), std::move(_null_column));
         } else {
-            return _column;
+            return std::move(_column);
         }
     }
 
     void reserve(int size) {
         _column->reserve(size);
-        _null_column->reserve(size);
+        if (_null_column != nullptr) {
+            _null_column->reserve(size);
+        }
     }
 
-    DataColumnPtr data_column() { return _column; }
+    const DataColumnPtr& data_column() const { return _column; }
 
 protected:
+    void create_null_column() {
+        _null_column = NullColumn::create();
+        _null_column->reserve(_column->capacity());
+        _null_column->resize(_column->size());
+    }
+
     DataColumnPtr _column;
     NullColumnPtr _null_column;
-    bool _has_null;
 };
 
 class NullableBinaryColumnBuilder : public ColumnBuilder<TYPE_VARCHAR> {
 public:
     using ColumnType = RunTimeColumnType<TYPE_VARCHAR>;
     using Offsets = ColumnType::Offsets;
-    NullableBinaryColumnBuilder() : ColumnBuilder(nullptr) {
-        _column = ColumnType::create();
-        _null_column = NullColumn::create();
-        _has_null = false;
-    }
+
+    NullableBinaryColumnBuilder() : ColumnBuilder(0) {}
 
     // allocate enough room for offsets and null_column
     // reserve bytes_size bytes for Bytes. size of offsets
@@ -112,12 +121,16 @@ public:
         auto& offsets = _column->get_offset();
         raw::make_room(&offsets, num_rows + 1);
         offsets[0] = 0;
-        _null_column->get_data().resize(num_rows);
+        if (_null_column != nullptr) {
+            _null_column->get_data().resize(num_rows);
+        }
     }
 
     // mark i-th resulting element is null
     void set_null(size_t i) {
-        _has_null = true;
+        if (_null_column == nullptr) {
+            create_null_column();
+        }
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
         NullColumn::Container& nulls = _null_column->get_data();
@@ -159,12 +172,26 @@ public:
         bytes.resize(bytes.size() - n);
     }
 
-    NullColumnPtr get_null_column() { return _null_column; }
+    NullColumnPtr get_null_column() {
+        if (_null_column == nullptr) {
+            create_null_column();
+        }
+        return _null_column;
+    }
 
-    NullColumn::Container& get_null_data() { return _null_column->get_data(); }
+    NullColumn::Container& get_null_data() {
+        if (_null_column == nullptr) {
+            create_null_column();
+        }
+        return _null_column->get_data();
+    }
 
     // has_null = true means the finally resulting NullableColumn has nulls.
-    void set_has_null(bool has_null) { _has_null = has_null; }
+    void set_has_null(bool has_null) {
+        if (has_null & (_null_column == nullptr)) {
+            create_null_column();
+        }
+    }
 
 private:
 };
