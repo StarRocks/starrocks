@@ -61,6 +61,7 @@ Status ParquetScanner::open() {
 }
 
 Status ParquetScanner::initialize_src_chunk(ChunkPtr* chunk) {
+    SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
     _pool.clear();
     (*chunk) = std::make_shared<Chunk>();
     size_t column_pos = 0;
@@ -80,6 +81,7 @@ Status ParquetScanner::initialize_src_chunk(ChunkPtr* chunk) {
 }
 
 Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
+    SCOPED_RAW_TIMER(&_counter->fill_ns);
     size_t num_elements =
             std::min<size_t>((_max_chunk_size - _chunk_start_idx), (_batch->num_rows() - _batch_start_idx));
     size_t column_pos = 0;
@@ -112,21 +114,25 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
     auto num_rows = (*chunk)->filter(_chunk_filter);
     _counter->num_rows_filtered += _chunk_start_idx - num_rows;
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
-    for (auto i = 0; i < _num_of_columns_from_file; ++i) {
-        SlotDescriptor* slot_desc = _src_slot_descriptors[i];
-        if (slot_desc == nullptr) {
-            continue;
-        }
+    {
+        SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
+        for (auto i = 0; i < _num_of_columns_from_file; ++i) {
+            SlotDescriptor *slot_desc = _src_slot_descriptors[i];
+            if (slot_desc == nullptr) {
+                continue;
+            }
 
-        auto column = _cast_exprs[i]->evaluate(nullptr, (*chunk).get());
-        column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
-        cast_chunk->append_column(column, slot_desc->id());
+            auto column = _cast_exprs[i]->evaluate(nullptr, (*chunk).get());
+            column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
+            cast_chunk->append_column(column, slot_desc->id());
+        }
+        auto range = _scan_range.ranges.at(_next_file - 1);
+        if (range.__isset.num_of_columns_from_file) {
+            fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
+                                   cast_chunk->num_rows());
+        }
     }
-    auto range = _scan_range.ranges.at(_next_file - 1);
-    if (range.__isset.num_of_columns_from_file) {
-        fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
-                               cast_chunk->num_rows());
-    }
+
     auto dest_chunk = materialize(*chunk, cast_chunk);
     *chunk = dest_chunk;
     _chunk_start_idx = 0;
@@ -263,6 +269,7 @@ bool ParquetScanner::batch_is_exhausted() {
 }
 
 StatusOr<ChunkPtr> ParquetScanner::get_next() {
+    SCOPED_RAW_TIMER(&_counter->total_ns);
     ChunkPtr chunk;
     if (batch_is_exhausted()) {
         while (true) {
@@ -313,6 +320,7 @@ StatusOr<ChunkPtr> ParquetScanner::get_next() {
 }
 
 Status ParquetScanner::next_batch() {
+    SCOPED_RAW_TIMER(&_counter->read_batch_ns);
     _batch_start_idx = 0;
     if (_curr_file_reader == nullptr) {
         RETURN_IF_ERROR(open_next_reader());
