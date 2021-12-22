@@ -13,29 +13,27 @@
 namespace starrocks::vectorized {
 
 Chunk::Chunk() {
-    _slot_id_to_index.init(4);
-    _tuple_id_to_index.init(1);
+    _slot_id_to_index.reserve(4);
+    _tuple_id_to_index.reserve(1);
 }
 
 Chunk::Chunk(Columns columns, SchemaPtr schema) : _columns(std::move(columns)), _schema(std::move(schema)) {
     // bucket size cannot be 0.
-    _cid_to_index.init(std::max<size_t>(1, columns.size() * 2));
-    _slot_id_to_index.init(std::max<size_t>(1, _columns.size() * 2));
-    _tuple_id_to_index.init(1);
+    _cid_to_index.reserve(std::max<size_t>(1, columns.size() * 2));
+    _slot_id_to_index.reserve(std::max<size_t>(1, _columns.size() * 2));
+    _tuple_id_to_index.reserve(1);
     rebuild_cid_index();
     check_or_die();
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, const butil::FlatMap<SlotId, size_t>& slot_map)
-        : _columns(std::move(columns)), _slot_id_to_index(slot_map) {
+Chunk::Chunk(Columns columns, const SlotHashMap& slot_map) : _columns(std::move(columns)), _slot_id_to_index(slot_map) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
-    _tuple_id_to_index.init(1);
+    _tuple_id_to_index.reserve(1);
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, const butil::FlatMap<SlotId, size_t>& slot_map,
-             const butil::FlatMap<SlotId, size_t>& tuple_map)
+Chunk::Chunk(Columns columns, const SlotHashMap& slot_map, const TupleHashMap& tuple_map)
         : _columns(std::move(columns)), _slot_id_to_index(slot_map), _tuple_id_to_index(tuple_map) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
 }
@@ -68,7 +66,7 @@ std::string Chunk::get_column_name(size_t idx) const {
 }
 
 void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
-    DCHECK(_cid_to_index.seek(field->id()) == nullptr);
+    DCHECK(!_cid_to_index.contains(field->id()));
     _cid_to_index[field->id()] = _columns.size();
     _columns.emplace_back(std::move(column));
     _schema->append(field);

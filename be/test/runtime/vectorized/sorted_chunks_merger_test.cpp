@@ -79,8 +79,8 @@ public:
         Columns columns_2 = {col_cust_key_2, col_nation_2, col_region_2};
         Columns columns_3 = {col_cust_key_3, col_nation_3, col_region_3};
 
-        butil::FlatMap<SlotId, size_t> map;
-        map.init(columns_1.size() * 2);
+        Chunk::SlotHashMap map;
+        map.reserve(columns_1.size() * 2);
         for (int i = 0; i < columns_1.size(); ++i) {
             map[i] = i;
         }
