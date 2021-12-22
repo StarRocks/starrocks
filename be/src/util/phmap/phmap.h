@@ -1811,8 +1811,10 @@ private:
         auto layout = MakeLayout(capacity_);
         // Unpoison before returning the memory to the allocator.
         SanitizerUnpoisonMemoryRegion(slots_, sizeof(slot_type) * capacity_);
-        Deallocate<Layout::Alignment()>(&alloc_ref(), ctrl_, layout.AllocSize());
-        ctrl_ = EmptyGroup();
+        if (ctrl_ != EmptyGroup()) {
+            Deallocate<Layout::Alignment()>(&alloc_ref(), ctrl_, layout.AllocSize());
+            ctrl_ = EmptyGroup();
+        }
         slots_ = nullptr;
         size_ = 0;
         capacity_ = 0;
