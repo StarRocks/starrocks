@@ -581,8 +581,701 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
+    // array_remove([], 1) -> []
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        target->append_datum(Datum{(int32_t)1});
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+        EXPECT_EQ(0, result->get(0).get_array().size());
+    }
+
+    // array_remove([], "abc") -> []
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        target->append_datum(Datum{"abc"});
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+        EXPECT_EQ(0, result->get(0).get_array().size());
+    }
+
+    // array_remove([[]], [1]) -> [[]]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        target->append_datum(Datum(DatumArray{Datum{(int32_t)1}}));
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(0, row.size());
+    }
+
+    // array_remove([[]], []) -> []
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        target->append_datum(Datum(DatumArray{}));
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(0, row.size());
+    }
+
+    // array_remove([], 1) -> []
+    // array_remove([], 1) -> []
+    // array_remove([], 1) -> []
+    // array_remove([], 1) -> []
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        DCHECK(target->is_constant());
+        target->append_datum(Datum((int32_t)1));
+        target->resize(4);
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+
+        // 1st row: array_remove([], 1) -> []
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 2nd row: array_remove([], 1) -> []
+        row = result->get(1).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 3rd row: array_remove([], 1) -> []
+        row = result->get(2).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 4th row: array_remove([], 1) -> []
+        row = result->get(3).get_array();
+        EXPECT_EQ(0, row.size());
+    }
+
+    // array_remove([], 1) -> []
+    // array_remove([], 2) -> []
+    // array_remove([], NULL) -> []
+    // array_remove([], 3) -> []
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        target->append_datum(Datum((int32_t)1));
+        target->append_datum(Datum((int32_t)2));
+        target->append_datum(Datum{});
+        target->append_datum(Datum((int32_t)3));
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+
+        // 1st row: array_remove([], 1) -> []
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 2nd row: array_remove([], 2) -> []
+        row = result->get(1).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 3rd row: array_remove([], NULL) -> []
+        row = result->get(2).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 4th row: array_remove([], 3) -> []
+        row = result->get(3).get_array();
+        EXPECT_EQ(0, row.size());
+    }
+
+    // array_remove([], NULL) -> []
+    // array_remove([], NULL) -> []
+    // array_remove([], NULL) -> []
+    // array_remove([], NULL) -> []
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_const_null_column(1);
+        target->resize(4);
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+        EXPECT_EQ(0, result->get(0).get_array().size());
+        EXPECT_EQ(0, result->get(1).get_array().size());
+        EXPECT_EQ(0, result->get(2).get_array().size());
+        EXPECT_EQ(0, result->get(3).get_array().size());
+
+        array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+        EXPECT_EQ(0, result->get(0).get_array().size());
+        EXPECT_EQ(0, result->get(1).get_array().size());
+        EXPECT_EQ(0, result->get(2).get_array().size());
+        EXPECT_EQ(0, result->get(3).get_array().size());
+
+        array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+        EXPECT_EQ(0, result->get(0).get_array().size());
+        EXPECT_EQ(0, result->get(1).get_array().size());
+        EXPECT_EQ(0, result->get(2).get_array().size());
+        EXPECT_EQ(0, result->get(3).get_array().size());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_remove_no_null) {
+    // array_remove([], false)            -> []
+    // array_remove([], true)             -> []
+    // array_remove([false], false)       -> []
+    // array_remove([false], true)        -> [false]
+    // array_remove([true], false)        -> [true]
+    // array_remove([true], true)         -> []
+    // array_remove([true, false], false) -> [true]
+    // array_remove([true, false], true)  -> [false]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(DatumArray{(int8_t) false});
+        array->append_datum(DatumArray{(int8_t) false});
+        array->append_datum(DatumArray{(int8_t) true});
+        array->append_datum(DatumArray{(int8_t) true});
+        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+        target->append_datum(Datum{(int8_t)0});
+        target->append_datum(Datum{(int8_t)1});
+        target->append_datum(Datum{(int8_t)0});
+        target->append_datum(Datum{(int8_t)1});
+        target->append_datum(Datum{(int8_t)0});
+        target->append_datum(Datum{(int8_t)1});
+        target->append_datum(Datum{(int8_t)0});
+        target->append_datum(Datum{(int8_t)1});
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(8, result->size());
+
+        // 1st row: array_remove([], false) -> []
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 2nd row: array_remove([], true) -> []
+        row = result->get(1).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 3rd row: array_remove([false], false) -> []
+        row = result->get(2).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 4th row: array_remove([false], true) -> [false]
+        row = result->get(3).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_EQ(0, row[0].get_int8());
+
+        // 5th row: array_remove([true], false) -> [true]
+        row = result->get(4).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_EQ(1, row[0].get_int8());
+
+        // 6th row: array_remove([true], true) -> []
+        row = result->get(5).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 7th row: array_remove([true, false], false) -> [true]
+        row = result->get(6).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_EQ(1, row[0].get_int8());
+
+        // 8th row: array_remove([true, false], true) -> [false]
+        row = result->get(7).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_EQ(0, row[0].get_int8());
+    }
+
+    // array_remove([], 3) -> []
+    // array_remove([2], 3) -> [2]
+    // array_remove([1, 2, 3], 3) -> [1, 2]
+    // array_remove([3, 2, 1], 3) -> [2, 1]
+    // array_remove([2, 1, 3], 3) -> [2, 1]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(DatumArray{2});
+        array->append_datum(DatumArray{1, 2, 3});
+        array->append_datum(DatumArray{3, 2, 1});
+        array->append_datum(DatumArray{2, 1, 3});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        target->append_datum(Datum{3});
+        target->resize(5);
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(5, result->size());
+
+        // 1st row: array_remove([], 3) -> []
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 2nd row: array_remove([2], 3) -> [2]
+        row = result->get(1).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_EQ(2, row[0].get_int32());
+
+        // 3rd row: array_remove([1, 2, 3], 3) -> [1, 2]
+        row = result->get(2).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ(1, row[0].get_int32());
+        EXPECT_EQ(2, row[1].get_int32());
+
+        // 4th row: array_remove([3, 2, 1], 3) -> [2, 1]
+        row = result->get(3).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ(2, row[0].get_int32());
+        EXPECT_EQ(1, row[1].get_int32());
+
+        // 5th row: array_remove([2, 1, 3], 3) -> [2, 1]
+        row = result->get(4).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ(2, row[0].get_int32());
+        EXPECT_EQ(1, row[1].get_int32());
+    }
+
+    // array_remove([], [])                                      -> []
+    // array_remove([[]], [])                                    -> []
+    // array_remove([["d", "o"], ["r"], ["i", "s"]], [])         -> [["d", "o"], ["r"], ["i", "s"]]
+    // array_remove([["d", "o"], ["r"], ["i", "s"]], ["d])       -> [["d", "o"], ["r"], ["i", "s"]]
+    // array_remove([["d", "o"], ["r"], ["i", "s"]], ["d", "o"]) -> [["r"], ["i", "s"]]
+    // array_remove([["d", "o"], ["r"], ["i", "s"]], ["o", "d"]) -> [["d", "o"], ["r"], ["i", "s"]]
+    // array_remove([["d", "o"], ["r"], ["i", "s"]], ["r"])      -> [["d", "o"], ["i", "s"]]
+    // array_remove([["d", "o"], ["r"], ["i", "s"]], ["ri"])     -> [["d", "o"], ["r"], ["i", "s"]]
+    // array_remove([["d", "o"], ["r"], ["i", "s"]], ["r", "i"]) -> [["d", "o"], ["r"], ["i", "s"]]
+    // array_remove([["d", "o"], ["r"], ["i", "s"]], ["i", "s"]) -> [["d", "o"], ["r"]]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(DatumArray{DatumArray{}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        target->append_datum(Datum(DatumArray{}));
+        target->append_datum(Datum(DatumArray{}));
+        target->append_datum(Datum(DatumArray{}));
+        target->append_datum(DatumArray{"d"});
+        target->append_datum(DatumArray{"d", "o"});
+        target->append_datum(DatumArray{"o", "d"});
+        target->append_datum(DatumArray{"r"});
+        target->append_datum(DatumArray{"ri"});
+        target->append_datum(DatumArray{"r", "i"});
+        target->append_datum(DatumArray{"i", "s"});
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(10, result->size());
+
+        // 1st row: array_remove([], []) -> []
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 2nd row: array_remove([[]], []) -> []
+        row = result->get(1).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 3rd row: array_remove([["d", "o"], ["r"], ["i", "s"]], []) -> [["d", "o"], ["r"], ["i", "s"]]
+        row = result->get(2).get_array();
+        EXPECT_EQ(3, row.size());
+        EXPECT_EQ(2, row[0].get_array().size()); // ["d", "o"]
+        EXPECT_EQ("d", row[0].get_array()[0].get_slice());
+        EXPECT_EQ("o", row[0].get_array()[1].get_slice());
+        EXPECT_EQ(1, row[1].get_array().size()); //["r"]
+        EXPECT_EQ("r", row[1].get_array()[0].get_slice());
+        EXPECT_EQ(2, row[2].get_array().size()); // ["i", "s"]
+        EXPECT_EQ("i", row[2].get_array()[0].get_slice());
+        EXPECT_EQ("s", row[2].get_array()[1].get_slice());
+
+        // 4th row: array_remove([["d", "o"], ["r"], ["i", "s"]], ["d]) -> [["d", "o"], ["r"], ["i", "s"]]
+        row = result->get(3).get_array();
+        EXPECT_EQ(3, row.size());
+        EXPECT_EQ(2, row[0].get_array().size()); // ["d", "o"]
+        EXPECT_EQ("d", row[0].get_array()[0].get_slice());
+        EXPECT_EQ("o", row[0].get_array()[1].get_slice());
+        EXPECT_EQ(1, row[1].get_array().size()); //["r"]
+        EXPECT_EQ("r", row[1].get_array()[0].get_slice());
+        EXPECT_EQ(2, row[2].get_array().size()); // ["i", "s"]
+        EXPECT_EQ("i", row[2].get_array()[0].get_slice());
+        EXPECT_EQ("s", row[2].get_array()[1].get_slice());
+
+        // 5th row: array_remove([["d", "o"], ["r"], ["i", "s"]], ["d", "o"]) -> [["r"], ["i", "s"]]
+        row = result->get(4).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ(1, row[0].get_array().size()); //["r"]
+        EXPECT_EQ("r", row[0].get_array()[0].get_slice());
+        EXPECT_EQ(2, row[1].get_array().size()); // ["i", "s"]
+        EXPECT_EQ("i", row[1].get_array()[0].get_slice());
+        EXPECT_EQ("s", row[1].get_array()[1].get_slice());
+
+        // 6th row: array_remove([["d", "o"], ["r"], ["i", "s"]], ["o", "d"]) -> [["d", "o"], ["r"], ["i", "s"]]
+        row = result->get(5).get_array();
+        EXPECT_EQ(3, row.size());
+        EXPECT_EQ(2, row[0].get_array().size()); // ["d", "o"]
+        EXPECT_EQ("d", row[0].get_array()[0].get_slice());
+        EXPECT_EQ("o", row[0].get_array()[1].get_slice());
+        EXPECT_EQ(1, row[1].get_array().size()); // ["r"]
+        EXPECT_EQ("r", row[1].get_array()[0].get_slice());
+        EXPECT_EQ(2, row[2].get_array().size()); // ["i", "s"]
+        EXPECT_EQ("i", row[2].get_array()[0].get_slice());
+        EXPECT_EQ("s", row[2].get_array()[1].get_slice());
+
+        // 7th row: array_remove([["d", "o"], ["r"], ["i", "s"]], ["r"]) -> [["d", "o"], ["i", "s"]]
+        row = result->get(6).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ(2, row[0].get_array().size()); // ["d", "o"]
+        EXPECT_EQ("d", row[0].get_array()[0].get_slice());
+        EXPECT_EQ("o", row[0].get_array()[1].get_slice());
+        EXPECT_EQ(2, row[1].get_array().size()); // ["i", "s"]
+        EXPECT_EQ("i", row[1].get_array()[0].get_slice());
+        EXPECT_EQ("s", row[1].get_array()[1].get_slice());
+
+        // 8th row: array_remove([["d", "o"], ["r"], ["i", "s"]], ["ri"]) -> [["d", "o"], ["r"], ["i", "s"]]
+        row = result->get(7).get_array();
+        EXPECT_EQ(3, row.size());
+        EXPECT_EQ(2, row[0].get_array().size()); // ["d", "o"]
+        EXPECT_EQ("d", row[0].get_array()[0].get_slice());
+        EXPECT_EQ("o", row[0].get_array()[1].get_slice());
+        EXPECT_EQ(1, row[1].get_array().size()); //["r"]
+        EXPECT_EQ("r", row[1].get_array()[0].get_slice());
+        EXPECT_EQ(2, row[2].get_array().size()); // ["i", "s"]
+        EXPECT_EQ("i", row[2].get_array()[0].get_slice());
+        EXPECT_EQ("s", row[2].get_array()[1].get_slice());
+
+        // 9th row: array_remove([["d", "o"], ["r"], ["i", "s"]], ["r", "i"]) -> [["d", "o"], ["r"], ["i", "s"]]
+        row = result->get(8).get_array();
+        EXPECT_EQ(3, row.size());
+        EXPECT_EQ(2, row[0].get_array().size()); // ["d", "o"]
+        EXPECT_EQ("d", row[0].get_array()[0].get_slice());
+        EXPECT_EQ("o", row[0].get_array()[1].get_slice());
+        EXPECT_EQ(1, row[1].get_array().size()); //["r"]
+        EXPECT_EQ("r", row[1].get_array()[0].get_slice());
+        EXPECT_EQ(2, row[2].get_array().size()); // ["i", "s"]
+        EXPECT_EQ("i", row[2].get_array()[0].get_slice());
+        EXPECT_EQ("s", row[2].get_array()[1].get_slice());
+
+        // 10th row: array_remove([["d", "o"], ["r"], ["i", "s"]], ["i", "s"]) -> [["d", "o"], ["r"]]
+        row = result->get(9).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ(2, row[0].get_array().size()); // ["d", "o"]
+        EXPECT_EQ("d", row[0].get_array()[0].get_slice());
+        EXPECT_EQ("o", row[0].get_array()[1].get_slice());
+        EXPECT_EQ(1, row[1].get_array().size()); //["r"]
+        EXPECT_EQ("r", row[1].get_array()[0].get_slice());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_remove_has_null_element) {
+    // array_remove([NULL], "abc")        -> [NULL]
+    // array_remove(["abc", NULL], "abc") -> [NULL]
+    // array_remove([NULL, "abc"], "abc") -> [NULL]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{Datum{}});
+        array->append_datum(DatumArray{"abc", Datum{}});
+        array->append_datum(DatumArray{Datum{}, "abc"});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        target->append_datum(Datum{"abc"});
+        target->append_datum(Datum{"abc"});
+        target->append_datum(Datum{"abc"});
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+
+        // 1st row: array_remove([NULL], "abc") -> [NULL]
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(1, row.size());
+
+        // 2nd row: array_remove(["abc", NULL], "abc") -> [NULL]
+        row = result->get(1).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_TRUE(row[0].is_null());
+
+        // 3rd row: array_remove([NULL, "abc"], "abc") -> [NULL]
+        row = result->get(2).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_TRUE(row[0].is_null());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_remove_has_null_target) {
+    {
+        // array_remove(["abc", "def"], NULL) -> ["abc", "def"]
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{"abc", "def"});
+
+        // const-null column.
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ("abc", row[0].get_slice());
+        EXPECT_EQ("def", row[1].get_slice());
+    }
+
+    // array_remove([1, 2, 3], 2) -> [1, 3]
+    // array_remove([1, 2, 3], 4) -> [1, 2, 3]
+    // array_remove([1, 2, 3], NULL) -> [1, 2, 3]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
+        array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
+        array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        target->append_datum(Datum((int8_t)2));
+        target->append_datum(Datum((int8_t)4));
+        target->append_datum(Datum());
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+
+        // 1st row: array_remove([1, 2, 3], 2) -> [1, 3]
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ(1, row[0].get_int8());
+        EXPECT_EQ(3, row[1].get_int8());
+
+        // 2nd row: array_remove([1, 2, 3], 4) -> [1, 2, 3]
+        row = result->get(1).get_array();
+        EXPECT_EQ(3, row.size());
+        EXPECT_EQ(1, row[0].get_int8());
+        EXPECT_EQ(2, row[1].get_int8());
+        EXPECT_EQ(3, row[2].get_int8());
+
+        // 3rd row: array_remove([1, 2, 3], NULL) -> [1, 2, 3]
+        row = result->get(2).get_array();
+        EXPECT_EQ(3, row.size());
+        EXPECT_EQ(1, row[0].get_int8());
+        EXPECT_EQ(2, row[1].get_int8());
+        EXPECT_EQ(3, row[2].get_int8());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_remove_has_null_element_and_target) {
+    // array_remove([NULL], NULL)  -> []
+    // array_remove([NULL, "abc"], NULL) -> ["abc"]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{Datum()});
+        array->append_datum(DatumArray{Datum(), "abc"});
+
+        // const-null column.
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(2, result->size());
+
+        // 1st row: array_remove([NULL], NULL) -> []
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 2nd row: array_remove([NULL, "abc"], NULL) -> ["abc"]
+        row = result->get(1).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_EQ("abc", row[0].get_slice());
+    }
+
+    // array_remove([NULL], NULL)           -> []
+    // array_remove([NULL, [1, 2]], NULL)   -> [[1 ,2]]
+    // array_remove([NULL, [1, 2]], [1, 2]) -> [NULL]
+    // array_remove([[1, 2], NULL], [1, 2]) -> [NULL]
+    // array_remove([NULL, [1, 2]], NULL)   -> [[1, 2]]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(DatumArray{Datum()});
+        array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
+        array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
+        array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
+        array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
+        target->append_datum(Datum());
+        target->append_datum(Datum());
+        target->append_datum(DatumArray{1, 2});
+        target->append_datum(DatumArray{1, 2});
+        target->append_datum(Datum());
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(5, result->size());
+
+        // 1st row: array_remove([NULL], NULL) -> []
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(0, row.size());
+
+        // 2nd row: array_remove([NULL, [1, 2]], NULL)   -> [[1 ,2]]
+        row = result->get(1).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_EQ(2, row[0].get_array().size());
+        EXPECT_EQ(1, row[0].get_array()[0].get_int32());
+        EXPECT_EQ(2, row[0].get_array()[1].get_int32());
+
+        // 3rd row: array_remove([NULL, [1, 2]], [1, 2]) -> [NULL]
+        row = result->get(2).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_TRUE(row[0].is_null());
+
+        // 4th row: array_remove([[1, 2], NULL], [1, 2]) -> [NULL]
+        row = result->get(3).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_TRUE(row[0].is_null());
+
+        // 5th row: array_remove([NULL, [1, 2]], NULL)   -> [[1, 2]]
+        row = result->get(4).get_array();
+        EXPECT_EQ(1, row.size());
+        EXPECT_EQ(2, row[0].get_array().size());
+        EXPECT_EQ(1, row[0].get_array()[0].get_int32());
+        EXPECT_EQ(2, row[0].get_array()[1].get_int32());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
+    {
+        // array_remove(["a", "b"], "c")      -> ["a", "b"]
+        // array_remove(NULL, "c")            -> NULL
+        // array_remove(["a", "b", "c"], "c") -> ["a", "b"]
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        array->append_datum(DatumArray{"a", "b"});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{"a", "b", "c"});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        target->append_datum(Datum("c"));
+        target->append_datum(Datum("c"));
+        target->append_datum(Datum("c"));
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+
+        // 1st row: array_remove(["a", "b"], "c")      -> ["a", "b"]
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ("a", row[0].get_slice());
+        EXPECT_EQ("b", row[1].get_slice());
+
+        // 2nd row: array_remove(NULL, "c") -> NULL
+        EXPECT_TRUE(result->get(1).is_null());
+
+        // 3rd row: array_remove(["a", "b", "c"], "c") -> ["a", "b"]
+        row = result->get(2).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ("a", row[0].get_slice());
+        EXPECT_EQ("b", row[1].get_slice());
+    }
+
+    // array_remove([["a"], ["b"]], ["c"]) -> [["a"], ["b"]]
+    // array_remove(NULL, ["c"])           -> NULL
+    // array_remove([["a", "b"], ["c"]])   -> [["a", "b"]]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        array->append_datum(DatumArray{DatumArray{"a"}, DatumArray{"b"}});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{DatumArray{"a", "b"}, DatumArray{"c"}});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), false);
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(DatumArray{"c"});
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+
+        // 1st row: array_remove([["a"], ["b"]], ["c"]) -> [["a"], ["b"]]
+        DatumArray row = result->get(0).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ("a", row[0].get_array()[0].get_slice());
+        EXPECT_EQ("b", row[1].get_array()[0].get_slice());
+
+        // 2nd row: array_remove(NULL, ["c"]) -> NULL
+        EXPECT_TRUE(result->get(1).is_null());
+
+        // 3rd row: array_remove([["a", "b"], ["c"]])   -> [["a", "b"]]
+        row = result->get(0).get_array();
+        EXPECT_EQ(2, row.size());
+        EXPECT_EQ("a", row[0].get_array()[0].get_slice());
+        EXPECT_EQ("b", row[1].get_array()[0].get_slice());
+    }
+
+    // array_remove(NULL, NULL)  -> NULL
+    // array_remove(NULL, ["a"]) -> NULL
+    // array_remove(NULL, [])    -> NULL
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        array->append_datum(Datum());
+        array->append_datum(Datum());
+        array->append_datum(Datum());
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), true);
+        target->append_datum(Datum());
+        target->append_datum(DatumArray{"a"});
+        target->append_datum(DatumArray{Datum()});
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+
+        EXPECT_TRUE(result->get(0).is_null());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_TRUE(result->get(2).is_null());
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_append) {
-    // array_append([], NULL)
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));

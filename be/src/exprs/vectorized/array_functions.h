@@ -14,6 +14,8 @@ public:
 
     DEFINE_VECTORIZED_FN(array_append);
 
+    DEFINE_VECTORIZED_FN(array_remove);
+
     DEFINE_VECTORIZED_FN(array_contains);
 
     DEFINE_VECTORIZED_FN(array_sum_boolean);
