@@ -307,8 +307,8 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
 Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
                                                 bool is_pipeline) {
-    DCHECK(request.chunks_size() > 0);
-
+    bool use_pass_through = request.use_pass_through();
+    DCHECK(request.chunks_size() > 0 || use_pass_through);
     int32_t be_number = request.be_number();
     int64_t sequence = request.sequence();
     ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
@@ -343,7 +343,10 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
             return Status::OK();
         }
-        if (_chunk_meta.types.empty()) {
+        // We only need to build chunk meta on first chunk and not use_pass_through
+        // By using pass through, chunks are trasmitted in shared memory without ser/deser
+        // So there is no need to build chunk meta.
+        if (_chunk_meta.types.empty() && !use_pass_through) {
             SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
             auto& pchunk = request.chunks(0);
             RETURN_IF_ERROR(_build_chunk_meta(pchunk));
@@ -353,19 +356,32 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
     ChunkQueue chunks;
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
-    for (auto& pchunk : request.chunks()) {
-        int64_t chunk_bytes = pchunk.data().size();
-        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
-        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+    if (use_pass_through) {
+        ChunkUniquePtrVector swap_chunks;
+        std::vector<size_t> swap_bytes;
+        _recvr->_pass_through_context.pull_chunks(request.sender_id(), &swap_chunks, &swap_bytes);
+        DCHECK(swap_chunks.size() == swap_bytes.size());
+        size_t bytes = 0;
+        for (size_t i = 0; i < swap_chunks.size(); i++) {
+            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), std::move(swap_chunks[i]), nullptr};
+            chunks.emplace_back(std::move(item));
+            bytes += swap_bytes[i];
+        }
+        total_chunk_bytes += bytes;
+        COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
 
-        // TODO(zc): review this chunk_bytes
-        chunks.emplace_back(std::move(item));
-
-        total_chunk_bytes += chunk_bytes;
+    } else {
+        for (auto& pchunk : request.chunks()) {
+            int64_t chunk_bytes = pchunk.data().size();
+            ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
+            ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+            chunks.emplace_back(std::move(item));
+            total_chunk_bytes += chunk_bytes;
+        }
+        COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
     }
-    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
 
     wait_timer.start();
     {
@@ -394,8 +410,8 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
 
 Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
                                                                ::google::protobuf::Closure** done) {
-    DCHECK(request.chunks_size() > 0);
-
+    bool use_pass_through = request.use_pass_through();
+    DCHECK(request.chunks_size() > 0 || use_pass_through);
     const int32_t be_number = request.be_number();
     const int32_t sequence = request.sequence();
 
@@ -431,7 +447,10 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
             DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
             return Status::OK();
         }
-        if (_chunk_meta.types.empty()) {
+        // We only need to build chunk meta on first chunk and not use_pass_through
+        // By using pass through, chunks are trasmitted in shared memory without ser/deser
+        // So there is no need to build chunk meta.
+        if (_chunk_meta.types.empty() && !use_pass_through) {
             SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
             auto& pchunk = request.chunks(0);
             RETURN_IF_ERROR(_build_chunk_meta(pchunk));
@@ -441,19 +460,35 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
-    for (auto& pchunk : request.chunks()) {
-        int64_t chunk_bytes = pchunk.data().size();
-        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
-        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+    if (use_pass_through) {
+        ChunkUniquePtrVector swap_chunks;
+        std::vector<size_t> swap_bytes;
+        _recvr->_pass_through_context.pull_chunks(request.sender_id(), &swap_chunks, &swap_bytes);
+        DCHECK(swap_chunks.size() == swap_bytes.size());
+        size_t bytes = 0;
+        for (size_t i = 0; i < swap_chunks.size(); i++) {
+            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), std::move(swap_chunks[i]), nullptr};
+            local_chunk_queue.emplace_back(std::move(item));
+            bytes += swap_bytes[i];
+        }
+        total_chunk_bytes += bytes;
+        COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
+    } else {
+        for (auto& pchunk : request.chunks()) {
+            int64_t chunk_bytes = pchunk.data().size();
+            ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
-        // TODO(zc): review this chunk_bytes
-        local_chunk_queue.emplace_back(std::move(item));
+            ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
 
-        total_chunk_bytes += chunk_bytes;
+            // TODO(zc): review this chunk_bytes
+            local_chunk_queue.emplace_back(std::move(item));
+
+            total_chunk_bytes += chunk_bytes;
+        }
+        COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
     }
-    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
 
     wait_timer.start();
     {
@@ -668,7 +703,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
                                  std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
-                                 bool is_pipeline, bool keep_order)
+                                 bool is_pipeline, bool keep_order,
+                                 const PassThroughChunkBufferPtr& pass_through_chunk_buffer)
         : _mgr(stream_mgr),
           _fragment_instance_id(fragment_instance_id),
           _dest_node_id(dest_node_id),
@@ -682,9 +718,9 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
           _instance_mem_tracker(runtime_state->instance_mem_tracker_ptr()),
           _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
           _is_pipeline(is_pipeline),
-          _keep_order(keep_order) {
+          _keep_order(keep_order),
+          _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id) {
     // Create one queue per sender if is_merging is true.
-
     int num_queues = is_merging ? num_senders : 1;
     _sender_queues.reserve(num_queues);
     int num_sender_per_queue = is_merging ? 1 : num_senders;
@@ -695,11 +731,13 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
 
     // Initialize the counters
     _bytes_received_counter = ADD_COUNTER(_profile, "BytesReceived", TUnit::BYTES);
+    _bytes_pass_through_counter = ADD_COUNTER(_profile, "BytesPassThrough", TUnit::BYTES);
     _request_received_counter = ADD_COUNTER(_profile, "RequestReceived", TUnit::BYTES);
     _deserialize_row_batch_timer = ADD_TIMER(_profile, "DeserializeRowBatchTimer");
     _decompress_row_batch_timer = ADD_TIMER(_profile, "DecompressRowBatchTimer");
     _sender_total_timer = ADD_TIMER(_profile, "SenderTotalTime");
     _sender_wait_lock_timer = ADD_TIMER(_profile, "SenderWaitLockTime");
+    _pass_through_context.init();
 }
 
 Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {

@@ -722,7 +722,7 @@ public class OlapScanNode extends ScanNode {
         }
         if (ConnectContext.get() != null) {
             msg.olap_scan_node.setEnable_column_expr_predicate(
-                    ConnectContext.get().getSessionVariable().getEnableColumnExprPredicate());
+                    ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
         }
         msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 

@@ -132,6 +132,13 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
 
+    if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
+        _is_runtime_filter_merge_node = true;
+        _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params,
+                                                       false);
+    }
+    _exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+
     // set #senders of exchange nodes before calling Prepare()
     std::vector<ExecNode*> exch_nodes;
     _plan->collect_nodes(TPlanNodeType::EXCHANGE_NODE, &exch_nodes);
@@ -171,7 +178,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     // set up sink, if required
     if (request.fragment.__isset.output_sink) {
-        RETURN_IF_ERROR(DataSink::create_data_sink(obj_pool(), request.fragment.output_sink,
+        RETURN_IF_ERROR(DataSink::create_data_sink(_runtime_state, request.fragment.output_sink,
                                                    request.fragment.output_exprs, params, row_desc(), &_sink));
         RETURN_IF_ERROR(_sink->prepare(runtime_state()));
 
@@ -200,12 +207,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     _query_statistics.reset(new QueryStatistics());
     if (_sink != nullptr) {
         _sink->set_query_statistics(_query_statistics);
-    }
-
-    if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
-        _is_runtime_filter_merge_node = true;
-        _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params,
-                                                       false);
     }
 
     return Status::OK();
@@ -405,6 +406,7 @@ void PlanFragmentExecutor::cancel() {
     if (_is_runtime_filter_merge_node) {
         _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);
     }
+    _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
 }
 
 const RowDescriptor& PlanFragmentExecutor::row_desc() {
@@ -447,6 +449,7 @@ void PlanFragmentExecutor::close() {
     if (_is_runtime_filter_merge_node) {
         _exec_env->runtime_filter_worker()->close_query(_query_id);
     }
+    _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
 
     // Prepare may not have been called, which sets _runtime_state
     if (_runtime_state != nullptr) {

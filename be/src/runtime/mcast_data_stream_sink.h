@@ -6,7 +6,7 @@ namespace starrocks {
 
 class MultiCastDataStreamSink : public DataSink {
 public:
-    MultiCastDataStreamSink(ObjectPool* pool);
+    MultiCastDataStreamSink(RuntimeState* state);
     void add_data_stream_sink(std::unique_ptr<DataStreamSender> data_stream_sink);
     ~MultiCastDataStreamSink() override = default;
 
@@ -19,7 +19,7 @@ public:
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
 private:
-    ObjectPool* _pool;
+    RuntimeState* _state;
     std::vector<std::unique_ptr<DataStreamSender> > _sinks;
 };
 

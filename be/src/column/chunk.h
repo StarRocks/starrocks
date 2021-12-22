@@ -130,18 +130,19 @@ public:
 
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     // not clone tuple column
-    std::unique_ptr<Chunk> clone_empty() const;
-    std::unique_ptr<Chunk> clone_empty_with_slot() const;
-    std::unique_ptr<Chunk> clone_empty_with_schema() const;
+    ChunkUniquePtr clone_empty() const;
+    ChunkUniquePtr clone_empty_with_slot() const;
+    ChunkUniquePtr clone_empty_with_schema() const;
     // Create an empty chunk with the same meta and reserve it of specified size.
     // not clone tuple column
-    std::unique_ptr<Chunk> clone_empty(size_t size) const;
-    std::unique_ptr<Chunk> clone_empty_with_slot(size_t size) const;
-    std::unique_ptr<Chunk> clone_empty_with_schema(size_t size) const;
+    ChunkUniquePtr clone_empty(size_t size) const;
+    ChunkUniquePtr clone_empty_with_slot(size_t size) const;
+    ChunkUniquePtr clone_empty_with_schema(size_t size) const;
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
-    std::unique_ptr<Chunk> clone_empty_with_tuple() const;
+    ChunkUniquePtr clone_empty_with_tuple() const;
     // Create an empty chunk with the same meta and reserve it of specified size.
-    std::unique_ptr<Chunk> clone_empty_with_tuple(size_t size) const;
+    ChunkUniquePtr clone_empty_with_tuple(size_t size) const;
+    ChunkUniquePtr clone_unique() const;
 
     void append(const Chunk& src) { append(src, 0, src.num_rows()); }
 
