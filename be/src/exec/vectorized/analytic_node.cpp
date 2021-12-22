@@ -112,6 +112,7 @@ Status AnalyticNode::close(RuntimeState* state) {
 
     if (_analytor != nullptr) {
         _analytor->close(state);
+        _analytor.reset();
     }
 
     return ExecNode::close(state);

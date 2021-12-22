@@ -431,6 +431,13 @@ Status CrossJoinNode::close(RuntimeState* state) {
         return Status::OK();
     }
 
+    if (_build_chunk != nullptr) {
+        _build_chunk->reset();
+    }
+    if (_probe_chunk != nullptr) {
+        _probe_chunk->reset();
+    }
+
     child(0)->close(state);
     return ExecNode::close(state);
 }
