@@ -152,9 +152,9 @@ TEST_F(ChunkTest, test_serde) {
     size_t written_size = chunk->serialize((uint8_t*)buffer.data());
 
     RuntimeChunkMeta meta;
-    meta.slot_id_to_index.init(2);
-    meta.slot_id_to_index.insert(0, 0);
-    meta.slot_id_to_index.insert(1, 1);
+    meta.slot_id_to_index.reserve(2);
+    meta.slot_id_to_index[0] = 0;
+    meta.slot_id_to_index[1] = 1;
     meta.is_nulls.resize(2, false);
     meta.is_consts.resize(2, false);
     meta.types.resize(2);
@@ -222,7 +222,7 @@ TEST_F(ChunkTest, test_reset) {
     chk->reset();
     ASSERT_EQ(1, chk->num_columns());
     ASSERT_EQ(1, chk->get_slot_id_to_index_map().size());
-    ASSERT_EQ(0, *(chk->get_slot_id_to_index_map().seek(1)));
+    ASSERT_EQ(0, chk->get_slot_id_to_index_map().find(1)->second);
     ASSERT_EQ(0, chk->num_rows());
     ASSERT_EQ(DEL_NOT_SATISFIED, chk->delete_state());
 }
