@@ -447,7 +447,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "WHERE (NOT (true));";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  5:Decode\n" +
-                "  |  <dict id 34> : <string id 17>\n" +
+                "  |  <dict id 34> : <string id 33>\n" +
                 "  |  \n" +
                 "  4:Project\n" +
                 "  |  <slot 34> : 34: S_ADDRESS"));
@@ -684,7 +684,7 @@ public class DecodeRewriteTest extends PlanTestBase {
         String sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
-                "  |  <dict id 16> : <string id 11>"));
+                "  |  <dict id 16> : <string id 15>"));
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 16> : 16: t1a"));
     }

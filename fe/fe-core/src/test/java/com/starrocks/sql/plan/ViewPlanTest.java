@@ -1595,14 +1595,14 @@ public class ViewPlanTest extends PlanTestBase {
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
         Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[2, 4], [4]]") || sqlPlan.contains("" +
+                "  |  repeat: repeat 1 lines [[3, 4], [4]]") || sqlPlan.contains("" +
                 "  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[4], [2, 4]]"));
+                "  |  repeat: repeat 1 lines [[4], [3, 4]]"));
 
         Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[2, 4], [4]]") || viewPlan.contains("" +
+                "  |  repeat: repeat 1 lines [[3, 4], [4]]") || viewPlan.contains("" +
                 "  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[4], [2, 4]]"));
+                "  |  repeat: repeat 1 lines [[4], [3, 4]]"));
 
         starRocksAssert.dropView(viewName);
     }
@@ -1619,13 +1619,13 @@ public class ViewPlanTest extends PlanTestBase {
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
         Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 3 lines [[], [2], [4], [2, 4]]\n") ||
+                "  |  repeat: repeat 3 lines [[], [3], [4], [3, 4]]\n") ||
                 sqlPlan.contains("  6:REPEAT_NODE\n" +
-                        "  |  repeat: repeat 3 lines [[], [4], [2], [2, 4]]\n"));
+                        "  |  repeat: repeat 3 lines [[], [4], [3], [3, 4]]"));
         Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 3 lines [[], [2], [4], [2, 4]]\n") ||
+                "  |  repeat: repeat 3 lines [[], [3], [4], [3, 4]]\n") ||
                 viewPlan.contains("  6:REPEAT_NODE\n" +
-                        "  |  repeat: repeat 3 lines [[], [4], [2], [2, 4]]\n"));
+                        "  |  repeat: repeat 3 lines [[], [4], [3], [3, 4]]\n"));
         starRocksAssert.dropView(viewName);
     }
 
