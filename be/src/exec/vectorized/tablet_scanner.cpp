@@ -71,6 +71,8 @@ Status TabletScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
                                            _tablet->full_name(), st.to_string());
             st = Status::InternalError(msg);
             LOG(WARNING) << st;
+        } else {
+            RETURN_IF_ERROR(runtime_state->check_mem_limit("olap scanner open"));
         }
         return st;
     }

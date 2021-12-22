@@ -105,8 +105,8 @@ public:
         Columns columns2 = {col_cust_key_2, col_nation_2, col_region_2, col_mkt_sgmt_2};
         Columns columns3 = {col_cust_key_3, col_nation_3, col_region_3, col_mkt_sgmt_3};
 
-        butil::FlatMap<SlotId, size_t> map;
-        map.init(columns1.size() * 2);
+        Chunk::SlotHashMap map;
+        map.reserve(columns1.size() * 2);
         for (int i = 0; i < columns1.size(); ++i) {
             map[i] = i;
         }
