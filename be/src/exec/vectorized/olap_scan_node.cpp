@@ -560,8 +560,9 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     // If dop is one, we use num_fragment_instance > 1 to parallelize the query execution.
     // The scan may be still a bottleneck in this case, so we try to parallelize the scan operator.
-    if (context->degree_of_parallelism() == 1 && morsel_queue->num_morsels() >= 4) {
-        scan_operator->set_degree_of_parallelism(4);
+    if (context->degree_of_parallelism() == 1 &&
+        morsel_queue->num_morsels() >= pipeline::ScanOperator::PARALLELIZED_MORSELS_THRESHOLD) {
+        scan_operator->set_degree_of_parallelism(pipeline::ScanOperator::PARALLELIZED_MORSELS_THRESHOLD);
 
         operators.emplace_back(std::move(scan_operator));
         operators = context->maybe_interpolate_local_passthrough_exchange(operators);

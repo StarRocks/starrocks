@@ -42,6 +42,10 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
 
+    // If DOP is 1 and the number of morsels is >= 4
+    // make the DOP of the scan operator as 4 and insert a local passthrough after it.
+    static constexpr int PARALLELIZED_MORSELS_THRESHOLD = 4;
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
