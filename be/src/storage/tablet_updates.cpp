@@ -715,6 +715,14 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         return;
     }
     int64_t t_load = MonotonicMillis();
+    st = state.apply(&_tablet, rowset.get(), rowset_id, index);
+    if (!st.ok()) {
+        LOG(ERROR) << "_apply_rowset_commit error: apply rowset update state failed: " << st << " " << debug_string();
+        manager->update_state_cache().remove(state_entry);
+        _set_error();
+        return;
+    }
+    int64_t t_apply = MonotonicMillis();
 
     // 3. generate delvec
     PrimaryIndex::DeletesMap new_deletes;
@@ -852,8 +860,8 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
               << " rowset:" << rowset_id << " #seg:" << rowset->num_segments() << " #op(upsert:" << rowset->num_rows()
               << " del:" << delete_op << ") #del:" << old_total_del << "+" << new_del << "=" << total_del
               << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
-              << Substitute("($0/$1/$2/$3)", t_load - t_start, t_index - t_load, t_delvec - t_index,
-                            t_write - t_delvec);
+              << Substitute("($0/$1/$2/$3/$4)", t_load - t_start, t_apply - t_load, t_index - t_apply,
+                            t_delvec - t_index, t_write - t_delvec);
     VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
 }
 
@@ -2360,6 +2368,13 @@ void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets) {
     }
     _cur_total_rows = nrow;
     _cur_total_dels = ndel;
+}
+
+Status TabletUpdates::_get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
+                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                                         vector<std::unique_ptr<vectorized::Column>>* columns) {
+    // TODO(cbl): impl
+    return Status::OK();
 }
 
 } // namespace starrocks

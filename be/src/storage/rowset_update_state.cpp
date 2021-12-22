@@ -2,11 +2,18 @@
 
 #include "rowset_update_state.h"
 
+#include "gutil/strings/substitute.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"
+#include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/vectorized/rowset_options.h"
+#include "storage/tablet.h"
+#include "storage/tablet_updates.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/defer_op.h"
+#include "util/phmap/phmap.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -42,8 +49,7 @@ Status RowsetUpdateState::_do_load(Rowset* rowset) {
     auto block_manager = fs::fs_util::block_manager();
     // always one file for now.
     for (auto i = 0; i < rowset->num_delete_files(); i++) {
-        auto path = BetaRowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(),
-                                                      rowset->num_segments() - 1);
+        auto path = BetaRowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
         std::unique_ptr<fs::ReadableBlock> rblock;
         RETURN_IF_ERROR(block_manager->open_block(path, &rblock));
         uint64_t file_size = 0;
@@ -100,6 +106,155 @@ Status RowsetUpdateState::_do_load(Rowset* rowset) {
     for (const auto& one_delete : deletes()) {
         _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
     }
+    return Status::OK();
+}
+
+struct RowidSortEntry {
+    uint32_t rowid;
+    uint32_t idx;
+    RowidSortEntry(uint32_t rowid, uint32_t idx) : rowid(rowid), idx(idx) {}
+    bool operator<(const RowidSortEntry& rhs) const { return rowid < rhs.rowid; }
+};
+
+// group rowids by rssid, and for each group sort by rowid, return as `rowids_by_rssid`
+// num_default: return the number of rows that need to fill in default values
+// idxes: reverse indexes to restore values from (rssid,rowid) order to rowid order
+// i.e.
+// input rowids: [
+//    (0, 3),
+//    (-1,-1),
+//    (1, 3),
+//    (0, 1),
+//    (-1,-1),
+//    (1, 2),
+// ]
+// output:
+//   num_default: 2
+//   rowids_by_rssid: {
+//     0: [
+//        1,
+//        3
+//     ],
+//     1: [
+//        2,
+//        3
+//	   ]
+//   }
+//   the read column values will be in this order: [default_value, (0,1), (0,3), (1,2), (1,3)]
+//   the indexes used to convert read columns values to write order will be: [2, 0, 4, 1, 0, 3]
+static void plan_read_by_rssid(const vector<uint64_t>& rowids, size_t* num_default,
+                               std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid, vector<uint32_t>* idxes) {
+    uint32_t n = rowids.size();
+    phmap::node_hash_map<uint32_t, vector<RowidSortEntry>> sort_entry_by_rssid;
+    std::vector<uint32_t> defaults;
+    for (uint32_t i = 0; i < n; i++) {
+        uint64_t v = rowids[i];
+        uint32_t rssid = v >> 32;
+        if (rssid == (uint32_t)-1) {
+            defaults.push_back(i);
+        } else {
+            uint32_t rowid = v & ROWID_MASK;
+            sort_entry_by_rssid[rssid].emplace_back(rowid, i);
+        }
+    }
+    *num_default = defaults.size();
+    idxes->resize(rowids.size());
+    size_t ridx = 0;
+    if (defaults.size() > 0) {
+        // set defaults idxes to 0
+        for (uint32_t e : defaults) {
+            (*idxes)[e] = ridx;
+        }
+        ridx++;
+    }
+    defaults.clear();
+    // construct rowids_by_rssid
+    for (auto& e : sort_entry_by_rssid) {
+        std::sort(e.second.begin(), e.second.end());
+        rowids_by_rssid->emplace(e.first, vector<uint32_t>(e.second.size()));
+    }
+    // iterate rowids_by_rssid by rssid order
+    for (auto& e : *rowids_by_rssid) {
+        auto& sort_entries = sort_entry_by_rssid[e.first];
+        for (uint32_t i = 0; i < sort_entries.size(); i++) {
+            e.second[i] = sort_entries[i].rowid;
+            (*idxes)[sort_entries[i].idx] = ridx;
+            ridx++;
+        }
+    }
+}
+
+static void gen_column_by_src_column_and_idxes(const vectorized::Column& src, const vector<uint32_t>& idxes,
+                                               std::unique_ptr<vectorized::Column>* dest) {}
+
+Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, const PrimaryIndex& index) {
+    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    if (!rowset_meta_pb.has_txn_meta()) {
+        return Status::OK();
+    }
+    // currently assume it's a partial update
+    const auto& txn_meta = rowset_meta_pb.txn_meta();
+    const auto& tschema = tablet->tablet_schema();
+    // columns supplied in rowset
+    std::vector<uint32_t> update_colum_ids(txn_meta.partial_update_column_ids().begin(),
+                                           txn_meta.partial_update_column_ids().end());
+    std::set<uint32_t> update_columns_set(update_colum_ids.begin(), update_colum_ids.end());
+    // columns needs to be read from tablet's data
+    std::vector<uint32_t> read_column_ids;
+    for (uint32_t i = 0; i < tschema.num_columns(); i++) {
+        if (update_columns_set.find(i) == update_columns_set.end()) {
+            read_column_ids.push_back(i);
+        }
+    }
+    vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
+    vector<std::unique_ptr<vectorized::Column>> write_columns(read_column_ids.size());
+    size_t num_segments = rowset->num_segments();
+    DCHECK(num_segments == _upserts.size());
+    vector<std::pair<string, string>> rewrite_files;
+    DeferOp clean_temp_files([&] {
+        for (auto& e : rewrite_files) {
+            Env::Default()->delete_file(e.second);
+        }
+    });
+    for (size_t i = 0; i < num_segments; i++) {
+        auto& pks = *_upserts[i];
+        int64_t t_start = MonotonicMillis();
+        std::vector<uint64_t> rowids(pks.size());
+        // TODO: get rowid by pk column using primary index
+        int64_t t_get_rowids = MonotonicMillis();
+        size_t num_default = 0;
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        vector<uint32_t> idxes;
+        // group rowids by rssid, and for each group sort by rowid
+        plan_read_by_rssid(rowids, &num_default, &rowids_by_rssid, &idxes);
+        // get column values by rowid, also get default values if needed
+        RETURN_IF_ERROR(tablet->updates()->_get_column_values(read_column_ids, num_default > 0, rowids_by_rssid,
+                                                              &read_columns));
+        for (size_t col_idx = 0; col_idx < read_column_ids.size(); i++) {
+            gen_column_by_src_column_and_idxes(*read_columns[col_idx], idxes, &write_columns[col_idx]);
+        }
+        int64_t t_get_column_values = MonotonicMillis();
+        auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        rewrite_files.emplace_back(src_path, dest_path);
+        RETURN_IF_ERROR(segment_v2::SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(),
+                                                             read_column_ids, write_columns));
+        int64_t t_rewrite = MonotonicMillis();
+        LOG(INFO) << Substitute(
+                "apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #default:$4 getrowid:$5ms #read:$6($7ms) "
+                "write:$8ms total:$9ms",
+                tablet->tablet_id(), rowset_id, i, read_column_ids.size(), num_default,
+                (t_get_rowids - t_start) / 1000000, pks.size() - num_default,
+                (t_get_column_values - t_get_rowids) / 1000000, (t_rewrite - t_get_column_values) / 1000000,
+                (t_rewrite - t_start) / 1000000);
+    }
+    for (size_t i = 0; i < num_segments; i++) {
+        RETURN_IF_ERROR(Env::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
+    }
+    // clean this to prevent DeferOp clean files
+    rewrite_files.clear();
+    auto beta_rowset = down_cast<BetaRowset*>(rowset);
+    RETURN_IF_ERROR(beta_rowset->reload());
     return Status::OK();
 }
 

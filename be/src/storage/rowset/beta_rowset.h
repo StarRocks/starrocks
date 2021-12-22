@@ -55,6 +55,9 @@ public:
 
     ~BetaRowset() override {}
 
+    // reload this rowset after the underlying segment file is changed
+    Status reload();
+
     StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                         const vectorized::RowsetReadOptions& options) override;
 

@@ -88,6 +88,7 @@ add_library(Storage STATIC
     rowset/binary_prefix_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
+    rowset/segment_rewriter.cpp
     rowset/storage_page_decoder.cpp
     rowset/block_split_bloom_filter.cpp
     rowset/bloom_filter_index_reader.cpp

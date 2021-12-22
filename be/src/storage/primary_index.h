@@ -14,6 +14,8 @@ namespace starrocks {
 class Tablet;
 class HashIndex;
 
+const uint64_t ROWID_MASK = 0xffffffff;
+
 // An index to lookup a record's position(rowset->segment->rowid) by primary key.
 // It's only used to handle updates/deletes in the write pipeline for now.
 // Use a simple in-memory hash_map implementation for demo purpose.
