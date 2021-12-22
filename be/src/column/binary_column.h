@@ -182,15 +182,6 @@ public:
 
     uint32_t serialize_size(size_t idx) const override { return sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]; }
 
-    size_t serialize_size() const override {
-        DCHECK_EQ(_bytes.size(), _offsets.back());
-        return byte_size() + sizeof(uint32_t) * 2; // _offsets size + _bytes size;
-    }
-
-    uint8_t* serialize_column(uint8_t* dst) override;
-
-    const uint8_t* deserialize_column(const uint8_t* src) override;
-
     MutableColumnPtr clone_empty() const override { return create_mutable(); }
 
     ColumnPtr cut(size_t start, size_t length) const;

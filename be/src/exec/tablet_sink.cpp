@@ -34,6 +34,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "serde/protobuf_serde.h"
 #include "service/brpc.h"
 #include "simd/simd.h"
 #include "storage/hll.h"
@@ -351,7 +352,9 @@ int NodeChannel::try_send_chunk_and_fetch_status() {
         request.set_packet_seq(_next_packet_seq);
         if (chunk->num_rows() > 0) {
             SCOPED_RAW_TIMER(&_serialize_batch_ns);
-            chunk->serialize_with_meta(request.mutable_chunk());
+            StatusOr<ChunkPB> chunk_pb = serde::ProtobufChunkSerde::serialize(*chunk);
+            CHECK(chunk_pb.ok()) << chunk_pb.status(); // FIXME
+            request.mutable_chunk()->Swap(&chunk_pb.value());
         }
 
         _add_batch_closure->reset();
@@ -622,7 +625,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     DCHECK(chunk->num_rows() > 0);
     size_t num_rows = chunk->num_rows();
     _number_input_rows += num_rows;
-    size_t serialize_size = chunk->serialize_size();
+    size_t serialize_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
     // update incrementally so that FE can get the progress.
     // the real 'num_rows_load_total' will be set when sink being closed.
     state->update_num_rows_load_total(num_rows);

@@ -164,12 +164,6 @@ public:
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
 
-    size_t serialize_size() const override { return _data_column->serialize_size() + _null_column->serialize_size(); }
-
-    uint8_t* serialize_column(uint8_t* dst) override;
-
-    const uint8_t* deserialize_column(const uint8_t* src) override;
-
     MutableColumnPtr clone_empty() const override {
         return create_mutable(_data_column->clone_empty(), _null_column->clone_empty());
     }

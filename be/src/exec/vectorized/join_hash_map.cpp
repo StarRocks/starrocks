@@ -7,6 +7,7 @@
 #include <runtime/descriptors.h>
 
 #include "exec/vectorized/hash_join_node.h"
+#include "serde/column_array_serde.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -44,7 +45,7 @@ Status SerializedJoinBuildFunc::construct_hash_table(JoinHashTableItems* table_i
     // calc serialize size
     size_t serialize_size = 0;
     for (const auto& data_column : data_columns) {
-        serialize_size += data_column->serialize_size();
+        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
     uint8_t* ptr = table_items->build_pool->allocate(serialize_size);
     RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join build failed"));
@@ -138,7 +139,7 @@ Status SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_item
     // allocate memory for serialize key columns
     size_t serialize_size = 0;
     for (const auto& data_column : data_columns) {
-        serialize_size += data_column->serialize_size();
+        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
     uint8_t* ptr = table_items.probe_pool->allocate(serialize_size);
     RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join probe failed"));

@@ -30,6 +30,7 @@
 #include "env/env.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "serde/column_array_serde.h"
 #include "storage/fs/fs_util.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/beta_rowset.h"
@@ -298,11 +299,12 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         std::unique_ptr<fs::WritableBlock> wblock;
         fs::CreateBlockOptions opts({path});
         RETURN_IF_ERROR(_context.block_mgr->create_block(opts, &wblock));
-        size_t sz = deletes.serialize_size();
+        size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
         // TODO(cbl): temp buffer doubles the memory usage, need to optimize
-        string content;
-        content.resize(sz);
-        const_cast<vectorized::Column&>(deletes).serialize_column((uint8_t*)(content.data()));
+        std::vector<uint8_t> content(sz);
+        if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
+            return Status::InternalError("deletes column serialize failed");
+        }
         RETURN_IF_ERROR(wblock->append(Slice(content.data(), content.size())));
         RETURN_IF_ERROR(wblock->finalize());
         RETURN_IF_ERROR(wblock->close());

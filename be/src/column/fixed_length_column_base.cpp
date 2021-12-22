@@ -167,28 +167,6 @@ void FixedLengthColumnBase<T>::deserialize_and_append_batch(std::vector<Slice>& 
 }
 
 template <typename T>
-uint8_t* FixedLengthColumnBase<T>::serialize_column(uint8_t* dst) {
-    uint32_t size = byte_size();
-    encode_fixed32_le(dst, size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _data.data(), size);
-    dst += size;
-    return dst;
-}
-
-template <typename T>
-const uint8_t* FixedLengthColumnBase<T>::deserialize_column(const uint8_t* src) {
-    uint32_t size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
-    raw::make_room(&_data, size / sizeof(ValueType));
-    strings::memcpy_inlined(_data.data(), src, size);
-    src += size;
-    return src;
-}
-
-template <typename T>
 void FixedLengthColumnBase<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
         hash[i] = HashUtil::fnv_hash(&_data[i], sizeof(ValueType), hash[i]);

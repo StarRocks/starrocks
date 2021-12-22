@@ -38,6 +38,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/global_dicts.h"
 #include "runtime/mem_tracker.h"
+#include "serde/protobuf_serde.h"
 #include "storage/vectorized/async_delta_writer.h"
 #include "util/countdown_latch.h"
 
@@ -199,7 +200,7 @@ private:
     std::unordered_set<int64_t> _partition_ids;
 
     mutable std::mutex _chunk_meta_lock;
-    vectorized::RuntimeChunkMeta _chunk_meta;
+    serde::ProtobufChunkMeta _chunk_meta;
     std::atomic<bool> _has_chunk_meta;
 
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;

@@ -23,6 +23,7 @@
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
+#include "serde/protobuf_serde.h"
 #include "service/brpc.h"
 #include "util/block_compression.h"
 #include "util/compression_utils.h"
@@ -194,7 +195,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     // If chunk is not null, append it to request
     if (chunk != nullptr) {
         if (_use_pass_through) {
-            size_t chunk_size = chunk->serialize_size();
+            size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
             _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size);
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
@@ -520,32 +521,29 @@ Status ExchangeSinkOperator::close(RuntimeState* state) {
 Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst, bool* is_first_chunk,
                                              int num_receivers) {
     VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
-    size_t uncompressed_size = 0;
     {
         SCOPED_TIMER(_serialize_batch_timer);
-        dst->set_compress_type(CompressionTypePB::NO_COMPRESSION);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            uncompressed_size = src->serialize_with_meta(dst);
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+            if (!res.ok()) return res.status();
+            res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            dst->clear_is_nulls();
-            dst->clear_is_consts();
-            dst->clear_slot_id_map();
-            uncompressed_size = src->serialize_size();
-            // TODO(kks): resize without initializing the new bytes
-            dst->mutable_data()->resize(uncompressed_size);
-            size_t written_size = src->serialize((uint8_t*)dst->mutable_data()->data());
-            dst->set_serialized_size(written_size);
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src);
+            if (!res.ok()) return res.status();
+            res->Swap(dst);
         }
     }
+    DCHECK(dst->has_uncompressed_size());
+    DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
+    const size_t uncompressed_size = dst->uncompressed_size();
 
     if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
         return Status::InternalError("The input size for compression should be less than " +
                                      _compress_codec->max_input_size());
     }
 
-    dst->set_uncompressed_size(uncompressed_size);
     // try compress the ChunkPB data
     if (_compress_codec != nullptr && uncompressed_size > 0) {
         SCOPED_TIMER(_compress_timer);
