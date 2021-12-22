@@ -130,7 +130,7 @@ public class InsertAnalyzer {
             }
         }
 
-        if (query.getOutputExpr().size() != mentionedColumns.size()) {
+        if (query.getRelationFields().size() != mentionedColumns.size()) {
             throw new SemanticException("Column count doesn't match value count");
         }
         // check default value expr

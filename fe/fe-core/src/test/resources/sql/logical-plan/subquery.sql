@@ -185,5 +185,5 @@ logical project (col,col,col)
 [sql]
 select t0.v1 from t0 where exists (select t0.v1, t1.v4 from t1 where true)
 [except]
-Column '`default_cluster:test`.`t0`.`v1`' cannot be resolved
+Only support use correlated columns in the where clause of subqueries
 [end]
