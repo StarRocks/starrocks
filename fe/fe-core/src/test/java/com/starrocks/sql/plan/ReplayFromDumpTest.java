@@ -220,7 +220,9 @@ public class ReplayFromDumpTest {
     public void testGroupByLimit() throws Exception {
         // check can generate 1 phase with limit 1
         // This test has column statistics and accurate table row count
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"));
+        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+        sessionVariable.setNewPlanerAggStage(1);
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"), sessionVariable);
         Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
     }
 
@@ -242,7 +244,7 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n" +
                 "  |  other predicates: 25: sr_ticket_number IS NULL\n" +
                 "  |  cardinality: 39142590"));
-        Assert.assertTrue(replayPair.second.contains("15:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("16:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n" +
                 "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n" +
@@ -320,7 +322,7 @@ public class ReplayFromDumpTest {
     public void testJoinWithPipelineDop() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("24:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("25:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
     }
 
