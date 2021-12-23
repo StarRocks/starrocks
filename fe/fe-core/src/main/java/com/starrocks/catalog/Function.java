@@ -113,6 +113,8 @@ public class Function implements Writable {
     // we could evaluate the function only with the dict content, not all string column data.
     private boolean couldApplyDictOptimize = false;
 
+    private boolean isNullable = true;
+
     // Only used for serialization
     protected Function() {
     }
@@ -276,6 +278,14 @@ public class Function implements Writable {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    public boolean isNullable() {
+        return isNullable;
+    }
+
+    public void setIsNullable(boolean isNullable) {
+        this.isNullable = isNullable;
     }
 
     public boolean isCouldApplyDictOptimize() {
