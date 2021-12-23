@@ -47,15 +47,7 @@ class Column;
 //      RowsetFactory::create_rowset_writer(writer_context, &writer);
 //
 //      // write data
-//      // 1. serial add row
-//      // should ensure the order of data between rows
-//      // flush segment when size or number of rows reaches certain condition
-//      writer->add_row(row1);
-//      writer->add_row(row2);
-//      ...
-//      writer->flush();
-//
-//      // 2. serial add chunk
+//      // 1. serial add chunk
 //      // should ensure the order of data between chunks
 //      // flush segment when size or number of rows reaches certain condition
 //      writer->add_chunk(chunk1);
@@ -63,11 +55,11 @@ class Column;
 //      ...
 //      writer->flush();
 //
-//      // 3. parallel add chunk
+//      // 2. parallel add chunk
 //      // each chunk generates a segment
 //      writer->flush_chunk(chunk);
 //
-//      // 4. add chunk by columns
+//      // 3. add chunk by columns
 //      for (column_group : column_groups) {
 //          writer->add_columns(chunk, column_group, is_key);
 //          writer->add_columns(chunk, column_group, is_key);
@@ -85,11 +77,6 @@ public:
     virtual ~RowsetWriter() = default;
 
     virtual OLAPStatus init() = 0;
-
-    // Memory note: input `row` is guaranteed to be copied into writer's internal buffer, including all slice data
-    // referenced by `row`. That means callers are free to de-allocate memory for `row` after this method returns.
-    virtual OLAPStatus add_row(const RowCursor& row) { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
-    virtual OLAPStatus add_row(const ContiguousRow& row) { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
 
     virtual OLAPStatus add_chunk(const vectorized::Chunk& chunk) { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
 
@@ -149,7 +136,7 @@ public:
 
     virtual RowsetId rowset_id() = 0;
 
-    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() {
+    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
         return _global_dict_columns_valid_info;
     }
 

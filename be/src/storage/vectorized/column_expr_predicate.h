@@ -11,10 +11,7 @@ class RuntimeState;
 class SlotDescriptor;
 class SparseRange;
 class ExprContext;
-
-namespace segment_v2 {
 class BitmapIndexIterator;
-}
 } // namespace starrocks
 
 namespace starrocks::vectorized {

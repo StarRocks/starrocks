@@ -1,11 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "percentile_functions.h"
+#include "exprs/vectorized/percentile_functions.h"
 
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "gutil/strings/substitute.h"
+#include "util/percentile_value.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks::vectorized {

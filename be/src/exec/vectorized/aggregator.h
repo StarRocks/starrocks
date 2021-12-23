@@ -59,7 +59,11 @@ class Aggregator final : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
-    ~Aggregator() = default;
+    ~Aggregator() {
+        if (_state != nullptr) {
+            close(_state);
+        }
+    }
 
     Status open(RuntimeState* state);
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
@@ -143,6 +147,9 @@ public:
 #endif
 
 private:
+    bool _is_closed = false;
+    RuntimeState* _state = nullptr;
+
     const TPlanNode& _tnode;
 
     MemTracker* _mem_tracker = nullptr;
@@ -494,7 +501,6 @@ public:
 
 private:
     const TPlanNode& _tnode;
-
     std::unordered_map<size_t, AggregatorPtr> _aggregators;
 };
 

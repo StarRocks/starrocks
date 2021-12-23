@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_TASK_WORKER_POOL_H
-#define STARROCKS_BE_SRC_TASK_WORKER_POOL_H
-
+#pragma once
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -151,4 +149,3 @@ private:
     const TaskWorkerPool& operator=(const TaskWorkerPool&) = delete;
 }; // class TaskWorkerPool
 } // namespace starrocks
-#endif // STARROCKS_BE_SRC_TASK_WORKER_POOL_H

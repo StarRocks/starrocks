@@ -31,7 +31,6 @@
 #include <set>
 
 #include "storage/data_dir.h"
-#include "storage/reader.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
@@ -39,22 +38,6 @@
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
-
-using apache::thrift::ThriftDebugString;
-
-using std::back_inserter;
-using std::copy;
-using std::inserter;
-using std::list;
-using std::map;
-using std::nothrow;
-using std::pair;
-using std::priority_queue;
-using std::set;
-using std::set_difference;
-using std::string;
-using std::stringstream;
-using std::vector;
 
 namespace starrocks {
 

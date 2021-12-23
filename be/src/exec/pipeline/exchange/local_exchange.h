@@ -18,13 +18,19 @@ namespace pipeline {
 // Exchange the local data from local sink operator to local source operator
 class LocalExchanger {
 public:
-    explicit LocalExchanger(std::shared_ptr<LocalExchangeMemoryManager> memory_manager,
+    explicit LocalExchanger(const std::string& name, std::shared_ptr<LocalExchangeMemoryManager> memory_manager,
                             LocalExchangeSourceOperatorFactory* source)
-            : _memory_manager(std::move(memory_manager)), _source(source) {}
+            : _name(name), _memory_manager(std::move(memory_manager)), _source(source) {}
 
     virtual Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
 
-    virtual void finish(RuntimeState* state) = 0;
+    virtual void finish(RuntimeState* state) {
+        if (decrement_sink_number() == 1) {
+            for (auto* source : _source->get_sources()) {
+                source->set_finishing(state);
+            }
+        }
+    }
 
     // All LocalExchangeSourceOperators have finished.
     virtual bool is_all_sources_finished() const {
@@ -36,6 +42,8 @@ public:
         return true;
     }
 
+    const std::string& name() const { return _name; }
+
     bool need_input() const;
 
     void increment_sink_number() { _sink_number++; }
@@ -43,8 +51,9 @@ public:
     int32_t decrement_sink_number() { return _sink_number--; }
 
 protected:
+    const std::string _name;
     std::shared_ptr<LocalExchangeMemoryManager> _memory_manager;
-    std::atomic<int32_t> _sink_number{0};
+    std::atomic<int32_t> _sink_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
 };
 
@@ -94,14 +103,6 @@ public:
 
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
-    void finish(RuntimeState* state) override {
-        if (decrement_sink_number() == 1) {
-            for (auto* source : _source->get_sources()) {
-                source->set_finishing(state);
-            }
-        }
-    }
-
 private:
     // Used for local shuffle exchanger.
     // The sink_driver_sequence-th local sink operator exclusively uses the sink_driver_sequence-th partitioner.
@@ -114,17 +115,9 @@ class BroadcastExchanger final : public LocalExchanger {
 public:
     BroadcastExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                        LocalExchangeSourceOperatorFactory* source)
-            : LocalExchanger(memory_manager, source) {}
+            : LocalExchanger("Broadcast", memory_manager, source) {}
 
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
-
-    void finish(RuntimeState* state) override {
-        if (decrement_sink_number() == 1) {
-            for (auto* source : _source->get_sources()) {
-                source->set_finishing(state);
-            }
-        }
-    }
 };
 
 // Exchange the local data for one local source operation
@@ -132,17 +125,9 @@ class PassthroughExchanger final : public LocalExchanger {
 public:
     PassthroughExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                          LocalExchangeSourceOperatorFactory* source)
-            : LocalExchanger(memory_manager, source) {}
+            : LocalExchanger("Passthrough", memory_manager, source) {}
 
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
-
-    void finish(RuntimeState* state) override {
-        if (decrement_sink_number() == 1) {
-            for (auto* source : _source->get_sources()) {
-                source->set_finishing(state);
-            }
-        }
-    }
 
 private:
     std::atomic<size_t> _next_accept_source = 0;

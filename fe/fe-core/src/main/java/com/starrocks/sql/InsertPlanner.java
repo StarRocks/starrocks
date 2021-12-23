@@ -13,8 +13,11 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.DataSink;
+import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlannerContext;
 import com.starrocks.qe.ConnectContext;
@@ -24,6 +27,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.relation.InsertRelation;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.analyzer.relation.ValuesRelation;
@@ -67,7 +71,7 @@ public class InsertPlanner {
         //2. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory).transform(insertRelation.getQueryRelation());
+                new RelationTransformer(columnRefFactory, session).transform(insertRelation.getQueryRelation());
 
         //3. Fill in the default value and NULL
         OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertRelation, outputColumns);
@@ -94,7 +98,7 @@ public class InsertPlanner {
         PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
 
         ExecPlan execPlan;
-        if (optimizedPlan.getOp().hasLimit()) {
+        if (optimizedPlan.getOp().hasLimit() || insertRelation.getTargetTable() instanceof MysqlTable) {
             execPlan = new PlanFragmentBuilder().createPhysicalPlan(
                     optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     insertRelation.getQueryRelation().getColumnOutputNames());
@@ -122,8 +126,15 @@ public class InsertPlanner {
         }
         olapTuple.computeMemLayout();
 
-        OlapTableSink dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
-                insertRelation.getTargetPartitionIds());
+        DataSink dataSink;
+        if (insertRelation.getTargetTable() instanceof OlapTable) {
+            dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
+                    insertRelation.getTargetPartitionIds());
+        } else if (insertRelation.getTargetTable() instanceof MysqlTable) {
+            dataSink = new MysqlTableSink((MysqlTable) insertRelation.getTargetTable());
+        } else {
+            throw new SemanticException("Unknown table type " + insertRelation.getTargetTable().getType());
+        }
         execPlan.getFragments().get(0).setSink(dataSink);
         execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
         return execPlan;
@@ -139,7 +150,7 @@ public class InsertPlanner {
             if (insertRelation.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
-                        row.set(columnIdx, new StringLiteral(targetColumn.getDefaultValue()));
+                        row.set(columnIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                     }
                     row.set(columnIdx, TypeManager.addCastExpr(row.get(columnIdx), targetColumn.getType()));
                 }
@@ -149,7 +160,7 @@ public class InsertPlanner {
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (row.get(idx) instanceof DefaultValueExpr) {
-                            row.set(idx, new StringLiteral(targetColumn.getDefaultValue()));
+                            row.set(idx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                         }
                         row.set(idx, TypeManager.addCastExpr(row.get(idx), targetColumn.getType()));
                     }
@@ -174,10 +185,17 @@ public class InsertPlanner {
                 int idx = insertRelation.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx == -1) {
                     ScalarOperator scalarOperator;
-                    if (targetColumn.getDefaultValue() == null) {
+                    Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+                    if (defaultValueType == Column.DefaultValueType.NULL) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
+                    } else if (defaultValueType == Column.DefaultValueType.CONST)  {
+                        scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                    } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                        throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
+                                    + targetColumn.getDefaultExpr().getExpr());
+
                     } else {
-                        scalarOperator = ConstantOperator.createVarchar(targetColumn.getDefaultValue());
+                        throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
                     }
                     ColumnRefOperator col = columnRefFactory
                             .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
@@ -193,16 +211,15 @@ public class InsertPlanner {
         return logicalPlan.getRootBuilder().withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
-    OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory,
-                                     InsertRelation insertRelation, List<ColumnRefOperator> outputColumns,
-                                     OptExprBuilder root, ConnectContext session) {
+    OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertRelation insertRelation,
+                                     List<ColumnRefOperator> outputColumns, OptExprBuilder root, ConnectContext session) {
         List<Column> fullSchema = insertRelation.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
 
-            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) || 
+            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
                     targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 String originName = Column.removeNamePrefix(targetColumn.getName());
                 Column originColumn = fullSchema.stream()
@@ -251,10 +268,15 @@ public class InsertPlanner {
                         targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
                 outputColumns.add(columnRefOperator);
 
-                if (targetColumn.getDefaultValue() == null) {
+                Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NULL) {
                     columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
-                } else {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(targetColumn.getDefaultValue()));
+                } else if (defaultValueType == Column.DefaultValueType.CONST) {
+                    columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(
+                            targetColumn.calculatedDefaultValue()));
+                } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                    throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
+                            + targetColumn.getDefaultExpr().getExpr());
                 }
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));

@@ -84,6 +84,7 @@ Status IntersectNode::open(RuntimeState* state) {
 
     // initial build hash table used for record hitting.
     _hash_set = std::make_unique<IntersectHashSerializeSet>();
+    RETURN_IF_ERROR(_hash_set->init());
 
     ChunkPtr chunk = nullptr;
     RETURN_IF_ERROR(child(0)->open(state));
@@ -215,6 +216,10 @@ Status IntersectNode::close(RuntimeState* state) {
 
     if (_build_pool != nullptr) {
         _build_pool->free_all();
+    }
+
+    if (_hash_set != nullptr) {
+        _hash_set.reset();
     }
 
     return ExecNode::close(state);

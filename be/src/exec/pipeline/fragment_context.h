@@ -45,6 +45,8 @@ public:
     }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
+    void set_profile_mode(const TPipelineProfileMode::type& profile_mode) { _profile_mode = profile_mode; }
+    const TPipelineProfileMode::type& profile_mode() { return _profile_mode; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
@@ -72,6 +74,11 @@ public:
         }
         Status* old_status = nullptr;
         if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
+            if (_final_status.load()->is_cancelled()) {
+                LOG(WARNING) << "[Driver] Canceled, query_id=" << print_id(_query_id)
+                             << ", instance_id=" << print_id(_fragment_instance_id)
+                             << ", reason=" << final_status().to_string();
+            }
             _s_status = status;
         }
     }
@@ -107,11 +114,7 @@ public:
 
     RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
 
-    void set_runtime_filter_port(std::unique_ptr<RuntimeFilterPort>&& runtime_filter_port) {
-        _runtime_filter_port = std::move(runtime_filter_port);
-    }
-
-    RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port.get(); }
+    RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
 
 private:
     // Id of this query
@@ -119,6 +122,9 @@ private:
     // Id of this instance
     TUniqueId _fragment_instance_id;
     TNetworkAddress _fe_addr;
+
+    // Mode of profile
+    TPipelineProfileMode::type _profile_mode;
 
     // promise used to determine whether fragment finished its execution
     FragmentPromise _finish_promise;
@@ -129,7 +135,7 @@ private:
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     Pipelines _pipelines;
     Drivers _drivers;
-    std::unique_ptr<RuntimeFilterPort> _runtime_filter_port;
+
     RuntimeFilterHub _runtime_filter_hub;
     // _morsel_queues is mapping from an source_id to its corresponding
     // MorselQueue that is shared among drivers created from the same pipeline,
@@ -160,7 +166,10 @@ public:
 
     FragmentContext* get_or_register(const TUniqueId& fragment_id);
     FragmentContextPtr get(const TUniqueId& fragment_id);
+
+    void register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
     void unregister(const TUniqueId& fragment_id);
+
     void cancel(const Status& status);
 
 private:

@@ -9,11 +9,13 @@
 
 #include "common/compiler_util.h"
 #include "common/logging.h"
-#include "gen_cpp/Status_types.h" // for TStatus
-#include "gen_cpp/status.pb.h"    // for PStatus
-#include "util/slice.h"           // for Slice
+#include "gen_cpp/StatusCode_types.h" // for TStatus
+#include "util/slice.h"               // for Slice
 
 namespace starrocks {
+
+class PStatus;
+class TStatus;
 
 class Status {
 public:
@@ -322,6 +324,20 @@ inline std::ostream& operator<<(std::ostream& os, const Status& st) {
         if (cond) {          \
             return ret;      \
         }                    \
+    } while (0)
+
+#define RETURN_IF_UNLIKELY_NULL(ptr, ret) \
+    do {                                  \
+        if (UNLIKELY(ptr == nullptr)) {   \
+            return ret;                   \
+        }                                 \
+    } while (0)
+
+#define RETURN_IF_UNLIKELY(cond, ret) \
+    do {                              \
+        if (UNLIKELY(cond)) {         \
+            return ret;               \
+        }                             \
     } while (0)
 
 #define WARN_UNUSED_RESULT __attribute__((warn_unused_result))

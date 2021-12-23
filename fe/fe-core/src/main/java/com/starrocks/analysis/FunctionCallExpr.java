@@ -45,7 +45,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.ExprVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -173,6 +172,14 @@ public class FunctionCallExpr extends Expr {
         fn = other.fn;
     }
 
+    public static final Set<String> nullableSameWithChildrenFunctions =
+            ImmutableSet.<String>builder()
+                    .add(FunctionSet.YEAR)
+                    .add(FunctionSet.MONTH)
+                    .add(FunctionSet.DAY)
+                    .add(FunctionSet.HOUR)
+                    .build();
+
     public boolean isMergeAggFn() {
         return isMergeAggFn;
     }
@@ -218,6 +225,22 @@ public class FunctionCallExpr extends Expr {
             sb.append("DISTINCT ");
         }
         sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
+        return sb.toString();
+    }
+
+    @Override
+    public String toDigestImpl() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(fnName);
+
+        sb.append("(");
+        if (fnParams.isStar()) {
+            sb.append("*");
+        }
+        if (fnParams.isDistinct()) {
+            sb.append("distinct ");
+        }
+        sb.append(Joiner.on(", ").join(childrenToDigest())).append(")");
         return sb.toString();
     }
 
@@ -363,7 +386,7 @@ public class FunctionCallExpr extends Expr {
             }
 
             for (Expr child : children) {
-                if (child.type.isOnlyMetricType()) {
+                if (child.type.isPercentile()) {
                     throw new AnalysisException(Type.OnlyMetricTypeErrorMsg);
                 }
             }
@@ -576,7 +599,8 @@ public class FunctionCallExpr extends Expr {
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
-                    .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE).build();
+                    .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
+                    .add(FunctionSet.ANY_VALUE).build();
 
     private static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
@@ -811,7 +835,15 @@ public class FunctionCallExpr extends Expr {
 
     // TODO(kks): improve this
     public boolean isNullable() {
-        return !CallOperator.AlwaysReturnNonNullableFunctions.contains(fnName.getFunction());
+        // check if fn always return non null
+        if (fn != null && !fn.isNullable()) {
+            return false;
+        }
+        // check children nullable
+        if (nullableSameWithChildrenFunctions.contains(fnName.getFunction())) {
+            return children.stream().anyMatch(Expr::isNullable);
+        }
+        return true;
     }
 
     public static FunctionCallExpr createMergeAggCall(

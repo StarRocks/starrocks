@@ -19,7 +19,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -71,6 +71,7 @@ set(EXEC_FILES
     vectorized/join_hash_map.cpp
     vectorized/topn_node.cpp
     vectorized/chunks_sorter.cpp
+    vectorized/chunk_sorter_heapsorter.cpp
     vectorized/chunks_sorter_topn.cpp
     vectorized/chunks_sorter_full_sort.cpp
     vectorized/cross_join_node.cpp
@@ -132,6 +133,8 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange.cpp
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
+    pipeline/exchange/multi_cast_local_exchange.cpp
+    pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
     pipeline/operator_with_dependency.cpp
@@ -147,6 +150,7 @@ set(EXEC_FILES
     pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
+    pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_dispatcher.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
@@ -165,6 +169,7 @@ set(EXEC_FILES
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
+    pipeline/analysis/analytor_factory.cpp
     pipeline/table_function_operator.cpp
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp

@@ -2,6 +2,7 @@
 
 #include "exprs/vectorized/time_functions.h"
 
+#include "column/column_helper.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
 #include "runtime/runtime_state.h"
@@ -305,6 +306,16 @@ DEFINE_UNARY_FN_WITH_IMPL(yearImpl, v) {
 
 DEFINE_TIME_UNARY_FN(year, TYPE_DATETIME, TYPE_INT);
 
+// year
+// return type: INT16
+DEFINE_UNARY_FN_WITH_IMPL(yearV2Impl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    return y;
+}
+
+DEFINE_TIME_UNARY_FN(yearV2, TYPE_DATETIME, TYPE_SMALLINT);
+
 // quarter
 DEFINE_UNARY_FN_WITH_IMPL(quarterImpl, v) {
     int y, m, d;
@@ -321,6 +332,15 @@ DEFINE_UNARY_FN_WITH_IMPL(monthImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(month, TYPE_DATETIME, TYPE_INT);
 
+// month
+// return type: INT8
+DEFINE_UNARY_FN_WITH_IMPL(monthV2Impl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    return m;
+}
+DEFINE_TIME_UNARY_FN(monthV2, TYPE_DATETIME, TYPE_TINYINT);
+
 // day
 DEFINE_UNARY_FN_WITH_IMPL(dayImpl, v) {
     int y, m, d;
@@ -328,6 +348,15 @@ DEFINE_UNARY_FN_WITH_IMPL(dayImpl, v) {
     return d;
 }
 DEFINE_TIME_UNARY_FN(day, TYPE_DATETIME, TYPE_INT);
+
+// day
+// return type: INT8
+DEFINE_UNARY_FN_WITH_IMPL(dayV2Impl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    return d;
+}
+DEFINE_TIME_UNARY_FN(dayV2, TYPE_DATETIME, TYPE_TINYINT);
 
 // hour of the day
 DEFINE_UNARY_FN_WITH_IMPL(hourImpl, v) {
@@ -337,6 +366,14 @@ DEFINE_UNARY_FN_WITH_IMPL(hourImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(hour, TYPE_DATETIME, TYPE_INT);
 
+// hour of the day
+DEFINE_UNARY_FN_WITH_IMPL(hourV2Impl, v) {
+    int hour1, mintue1, second1, usec1;
+    v.to_time(&hour1, &mintue1, &second1, &usec1);
+    return hour1;
+}
+DEFINE_TIME_UNARY_FN(hourV2, TYPE_DATETIME, TYPE_TINYINT);
+
 // minute of the hour
 DEFINE_UNARY_FN_WITH_IMPL(minuteImpl, v) {
     int hour1, mintue1, second1, usec1;
@@ -345,6 +382,14 @@ DEFINE_UNARY_FN_WITH_IMPL(minuteImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(minute, TYPE_DATETIME, TYPE_INT);
 
+// minute of the hour
+DEFINE_UNARY_FN_WITH_IMPL(minuteV2Impl, v) {
+    int hour1, mintue1, second1, usec1;
+    v.to_time(&hour1, &mintue1, &second1, &usec1);
+    return mintue1;
+}
+DEFINE_TIME_UNARY_FN(minuteV2, TYPE_DATETIME, TYPE_TINYINT);
+
 // second of the minute
 DEFINE_UNARY_FN_WITH_IMPL(secondImpl, v) {
     int hour1, mintue1, second1, usec1;
@@ -352,6 +397,14 @@ DEFINE_UNARY_FN_WITH_IMPL(secondImpl, v) {
     return second1;
 }
 DEFINE_TIME_UNARY_FN(second, TYPE_DATETIME, TYPE_INT);
+
+// second of the minute
+DEFINE_UNARY_FN_WITH_IMPL(secondV2Impl, v) {
+    int hour1, mintue1, second1, usec1;
+    v.to_time(&hour1, &mintue1, &second1, &usec1);
+    return second1;
+}
+DEFINE_TIME_UNARY_FN(secondV2, TYPE_DATETIME, TYPE_TINYINT);
 
 // day_of_week
 DEFINE_UNARY_FN_WITH_IMPL(day_of_weekImpl, v) {
@@ -1201,9 +1254,11 @@ ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
     ColumnBuilder<TYPE_VARCHAR> builder;
     ColumnViewer<Type> viewer(cols[0]);
 
-    builder.data_column()->reserve(viewer.size(), viewer.size() * patten_size);
+    size_t num_rows = viewer.size();
 
-    for (int i = 0; i < viewer.size(); ++i) {
+    builder.data_column()->reserve(num_rows, num_rows * patten_size);
+
+    for (int i = 0; i < num_rows; ++i) {
         if (viewer.is_null(i)) {
             builder.append_null();
             continue;
@@ -1212,7 +1267,7 @@ ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
         builder.append(OP::template apply<RunTimeCppType<Type>, RunTimeCppType<TYPE_VARCHAR>>(viewer.value(i)));
     }
 
-    return builder.build(cols[0]->is_constant());
+    return builder.build(ColumnHelper::is_all_const(cols));
 }
 
 std::string format_for_yyyyMMdd(const DateValue& date_value) {
@@ -1402,13 +1457,18 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
     if (fc != nullptr && fc->is_valid) {
         return do_format<TYPE_DATETIME>(fc, columns);
     } else {
+        bool all_const = ColumnHelper::is_all_const(columns);
         ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<TYPE_DATETIME> viewer_date(columns[0]);
         ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
 
+        // all_const was true viewer_date.size() will return 1
+        // which could reduce unnecessary calculations
+        size_t num_rows = all_const ? viewer_date.size() : columns[0]->size();
+
         builder.reserve(columns[0]->size());
 
-        for (int i = 0; i < viewer_date.size(); ++i) {
+        for (int i = 0; i < num_rows; ++i) {
             if (viewer_date.is_null(i)) {
                 builder.append_null();
                 continue;
@@ -1417,7 +1477,7 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
             common_format_process(&viewer_date, &viewer_format, &builder, i);
         }
 
-        return builder.build(columns[0]->is_constant());
+        return builder.build(all_const);
     }
 }
 
@@ -1430,13 +1490,14 @@ ColumnPtr TimeFunctions::date_format(FunctionContext* context, const Columns& co
     if (fc != nullptr && fc->is_valid) {
         return do_format<TYPE_DATE>(fc, columns);
     } else {
+        int num_rows = columns[0]->size();
         ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<TYPE_DATE> viewer_date(columns[0]);
         ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
 
         builder.reserve(columns[0]->size());
 
-        for (int i = 0; i < viewer_date.size(); ++i) {
+        for (int i = 0; i < num_rows; ++i) {
             if (viewer_date.is_null(i)) {
                 builder.append_null();
                 continue;
@@ -1445,7 +1506,7 @@ ColumnPtr TimeFunctions::date_format(FunctionContext* context, const Columns& co
             common_format_process(&viewer_date, &viewer_format, &builder, i);
         }
 
-        return builder.build(columns[0]->is_constant());
+        return builder.build(ColumnHelper::is_all_const(columns));
     }
 }
 

@@ -32,14 +32,14 @@ public:
                     std::vector<std::string>* unused_output_columns, RuntimeProfile* runtime_profile, int64_t limit)
             : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
+              _limit(limit),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _runtime_in_filters(runtime_in_filters),
               _runtime_bloom_filters(*runtime_bloom_filters),
               _key_column_names(std::move(key_column_names)),
               _skip_aggregation(skip_aggregation),
               _unused_output_columns(unused_output_columns),
-              _runtime_profile(runtime_profile),
-              _limit(limit) {
+              _runtime_profile(runtime_profile) {
         _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
         OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
         _scan_range = olap_morsel->get_scan_range();
@@ -122,7 +122,7 @@ private:
     int64_t _raw_rows_read = 0;
     int64_t _compressed_bytes_read = 0;
 
-    RuntimeProfile* _runtime_profile = nullptr;
+    RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 

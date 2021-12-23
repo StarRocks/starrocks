@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_AGENT_HEARTBEAT_SERVER_H
-#define STARROCKS_BE_SRC_AGENT_HEARTBEAT_SERVER_H
+#pragma once
 
 #include <mutex>
 
@@ -72,4 +71,3 @@ private:
 AgentStatus create_heartbeat_server(ExecEnv* exec_env, uint32_t heartbeat_server_port, ThriftServer** heart_beat_server,
                                     uint32_t worker_thread_num, TMasterInfo* local_master_info);
 } // namespace starrocks
-#endif // STARROCKS_BE_SRC_AGENT_HEARTBEAT_SERVER_H

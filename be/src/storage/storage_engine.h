@@ -55,6 +55,7 @@
 
 namespace starrocks {
 
+class AsyncDeltaWriterExecutor;
 class DataDir;
 class EngineTask;
 class BlockManager;
@@ -153,9 +154,15 @@ public:
     OLAPStatus execute_task(EngineTask* task);
 
     TabletManager* tablet_manager() { return _tablet_manager.get(); }
+
     TxnManager* txn_manager() { return _txn_manager.get(); }
+
+    AsyncDeltaWriterExecutor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
+
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
+
     fs::BlockManager* block_manager() { return _block_manager.get(); }
+
     UpdateManager* update_manager() { return _update_manager.get(); }
 
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
@@ -174,6 +181,8 @@ public:
     void stop();
 
     bool bg_worker_stopped() { return _bg_worker_stopped.load(std::memory_order_consume); }
+
+    MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
 
 private:
     // Instance should be inited from `static open()`
@@ -317,6 +326,8 @@ private:
     std::unique_ptr<TxnManager> _txn_manager;
 
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
+
+    std::unique_ptr<AsyncDeltaWriterExecutor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 

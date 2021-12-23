@@ -5,12 +5,14 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -60,6 +62,10 @@ public class OperatorBuilderFactory {
             return new LogicalAssertOneRowOperator.Builder();
         } else if (operator instanceof LogicalRepeatOperator) {
             return new LogicalRepeatOperator.Builder();
+        } else if (operator instanceof LogicalLimitOperator) {
+            return new LogicalLimitOperator.Builder();
+        } else if (operator instanceof LogicalCTEConsumeOperator) {
+            return new LogicalCTEConsumeOperator.Builder();
         } else {
             throw new StarRocksPlannerException("not implement builder", ErrorType.INTERNAL_ERROR);
         }

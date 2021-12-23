@@ -6,7 +6,9 @@
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/aggregator.h"
+#include "runtime/current_thread.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -57,10 +59,11 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             if (!_aggregator->is_none_group_by_exprs()) {
                 if (false) {
                 }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                       \
-            _aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit);
+#define HASH_MAP_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
+                *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit));                          \
+    }
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
@@ -166,10 +169,15 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     if (agg_node.need_finalize) {
         // If finalize aggregate with group by clause, then it can be paralized
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            std::vector<ExprContext*> group_by_expr_ctxs;
-            Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-            operators_with_sink =
-                    context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, group_by_expr_ctxs);
+            // The san operator followed by an aggregate operator indicates the aggregating key is the same as
+            // the bucket key of this table, so we needn't local shuffle for this case.
+            auto* source_op = operators_with_sink[0].get();
+            if (typeid(*source_op) != typeid(pipeline::ScanOperatorFactory)) {
+                std::vector<ExprContext*> group_by_expr_ctxs;
+                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+                operators_with_sink =
+                        context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, group_by_expr_ctxs);
+            }
         } else {
             operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
         }

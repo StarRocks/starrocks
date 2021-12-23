@@ -572,6 +572,12 @@ public class SchemaChangeHandler extends AlterHandler {
                                    Map<Long, LinkedList<Column>> indexSchemaMap,
                                    Set<String> newColNameSet) throws DdlException {
 
+        Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
+        // expr like uuid() will support later
+        if (defaultValueType == Column.DefaultValueType.VARY) {
+            throw new DdlException("Schema change currently not supported default expr:"
+                    + newColumn.getDefaultExpr().getExpr());
+        }
         String newColName = newColumn.getName();
         // check the validation of aggregation method on column.
         // also fill the default aggregation method if not specified.
@@ -963,6 +969,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 new SchemaChangeJobV2(jobId, dbId, olapTable.getId(), olapTable.getName(), timeoutSecond * 1000);
         schemaChangeJob.setBloomFilterInfo(hasBfChange, bfColumns, bfFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChange, indexes);
+        schemaChangeJob.setStartTime(ConnectContext.get().getStartTime());
 
         // If StorageFormat is set to TStorageFormat.V2
         // which will create tablet with preferred_rowset_type set to BETA
@@ -1208,7 +1215,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                 .checkState(originReplica.getState() == ReplicaState.NORMAL, originReplica.getState());
                         // replica's init state is ALTER, so that tablet report process will ignore its report
                         Replica shadowReplica = new Replica(shadowReplicaId, backendId, ReplicaState.ALTER,
-                                Partition.PARTITION_INIT_VERSION, Partition.PARTITION_INIT_VERSION_HASH,
+                                Partition.PARTITION_INIT_VERSION,
                                 newSchemaHash);
                         shadowTablet.addReplica(shadowReplica);
                         healthyReplicaNum++;

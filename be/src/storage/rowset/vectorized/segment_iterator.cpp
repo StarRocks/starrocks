@@ -18,16 +18,14 @@
 #include "simd/simd.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
-#include "storage/row_block2.h"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
-#include "storage/rowset/segment_v2/column_decoder.h"
-#include "storage/rowset/segment_v2/column_reader.h"
-#include "storage/rowset/segment_v2/common.h"
-#include "storage/rowset/segment_v2/default_value_column_iterator.h"
-#include "storage/rowset/segment_v2/dictcode_column_iterator.h"
-#include "storage/rowset/segment_v2/row_ranges.h"
-#include "storage/rowset/segment_v2/scalar_column_iterator.h"
-#include "storage/rowset/segment_v2/segment.h"
+#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/rowset/column_decoder.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/common.h"
+#include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/dictcode_column_iterator.h"
+#include "storage/rowset/scalar_column_iterator.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
@@ -45,12 +43,6 @@
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
-
-using segment_v2::BitmapIndexIterator;
-using segment_v2::ColumnIterator;
-using segment_v2::ColumnIteratorOptions;
-using segment_v2::rowid_t;
-using segment_v2::Segment;
 
 constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
 
@@ -123,6 +115,17 @@ private:
             return Status::OK();
         }
 
+        Status read_columns(Chunk* chunk, const vectorized::SparseRange& range) {
+            bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
+            for (size_t i = 0; i < _column_iterators.size(); i++) {
+                const ColumnPtr& col = chunk->get_column_by_index(i);
+                RETURN_IF_ERROR(_column_iterators[i]->next_batch(range, col.get()));
+                may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+            }
+            chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+            return Status::OK();
+        }
+
         int64_t memory_usage() const {
             int64_t usage = 0;
             usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
@@ -130,6 +133,8 @@ private:
             usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
             return usage;
         }
+
+        size_t column_size() { return _column_iterators.size(); }
 
         Schema _read_schema;
         Schema _dict_decode_schema;
@@ -180,6 +185,8 @@ private:
     template <bool late_materialization>
     Status _build_context(ScanContext* ctx);
 
+    Status _init_global_dict_decoder();
+
     void _rewrite_predicates();
 
     Status _decode_dict_codes(ScanContext* ctx);
@@ -203,7 +210,11 @@ private:
 
     Status _apply_bitmap_index();
 
+    Status _apply_del_vector();
+
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
+
+    Status _read_by_column(size_t n, Chunk* result, vector<rowid_t>* rowids);
 
 private:
     std::shared_ptr<Segment> _segment;
@@ -213,7 +224,6 @@ private:
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
-    rowid_t _chunk_rowid_start = 0;
     roaring_uint32_iterator_t _roaring_iter;
 
     // block for file to read
@@ -259,7 +269,6 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
-
           _predicate_columns(_opts.predicates.size()) {}
 
 Status SegmentIterator::_init() {
@@ -301,6 +310,7 @@ Status SegmentIterator::_init() {
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    RETURN_IF_ERROR(_apply_del_vector());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
@@ -396,7 +406,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         return Status::OK();
     }
     DCHECK_EQ(0, _scan_range.span_size());
-    RETURN_IF_ERROR(_segment->_load_index());
+    RETURN_IF_ERROR(_segment->_load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -557,28 +567,40 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
     return Status::OK();
 }
 
-inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowid, size_t n) {
-    Range r = _range_iter.next(n);
-    size_t nread = r.span_size();
-    if (_cur_rowid != r.begin() || _cur_rowid == 0) {
-        _cur_rowid = r.begin();
+inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n) {
+    size_t read_num = 0;
+    SparseRange range;
+    size_t cur_rowid = _cur_rowid;
+
+    if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0) {
+        _cur_rowid = _range_iter.begin();
         _opts.stats->block_seek_num += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
         RETURN_IF_ERROR(_context->seek_columns(_cur_rowid));
     }
+
+    _range_iter.next_range(n, &range);
+    read_num += range.span_size();
+
     {
         _opts.stats->blocks_load += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_fetch_ns);
-        RETURN_IF_ERROR(_context->read_columns(chunk, nread));
+        RETURN_IF_ERROR(_context->read_columns(chunk, range));
     }
-    _chunk_rowid_start = _cur_rowid;
-    if (rowid != nullptr) {
-        for (uint32_t i = _cur_rowid; i < _cur_rowid + nread; i++) {
-            rowid->push_back(i);
+
+    if (rowids != nullptr) {
+        rowids->reserve(rowids->size() + n);
+        vectorized::SparseRangeIterator iter = range.new_iterator();
+        while (iter.has_more()) {
+            vectorized::Range r = iter.next(n);
+            for (uint32_t i = r.begin(); i < r.end(); i++) {
+                rowids->push_back(i);
+            }
         }
     }
-    _cur_rowid += nread;
-    _opts.stats->raw_rows_read += nread;
+
+    _cur_rowid = cur_rowid;
+    _opts.stats->raw_rows_read += read_num;
     chunk->check_or_die();
     return Status::OK();
 }
@@ -633,7 +655,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk->check_or_die();
         size_t next_start = chunk->num_rows();
 
-        if (has_predicate || _del_vec) {
+        if (has_predicate) {
             next_start = _filter(chunk, rowid, chunk_start, next_start);
             chunk->check_or_die();
         }
@@ -790,25 +812,6 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
         }
     }
 
-    int64_t del_vec_filtered = 0;
-    if (_del_vec) {
-        if (_vectorized_preds.empty() && _branchless_preds.empty()) {
-            // setup selection vector
-            memset(_selection.data() + from, 1, to - from);
-        }
-        // TODO: filter del_vec early if most of the rows are deleted
-        uint32_t& cur_value = _roaring_iter.current_value;
-        while (_roaring_iter.has_value && cur_value < _cur_rowid) {
-            if (cur_value >= _chunk_rowid_start) {
-                // valid delete
-                auto& del = _selection[cur_value - _chunk_rowid_start + from];
-                del_vec_filtered += del;
-                del = 0;
-            }
-            roaring_advance_uint32_iterator(&_roaring_iter);
-        }
-    }
-
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
     uint16_t chunk_size = to;
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
@@ -825,8 +828,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
             rowid->resize(size);
         }
     }
-    _opts.stats->rows_del_vec_filtered += del_vec_filtered;
-    _opts.stats->rows_vec_cond_filtered += (to - chunk_size) - del_vec_filtered;
+    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
     return chunk_size;
 }
 
@@ -917,11 +919,9 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             auto f2 = std::make_shared<Field>(cid, name, kDictCodeType, -1, -1, f->is_nullable());
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
-                iter = new segment_v2::GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
-                                                                    _opts.global_dictmaps->at(cid));
-                _column_decoders[cid].set_iterator(iter);
+                iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid], _opts.global_dictmaps->at(cid));
             } else {
-                iter = new segment_v2::DictCodeColumnIterator(cid, _column_iterators[cid]);
+                iter = new DictCodeColumnIterator(cid, _column_iterators[cid]);
             }
 
             _obj_pool.add(iter);
@@ -989,6 +989,8 @@ Status SegmentIterator::_init_context() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     _late_materialization_ratio = config::late_materialization_ratio;
 
+    RETURN_IF_ERROR(_init_global_dict_decoder());
+
     if (_predicate_columns == 0 || _predicate_columns >= _schema.num_fields()) {
         // non or all field has predicate, disable late materialization.
         RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
@@ -1016,6 +1018,21 @@ Status SegmentIterator::_init_context() {
         }
     }
     _switch_context(&_context_list[0]);
+    return Status::OK();
+}
+
+Status SegmentIterator::_init_global_dict_decoder() {
+    // init decoder for all columns
+    // in some case _build_context<false> won't be called
+    for (int i = 0; i < _schema.num_fields(); ++i) {
+        const FieldPtr& f = _schema.field(i);
+        const ColumnId cid = f->id();
+        if (_can_using_global_dict(f)) {
+            auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid], _opts.global_dictmaps->at(cid));
+            _obj_pool.add(iter);
+            _column_decoders[cid].set_iterator(iter);
+        }
+    }
     return Status::OK();
 }
 
@@ -1241,6 +1258,18 @@ Status SegmentIterator::_apply_bitmap_index() {
     return Status::OK();
 }
 
+Status SegmentIterator::_apply_del_vector() {
+    if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && !_del_vec->empty()) {
+        Roaring row_bitmap = range2roaring(_scan_range);
+        size_t input_rows = row_bitmap.cardinality();
+        row_bitmap -= *(_del_vec->roaring());
+        _scan_range = roaring2range(row_bitmap);
+        size_t filtered_rows = row_bitmap.cardinality();
+        _opts.stats->rows_del_vec_filtered += input_rows - filtered_rows;
+    }
+    return Status::OK();
+}
+
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
     RETURN_IF(_opts.predicates.empty(), Status::OK());
     size_t prev_size = _scan_range.span_size();
@@ -1287,8 +1316,8 @@ inline Schema reorder_schema(const Schema& input, const std::unordered_map<Colum
     return output;
 }
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<segment_v2::Segment>& segment,
-                                      const vectorized::Schema& schema, const vectorized::SegmentReadOptions& options) {
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const vectorized::Schema& schema,
+                                      const vectorized::SegmentReadOptions& options) {
     if (options.predicates.empty() || options.predicates.size() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
     } else {

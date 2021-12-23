@@ -6,6 +6,8 @@
 #include <runtime/descriptors.h>
 #include <runtime/runtime_state.h>
 
+#include <cstdint>
+
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -205,9 +207,16 @@ struct JoinKeyEqual<Slice> {
 
 class JoinHashMapHelper {
 public:
+    // maxinum bucket size
+    const static uint32_t MAX_BUCKET_SIZE = 1 << 31;
+
     static uint32_t calc_bucket_size(uint32_t size) {
-        size = size + (size - 1) / 7;
-        return phmap::priv::NormalizeCapacity(size) + 1;
+        size_t expect_bucket_size = static_cast<size_t>(size) + (size - 1) / 7;
+        // Limit the maximum hash table bucket size.
+        if (expect_bucket_size >= MAX_BUCKET_SIZE) {
+            return MAX_BUCKET_SIZE;
+        }
+        return phmap::priv::NormalizeCapacity(expect_bucket_size) + 1;
     }
 
     template <typename CppType>
@@ -494,32 +503,32 @@ public:
 
     Status append_chunk(RuntimeState* state, const ChunkPtr& chunk);
 
-    const ChunkPtr& get_build_chunk() const { return _table_items.build_chunk; }
-    Columns& get_key_columns() { return _table_items.key_columns; }
-    uint32_t get_row_count() const { return _table_items.row_count; }
-    size_t get_probe_column_count() const { return _table_items.probe_column_count; }
-    size_t get_build_column_count() const { return _table_items.build_column_count; }
-    size_t get_bucket_size() const { return _table_items.bucket_size; }
+    const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
+    Columns& get_key_columns() { return _table_items->key_columns; }
+    uint32_t get_row_count() const { return _table_items->row_count; }
+    size_t get_probe_column_count() const { return _table_items->probe_column_count; }
+    size_t get_build_column_count() const { return _table_items->build_column_count; }
+    size_t get_bucket_size() const { return _table_items->bucket_size; }
 
     void remove_duplicate_index(Column::Filter* filter);
 
     int64_t mem_usage() {
         int64_t usage = 0;
-        if (_table_items.build_chunk != nullptr) {
-            usage += _table_items.build_chunk->memory_usage();
+        if (_table_items->build_chunk != nullptr) {
+            usage += _table_items->build_chunk->memory_usage();
         }
-        usage += _table_items.first.capacity() * sizeof(uint32_t);
-        usage += _table_items.next.capacity() * sizeof(uint32_t);
-        if (_table_items.build_pool != nullptr) {
-            usage += _table_items.build_pool->total_reserved_bytes();
+        usage += _table_items->first.capacity() * sizeof(uint32_t);
+        usage += _table_items->next.capacity() * sizeof(uint32_t);
+        if (_table_items->build_pool != nullptr) {
+            usage += _table_items->build_pool->total_reserved_bytes();
         }
-        if (_table_items.probe_pool != nullptr) {
-            usage += _table_items.probe_pool->total_reserved_bytes();
+        if (_table_items->probe_pool != nullptr) {
+            usage += _table_items->probe_pool->total_reserved_bytes();
         }
-        if (_table_items.build_key_column != nullptr) {
-            usage += _table_items.build_key_column->memory_usage();
+        if (_table_items->build_key_column != nullptr) {
+            usage += _table_items->build_key_column->memory_usage();
         }
-        usage += _table_items.build_slice.size() * sizeof(Slice);
+        usage += _table_items->build_slice.size() * sizeof(Slice);
         return usage;
     }
 
@@ -557,8 +566,8 @@ private:
 
     JoinHashMapType _hash_map_type = JoinHashMapType::empty;
 
-    JoinHashTableItems _table_items;
-    HashTableProbeState _probe_state;
+    std::unique_ptr<JoinHashTableItems> _table_items;
+    std::unique_ptr<HashTableProbeState> _probe_state;
 };
 } // namespace starrocks::vectorized
 

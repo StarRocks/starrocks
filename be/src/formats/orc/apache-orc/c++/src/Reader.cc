@@ -89,7 +89,7 @@ void ColumnSelector::selectChildren(std::vector<bool>& selectedColumns, const Ty
 }
 
 /**
-   * Recurses over a type tree and selects the parents of every selected type.
+   * Recurse over a type tree and selects the parents of every selected type.
    * @return true if any child was selected.
    */
 bool ColumnSelector::selectParents(std::vector<bool>& selectedColumns, const Type& type) {
@@ -103,7 +103,7 @@ bool ColumnSelector::selectParents(std::vector<bool>& selectedColumns, const Typ
 }
 
 /**
-   * Recurses over a type tree and build two maps
+   * Recurse over a type tree and build two maps
    * map<TypeName, TypeId>, map<TypeId, Type>
    */
 void ColumnSelector::buildTypeNameIdMap(const Type* type) {

@@ -9,6 +9,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -25,7 +26,7 @@ import static org.junit.Assert.assertTrue;
 public class ColumnFilterConverterTest {
 
     @Test
-    public void convertColumnFilterNormal1() {
+    public void convertColumnFilterNormal() {
         ScalarOperator root1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
                 new ColumnRefOperator(1, Type.INT, "age", true),
                 ConstantOperator.createInt(1));
@@ -69,5 +70,26 @@ public class ColumnFilterConverterTest {
 
         assertEquals(new NullLiteral(), result.get("sex").lowerBound);
         assertEquals(new NullLiteral(), result.get("sex").upperBound);
+    }
+
+    @Test
+    public void testIsNullOnCastColumn() {
+        {
+            // cast(c0 as smallint) is null.
+            IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false, new CastOperator(Type.SMALLINT, new ColumnRefOperator(1, Type.INT, "c0", true)));
+            List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
+            Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
+            assertEquals(result.size(), 0);
+        }
+        {
+            // c0 is null.
+            IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false, new ColumnRefOperator(1, Type.INT, "c0", true));
+            List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
+            Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
+            assertEquals(result.size(), 1);
+            PartitionColumnFilter filter = result.get("c0");
+            assertEquals(filter.lowerBound, new NullLiteral());
+            assertEquals(filter.upperBound, new NullLiteral());
+        }
     }
 }

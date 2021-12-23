@@ -221,9 +221,6 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
 }
 
 Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_scan_timer);
-#endif
     Status status = _reader->get_next(chunk);
     return status;
 }
@@ -248,6 +245,11 @@ void HdfsParquetScanner::update_counter() {
     COUNTER_UPDATE(_scanner_params.parent->_group_dict_filter_timer, _stats.group_dict_filter_ns);
     COUNTER_UPDATE(_scanner_params.parent->_group_dict_decode_timer, _stats.group_dict_decode_ns);
 #endif
+}
+
+void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {
+    update_counter();
+    _reader.reset();
 }
 
 void HdfsFileReaderParam::set_columns_from_file(const std::unordered_set<std::string>& names) {

@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "column/datum.h"
-#include "storage/rowset/segment_v2/common.h"
+#include "storage/rowset/common.h"
 #include "util/logging.h"
 
 namespace starrocks::vectorized {
@@ -16,7 +16,7 @@ namespace starrocks::vectorized {
 // Range represent a logical contiguous range of a segment file.
 // Range contains a inclusive start row number and an exclusive end row number.
 class Range {
-    using rowid_t = starrocks::segment_v2::rowid_t;
+    using rowid_t = starrocks::rowid_t;
 
 public:
     Range() {}
@@ -84,11 +84,14 @@ class SparseRange;
 
 // SparseRangeIterator used to travel a SparseRange.
 class SparseRangeIterator {
-    using rowid_t = starrocks::segment_v2::rowid_t;
+    using rowid_t = starrocks::rowid_t;
 
 public:
     SparseRangeIterator() {}
     explicit SparseRangeIterator(const SparseRange* r);
+
+    SparseRangeIterator(const SparseRangeIterator& iter)
+            : _range(iter._range), _index(iter._index), _next_rowid(iter._next_rowid) {}
 
     rowid_t begin() const { return _next_rowid; }
 
@@ -98,6 +101,9 @@ public:
     // Return the next contiguous range contains at most |size| rows.
     // `has_more` must be checked before calling this method.
     Range next(size_t size);
+
+    // Return the next discontiguous range contains at most |size| rows
+    void next_range(size_t size, SparseRange* range);
 
     size_t covered_ranges(size_t size) const;
 
@@ -114,7 +120,7 @@ private:
 // SparseRange represent a set of non-intersected contiguous ranges, or, in other words, represent
 // a single non-contiguous range.
 class SparseRange {
-    using rowid_t = starrocks::segment_v2::rowid_t;
+    using rowid_t = starrocks::rowid_t;
 
 public:
     SparseRange() = default;
@@ -302,6 +308,14 @@ inline Range SparseRangeIterator::next(size_t size) {
         }
     }
     return ret;
+}
+
+inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
+    while (size > 0 && has_more()) {
+        Range r = next(size);
+        range->add(r);
+        size -= r.span_size();
+    }
 }
 
 inline size_t SparseRangeIterator::covered_ranges(size_t size) const {

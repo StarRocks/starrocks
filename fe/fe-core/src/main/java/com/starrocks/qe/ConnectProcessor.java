@@ -23,6 +23,7 @@ package com.starrocks.qe;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.KillStmt;
+import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
@@ -54,6 +55,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,6 +64,8 @@ import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousCloseException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 /**
@@ -155,6 +159,7 @@ public class ConnectProcessor {
                 MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
                 if (elapseMs > Config.qe_slow_log_ms) {
                     MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
+                    ctx.getAuditEventBuilder().setDigest(computeStatementDigest((QueryStmt) parsedStmt));
                 }
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
@@ -175,6 +180,18 @@ public class ConnectProcessor {
         }
 
         Catalog.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
+    }
+
+    public String computeStatementDigest(QueryStmt queryStmt) {
+        String digest = queryStmt.toDigest();
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            md.reset();
+            md.update(digest.getBytes());
+            return Hex.encodeHexString(md.digest());
+        } catch (NoSuchAlgorithmException e) {
+            return "";
+        }
     }
 
     private boolean containsComment(String sql) {
@@ -330,10 +347,8 @@ public class ConnectProcessor {
     private void handleFieldList() throws IOException {
         // Already get command code.
         String tableName = null;
-        String pattern = null;
         try {
             tableName = new String(MysqlProto.readNulTerminateString(packetBuf), "UTF-8");
-            pattern = new String(MysqlProto.readEofString(packetBuf), "UTF-8");
         } catch (UnsupportedEncodingException e) {
             // Impossible!!!
             LOG.error("Unknown UTF-8 character set.");
@@ -569,7 +584,7 @@ public class ConnectProcessor {
             TMasterOpResult result = new TMasterOpResult();
             ctx.getState().setError(
                     "Missing current user identity. You need to upgrade this Frontend to the same version as Master Frontend.");
-            result.setMaxJournalId(Catalog.getCurrentCatalog().getMaxJournalId().longValue());
+            result.setMaxJournalId(Catalog.getCurrentCatalog().getMaxJournalId());
             result.setPacket(getResultPacket());
             return result;
         }
@@ -593,7 +608,7 @@ public class ConnectProcessor {
         // no matter the master execute success or fail, the master must transfer the result to follower
         // and tell the follower the current jounalID.
         TMasterOpResult result = new TMasterOpResult();
-        result.setMaxJournalId(Catalog.getCurrentCatalog().getMaxJournalId().longValue());
+        result.setMaxJournalId(Catalog.getCurrentCatalog().getMaxJournalId());
         // following stmt will not be executed, when current stmt is failed,
         // so only set SERVER_MORE_RESULTS_EXISTS Flag when stmt executed successfully
         if (!ctx.getIsLastStmt()

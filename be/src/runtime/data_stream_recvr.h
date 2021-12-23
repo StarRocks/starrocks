@@ -27,8 +27,9 @@
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
+#include "runtime/local_pass_through_buffer.h"
 #include "runtime/query_statistics.h"
-#include "util/tuple_row_compare.h"
+#include "util/runtime_profile.h"
 
 namespace google::protobuf {
 class Closure;
@@ -44,6 +45,7 @@ class DataStreamMgr;
 class MemTracker;
 class RuntimeProfile;
 class PTransmitChunkParams;
+class SortExecExprs;
 
 // Single receiver of an m:n data stream.
 // DataStreamRecvr maintains one or more queues of row batches received by a
@@ -74,6 +76,7 @@ public:
     ~DataStreamRecvr();
 
     Status get_chunk(std::unique_ptr<vectorized::Chunk>* chunk);
+    Status get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk);
 
     // Deregister from DataStreamMgr instance, which shares ownership of this instance.
     void close();
@@ -112,7 +115,8 @@ private:
     DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
                     int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
-                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline);
+                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
+                    bool keep_order, const PassThroughChunkBufferPtr& pass_through_chunk_buffer);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
@@ -172,6 +176,7 @@ private:
 
     // Number of bytes received
     RuntimeProfile::Counter* _bytes_received_counter;
+    RuntimeProfile::Counter* _bytes_pass_through_counter;
 
     // Time series of number of bytes received, samples _bytes_received_counter
     // RuntimeProfile::TimeSeriesCounter* _bytes_received_time_series_counter;
@@ -185,8 +190,13 @@ private:
 
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
-
     bool _is_pipeline;
+
+    // Invalid if _is_pipeline is false
+    // Pipeline will send packets out-of-order
+    // if _keep_order is set to true, then receiver will keep the order according sequence
+    bool _keep_order;
+    PassThroughContext _pass_through_context;
 };
 
 } // end namespace starrocks

@@ -40,8 +40,6 @@
 
 #include "exprs/expr.h"
 #include "runtime/mysql_table_writer.h"
-#include "runtime/row_batch.h"
-#include "runtime/tuple_row.h"
 #include "util/types.h"
 
 namespace starrocks {
@@ -100,7 +98,7 @@ Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
         auto* ctx = _output_expr_ctxs[i];
         const auto& type = ctx->root()->type();
         if (!is_scalar_primitive_type(type.type)) {
-            return Status::InternalError(fmt::format("unsupport type in mysql sink:{}", type.type));
+            return Status::InternalError(fmt::format("unsupported type in mysql sink:{}", type.type));
         }
 
         switch (type.type) {
@@ -119,7 +117,7 @@ Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
         }
 
         default:
-            return Status::InternalError(fmt::format("unsupport type in mysql sink:{}", type.type));
+            return Status::InternalError(fmt::format("unsupported type in mysql sink:{}", type.type));
         }
     }
 

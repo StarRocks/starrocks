@@ -12,7 +12,6 @@
 
 namespace starrocks {
 
-class Tuple;
 class TupleDescriptor;
 class RuntimeState;
 class MemPool;
@@ -23,7 +22,11 @@ namespace vectorized {
 class MysqlScanNode final : public ScanNode {
 public:
     MysqlScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~MysqlScanNode() override = default;
+    ~MysqlScanNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     // initialize _mysql_scanner, and create _text_converter.
     Status prepare(RuntimeState* state) override;
@@ -74,8 +77,6 @@ private:
     // Pool for allocating tuple data, including all varying-length slots.
     std::unique_ptr<MemPool> _tuple_pool;
     std::unique_ptr<MysqlScanner> _mysql_scanner;
-    // Current tuple.
-    Tuple* _tuple = nullptr;
 };
 } // namespace vectorized
 } // namespace starrocks

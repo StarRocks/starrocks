@@ -13,29 +13,27 @@
 namespace starrocks::vectorized {
 
 Chunk::Chunk() {
-    _slot_id_to_index.init(4);
-    _tuple_id_to_index.init(1);
+    _slot_id_to_index.reserve(4);
+    _tuple_id_to_index.reserve(1);
 }
 
 Chunk::Chunk(Columns columns, SchemaPtr schema) : _columns(std::move(columns)), _schema(std::move(schema)) {
     // bucket size cannot be 0.
-    _cid_to_index.init(std::max<size_t>(1, columns.size() * 2));
-    _slot_id_to_index.init(std::max<size_t>(1, _columns.size() * 2));
-    _tuple_id_to_index.init(1);
+    _cid_to_index.reserve(std::max<size_t>(1, columns.size() * 2));
+    _slot_id_to_index.reserve(std::max<size_t>(1, _columns.size() * 2));
+    _tuple_id_to_index.reserve(1);
     rebuild_cid_index();
     check_or_die();
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, const butil::FlatMap<SlotId, size_t>& slot_map)
-        : _columns(std::move(columns)), _slot_id_to_index(slot_map) {
+Chunk::Chunk(Columns columns, const SlotHashMap& slot_map) : _columns(std::move(columns)), _slot_id_to_index(slot_map) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
-    _tuple_id_to_index.init(1);
+    _tuple_id_to_index.reserve(1);
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, const butil::FlatMap<SlotId, size_t>& slot_map,
-             const butil::FlatMap<SlotId, size_t>& tuple_map)
+Chunk::Chunk(Columns columns, const SlotHashMap& slot_map, const TupleHashMap& tuple_map)
         : _columns(std::move(columns)), _slot_id_to_index(slot_map), _tuple_id_to_index(tuple_map) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
 }
@@ -68,7 +66,7 @@ std::string Chunk::get_column_name(size_t idx) const {
 }
 
 void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
-    DCHECK(_cid_to_index.seek(field->id()) == nullptr);
+    DCHECK(!_cid_to_index.contains(field->id()));
     _cid_to_index[field->id()] = _columns.size();
     _columns.emplace_back(std::move(column));
     _schema->append(field);
@@ -138,7 +136,8 @@ size_t Chunk::serialize_size() const {
     return size;
 }
 
-void Chunk::serialize(uint8_t* dst) const {
+size_t Chunk::serialize(uint8_t* dst) const {
+    uint8_t* head = dst;
     uint32_t version = 1;
     encode_fixed32_le(dst, version);
     dst += sizeof(uint32_t);
@@ -149,6 +148,7 @@ void Chunk::serialize(uint8_t* dst) const {
     for (const auto& column : _columns) {
         dst = column->serialize_column(dst);
     }
+    return dst - head;
 }
 
 size_t Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
@@ -182,15 +182,17 @@ size_t Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
 
     size_t size = serialize_size();
     chunk->mutable_data()->resize(size);
-    serialize((uint8_t*)chunk->mutable_data()->data());
+    size_t written_size = serialize((uint8_t*)chunk->mutable_data()->data());
+    chunk->set_serialized_size(written_size);
     return size;
 }
 
-Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta) {
+Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta, size_t serialized_size) {
     _slot_id_to_index = meta.slot_id_to_index;
     _tuple_id_to_index = meta.tuple_id_to_index;
     _columns.resize(_slot_id_to_index.size() + _tuple_id_to_index.size());
 
+    const uint8_t* head = src;
     uint32_t version = decode_fixed32_le(src);
     DCHECK_EQ(version, 1);
     src += sizeof(uint32_t);
@@ -206,10 +208,23 @@ Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta
         src = column->deserialize_column(src);
     }
 
-    size_t except = serialize_size();
-    if (UNLIKELY(len != except)) {
-        return Status::InternalError(
-                strings::Substitute("deserialize chunk data failed. len: $0, except: $1", len, except));
+    // The logic is a bit confusing here.
+    // `len` and `expected` are both "estimated" serialized size. it could be larger than real serialized size.
+    // `serialized_size` and `read_size` are both "real" serialized size. it's exactly how much bytes are written into buffer.
+    // For some object column types like bitmap/hll/percentile, "estimated" and "real" are not always the same.
+    // And for bitmap, sometimes `len` and `expected` are different. So to fix that problem, we fallback to compare "real" serialized size.
+
+    // We compare "real" serialized size first. It may fails because of backward compatibility. For old version of BE,
+    // there is no "serialized_size" this field(which means the value is zero), and we fallback to compare "estimated" serialized size.
+    // And for new version of BE, the "real" serialized size always matches, and we can save the cost of calling `serialzied_size`.
+    size_t read_size = src - head;
+    if (UNLIKELY(read_size != serialized_size)) {
+        size_t expected = serialize_size();
+        if (UNLIKELY(len != expected)) {
+            return Status::InternalError(strings::Substitute(
+                    "deserialize chunk data failed. len: $0, expected: $1, ser_size: $2, deser_size: $3", len, expected,
+                    serialized_size, read_size));
+        }
     }
     DCHECK_EQ(rows, num_rows());
     return Status::OK();
@@ -266,6 +281,17 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_tuple(size_t size) const {
         columns[i]->reserve(size);
     }
     return std::make_unique<Chunk>(columns, _slot_id_to_index, _tuple_id_to_index);
+}
+
+std::unique_ptr<Chunk> Chunk::clone_unique() const {
+    std::unique_ptr<Chunk> chunk = clone_empty_with_tuple(0);
+    for (const auto& kv : _slot_id_to_index) {
+        size_t index = kv.second;
+        ColumnPtr column = _columns[index]->clone_shared();
+        chunk->_columns[index] = std::move(column);
+    }
+    chunk->check_or_die();
+    return chunk;
 }
 
 void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {

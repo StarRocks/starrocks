@@ -13,9 +13,10 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -42,21 +43,22 @@ import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTransla
 
 class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
-    private final ExpressionMapping outer;
+    private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
-    QueryTransformer(ColumnRefFactory columnRefFactory, ExpressionMapping outer) {
+    public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this.columnRefFactory = columnRefFactory;
-        this.outer = outer;
+        this.session = session;
     }
 
-    public LogicalPlan plan(QuerySpecification queryBlock) {
-        OptExprBuilder builder = planFrom(queryBlock.getRelation());
+    public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer,
+                            Map<String, ExpressionMapping> cteContext) {
+        OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
+        builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), builder.getFieldMappings(), outer));
 
         builder = filter(builder, queryBlock.getPredicate());
-        builder =
-                aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(), queryBlock.getGroupingSetsList(),
-                        queryBlock.getGroupingFunctionCallExprs());
+        builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),
+                queryBlock.getGroupingSetsList(), queryBlock.getGroupingFunctionCallExprs());
         builder = filter(builder, queryBlock.getHaving());
         builder = window(builder, queryBlock.getOutputAnalytic());
 
@@ -101,8 +103,8 @@ class QueryTransformer {
         return outputs;
     }
 
-    private OptExprBuilder planFrom(Relation node) {
-        return new RelationTransformer(columnRefFactory).visit(node);
+    private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
+        return new RelationTransformer(columnRefFactory, session, cteContext).visit(node).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,
@@ -151,7 +153,7 @@ class QueryTransformer {
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
         for (Expr expression : expressions) {
             subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression);
@@ -169,11 +171,11 @@ class QueryTransformer {
             return subOpt;
         }
 
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
         subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate);
 
         ScalarOperator scalarPredicate =
-                subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, outer, correlation);
+                subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, correlation);
 
         if (scalarPredicate != null) {
             LogicalFilterOperator filterOperator = new LogicalFilterOperator(scalarPredicate);

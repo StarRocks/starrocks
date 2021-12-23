@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_CONFIGBASE_H
-#define STARROCKS_BE_SRC_COMMON_CONFIGBASE_H
-
+#pragma once
 #include <cstdint>
 #include <map>
 #include <string>
@@ -123,5 +121,3 @@ Status set_config(const std::string& field, const std::string& value);
 
 } // namespace config
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_COMMON_CONFIGBASE_H

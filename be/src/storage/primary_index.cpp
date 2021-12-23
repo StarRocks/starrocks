@@ -16,14 +16,7 @@
 
 namespace starrocks {
 
-using vectorized::Column;
-using vectorized::ColumnPtr;
-using vectorized::ChunkHelper;
-using vectorized::UInt64Column;
-using vectorized::StdHashWithSeed;
-using vectorized::PhmapSeed1;
-
-using tablet_rowid_t = uint64_t;
+using tablet_rowid_t = PrimaryIndex::tablet_rowid_t;
 
 class HashIndex {
 public:
@@ -50,6 +43,9 @@ public:
                              vector<uint32_t>* failed) = 0;
     // batch erase a range [idx_begin, idx_end) of keys
     virtual void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
+
+    virtual void get(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                     std::vector<uint64_t>* rowids) = 0;
 
     // just an estimate value for now
     virtual std::size_t memory_usage() const = 0;
@@ -88,12 +84,12 @@ public:
 };
 
 const uint32_t PREFETCHN = 8;
-const uint32_t ROWID_MASK = 0xffffffff;
 
 template <typename Key>
 class HashIndexImpl : public HashIndex {
 private:
-    phmap::parallel_flat_hash_map<Key, RowIdPack4, StdHashWithSeed<Key, PhmapSeed1>, phmap::priv::hash_default_eq<Key>,
+    phmap::parallel_flat_hash_map<Key, RowIdPack4, vectorized::StdHashWithSeed<Key, vectorized::PhmapSeed1>,
+                                  phmap::priv::hash_default_eq<Key>,
                                   TraceAlloc<phmap::priv::Pair<const Key, RowIdPack4>>, 4, phmap::NullMutex, false>
             _map;
 
@@ -180,6 +176,21 @@ public:
                 uint64_t old = iter->second.value;
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 _map.erase(iter);
+            }
+        }
+    }
+
+    void get(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
+             std::vector<uint64_t>* rowids) override {
+        auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
+        for (auto i = idx_begin; i < idx_end; i++) {
+            uint32_t prefetch_i = i + PREFETCHN;
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
+            auto iter = _map.find(keys[i]);
+            if (iter != _map.end()) {
+                (*rowids)[i] = iter->second.value;
+            } else {
+                (*rowids)[i] = -1;
             }
         }
     }
@@ -412,6 +423,45 @@ public:
         }
     }
 
+    void get(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
+             std::vector<uint64_t>* rowids) override {
+        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        uint32_t n = idx_end - idx_begin;
+        if (n >= PREFETCHN * 2) {
+            FixSlice<S> prefetch_keys[PREFETCHN];
+            size_t prefetch_hashes[PREFETCHN];
+            for (uint32_t i = 0; i < PREFETCHN; i++) {
+                prefetch_keys[i].assign(keys[idx_begin + i]);
+                prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
+                _map.prefetch_hash(prefetch_hashes[i]);
+            }
+            for (auto i = idx_begin; i < idx_end; i++) {
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto iter = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
+                if (iter != _map.end()) {
+                    (*rowids)[i] = iter->second.value;
+                } else {
+                    (*rowids)[i] = -1;
+                }
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
+        } else {
+            for (auto i = idx_begin; i < idx_end; i++) {
+                auto iter = _map.find(FixSlice<S>(keys[i]));
+                if (iter != _map.end()) {
+                    (*rowids)[i] = iter->second.value;
+                } else {
+                    (*rowids)[i] = -1;
+                }
+            }
+        }
+    }
+
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
 };
 
@@ -507,6 +557,19 @@ public:
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 _map.erase(p);
                 _total_length -= keys[i].size;
+            }
+        }
+    }
+
+    void get(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
+             std::vector<uint64_t>* rowids) override {
+        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            auto p = _map.find(keys[i].to_string());
+            if (p != _map.end()) {
+                (*rowids)[i] = p->second;
+            } else {
+                (*rowids)[i] = -1;
             }
         }
     }
@@ -675,6 +738,20 @@ public:
         }
     }
 
+    void get(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
+             std::vector<uint64_t>* rowids) override {
+        if (idx_begin < idx_end) {
+            auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+            for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
+                if (keys[i].size != keys[idx_begin].size) {
+                    get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, i, rowids);
+                    idx_begin = i;
+                }
+            }
+            get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, idx_end, rowids);
+        }
+    }
+
     std::size_t memory_usage() const final {
         size_t ret = 0;
         for (int i = 0; i < max_fix_length; i++) {
@@ -791,14 +868,13 @@ static string int_list_to_string(const vector<uint32_t>& l) {
 Status PrimaryIndex::_do_load(Tablet* tablet) {
     MonotonicStopWatch timer;
     timer.start();
-    using vectorized::ChunkHelper;
 
     const TabletSchema& tablet_schema = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
     for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
+    auto pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
     _set_schema(pkey_schema);
 
     int64_t apply_version = 0;
@@ -840,7 +916,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     // only hold pkey, so can use larger chunk size
     vector<uint32_t> rowids;
     rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+    auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
@@ -867,7 +943,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    Column* pkc = nullptr;
+                    vectorized::Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
@@ -925,9 +1001,14 @@ void PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const vecto
     _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
 }
 
-void PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
+void PrimaryIndex::erase(const vectorized::Column& key_col, DeletesMap* deletes) {
     DCHECK(_status.ok() && _pkey_to_rssid_rowid);
     _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
+}
+
+void PrimaryIndex::get(const vectorized::Column& key_col, std::vector<uint64_t>* rowids) {
+    DCHECK(_status.ok() && _pkey_to_rssid_rowid);
+    _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
 }
 
 std::size_t PrimaryIndex::memory_usage() const {

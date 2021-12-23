@@ -32,10 +32,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/mem_pool.h"
-#include "storage/merger.h"
-#include "storage/row.h"
-#include "storage/row_block.h"
-#include "storage/row_cursor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/storage_engine.h"
@@ -422,7 +418,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                             ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
                     Status st = datum_from_string(new_field.type().get(), &dst_datum, tmp, nullptr);
                     if (!st.ok()) {
-                        LOG(WARNING) << "create datum from string failed";
+                        LOG(WARNING) << "create datum from string failed: status=" << st;
                         return false;
                     }
                 }
@@ -909,7 +905,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (new_tablet->tablet_state() != TABLET_NOTREADY) {
         Status st = _validate_alter_result(new_tablet, request);
         LOG(INFO) << "tablet's state=" << new_tablet->tablet_state()
-                  << " the convert job alreay finished, check its version"
+                  << " the convert job already finished, check its version"
                   << " res=" << st.to_string();
         return Status::InternalError("new tablet's meta is invalid");
     }
@@ -1201,7 +1197,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         LOG(INFO) << "new rowset has " << new_rowset->num_segments() << " segments";
         status = sc_params.new_tablet->add_rowset(new_rowset, false);
         if (status.is_already_exist()) {
-            LOG(WARNING) << "version already exist, version revert occured. "
+            LOG(WARNING) << "version already exist, version revert occurred. "
                          << "tablet=" << sc_params.new_tablet->full_name() << ", version='" << sc_params.version.first
                          << "-" << sc_params.version.second;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
@@ -1262,7 +1258,6 @@ Status SchemaChangeHandler::_parse_request(
         }
 
         // to handle new added column
-        //if (new_column_schema.is_allow_null || new_column_schema.has_default_value) {
         {
             column_mapping->ref_column = -1;
 
@@ -1278,14 +1273,6 @@ Status SchemaChangeHandler::_parse_request(
                       << "column=" << column_name << ", default_value=" << new_column.default_value();
             continue;
         }
-
-        column_mapping->ref_column = -1;
-        if (!_init_column_mapping(column_mapping, new_column, "").ok()) {
-            return Status::InternalError("init column mapping failed");
-        }
-        LOG(INFO) << "A new schema delta is converted while dropping column. "
-                  << "Dropped column will be assigned as '0' for the older schema. "
-                  << "column=" << column_name;
     }
 
     // Check if re-aggregation is needed.

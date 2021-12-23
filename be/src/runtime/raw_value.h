@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_RAW_VALUE_H
-#define STARROCKS_BE_RUNTIME_RAW_VALUE_H
+#pragma once
 
 #include <string>
 
@@ -34,7 +33,6 @@ namespace starrocks {
 
 class MemPool;
 class SlotDescriptor;
-class Tuple;
 
 // Useful utility functions for runtime values (which are passed around as void*).
 class RawValue {
@@ -90,11 +88,6 @@ public:
     // Compares both values.
     // Return value is < 0  if v1 < v2, 0 if v1 == v2, > 0 if v1 > v2.
     static int compare(const void* v1, const void* v2, const TypeDescriptor& type);
-
-    // Writes the bytes of a given value into the slot of a tuple.
-    // For string values, the string data is copied into memory allocated from 'pool'
-    // only if pool is non-NULL.
-    static void write(const void* value, Tuple* tuple, const SlotDescriptor* slot_desc, MemPool* pool);
 
     // Writes 'src' into 'dst' for type.
     // For string values, the string data is copied into 'pool' if pool is non-NULL.
@@ -407,5 +400,3 @@ inline uint32_t RawValue::zlib_crc32(const void* v, const TypeDescriptor& type, 
 }
 
 } // namespace starrocks
-
-#endif

@@ -70,7 +70,7 @@ bool RowSourceMaskBuffer::has_same_source(uint16_t source, size_t count) const {
     return true;
 }
 
-Status RowSourceMaskBuffer::flip() {
+Status RowSourceMaskBuffer::flip_to_read() {
     _current_index = 0;
     if (_tmp_file_fd > 0) {
         off_t offset = lseek(_tmp_file_fd, 0, SEEK_SET);

@@ -48,14 +48,9 @@ public:
     Status prepare(const SlotDescriptor* slot_desc, const RowDescriptor& row_desc);
 
     Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* ctx) override;
-    static void* get_value(Expr* expr, TupleRow* row);
-    void* get_slot(TupleRow* row);
-    Tuple* get_tuple(TupleRow* row);
-    bool is_null_bit_set(TupleRow* row);
     static bool is_nullable(Expr* expr);
     std::string debug_string() const override;
     bool is_constant() const override { return false; }
-    bool is_vectorized() const override { return true; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const override;
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
     SlotId slot_id() const { return _slot_id; }
@@ -75,32 +70,6 @@ private:
     TupleId _tuple_id = 0; // used for desc this slot from
     bool _is_nullable = false;
 };
-
-inline void* SlotRef::get_value(Expr* expr, TupleRow* row) {
-    SlotRef* ref = (SlotRef*)expr;
-    Tuple* t = row->get_tuple(ref->_tuple_idx);
-    if (t == nullptr || t->is_null(ref->_null_indicator_offset)) {
-        return nullptr;
-    }
-    return t->get_slot(ref->_slot_offset);
-}
-
-inline void* SlotRef::get_slot(TupleRow* row) {
-    Tuple* t = row->get_tuple(_tuple_idx);
-    DCHECK(t != nullptr);
-    return t->get_slot(_slot_offset);
-}
-
-inline Tuple* SlotRef::get_tuple(TupleRow* row) {
-    Tuple* t = row->get_tuple(_tuple_idx);
-    return t;
-}
-
-inline bool SlotRef::is_null_bit_set(TupleRow* row) {
-    Tuple* t = row->get_tuple(_tuple_idx);
-    DCHECK(t != nullptr);
-    return t->is_null(_null_indicator_offset);
-}
 
 inline bool SlotRef::is_nullable(Expr* expr) {
     SlotRef* ref = (SlotRef*)expr;

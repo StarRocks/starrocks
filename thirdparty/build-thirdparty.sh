@@ -314,7 +314,7 @@ build_rapidjson() {
     cp -r $TP_SOURCE_DIR/$RAPIDJSON_SOURCE/include/rapidjson $TP_INCLUDE_DIR/
 }
 
-# rapidjson
+# simdjson
 build_simdjson() {
     check_if_source_exist $SIMDJSON_SOURCE
     cd $TP_SOURCE_DIR/$SIMDJSON_SOURCE

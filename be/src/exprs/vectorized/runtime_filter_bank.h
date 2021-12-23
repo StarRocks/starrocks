@@ -3,6 +3,7 @@
 #pragma once
 
 #include <mutex>
+#include <set>
 
 #include "column/column.h"
 #include "common/global_types.h"
@@ -103,12 +104,16 @@ public:
     void replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* new_probe_expr_ctx);
     std::string debug_string() const;
     JoinRuntimeFilter::RunningContext* runtime_filter_ctx() { return &_runtime_filter_ctx; }
+    bool is_local() const { return _is_local; }
+    TPlanNodeId build_plan_node_id() const { return _build_plan_node_id; }
 
 private:
     friend class HashJoinNode;
     friend class hashJoiner;
     int32_t _filter_id;
     ExprContext* _probe_expr_ctx = nullptr;
+    bool _is_local;
+    TPlanNodeId _build_plan_node_id;
     std::atomic<const JoinRuntimeFilter*> _runtime_filter;
     std::shared_ptr<const JoinRuntimeFilter> _shared_runtime_filter;
     JoinRuntimeFilter::RunningContext _runtime_filter_ctx;
@@ -123,12 +128,6 @@ private:
 // into RuntimeBloomFilterEvalContext and make do_evaluate function can be called concurrently.
 struct RuntimeBloomFilterEvalContext {
     RuntimeBloomFilterEvalContext() = default;
-    void prepare(RuntimeProfile* runtime_profile) {
-        join_runtime_filter_timer = ADD_TIMER(runtime_profile, "JoinRuntimeFilterTime");
-        join_runtime_filter_input_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterInputRows", TUnit::UNIT);
-        join_runtime_filter_output_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
-        join_runtime_filter_eval_counter = ADD_COUNTER(runtime_profile, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
-    }
 
     std::map<double, RuntimeFilterProbeDescriptor*> selectivity;
     size_t input_chunk_nums = 0;
@@ -154,12 +153,16 @@ public:
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
     // accept RuntimeFilterCollector from parent node
     // which means parent node to push down runtime filter.
-    void push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids);
+    void push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
+                   std::set<TPlanNodeId>& rf_waiting_set);
     std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() { return _descriptors; }
     const std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() const { return _descriptors; }
+
     void set_wait_timeout_ms(int v) { _wait_timeout_ms = v; }
+    int wait_timeout_ms() const { return _wait_timeout_ms; }
     // wait for all runtime filters are ready.
     void wait();
+
     std::string debug_string() const;
     bool empty() const { return _descriptors.empty(); }
     void init_counter();

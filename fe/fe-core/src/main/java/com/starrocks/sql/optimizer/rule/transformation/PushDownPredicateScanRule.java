@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -32,8 +33,6 @@ public class PushDownPredicateScanRule extends TransformationRule {
     public static final PushDownPredicateScanRule ES_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
 
-    private ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
-
     public PushDownPredicateScanRule(OperatorType type) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));
     }
@@ -45,9 +44,12 @@ public class PushDownPredicateScanRule extends TransformationRule {
         OptExpression scan = input.getInputs().get(0);
         LogicalScanOperator logicalScanOperator = (LogicalScanOperator) scan.getOp();
 
+        ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
         ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
-        predicates = rangeExtractor.rewriteOnlyColumn(predicates);
+        predicates = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)
+                .stream().map(rangeExtractor::rewriteOnlyColumn).collect(Collectors.toList())));
+        Preconditions.checkState(predicates != null);
         predicates = scalarOperatorRewriter.rewrite(predicates,
                 ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
 

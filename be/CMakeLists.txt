@@ -266,8 +266,6 @@ set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 
 add_library(simdjson STATIC IMPORTED)
 set_target_properties(simdjson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdjson.a)
-# Disable exceptions for simdjson.
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSIMDJSON_EXCEPTIONS=OFF")
 
 find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
@@ -347,7 +345,7 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
 # Debug information is stored as dwarf2 to be as compatible as possible
 #   -Werror: compile warnings should be errors when using the toolchain compiler.
 # Only enable for debug builds because this is what we test in pre-commit tests.
-set(CXX_FLAGS_DEBUG "${CXX_GCC_FLAGS} -ggdb -O0 -gdwarf-4")
+set(CXX_FLAGS_DEBUG "${CXX_GCC_FLAGS} -ggdb -O0 -gdwarf-4 -DDEBUG")
 
 # For CMAKE_BUILD_TYPE=Release
 #   -O3: Enable all compiler optimizations
@@ -429,7 +427,7 @@ set(STARROCKS_LINK_LIBS
     Exprs
     Formats
     Gutil
-    Olap
+    Storage
     Rowset
     OlapFs
     Runtime
@@ -461,8 +459,6 @@ set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
     ${WL_START_GROUP}
     rocksdb
-    librdkafka_cpp
-    librdkafka
     libs2
     snappy
     ${Boost_LIBRARIES}
@@ -471,6 +467,8 @@ set(STARROCKS_DEPENDENCIES
     glog
     re2
     pprof
+    # Put lz4 in front of librdkafka to make sure that segment use the native lz4 library to compress/decompress page
+    # Otherwise, he will use the lz4 Library in librdkafka
     lz4
     libevent
     curl
@@ -497,6 +495,8 @@ set(STARROCKS_DEPENDENCIES
     ryu
     hyperscan
     simdjson
+    librdkafka_cpp
+    librdkafka
     ${WL_END_GROUP}
 )
 

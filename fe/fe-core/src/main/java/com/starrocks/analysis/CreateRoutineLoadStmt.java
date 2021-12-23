@@ -121,6 +121,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(JSONROOT)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
+            .add(LoadStmt.PARTIAL_UPDATE)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -148,6 +149,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private long maxBatchRows = -1;
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
+    private boolean partialUpdate = false;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -228,6 +230,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return timezone;
     }
 
+    public boolean isPartialUpdate() {
+        return partialUpdate;
+    }
+
     public String getFormat() {
         return format;
     }
@@ -302,7 +308,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 columnSeparator = (ColumnSeparator) parseNode;
                 columnSeparator.analyze(null);
             } else if (parseNode instanceof RowDelimiter) {
-                // check row delimiter 
+                // check row delimiter
                 if (rowDelimiter != null) {
                     throw new AnalysisException("repeat setting of row delimiter");
                 }
@@ -361,6 +367,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         strictMode = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.STRICT_MODE),
                 RoutineLoadJob.DEFAULT_STRICT_MODE,
                 LoadStmt.STRICT_MODE + " should be a boolean");
+
+        partialUpdate = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.PARTIAL_UPDATE),
+                false,
+                LoadStmt.PARTIAL_UPDATE + " should be a boolean");
 
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();

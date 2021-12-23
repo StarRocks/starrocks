@@ -31,7 +31,7 @@
 #include <unordered_map>
 
 #include "column/datum.h"
-#include "gen_cpp/segment_v2.pb.h" // for ColumnMetaPB
+#include "gen_cpp/segment.pb.h" // for ColumnMetaPB
 #include "gutil/strings/numbers.h"
 #include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
@@ -305,6 +305,7 @@ public:
         size_t item_size = src_value.length * _item_size;
         size_t nulls_size = src_value.has_null ? src_value.length : 0;
         dest_value.data = mem_pool->allocate(item_size + nulls_size);
+        assert(dest_value.data != nullptr);
         dest_value.has_null = src_value.has_null;
         dest_value.null_signs = src_value.has_null ? reinterpret_cast<uint8_t*>(dest_value.data) + item_size : nullptr;
 
@@ -402,7 +403,7 @@ const ScalarTypeInfo* get_scalar_type_info(FieldType t);
 
 TypeInfoPtr get_type_info(FieldType field_type);
 
-TypeInfoPtr get_type_info(const segment_v2::ColumnMetaPB& column_meta_pb);
+TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb);
 
 TypeInfoPtr get_type_info(const TabletColumn& col);
 
@@ -1245,6 +1246,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_CHAR> : public BaseFieldtypeTraits<OLAP_F
         Slice l_slice = unaligned_load<Slice>(dest);
         Slice r_slice = unaligned_load<Slice>(src);
         l_slice.data = reinterpret_cast<char*>(mem_pool->allocate(r_slice.size));
+        assert(l_slice.data != nullptr);
         memory_copy(l_slice.data, r_slice.data, r_slice.size);
         l_slice.size = r_slice.size;
         unaligned_store<Slice>(dest, l_slice);

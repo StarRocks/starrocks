@@ -118,8 +118,8 @@ void PInternalServiceImpl<T>::transmit_runtime_filter(google::protobuf::RpcContr
                                                       PTransmitRuntimeFilterResult* response,
                                                       google::protobuf::Closure* done) {
     VLOG_FILE << "transmit runtime filter: fragment_instance_id=" << print_id(request->finst_id())
-              << " query_id=" << request->query_id() << ", is_partital=" << request->is_partial()
-              << ", filter_id=" << request->filter_id();
+              << " query_id=" << request->query_id() << ", is_partial=" << request->is_partial()
+              << ", filter_id=" << request->filter_id() << ", is_pipeline=" << request->is_pipeline();
     ClosureGuard closure_guard(done);
     _exec_env->runtime_filter_worker()->receive_runtime_filter(*request);
     Status st;
@@ -261,7 +261,7 @@ void PInternalServiceImpl<T>::cancel_plan_fragment(google::protobuf::RpcControll
     Status st;
     auto reason_string =
             request->has_cancel_reason() ? cancel_reason_to_string(request->cancel_reason()) : "UnknownReason";
-    LOG(INFO) << "cancel framgent, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
         TUniqueId query_id;
@@ -291,7 +291,7 @@ void PInternalServiceImpl<T>::cancel_plan_fragment(google::protobuf::RpcControll
         if (request->has_cancel_reason()) {
             st = _exec_env->fragment_mgr()->cancel(tid, request->cancel_reason());
         } else {
-            LOG(INFO) << "cancel framgent, fragment_instance_id=" << print_id(tid);
+            LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid);
             st = _exec_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
@@ -351,6 +351,26 @@ void PInternalServiceImpl<T>::get_info(google::protobuf::RpcController* controll
         }
         st.to_protobuf(response->mutable_status());
         return;
+    }
+    if (request->has_kafka_offset_batch_request()) {
+        for (auto offset_req : request->kafka_offset_batch_request().requests()) {
+            std::vector<int64_t> beginning_offsets;
+            std::vector<int64_t> latest_offsets;
+            Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
+                    offset_req, &beginning_offsets, &latest_offsets);
+            auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
+            if (st.ok()) {
+                for (int i = 0; i < beginning_offsets.size(); i++) {
+                    offset_result->add_partition_ids(offset_req.partition_ids(i));
+                    offset_result->add_beginning_offsets(beginning_offsets[i]);
+                    offset_result->add_latest_offsets(latest_offsets[i]);
+                }
+            } else {
+                response->clear_kafka_offset_batch_result();
+                st.to_protobuf(response->mutable_status());
+                return;
+            }
+        }
     }
     Status::OK().to_protobuf(response->mutable_status());
 }

@@ -66,7 +66,7 @@ struct TColumnDef {
   2: optional string comment
 }
 
-// Arguments to DescribeTable, which returns a list of column descriptors for a 
+// Arguments to DescribeTable, which returns a list of column descriptors for a
 // given table
 struct TDescribeTableParams {
   1: optional string db
@@ -298,14 +298,14 @@ struct TGetDbsResult {
   1: list<string> dbs
 }
 
-// Arguments to getTableNames, which returns a list of tables that match an 
+// Arguments to getTableNames, which returns a list of tables that match an
 // optional pattern.
 struct TGetTablesParams {
   // If not set, match tables in all DBs
-  1: optional string db 
+  1: optional string db
 
   // If not set, match every table
-  2: optional string pattern 
+  2: optional string pattern
   3: optional string user   // deprecated
   4: optional string user_ip    // deprecated
   5: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
@@ -341,7 +341,7 @@ enum FrontendServiceVersion {
   V1
 }
 
-// The results of an INSERT query, sent to the coordinator as part of 
+// The results of an INSERT query, sent to the coordinator as part of
 // TReportExecStatusParams
 struct TReportExecStatusParams {
   1: required FrontendServiceVersion protocol_version
@@ -367,9 +367,9 @@ struct TReportExecStatusParams {
   // cumulative profile
   // required in V1
   7: optional RuntimeProfile.TRuntimeProfileTree profile
-  
+
   // New errors that have not been reported to the coordinator
-  // optional in V1 
+  // optional in V1
   9: optional list<string> error_log
 
   // URL of files need to load
@@ -379,7 +379,7 @@ struct TReportExecStatusParams {
   12: optional string tracking_url
 
   // export files
-  13: optional list<string> export_files 
+  13: optional list<string> export_files
 
   14: optional list<Types.TTabletCommitInfo> commitInfos
 
@@ -402,7 +402,7 @@ struct TUpdateMiniEtlTaskStatusRequest {
 struct TMasterOpRequest {
     1: required string user
     2: required string db
-    3: required string sql 
+    3: required string sql
     4: optional Types.TResourceInfo resourceInfo
     5: optional string cluster
     6: optional i64 execMemLimit // deprecated, move into query_options
@@ -522,6 +522,7 @@ struct TStreamLoadPutRequest {
     24: optional string jsonpaths
     25: optional i64 thrift_rpc_timeout_ms
     26: optional string json_root
+    27: optional bool partial_update
     // only valid when file type is CSV
     50: optional string rowDelimiter
 }
@@ -554,7 +555,7 @@ struct TMiniLoadTxnCommitAttachment {
     1: required i64 loadedRows
     2: required i64 filteredRows
     3: optional string errorLogUrl
-} 
+}
 
 struct TManualLoadTxnCommitAttachment {
     1: optional i64 loadedRows
@@ -562,12 +563,12 @@ struct TManualLoadTxnCommitAttachment {
     3: optional string errorLogUrl
     4: optional i64 receivedBytes
     5: optional i64 loadedBytes
-} 
+}
 
 struct TTxnCommitAttachment {
     1: required Types.TLoadType loadType
     2: optional TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment
-    3: optional TMiniLoadTxnCommitAttachment mlTxnCommitAttachment 
+    3: optional TMiniLoadTxnCommitAttachment mlTxnCommitAttachment
     10: optional TManualLoadTxnCommitAttachment manualLoadTxnCommitAttachment
 }
 
@@ -913,7 +914,7 @@ service FrontendService {
     TGetUserPrivsResult getUserPrivs(1:TGetUserPrivsParams params)
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
-    
+
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
     TReportExecStatusResult reportExecStatus(1:TReportExecStatusParams params)

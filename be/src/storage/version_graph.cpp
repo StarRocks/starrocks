@@ -356,7 +356,7 @@ void VersionGraph::_add_vertex_to_graph(int64_t vertex_value) {
 OLAPStatus VersionGraph::capture_consistent_versions(const Version& spec_version,
                                                      std::vector<Version>* version_path) const {
     if (spec_version.first > spec_version.second) {
-        LOG(WARNING) << "invalid specfied version. "
+        LOG(WARNING) << "invalid specified version. "
                      << "spec_version=" << spec_version.first << "-" << spec_version.second;
         return OLAP_ERR_INPUT_PARAMETER_ERROR;
     }

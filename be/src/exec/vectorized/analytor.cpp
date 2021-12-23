@@ -80,10 +80,13 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
 }
 
 Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
+    _state = state;
+
     _pool = pool;
     _runtime_profile = runtime_profile;
     _limit = _tnode.limit;
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
+    _mem_pool = std::make_unique<MemPool>();
 
     const TAnalyticNode& analytic_node = _tnode.analytic_node;
 
@@ -213,7 +216,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    _mem_pool.reset(new MemPool());
 
     _compute_timer = ADD_TIMER(_runtime_profile, "ComputeTime");
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
@@ -254,6 +256,12 @@ Status Analytor::open(RuntimeState* state) {
 }
 
 Status Analytor::close(RuntimeState* state) {
+    if (_is_closed) {
+        return Status::OK();
+    }
+
+    _is_closed = true;
+
     for (auto* ctx : _agg_fn_ctxs) {
         if (ctx != nullptr && ctx->impl()) {
             ctx->impl()->close();
@@ -294,7 +302,7 @@ vectorized::ChunkPtr Analytor::poll_chunk_buffer() {
 
 void Analytor::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
     std::lock_guard<std::mutex> l(_buffer_mutex);
-    _buffer.push(std::move(chunk));
+    _buffer.push(chunk);
 }
 
 FrameRange Analytor::get_sliding_frame_range() {
@@ -330,22 +338,17 @@ void Analytor::get_window_function_result(int32_t start, int32_t end) {
     }
 }
 
-bool Analytor::is_partition_finished(int64_t found_partition_end) {
-    // current partition data don't consume finished
-    if (_input_eos | (_current_row_position < _partition_end)) {
+bool Analytor::is_partition_finished() {
+    if (_input_eos) {
         return true;
     }
 
-    // no partition or hasn't fecth one chunk
-    if ((_partition_ctxs.empty() & !_input_eos) | (found_partition_end == 0)) {
+    // No partition or hasn't fecth one chunk
+    if (_partition_ctxs.empty() || _partition_end == 0) {
         return false;
     }
 
-    // partition end not found
-    if (!_partition_ctxs.empty() && found_partition_end == _partition_columns[0]->size() && !_input_eos) {
-        return false;
-    }
-    return true;
+    return _current_row_position >= _partition_end;
 }
 
 Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
@@ -421,7 +424,7 @@ void Analytor::append_column(size_t chunk_size, vectorized::Column* dst_column, 
 }
 
 bool Analytor::is_new_partition(int64_t found_partition_end) {
-    // _current_row_position >= _partition_end : current partition data has consumed finished
+    // _current_row_position >= _partition_end : current partition data has been processed
     // _partition_end == 0 : the first partition
     return ((_current_row_position >= _partition_end) &
             ((_partition_end == 0) | (_partition_end != found_partition_end)));
@@ -437,7 +440,7 @@ int64_t Analytor::find_partition_end() {
         return _partition_end;
     }
 
-    if (_partition_columns.empty() | (_input_rows == 0)) {
+    if (_partition_columns.empty() || _input_rows == 0) {
         return _input_rows;
     }
 

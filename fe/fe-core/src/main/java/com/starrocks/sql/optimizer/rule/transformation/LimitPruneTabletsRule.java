@@ -56,17 +56,20 @@ public class LimitPruneTabletsRule extends TransformationRule {
             }
             Partition partition = olapTable.getPartition(partitionId);
             long version = partition.getVisibleVersion();
-            long versionHash = partition.getVisibleVersionHash();
             MaterializedIndex index = partition.getIndex(olapScanOperator.getSelectedIndexId());
 
             for (Tablet tablet : index.getTablets()) {
                 long tabletRowCount = 0L;
                 for (Replica replica : tablet.getReplicas()) {
-                    if (replica.checkVersionCatchUp(version, versionHash, false)
+                    if (replica.checkVersionCatchUp(version, false)
                             && replica.getRowCount() > tabletRowCount) {
                         tabletRowCount = replica.getRowCount();
                         break;
                     }
+                }
+                // Needn't select empty tablet
+                if (tabletRowCount == 0) {
+                    continue;
                 }
                 totalRow += tabletRowCount;
 
@@ -77,7 +80,9 @@ public class LimitPruneTabletsRule extends TransformationRule {
             }
         }
 
-        if (result.equals(olapScanOperator.getSelectedTabletId())) {
+        // 1. Don't select any tablet
+        // 2. selected tablets don't change
+        if (result.isEmpty() || result.equals(olapScanOperator.getSelectedTabletId())) {
             return Collections.emptyList();
         }
 

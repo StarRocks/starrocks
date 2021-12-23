@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnDef.DefaultValue;
+import com.starrocks.analysis.ColumnDef.DefaultValueDef;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -44,10 +44,10 @@ public class AddColumnsClauseTest {
     public void testNormal() throws AnalysisException {
         List<ColumnDef> columns = Lists.newArrayList();
         ColumnDef definition = new ColumnDef("col1", new TypeDef(ScalarType.createType(PrimitiveType.INT)),
-                true, null, false, new DefaultValue(true, "0"), "");
+                true, null, false, new DefaultValueDef(true, new StringLiteral("0")), "");
         columns.add(definition);
         definition = new ColumnDef("col2", new TypeDef(ScalarType.createType(PrimitiveType.INT)), true, null, false,
-                new DefaultValue(true, "0"), "");
+                new DefaultValueDef(true, new StringLiteral("0")), "");
         columns.add(definition);
         AddColumnsClause clause = new AddColumnsClause(columns, null, null);
         clause.analyze(analyzer);

@@ -34,13 +34,28 @@
 #include "runtime/data_stream_sender.h"
 #include "runtime/export_sink.h"
 #include "runtime/memory_scratch_sink.h"
+#include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
 
-Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink,
+static std::unique_ptr<DataStreamSender> create_data_stream_sink(
+        RuntimeState* state, const TDataStreamSink& data_stream_sink, const RowDescriptor& row_desc,
+        const TPlanFragmentExecParams& params, const std::vector<TPlanFragmentDestination>& destinations) {
+    bool send_query_statistics_with_every_batch =
+            params.__isset.send_query_statistics_with_every_batch && params.send_query_statistics_with_every_batch;
+    bool enable_exchange_pass_through =
+            params.__isset.enable_exchange_pass_through && params.enable_exchange_pass_through;
+    // TODO: figure out good buffer size based on size of output row
+    auto ret = std::make_unique<DataStreamSender>(state, params.sender_id, row_desc, data_stream_sink, destinations,
+                                                  16 * 1024, send_query_statistics_with_every_batch,
+                                                  enable_exchange_pass_through);
+    return ret;
+}
+
+Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
                                   const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
                                   const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink) {
     DCHECK(sink != nullptr);
@@ -49,12 +64,8 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         if (!thrift_sink.__isset.stream_sink) {
             return Status::InternalError("Missing data stream sink.");
         }
-        bool send_query_statistics_with_every_batch =
-                params.__isset.send_query_statistics_with_every_batch && params.send_query_statistics_with_every_batch;
-        // TODO: figure out good buffer size based on size of output row
-        *sink = std::make_unique<DataStreamSender>(pool, params.use_vectorized, params.sender_id, row_desc,
-                                                   thrift_sink.stream_sink, params.destinations, 16 * 1024,
-                                                   send_query_statistics_with_every_batch);
+        *sink = std::move(
+                create_data_stream_sink(state, thrift_sink.stream_sink, row_desc, params, params.destinations));
         break;
     }
     case TDataSinkType::RESULT_SINK:
@@ -76,7 +87,7 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
             return Status::InternalError("Missing data buffer sink.");
         }
         // TODO: figure out good buffer size based on size of output row
-        *sink = std::make_unique<MysqlTableSink>(pool, row_desc, output_exprs);
+        *sink = std::make_unique<MysqlTableSink>(state->obj_pool(), row_desc, output_exprs);
         break;
     }
 
@@ -84,15 +95,30 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         if (!thrift_sink.__isset.export_sink) {
             return Status::InternalError("Missing export sink sink.");
         }
-        *sink = std::make_unique<ExportSink>(pool, row_desc, output_exprs);
+        *sink = std::make_unique<ExportSink>(state->obj_pool(), row_desc, output_exprs);
         break;
     }
     case TDataSinkType::OLAP_TABLE_SINK: {
         Status status;
         DCHECK(thrift_sink.__isset.olap_table_sink);
         LOG_IF(WARNING, !params.use_vectorized) << "Ignore option use_vectorized=false";
-        *sink = std::make_unique<stream_load::OlapTableSink>(pool, row_desc, output_exprs, &status);
+        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), row_desc, output_exprs, &status);
         RETURN_IF_ERROR(status);
+        break;
+    }
+    case TDataSinkType::MULTI_CAST_DATA_STREAM_SINK: {
+        DCHECK(thrift_sink.__isset.multi_cast_stream_sink || thrift_sink.multi_cast_stream_sink.sinks.size() == 0)
+                << "Missing mcast stream sink.";
+        auto mcast_data_stream_sink = std::make_unique<MultiCastDataStreamSink>(state);
+        const auto& thrift_mcast_stream_sink = thrift_sink.multi_cast_stream_sink;
+
+        for (size_t i = 0; i < thrift_mcast_stream_sink.sinks.size(); i++) {
+            const auto& sink = thrift_mcast_stream_sink.sinks[i];
+            const auto& destinations = thrift_mcast_stream_sink.destinations[i];
+            auto ret = create_data_stream_sink(state, sink, row_desc, params, destinations);
+            mcast_data_stream_sink->add_data_stream_sink(std::move(ret));
+        }
+        *sink = std::move(mcast_data_stream_sink);
         break;
     }
 

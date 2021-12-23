@@ -36,12 +36,10 @@
 namespace starrocks {
 
 class TabletSchemaMap;
-
-namespace segment_v2 {
+class MemTracker;
 class SegmentReaderWriterTest;
 class SegmentReaderWriterTest_estimate_segment_size_Test;
 class SegmentReaderWriterTest_TestStringDict_Test;
-} // namespace segment_v2
 
 class TabletColumn {
     struct ExtraFields {
@@ -210,6 +208,12 @@ class TabletSchema {
 public:
     using SchemaId = int64_t;
 
+    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb);
+    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
+                                                TabletSchemaMap* schema_map);
+    static std::shared_ptr<TabletSchema> create(const TabletSchema& tablet_schema,
+                                                const std::vector<std::size_t>& column_indexes);
+
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
     constexpr static SchemaId invalid_id() { return 0; }
@@ -239,6 +243,8 @@ public:
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
     CompressKind compress_kind() const { return static_cast<CompressKind>(_compress_kind); }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
+    bool has_bf_fpp() const { return _has_bf_fpp; }
+    double bf_fpp() const { return _bf_fpp; }
 
     // The in-memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.
@@ -262,9 +268,9 @@ public:
     bool shared() const { return _schema_map != nullptr; }
 
 private:
-    friend class segment_v2::SegmentReaderWriterTest;
-    FRIEND_TEST(segment_v2::SegmentReaderWriterTest, estimate_segment_size);
-    FRIEND_TEST(segment_v2::SegmentReaderWriterTest, TestStringDict);
+    friend class SegmentReaderWriterTest;
+    FRIEND_TEST(SegmentReaderWriterTest, estimate_segment_size);
+    FRIEND_TEST(SegmentReaderWriterTest, TestStringDict);
 
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);

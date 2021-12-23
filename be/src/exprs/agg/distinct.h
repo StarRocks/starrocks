@@ -103,6 +103,7 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
         KeyType key(raw_key);
         set.template lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = mem_pool->allocate(key.size);
+            assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
             ret = phmap::item_serialize_size<SliceHashSet>::value;
@@ -115,6 +116,7 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
         KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
         set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             uint8_t* pos = mem_pool->allocate(key.size);
+            assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
             ret = phmap::item_serialize_size<SliceHashSet>::value;
@@ -156,6 +158,7 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
             // we only memcpy when the key is new
             set.template lazy_emplace(key, [&](const auto& ctor) {
                 uint8_t* pos = mem_pool->allocate(key.size);
+                assert(pos != nullptr);
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
                 mem_usage += phmap::item_serialize_size<SliceHashSet>::value;

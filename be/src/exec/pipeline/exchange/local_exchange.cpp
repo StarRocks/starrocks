@@ -53,7 +53,7 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
 PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, bool is_shuffle,
                                        const std::vector<ExprContext*>& partition_expr_ctxs, const size_t num_sinks)
-        : LocalExchanger(memory_manager, source) {
+        : LocalExchanger("Partition", memory_manager, source) {
     _partitioners.reserve(num_sinks);
     for (size_t i = 0; i < num_sinks; i++) {
         _partitioners.emplace_back(source, is_shuffle, partition_expr_ctxs);

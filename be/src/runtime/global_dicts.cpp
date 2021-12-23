@@ -172,7 +172,7 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
     auto result_column = expr_ctx->evaluate(temp_chunk.get());
 
     ColumnViewer<TYPE_VARCHAR> viewer(result_column);
-    int row_sz = viewer.size();
+    int row_sz = result_column->size();
 
     dict_opt_ctx->code_convert_map.resize(DICT_DECODE_MAX_SIZE + 1);
     std::fill(dict_opt_ctx->code_convert_map.begin(), dict_opt_ctx->code_convert_map.end(), 0);
@@ -180,12 +180,13 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
 
     GlobalDictMap result_map;
     RGlobalDictMap rresult_map;
+    std::vector<Slice> values;
+    values.reserve(row_sz);
+
+    // distinct result values
     int id_allocator = 1;
     for (int i = 0; i < row_sz; ++i) {
-        if (viewer.is_null(i)) {
-            code_convert_map[codes[i]] = 0;
-            dict_opt_ctx->result_nullable = true;
-        } else {
+        if (!viewer.is_null(i)) {
             auto value = viewer.value(i);
             Slice slice(value.data, value.size);
             auto res = result_map.lazy_emplace(slice, [&](const auto& ctor) {
@@ -195,9 +196,27 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
                 slice = Slice(data, slice.size);
                 ctor(slice, id_allocator);
             });
+            values.emplace_back(res->first);
+        }
+    }
 
-            code_convert_map[codes[i]] = res->second;
-            rresult_map.emplace(res->second, slice);
+    // sort and build result map
+    Slice::Comparator comparator;
+    std::sort(values.begin(), values.end(), comparator);
+    int sorted_id = 1;
+    for (int i = 0; i < values.size(); ++i) {
+        auto slice = values[i];
+        result_map[slice] = sorted_id;
+        rresult_map[sorted_id++] = slice;
+    }
+
+    // build code convert map
+    for (int i = 0; i < values.size(); ++i) {
+        if (viewer.is_null(i)) {
+            code_convert_map[codes[i]] = 0;
+            dict_opt_ctx->result_nullable = true;
+        } else {
+            code_convert_map[codes[i]] = result_map.find(viewer.value(i))->second;
         }
     }
 

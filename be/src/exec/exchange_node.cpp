@@ -30,7 +30,6 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -70,7 +69,8 @@ Status ExchangeNode::prepare(RuntimeState* state) {
     _sub_plan_query_statistics_recvr.reset(new QueryStatisticsRecvr());
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
-            config::exchg_node_buffer_size_bytes, _runtime_profile, _is_merging, _sub_plan_query_statistics_recvr);
+            config::exchg_node_buffer_size_bytes, _runtime_profile, _is_merging, _sub_plan_query_statistics_recvr,
+            false, false);
     if (_is_merging) {
         RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor));
     }
@@ -235,8 +235,10 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     using namespace pipeline;
     OpFactories operators;
     if (!_is_merging) {
-        operators.emplace_back(std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                               _num_senders, _input_row_desc));
+        auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
+                                                                                  _num_senders, _input_row_desc);
+        exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
+        operators.emplace_back(exchange_source_op);
         if (limit() != -1) {
             operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
         }

@@ -17,8 +17,8 @@
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "runtime/global_dicts.h"
 #include "simd/simd.h"
-#include "storage/rowset/segment_v2/column_reader.h"
-#include "storage/rowset/segment_v2/scalar_column_iterator.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/vectorized/column_expr_predicate.h"
 #include "storage/vectorized/column_predicate.h"
 
@@ -224,13 +224,12 @@ bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPt
 // This function is only used to rewrite the LE/LT/GE/GT condition.
 // For the greater than or less than condition,
 // you need to get the values of all ordered dictionaries and rewrite them as `InList` expressions
-void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::string, int>>* dicts,
-                                                segment_v2::ColumnIterator* iter) {
+void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, ColumnIterator* iter) {
     // We already loaded dicts, no need to do once more.
     if (!dicts->empty()) {
         return;
     }
-    auto column_iterator = down_cast<segment_v2::ScalarColumnIterator*>(iter);
+    auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
@@ -246,9 +245,9 @@ void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::strin
               [](const auto& e1, const auto& e2) { return e1.first.compare(e2.first) < 0; });
 }
 
-void ColumnPredicateRewriter::_get_segment_dict_vec(segment_v2::ColumnIterator* iter, ColumnPtr* dict_column,
+void ColumnPredicateRewriter::_get_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column,
                                                     ColumnPtr* code_column, bool field_nullable) {
-    auto column_iterator = down_cast<segment_v2::ScalarColumnIterator*>(iter);
+    auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);

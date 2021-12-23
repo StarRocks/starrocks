@@ -31,9 +31,14 @@ using Buffer = std::vector<T>;
 
 class ArrayColumn;
 class BinaryColumn;
+class NullableColumn;
+class ConstColumn;
 
 template <typename T>
 class FixedLengthColumn;
+
+template <typename T>
+class FixedLengthColumnBase;
 
 template <typename T>
 class DecimalV3Column;

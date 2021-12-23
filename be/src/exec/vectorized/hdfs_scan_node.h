@@ -10,7 +10,6 @@
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
 #include "hdfs/hdfs.h"
-#include "runtime/tuple.h"
 
 namespace starrocks::vectorized {
 
@@ -30,7 +29,11 @@ struct HdfsFileDesc {
 class HdfsScanNode final : public starrocks::ScanNode {
 public:
     HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~HdfsScanNode() override = default;
+    ~HdfsScanNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
@@ -44,7 +47,7 @@ private:
     friend HdfsScanner;
     friend HdfsParquetScanner;
     friend HdfsOrcScanner;
-    constexpr static const int kMaxConcurrency = 50;
+    int kMaxConcurrency = config::max_hdfs_scanner_num;
 
     template <typename T>
     class Stack {
@@ -90,8 +93,6 @@ private:
     static int _compute_priority(int32_t num_submitted_tasks);
 
     void _init_counter(RuntimeState* state);
-
-    static Status _get_name_node_from_path(const std::string& path, std::string* namenode);
 
     int _tuple_id = 0;
     const TupleDescriptor* _tuple_desc = nullptr;

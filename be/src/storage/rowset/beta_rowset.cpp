@@ -29,7 +29,6 @@
 #include <set>
 
 #include "gutil/strings/substitute.h"
-#include "storage/rowset/beta_rowset_reader.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
@@ -65,7 +64,7 @@ BetaRowset::BetaRowset(const TabletSchema* schema, string rowset_path, RowsetMet
         : Rowset(schema, std::move(rowset_path), std::move(rowset_meta)) {}
 
 OLAPStatus BetaRowset::init() {
-    return OLAP_SUCCESS; // no op
+    return OLAP_SUCCESS;
 }
 
 Status BetaRowset::do_load() {
@@ -76,7 +75,8 @@ Status BetaRowset::do_load() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = segment_v2::Segment::open(block_mgr, seg_path, seg_id, _schema, &footer_size_hint);
+        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
+                                 _schema, &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -87,15 +87,9 @@ Status BetaRowset::do_load() {
     return Status::OK();
 }
 
-OLAPStatus BetaRowset::create_reader(RowsetReaderSharedPtr* result) {
-    // NOTE: We use std::static_pointer_cast for performance
-    *result = std::make_shared<BetaRowsetReader>(std::static_pointer_cast<BetaRowset>(shared_from_this()));
-    return OLAP_SUCCESS;
-}
-
 OLAPStatus BetaRowset::remove() {
     // TODO should we close and remove all segment reader first?
-    VLOG(1) << "Removing files in rowsset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
+    VLOG(1) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     bool success = true;
     for (int i = 0; i < num_segments(); ++i) {
@@ -350,6 +344,11 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
         seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
+}
+
+Status BetaRowset::reload() {
+    // TODO: impl
+    return Status::OK();
 }
 
 } // namespace starrocks

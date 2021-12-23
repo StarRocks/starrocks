@@ -7,7 +7,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.rule.implementation.AssertOneRowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorToNoOpImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEConsumerImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEProduceImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
@@ -74,7 +73,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFi
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAssertOneRowProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitJoinRule;
@@ -128,7 +126,6 @@ public class RuleSet {
             new FilterImplementationRule(),
             new TableFunctionImplementationRule(),
             new LimitImplementationRule(),
-            new CTEAnchorToNoOpImplementationRule(),
             new CTEAnchorImplementationRule(),
             new CTEConsumerImplementationRule(),
             new CTEProduceImplementationRule()
@@ -257,10 +254,6 @@ public class RuleSet {
         transformRules.add(new SemiReorderRule());
         transformRules.add(JoinCommutativityRule.getInstance());
         transformRules.add(JoinAssociativityRule.getInstance());
-    }
-
-    public void addPushDownJoinToAggRule() {
-        transformRules.add(PushDownJoinAggRule.getInstance());
     }
 
     public void addJoinCommutativityWithOutInnerRule() {

@@ -29,7 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
@@ -52,12 +51,13 @@ import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.MultiCastDataSink;
+import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
-import com.starrocks.planner.Planner;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
@@ -68,6 +68,8 @@ import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.InternalServiceVersion;
@@ -96,12 +98,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -120,7 +122,7 @@ import java.util.stream.Collectors;
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
 
-    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private static final String localIP = FrontendOptions.getLocalHostAddress();
 
@@ -200,35 +202,6 @@ public class Coordinator {
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
 
-    // Used for query/insert
-    public Coordinator(ConnectContext context, Analyzer analyzer, Planner planner) {
-        this.isBlockQuery = planner.isBlockQuery();
-        this.queryId = context.getExecutionId();
-        this.fragments = planner.getFragments();
-        this.scanNodes = planner.getScanNodes();
-        this.descTable = analyzer.getDescTbl().toThrift();
-        this.returnedAllResults = false;
-        this.queryOptions = context.getSessionVariable().toThrift();
-        this.queryGlobals.setNow_string(DATE_FORMAT.format(new Date()));
-        this.queryGlobals.setTimestamp_ms(new Date().getTime());
-        if (context.getSessionVariable().getTimeZone().equals("CST")) {
-            this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
-        } else {
-            this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
-        }
-        if (context.getLastQueryId() != null) {
-            this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
-        }
-        this.tResourceInfo = new TResourceInfo(context.getQualifiedUser(),
-                context.getSessionVariable().getResourceGroup());
-        this.needReport = context.getSessionVariable().isReportSucc();
-        this.clusterName = context.getClusterName();
-        this.nextInstanceId = new TUniqueId();
-        nextInstanceId.setHi(queryId.hi);
-        nextInstanceId.setLo(queryId.lo + 1);
-        this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
-    }
-
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
                        TDescriptorTable descTable) {
@@ -239,13 +212,15 @@ public class Coordinator {
         this.descTable = descTable;
         this.returnedAllResults = false;
         this.queryOptions = context.getSessionVariable().toThrift();
-        this.queryGlobals.setNow_string(DATE_FORMAT.format(new Date()));
-        this.queryGlobals.setTimestamp_ms(new Date().getTime());
+        long startTime = context.getStartTime();
         if (context.getSessionVariable().getTimeZone().equals("CST")) {
             this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
         } else {
             this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
         }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
@@ -260,8 +235,8 @@ public class Coordinator {
     }
 
     // Used for broker load task/export task coordinator
-    public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable,
-                       List<PlanFragment> fragments, List<ScanNode> scanNodes, String cluster, String timezone) {
+    public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
+                       List<ScanNode> scanNodes, String cluster, String timezone, long startTime) {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
@@ -269,8 +244,9 @@ public class Coordinator {
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.queryOptions = new TQueryOptions();
-        this.queryGlobals.setNow_string(DATE_FORMAT.format(new Date()));
-        this.queryGlobals.setTimestamp_ms(new Date().getTime());
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);
         this.tResourceInfo = new TResourceInfo("", "");
         this.needReport = true;
@@ -351,16 +327,6 @@ public class Coordinator {
     private void prepare() {
         for (PlanFragment fragment : fragments) {
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
-        }
-
-        // set inputFragments
-        for (PlanFragment fragment : fragments) {
-            if (!(fragment.getSink() instanceof DataStreamSink)) {
-                continue;
-            }
-            FragmentExecParams params = fragmentExecParamsMap.get(fragment.getDestFragment().getFragmentId());
-            params.inputFragments.add(fragment.getFragmentId());
-
         }
 
         coordAddress = new TNetworkAddress(localIP, Config.rpc_port);
@@ -846,6 +812,11 @@ public class Coordinator {
                         params.instanceExecParams.size());
             }
 
+            if (params.fragment.getSink() instanceof ResultSink && params.instanceExecParams.size() > 1) {
+                throw new StarRocksPlannerException("This sql plan has multi result sinks",
+                        ErrorType.INTERNAL_ERROR);
+            }
+
             for (int j = 0; j < params.instanceExecParams.size(); ++j) {
                 // we add instance_num to query_id.lo to create a
                 // globally-unique instance id
@@ -859,8 +830,17 @@ public class Coordinator {
 
         // compute destinations and # senders per exchange node
         // (the root fragment doesn't have a destination)
+
+        // MultiCastFragment params
+        handleMultiCastFragmentParams();
+
         for (FragmentExecParams params : fragmentExecParamsMap.values()) {
+            if (params.fragment instanceof MultiCastPlanFragment) {
+                continue;
+            }
+            
             PlanFragment destFragment = params.fragment.getDestFragment();
+
             if (destFragment == null) {
                 // root plan fragment
                 continue;
@@ -916,6 +896,76 @@ public class Coordinator {
                     dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
                     dest.setBrpc_server(toBrpcHost(destParams.instanceExecParams.get(j).host));
                     params.destinations.add(dest);
+                }
+            }
+        }
+
+    }
+
+    private void handleMultiCastFragmentParams() throws Exception {
+        for (FragmentExecParams params : fragmentExecParamsMap.values()) {
+            if (!(params.fragment instanceof MultiCastPlanFragment)) {
+                continue;
+            }
+
+            MultiCastPlanFragment multi = (MultiCastPlanFragment) params.fragment;
+            Preconditions.checkState(multi.getSink() instanceof MultiCastDataSink);
+            // set # of senders
+            MultiCastDataSink multiSink = (MultiCastDataSink) multi.getSink();
+
+            for (int i = 0; i < multi.getDestFragmentList().size(); i++) {
+                PlanFragment destFragment = multi.getDestFragmentList().get(i);
+                DataSink sink = multiSink.getDataStreamSinks().get(i);
+
+                if (destFragment == null) {
+                    continue;
+                }
+                FragmentExecParams destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
+
+                PlanNodeId exchId = sink.getExchNodeId();
+                // we might have multiple fragments sending to this exchange node
+                // (distributed MERGE), which is why we need to add up the #senders
+                if (destParams.perExchNumSenders.get(exchId.asInt()) == null) {
+                    destParams.perExchNumSenders.put(exchId.asInt(), params.instanceExecParams.size());
+                } else {
+                    destParams.perExchNumSenders.put(exchId.asInt(),
+                            params.instanceExecParams.size() + destParams.perExchNumSenders.get(exchId.asInt()));
+                }
+
+                if (needScheduleByShuffleJoin(destFragment.getFragmentId().asInt(), sink)) {
+                    int bucketSeq = 0;
+                    int bucketNum = getFragmentBucketNum(destFragment.getFragmentId());
+                    TNetworkAddress dummyServer = new TNetworkAddress("0.0.0.0", 0);
+
+                    while (bucketSeq < bucketNum) {
+                        TPlanFragmentDestination dest = new TPlanFragmentDestination();
+                        // dest bucket may be pruned, these bucket dest should be set an invalid value
+                        // and will be deal with in BE's DataStreamSender
+                        dest.fragment_instance_id = new TUniqueId(-1, -1);
+                        dest.server = dummyServer;
+                        dest.setBrpc_server(dummyServer);
+
+                        for (FInstanceExecParam instanceExecParams : destParams.instanceExecParams) {
+                            if (instanceExecParams.bucketSeqSet.contains(bucketSeq)) {
+                                dest.fragment_instance_id = instanceExecParams.instanceId;
+                                dest.server = toRpcHost(instanceExecParams.host);
+                                dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
+                                break;
+                            }
+                        }
+                        Preconditions.checkState(dest.isSetFragment_instance_id());
+                        bucketSeq++;
+                        multiSink.getDestinations().get(i).add(dest);
+                    }
+                } else {
+                    // add destination host to this fragment's destination
+                    for (int j = 0; j < destParams.instanceExecParams.size(); ++j) {
+                        TPlanFragmentDestination dest = new TPlanFragmentDestination();
+                        dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
+                        dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
+                        dest.setBrpc_server(toBrpcHost(destParams.instanceExecParams.get(j).host));
+                        multiSink.getDestinations().get(i).add(dest);
+                    }
                 }
             }
         }
@@ -1157,6 +1207,10 @@ public class Coordinator {
         if (colocateFragmentIds.contains(node.getFragmentId().asInt())) {
             return true;
         }
+        // can not cross fragment
+        if (node instanceof ExchangeNode) {
+            return false;
+        }
 
         if (node.isColocate()) {
             colocateFragmentIds.add(node.getFragmentId().asInt());
@@ -1181,17 +1235,22 @@ public class Coordinator {
             return true;
         }
 
+        // can not cross fragment
+        if (node instanceof ExchangeNode) {
+            return false;
+        }
+
         if (node.isReplicated()) {
             replicateFragmentIds.add(node.getFragmentId().asInt());
             return true;
         }
 
-        boolean childHasColocate = false;
+        boolean childHasReplicated = false;
         for (PlanNode childNode : node.getChildren()) {
-            childHasColocate |= isReplicatedFragment(childNode);
+            childHasReplicated |= isReplicatedFragment(childNode);
         }
 
-        return childHasColocate;
+        return childHasReplicated;
     }
 
     // check whether the node fragment is bucket shuffle join fragment
@@ -1203,6 +1262,10 @@ public class Coordinator {
 
         if (bucketShuffleFragmentIds.contains(fragmentId)) {
             return true;
+        }
+        // can not cross fragment
+        if (node instanceof ExchangeNode) {
+            return false;
         }
 
         // One fragment could only have one HashJoinNode
@@ -1761,7 +1824,6 @@ public class Coordinator {
         public List<TPlanFragmentDestination> destinations = Lists.newArrayList();
         public Map<Integer, Integer> perExchNumSenders = Maps.newHashMap();
 
-        public List<PlanFragmentId> inputFragments = Lists.newArrayList();
         public List<FInstanceExecParam> instanceExecParams = Lists.newArrayList();
         public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
         TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
@@ -1828,10 +1890,15 @@ public class Coordinator {
                 }
                 params.params.setInstances_number(hostToNumbers.get(instanceExecParams.get(i).host));
                 // For broker load, the ConnectContext.get() is null
-                if (ConnectContext.get() != null &&
-                        ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-                    params.setIs_pipeline(
-                            fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                if (ConnectContext.get() != null) {
+                    SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+                    if (sessionVariable.isEnablePipelineEngine()) {
+                        params.setIs_pipeline(
+                                fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                    }
+                    if (sessionVariable.isEnableExchangePassThrough()) {
+                        params.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
+                    }
                 }
                 paramsList.add(params);
             }

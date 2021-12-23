@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 import com.google.common.base.Strings;
 import com.google.common.collect.Iterables;
@@ -33,9 +34,6 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;
@@ -43,7 +41,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ColumnAliasGenerator;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.Pair;
 import com.starrocks.common.TableAliasGenerator;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
@@ -266,11 +263,7 @@ public class SelectStmt extends QueryStmt {
     public Expr getHavingClause() {
         return havingClause;
     }
-
-    public void removeHavingClause() {
-        havingClause = null;
-    }
-
+    
     @Override
     public SortInfo getSortInfo() {
         return sortInfo;
@@ -374,13 +367,6 @@ public class SelectStmt extends QueryStmt {
             groupByClause.setNeedToSql(needToSql);
         }
 
-        // Generate !empty() predicates to filter out empty collections.
-        // Skip this step when analyzing a WITH-clause because CollectionTableRefs
-        // do not register collection slots in their parent in that context
-        // (see CollectionTableRef.analyze()).
-        if (!analyzer.isWithClause()) {
-            registerIsNotEmptyPredicates(analyzer);
-        }
         // populate selectListExprs, aliasSMap, groupingSmap and colNames
         for (SelectListItem item : selectList.getItems()) {
             if (item.isStar()) {
@@ -521,15 +507,6 @@ public class SelectStmt extends QueryStmt {
             sqlString_ = toSql();
         }
 
-        tryConvertOuterJoinToInnerJoin(analyzer);
-
-        // 1. If disable_join_reorder is set, disable join reorder
-        // 2. If we are analyzing with clause, disable join reorder, because which is unnecessary.
-        if (!analyzer.getContext().getSessionVariable().isDisableJoinReorder() &&
-                !analyzer.isParentHasWithClause()) {
-            reorderTable(analyzer);
-        }
-
         resolveInlineViewRefs(analyzer);
 
         if (analyzer.hasEmptySpjResultSet() && aggInfo == null) {
@@ -582,19 +559,6 @@ public class SelectStmt extends QueryStmt {
         List<TupleId> result = Lists.newArrayList();
 
         for (TableRef ref : fromClause_) {
-            result.add(ref.getId());
-        }
-
-        return result;
-    }
-
-    public List<TupleId> getTableRefIdsWithoutInlineView() {
-        List<TupleId> result = Lists.newArrayList();
-
-        for (TableRef ref : fromClause_) {
-            if (ref instanceof InlineViewRef) {
-                continue;
-            }
             result.add(ref.getId());
         }
 
@@ -775,52 +739,6 @@ public class SelectStmt extends QueryStmt {
     }
 
     /**
-     * Generates and registers !empty() predicates to filter out empty collections directly
-     * in the parent scan of collection table refs. This is a performance optimization to
-     * avoid the expensive processing of empty collections inside a subplan that would
-     * yield an empty result set.
-     * <p>
-     * For correctness purposes, the predicates are generated in cases where we can ensure
-     * that they will be assigned only to the parent scan, and no other plan node.
-     * <p>
-     * The conditions are as follows:
-     * - collection table ref is relative and non-correlated
-     * - collection table ref represents the rhs of an inner/cross/semi join
-     * - collection table ref's parent tuple is not outer joined
-     * <p>
-     * TODO: In some cases, it is possible to generate !empty() predicates for a correlated
-     * table ref, but in general, that is not correct for non-trivial query blocks.
-     * For example, if the block with the correlated ref has an aggregation then adding a
-     * !empty() predicate would incorrectly discard rows from the final result set.
-     * TODO: Evaluating !empty() predicates at non-scan nodes interacts poorly with our BE
-     * projection of collection slots. For example, rows could incorrectly be filtered if
-     * a !empty() predicate is assigned to a plan node that comes after the unnest of the
-     * collection that also performs the projection.
-     */
-    private void registerIsNotEmptyPredicates(Analyzer analyzer) throws AnalysisException {
-        /*
-        for (TableRef tblRef: fromClause_.getTableRefs()) {
-            Preconditions.checkState(tblRef.isResolved());
-            if (!(tblRef instanceof CollectionTableRef)) continue;
-            CollectionTableRef ref = (CollectionTableRef) tblRef;
-            // Skip non-relative and correlated refs.
-            if (!ref.isRelative() || ref.isCorrelated()) continue;
-            // Skip outer and anti joins.
-            if (ref.getJoinOp().isOuterJoin() || ref.getJoinOp().isAntiJoin()) continue;
-            // Do not generate a predicate if the parent tuple is outer joined.
-            if (analyzer.isOuterJoined(ref.getResolvedPath().getRootDesc().getId())) continue;
-            IsNotEmptyPredicate isNotEmptyPred =
-                    new IsNotEmptyPredicate(ref.getCollectionExpr().clone());
-            isNotEmptyPred.analyze(analyzer);
-            // Register the predicate as an On-clause conjunct because it should only
-            // affect the result of this join and not the whole FROM clause.
-            analyzer.registerOnClauseConjuncts(
-                    Lists.<Expr>newArrayList(isNotEmptyPred), ref);
-        }
-        */
-    }
-
-    /**
      * Marks all unassigned join predicates as well as exprs in aggInfo and sortInfo.
      */
     public void materializeRequiredSlots(Analyzer analyzer) throws AnalysisException {
@@ -867,173 +785,12 @@ public class SelectStmt extends QueryStmt {
             if (havingPred != null) {
                 havingConjuncts.add(havingPred);
             }
-            // Binding predicates are assigned to the final output tuple of the aggregation,
-            // which is the tuple of the 2nd phase agg for distinct aggs.
-            // TODO(zc):
-            // ArrayList<Expr> bindingPredicates =
-            //         analyzer.getBoundPredicates(aggInfo.getResultTupleId(), groupBySlots, false);
-            // havingConjuncts.addAll(bindingPredicates);
+
             havingConjuncts.addAll(
                     analyzer.getUnassignedConjuncts(aggInfo.getResultTupleId().asList()));
             materializeSlots(analyzer, havingConjuncts);
             aggInfo.materializeRequiredSlots(analyzer, baseTblSmap);
         }
-    }
-
-    protected void reorderTable(Analyzer analyzer) throws AnalysisException {
-        List<Pair<TableRef, Long>> candidates = Lists.newArrayList();
-
-        // New pair of table ref and row count
-        for (TableRef tblRef : fromClause_) {
-            if (tblRef.getJoinOp() != JoinOperator.INNER_JOIN || tblRef.hasJoinHints()) {
-                // Unsupported reorder outer join
-                return;
-            }
-            long rowCount = 0;
-            if (tblRef.getTable().getType() == TableType.OLAP) {
-                rowCount = ((OlapTable) (tblRef.getTable())).getRowCount();
-                LOG.debug("olap tableName={} rowCount={}", tblRef.getAlias(), rowCount);
-            } else if (tblRef.getTable().getType() == TableType.HIVE) {
-                rowCount = ((HiveTable) (tblRef.getTable())).getRowCount();
-                LOG.debug("hive tableName={} rowCount={}", tblRef.getAlias(), rowCount);
-            }
-            candidates.add(new Pair(tblRef, rowCount));
-        }
-        // give InlineView row count
-        long last = 0;
-        for (int i = candidates.size() - 1; i >= 0; --i) {
-            Pair<TableRef, Long> candidate = candidates.get(i);
-            if (candidate.first instanceof InlineViewRef) {
-                candidate.second = last;
-            }
-            last = candidate.second + 1;
-        }
-
-        // order oldRefList by row count
-        candidates.sort((a, b) -> b.second.compareTo(a.second));
-
-        for (Pair<TableRef, Long> candidate : candidates) {
-            if (reorderTable(analyzer, candidate.first)) {
-                // as long as one scheme success, we return this scheme immediately.
-                // in this scheme, candidate.first will be consider to be the big table in star schema.
-                // this scheme might not be fit for snowflake schema.
-
-                originalTableRefs.clear();
-                originalTableRefs.addAll(fromClause_.getTableRefs());
-                reOrderJoinConditions(originalTableRefs);
-
-                return;
-            }
-        }
-
-        // can not get AST only with equal join, MayBe cross join can help
-        originalTableRefs.clear();
-        for (Pair<TableRef, Long> candidate : candidates) {
-            originalTableRefs.add(candidate.first);
-        }
-        reOrderJoinConditions(originalTableRefs);
-    }
-
-    private void reOrderJoinConditions(List<TableRef> tableRefs) throws AnalysisException {
-        List<Pair<Expr, Expr>> misMatchJoinConditions = Lists.newArrayList();
-        List<TupleId> tupleIds = Lists.newArrayList();
-
-        fromClause_.clear();
-        for (TableRef tableRef : tableRefs) {
-            fromClause_.add(tableRef);
-            tupleIds.add(tableRef.desc.getId());
-            // Refer to https://github.com/apache/incubator-doris/issues/3908
-            applyInnerJoinConditionReorganizeRule(tableRef, tupleIds, misMatchJoinConditions);
-        }
-        // Finally, all join conditions must match
-        if (!misMatchJoinConditions.isEmpty()) {
-            throw new AnalysisException("Join reorder failed");
-        }
-    }
-
-    private boolean IsConjunctivePredicate(Expr expr) {
-        return ((expr instanceof CompoundPredicate)
-                && ((CompoundPredicate) expr).getOp() == CompoundPredicate.Operator.AND);
-    }
-
-    /**
-     * Extract all join conditions from joinOnClause, which cannot be bound by existing tableSpaces
-     *
-     * @param expr:                    joinOnClause
-     * @param tupleIds:                TableSpaces visible up to now
-     * @param unboundedJoinConditions: misMatchConjuncts:
-     */
-    private void ExtractUnboundedJoinConditions(Expr parentExpr, Expr expr, List<TupleId> tupleIds,
-                                                List<Pair<Expr, Expr>> unboundedJoinConditions) {
-        if (expr == null) {
-            return;
-        }
-
-        if (IsConjunctivePredicate(expr)) {
-            CompoundPredicate compoundPredicate = (CompoundPredicate) expr;
-            Expr left = compoundPredicate.getChild(0);
-            Expr right = compoundPredicate.getChild(1);
-            ExtractUnboundedJoinConditions(expr, left, tupleIds, unboundedJoinConditions);
-            ExtractUnboundedJoinConditions(expr, right, tupleIds, unboundedJoinConditions);
-        } else {
-            if (!expr.isBoundByTupleIds(tupleIds)) {
-                unboundedJoinConditions.add(new Pair<>(parentExpr, expr));
-            }
-        }
-    }
-
-    /**
-     * After adjusting the order of tables, it is necessary to reselect the join condition of each table,
-     * otherwise some columns will not be recognized by the current table space
-     *
-     * @param tableRef:
-     * @param tupleIds:               TableSpaces visible up to now
-     * @param misMatchJoinConditions: join conditions no matching yet, the first is fatherExpr, the second is sonExpr need to replace
-     */
-    private void applyInnerJoinConditionReorganizeRule(TableRef tableRef, List<TupleId> tupleIds,
-                                                       List<Pair<Expr, Expr>> misMatchJoinConditions) {
-        List<Pair<Expr, Expr>> tempMisMatchConjuncts = Lists.newArrayList();
-
-        // Extract all join conditions from joinOnClause to misMatchJoinConditions,
-        // which cannot be bound by existing tableSpaces(tupleIds)
-        ExtractUnboundedJoinConditions(null, tableRef.getOnClause(), tupleIds, misMatchJoinConditions);
-
-        for (Pair<Expr, Expr> exprPair : misMatchJoinConditions) {
-            Expr parent = exprPair.first;
-            Expr expr = exprPair.second;
-            if (!expr.isBoundByTupleIds(tupleIds)) {
-                tempMisMatchConjuncts.add(new Pair<>(null, expr));
-                // Father is null mean Not AND CompoundPredicate
-                // Just move the on clause  to another tableRef.
-                if (parent == null) {
-                    if (tableRef.getOnClause() == expr) {
-                        // remove the on clause from this tableRef
-                        // waiting for being visible in the future
-                        tableRef.setOnClause(null);
-                    }
-                } else if (parent.getChild(0) == expr) {
-                    // We just replace the unresolved predicates with TrueBoolLiteral expr,
-                    // so that the tree structure of joinOnClasue can not be changed.
-                    // TrueBoolLiteral will be removed in later analyze.
-                    parent.setChild(0, new BoolLiteral(true));
-                } else if (parent.getChild(1) == expr) {
-                    parent.setChild(1, new BoolLiteral(true));
-                }
-            } else {
-                if (tableRef.getOnClause() == null) {
-                    tableRef.setOnClause(expr);
-                } else {
-                    tableRef.setOnClause(new CompoundPredicate(
-                            CompoundPredicate.Operator.AND,
-                            expr,
-                            tableRef.getOnClause()));
-                    // no need to reAnalysis
-                    tableRef.getOnClause().analysisDone();
-                }
-            }
-        }
-        misMatchJoinConditions.clear();
-        misMatchJoinConditions.addAll(tempMisMatchConjuncts);
     }
 
     // reorder select table
@@ -1246,7 +1003,8 @@ public class SelectStmt extends QueryStmt {
         if (groupByClause == null && !selectList.isDistinct()
                 && !TreeNode.contains(resultExprs, Expr.isAggregatePredicate())
                 &&
-                (havingClauseAfterAnaylzed == null || !havingClauseAfterAnaylzed.contains(Expr.isAggregatePredicate()))
+                (havingClauseAfterAnaylzed == null || !havingClauseAfterAnaylzed.contains(
+                        Expr.isAggregatePredicate()))
                 && (sortInfo == null || !TreeNode.contains(sortInfo.getOrderingExprs(),
                 Expr.isAggregatePredicate()))) {
             // We're not computing aggregates but we still need to register the HAVING
@@ -1353,7 +1111,7 @@ public class SelectStmt extends QueryStmt {
         List<Expr> substitutedAggs =
                 Expr.substituteList(aggExprs, countAllMap, analyzer, false);
         aggExprs.clear();
-        TreeNode.collect(substitutedAggs, Expr.isAggregatePredicate(), aggExprs);
+        TreeNode.collect(substitutedAggs, Expr.isAggregatePredicate()::apply, aggExprs);
 
         // 3 create agg info
         createAggInfo(groupingExprs, aggExprs, analyzer);
@@ -1519,8 +1277,8 @@ public class SelectStmt extends QueryStmt {
             return scalarCountAllMap;
         }
 
-        com.google.common.base.Predicate<FunctionCallExpr> isNotDistinctPred =
-                new com.google.common.base.Predicate<FunctionCallExpr>() {
+        Predicate<FunctionCallExpr> isNotDistinctPred =
+                new Predicate<FunctionCallExpr>() {
                     public boolean apply(FunctionCallExpr expr) {
                         return !expr.isDistinct();
                     }
@@ -1530,8 +1288,8 @@ public class SelectStmt extends QueryStmt {
             return scalarCountAllMap;
         }
 
-        com.google.common.base.Predicate<FunctionCallExpr> isCountPred =
-                new com.google.common.base.Predicate<FunctionCallExpr>() {
+        Predicate<FunctionCallExpr> isCountPred =
+                new Predicate<FunctionCallExpr>() {
                     public boolean apply(FunctionCallExpr expr) {
                         return expr.getFnName().getFunction().equals(FunctionSet.COUNT);
                     }
@@ -1826,6 +1584,81 @@ public class SelectStmt extends QueryStmt {
         return strBuilder.toString();
     }
 
+
+    @Override
+    public String toDigest() {
+        StringBuilder strBuilder = new StringBuilder();
+        if (withClause_ != null) {
+            strBuilder.append(withClause_.toDigest());
+            strBuilder.append(" ");
+        }
+
+        // Select list
+        strBuilder.append("select ");
+        if (selectList.isDistinct()) {
+            strBuilder.append("distinct ");
+        }
+
+        if (originalExpr == null) {
+            originalExpr = Expr.cloneList(resultExprs);
+        }
+
+        if (resultExprs.isEmpty()) {
+            for (int i = 0; i < selectList.getItems().size(); ++i) {
+                if (i != 0) {
+                    strBuilder.append(", ");
+                }
+                strBuilder.append(selectList.getItems().get(i).toDigest());
+            }
+        } else {
+            for (int i = 0; i < originalExpr.size(); ++i) {
+                if (i != 0) {
+                    strBuilder.append(", ");
+                }
+                strBuilder.append(originalExpr.get(i).toDigest());
+                strBuilder.append(" as ").append(SqlUtils.getIdentSql(colLabels.get(i)));
+            }
+        }
+
+        // From clause
+        if (!fromClause_.isEmpty()) {
+            strBuilder.append(fromClause_.toDigest());
+        }
+
+        // Where clause
+        if (whereClause != null) {
+            strBuilder.append(" where ");
+            strBuilder.append(whereClause.toDigest());
+        }
+        // Group By clause
+        if (groupByClause != null) {
+            strBuilder.append(" group by ");
+            strBuilder.append(groupByClause.toSql());
+        }
+        // Having clause
+        if (havingClause != null) {
+            strBuilder.append(" having ");
+            strBuilder.append(havingClause.toDigest());
+        }
+        // Order By clause
+        if (orderByElements != null) {
+            strBuilder.append(" order by ");
+            for (int i = 0; i < orderByElements.size(); ++i) {
+                strBuilder.append(orderByElements.get(i).getExpr().toDigest());
+                if (sortInfo != null) {
+                    strBuilder.append((sortInfo.getIsAscOrder().get(i)) ? " asc" : " desc");
+                }
+                strBuilder.append((i + 1 != orderByElements.size()) ? ", " : "");
+            }
+        }
+        // Limit clause.
+        if (hasLimitClause()) {
+            strBuilder.append(limitElement.toDigest());
+        }
+
+        return strBuilder.toString();
+    }
+
     /**
      * If the select statement has a sort/top that is evaluated, then the sort tuple
      * is materialized. Else, if there is aggregation then the aggregate tuple id is
@@ -2011,53 +1844,6 @@ public class SelectStmt extends QueryStmt {
             }
         }
         // @TODO: should check the parameter of grouping function isn't grouping set column
-    }
-
-    // Convert outer join to inner join if the where conjuncts is strict
-    private void tryConvertOuterJoinToInnerJoin(Analyzer analyzer) {
-        List<TableRef> tables = getTableRefs();
-        int tableSize = tables.size();
-        if (tableSize < 2) {
-            return;
-        }
-        for (int i = tableSize - 1; i > 0; i--) {
-            TableRef table = tables.get(i);
-            if (table.getJoinOp().isLeftOuterJoin()) {
-                List<Expr> whereConjuncts = analyzer.getWhereConjuncts(Lists.newArrayList(table.getDesc().getId()));
-                if (couldConvertOuterToInner(whereConjuncts)) {
-                    analyzer.migrateOuterJoinConjunctsToInner(table);
-                    table.setJoinOp(JoinOperator.INNER_JOIN);
-                }
-            } else if (table.getJoinOp().isRightOuterJoin()) {
-                List<Expr> whereConjuncts = analyzer.getWhereConjuncts(table.getLeftTblRef().getAllTupleIds());
-                if (couldConvertOuterToInner(whereConjuncts)) {
-                    analyzer.migrateOuterJoinConjunctsToInner(table);
-                    table.setJoinOp(JoinOperator.INNER_JOIN);
-                }
-            } else if (table.getJoinOp().isFullOuterJoin()) {
-                boolean couldConvertLeft = couldConvertOuterToInner(
-                        analyzer.getWhereConjuncts(table.getLeftTblRef().getAllTupleIds()));
-                boolean couldConvertRight = couldConvertOuterToInner(
-                        analyzer.getWhereConjuncts(Lists.newArrayList(table.getDesc().getId())));
-                if (couldConvertLeft && couldConvertRight) {
-                    analyzer.migrateOuterJoinConjunctsToInner(table);
-                    table.setJoinOp(JoinOperator.INNER_JOIN);
-                } else if (couldConvertLeft) {
-                    table.setJoinOp(JoinOperator.LEFT_OUTER_JOIN);
-                } else if (couldConvertRight) {
-                    table.setJoinOp(JoinOperator.RIGHT_OUTER_JOIN);
-                }
-            }
-        }
-    }
-
-    private boolean couldConvertOuterToInner(List<Expr> whereConjuncts) {
-        for (Expr e : whereConjuncts) {
-            if (e.isStrictPredicate()) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Override

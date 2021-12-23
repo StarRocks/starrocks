@@ -436,7 +436,7 @@ int main(int argc, char* argv[]) {
                         1000000.0;
 
     std::cout << GetDate() << " Finish importing Orc file." << std::endl;
-    std::cout << GetDate() << " Total writer elasped time: " << totalElapsedTime << "s." << std::endl;
+    std::cout << GetDate() << " Total writer elapsed time: " << totalElapsedTime << "s." << std::endl;
     std::cout << GetDate() << " Total writer CPU time: " << static_cast<double>(totalCPUTime) / CLOCKS_PER_SEC << "s."
               << std::endl;
     return 0;

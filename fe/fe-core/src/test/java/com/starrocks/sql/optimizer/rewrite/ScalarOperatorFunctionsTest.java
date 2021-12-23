@@ -12,6 +12,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.FEFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
@@ -366,20 +367,20 @@ public class ScalarOperatorFunctionsTest {
         ConstantOperator date = ConstantOperator.createDatetime(LocalDateTime.of(2000, 10, 21, 12, 0));
         ConstantOperator result = ScalarOperatorFunctions.year(date);
 
-        assertEquals(Type.INT, result.getType());
-        assertEquals(2000, result.getInt());
+        assertEquals(Type.SMALLINT, result.getType());
+        assertEquals(2000, result.getSmallint());
     }
 
     @Test
     public void month() throws AnalysisException {
         assertEquals(FEFunctions.month(L_DT_20150323_092355).getLongValue(),
-                ScalarOperatorFunctions.month(O_DT_20150323_092355).getInt());
+                ScalarOperatorFunctions.month(O_DT_20150323_092355).getTinyInt());
     }
 
     @Test
     public void day() throws AnalysisException {
         assertEquals(FEFunctions.day(L_DT_20150323_092355).getLongValue(),
-                ScalarOperatorFunctions.day(O_DT_20150323_092355).getInt());
+                ScalarOperatorFunctions.day(O_DT_20150323_092355).getTinyInt());
     }
 
     @Test
@@ -401,6 +402,9 @@ public class ScalarOperatorFunctionsTest {
 
     @Test
     public void curDate() throws AnalysisException {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
         assertEquals(FEFunctions.curDate().toLocalDateTime().truncatedTo(ChronoUnit.DAYS),
                 ScalarOperatorFunctions.curDate().getDate());
     }
@@ -663,6 +667,20 @@ public class ScalarOperatorFunctionsTest {
 
         assertEquals(Type.VARCHAR, result.getType());
         assertEquals("1,2,3", result.getVarchar());
+    }
+
+    @Test
+    public void concat_ws_with_null() {
+        ConstantOperator[] arg = {ConstantOperator.createVarchar("star"),
+                ConstantOperator.createNull(Type.VARCHAR),
+                ConstantOperator.createVarchar("cks")};
+        ConstantOperator result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), arg);
+        assertEquals(Type.VARCHAR, result.getType());
+        assertEquals("starrocks", result.getVarchar());
+
+        result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","),
+                ConstantOperator.createNull(Type.VARCHAR));
+        assertEquals("", result.getVarchar());
     }
 
     @Test

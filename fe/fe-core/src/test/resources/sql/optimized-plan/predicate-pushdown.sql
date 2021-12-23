@@ -258,3 +258,11 @@ INNER JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 8: case] post-join-predica
             AGGREGATE ([LOCAL] aggregate [{7: count=count(5: v5)}] group by [[4: v4]] having [null]
                 SCAN (columns[4: v4, 5: v5] predicate[null])
 [end]
+
+[sql]
+select * from (select v1 + unnest as u from (select * from t0,unnest([1,2,3])) t ) x where u = 1
+[result]
+PREDICATE add(1: v1, cast(4: unnest as bigint(20))) = 1
+    TABLE FUNCTION (unnest)
+        SCAN (columns[1: v1] predicate[null])
+[end]

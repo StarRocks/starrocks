@@ -227,7 +227,7 @@ public class ReorderJoinRule extends Rule {
 
             ExpressionContext expressionContext = new ExpressionContext(joinOpt);
             StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                    expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext.getDumpInfo());
+                    expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext);
             statisticsCalculator.estimatorStats();
             joinOpt.setStatistics(expressionContext.getStatistics());
             return joinOpt;
@@ -267,7 +267,6 @@ public class ReorderJoinRule extends Rule {
 
         @Override
         public OptExpression visitLogicalJoin(OptExpression optExpression, Void context) {
-            ColumnRefSet outputColumns = new ColumnRefSet(optExpression.getOp().getProjection().getOutputColumns());
             ColumnRefSet childInputColumns = new ColumnRefSet();
             optExpression.getInputs().forEach(opt -> childInputColumns.union(
                     ((LogicalOperator) opt.getOp()).getOutputColumns(new ExpressionContext(opt))));
@@ -275,16 +274,21 @@ public class ReorderJoinRule extends Rule {
             OptExpression left = rewrite(optExpression.inputAt(0));
             OptExpression right = rewrite(optExpression.inputAt(1));
 
+            ColumnRefSet outputColumns = new ColumnRefSet();
+            if (optExpression.getOp().getProjection() != null) {
+                outputColumns = new ColumnRefSet(optExpression.getOp().getProjection().getOutputColumns());
+            }
+
             if (childInputColumns.equals(outputColumns)) {
                 LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder().withOperator(
-                                (LogicalJoinOperator) optExpression.getOp())
+                        (LogicalJoinOperator) optExpression.getOp())
                         .setProjection(null).build();
                 OptExpression joinOpt = OptExpression.create(joinOperator, Lists.newArrayList(left, right));
                 joinOpt.deriveLogicalPropertyItself();
 
                 ExpressionContext expressionContext = new ExpressionContext(joinOpt);
                 StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                        expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext.getDumpInfo());
+                        expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext);
                 statisticsCalculator.estimatorStats();
                 joinOpt.setStatistics(expressionContext.getStatistics());
                 return joinOpt;

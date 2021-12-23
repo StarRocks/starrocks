@@ -42,11 +42,11 @@
 #include "env/env.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "storage/async_delta_writer_executor.h"
 #include "storage/data_dir.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/lru_cache.h"
 #include "storage/memtable_flush_executor.h"
-#include "storage/reader.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
@@ -162,8 +162,11 @@ Status StorageEngine::_open() {
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
 
+    _async_delta_writer_executor = std::make_unique<AsyncDeltaWriterExecutor>();
+    RETURN_IF_ERROR_WITH_WARN(_async_delta_writer_executor->init(), "init AsyncDeltaWriterExecutor failed");
+
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
-    RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init memtable_flush_executor failed");
+    RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
 
     return Status::OK();
 }
@@ -545,9 +548,9 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
 }
 
 void StorageEngine::_start_clean_fd_cache() {
-    VLOG(10) << "Cleaning file descritpor cache";
+    VLOG(10) << "Cleaning file descriptor cache";
     _file_cache->prune();
-    VLOG(10) << "Cleaned file descritpor cache";
+    VLOG(10) << "Cleaned file descriptor cache";
 }
 
 Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
@@ -570,7 +573,8 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
 
-    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker =
+            std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
     vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
@@ -610,7 +614,8 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
 
     StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
 
-    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker =
+            std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
     vectorized::BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
 
     Status res = base_compaction.compact();
@@ -654,7 +659,8 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
         SCOPED_RAW_TIMER(&duration_ns);
 
-        std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
+        std::unique_ptr<MemTracker> mem_tracker =
+                std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
         res = best_tablet->updates()->compaction(mem_tracker.get());
     }
     StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);

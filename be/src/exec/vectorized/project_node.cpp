@@ -34,7 +34,11 @@ ProjectNode::ProjectNode(starrocks::ObjectPool* pool, const starrocks::TPlanNode
                          const starrocks::DescriptorTbl& desc)
         : ExecNode(pool, node, desc) {}
 
-ProjectNode::~ProjectNode() = default;
+ProjectNode::~ProjectNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -198,7 +202,7 @@ Status ProjectNode::close(RuntimeState* state) {
     return Status::OK();
 }
 
-void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
+void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
     for (const auto& ctx : (*expr_ctxs)) {
         if (!ctx->root()->is_bound(_tuple_ids)) {
             continue;
@@ -221,13 +225,13 @@ void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext
         }
     }
 
-    ExecNode::push_down_predicate(state, expr_ctxs, is_vectorized);
+    ExecNode::push_down_predicate(state, expr_ctxs);
 }
 
 void ProjectNode::push_down_join_runtime_filter(RuntimeState* state,
                                                 vectorized::RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
-    _runtime_filter_collector.push_down(collector, _tuple_ids);
+    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 
     // check to see if runtime filters can be rewritten
     auto& descriptors = _runtime_filter_collector.descriptors();

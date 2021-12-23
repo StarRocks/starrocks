@@ -145,7 +145,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         Load.initColumns(dstTable, streamLoadTask.getColumnExprDescs(), null /* no hadoop function */,
                 exprsByName, analyzer, srcTupleDesc, slotDescByName,
                 params, true, useVectorizedLoad, Lists.newArrayList(),
-                streamLoadTask.getFormatType() == TFileFormatType.FORMAT_JSON);
+                streamLoadTask.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadTask.isPartialUpdate());
 
         rangeDesc.setNum_of_columns_from_file(srcTupleDesc.getSlots().size());
         brokerScanRange.addToRanges(rangeDesc);
@@ -209,9 +209,13 @@ public class StreamLoadScanNode extends LoadScanNode {
                     expr = new SlotRef(srcSlotDesc);
                 } else {
                     Column column = dstSlotDesc.getColumn();
-                    if (column.getDefaultValue() != null) {
-                        expr = new StringLiteral(dstSlotDesc.getColumn().getDefaultValue());
-                    } else {
+                    Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                    if (defaultValueType == Column.DefaultValueType.CONST) {
+                        expr = new StringLiteral(column.calculatedDefaultValue());
+                    } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                        throw new UserException("Column(" + column + ") has unsupported default value:"
+                                + column.getDefaultExpr().getExpr());
+                    } else if (defaultValueType == Column.DefaultValueType.NULL) {
                         if (column.isAllowNull()) {
                             expr = NullLiteral.create(column.getType());
                         } else {

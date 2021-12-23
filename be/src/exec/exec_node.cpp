@@ -62,7 +62,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
@@ -99,10 +98,10 @@ ExecNode::~ExecNode() {
     }
 }
 
-void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
+void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
         for (auto& i : _children) {
-            i->push_down_predicate(state, expr_ctxs, is_vectorized);
+            i->push_down_predicate(state, expr_ctxs);
             if (expr_ctxs->size() == 0) {
                 return;
             }
@@ -125,10 +124,11 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
 }
 
 void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector) {
+    if (collector->empty()) return;
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
-    _runtime_filter_collector.push_down(collector, _tuple_ids);
+    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 }
 
 void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state,
@@ -168,7 +168,8 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
 void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
                                                 const RcRfProbeCollectorPtr& rc_rf_probe_collector) {
     op->init_runtime_filter(context->fragment_context()->runtime_filter_hub(), this->get_tuple_ids(),
-                            this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector);
+                            this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector,
+                            std::move(_filter_null_value_columns));
 }
 
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
@@ -619,15 +620,15 @@ void ExecNode::eval_join_runtime_filters(vectorized::ChunkPtr* chunk) {
     eval_join_runtime_filters(chunk->get());
 }
 
-void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
-    if (_filter_null_value_columns.size() == 0) return;
+void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns) {
+    if (filter_null_value_columns.size() == 0) return;
     size_t before_size = chunk->num_rows();
     if (before_size == 0) return;
 
     // lazy allocation.
     vectorized::Buffer<uint8_t> selection(0);
 
-    for (SlotId slot_id : _filter_null_value_columns) {
+    for (SlotId slot_id : filter_null_value_columns) {
         const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);
         if (!c->is_nullable()) continue;
         const vectorized::NullableColumn* nullable_column =
@@ -656,6 +657,10 @@ void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
         VLOG_FILE << "filter null values. before_size = " << before_size << ", after_size = " << after_size;
         chunk->filter(selection);
     }
+}
+
+void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
+    eval_filter_null_values(chunk, _filter_null_value_columns);
 }
 
 void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode*>* nodes) {

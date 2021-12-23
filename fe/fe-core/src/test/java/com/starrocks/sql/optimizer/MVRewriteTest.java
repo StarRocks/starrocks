@@ -989,7 +989,7 @@ public class MVRewriteTest {
         Assert.assertTrue(plan.contains("7:OlapScanNode\n" +
                 "     TABLE: emps\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 13: deptno < 200\n" +
+                "     PREDICATES: 11: deptno < 200\n" +
                 "     partitions=1/1\n" +
                 "     rollup: emps"));
     }

@@ -69,9 +69,7 @@ void GlobalDriverDispatcher::run() {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 
             if (fragment_ctx->is_canceled()) {
-                VLOG_ROW << "[Driver] Canceled: driver=" << driver
-                         << ", error=" << fragment_ctx->final_status().to_string();
-                driver->finish_operators(runtime_state);
+                driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
@@ -92,9 +90,11 @@ void GlobalDriverDispatcher::run() {
             this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
 
             if (!status.ok()) {
-                VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
+                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                             << ", error=" << status.status().to_string();
                 query_ctx->cancel(status.status());
-                driver->finish_operators(runtime_state);
+                driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
@@ -137,11 +137,21 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
         this->_blocked_driver_poller->add_blocked_driver(driver);
     } else {
         driver->dispatch_operators();
-        this->_driver_queue->put_back(driver);
+
+        // Try to add the driver to poller first.
+        if (!driver->source_operator()->is_finished() && !driver->source_operator()->has_output()) {
+            driver->set_driver_state(DriverState::INPUT_EMPTY);
+            this->_blocked_driver_poller->add_blocked_driver(driver);
+        } else {
+            this->_driver_queue->put_back(driver);
+        }
     }
 }
 
 void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
+    if (done) {
+        update_profile_by_mode(fragment_ctx, done);
+    }
     auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
@@ -150,13 +160,58 @@ void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, co
     auto report_task = [=]() {
         auto status = ExecStateReporter::report_exec_status(params, exec_env, fe_addr);
         if (!status.ok()) {
-            LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                         << ", status: " << status.to_string();
+            if (status.is_not_found()) {
+                LOG(INFO) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
+                          << print_id(fragment_id);
+            } else {
+                LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
+                             << ", status: " << status.to_string();
+            }
         } else {
             LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id);
         }
     };
 
     this->_exec_state_reporter->submit(std::move(report_task));
+}
+
+void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ctx, bool done) {
+    if (!done) {
+        return;
+    }
+
+    if (fragment_ctx->profile_mode() != TPipelineProfileMode::type::BRIEF) {
+        return;
+    }
+
+    auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+
+    std::vector<RuntimeProfile*> pipeline_profiles;
+    profile->get_children(&pipeline_profiles);
+    for (auto* pipeline_profile : pipeline_profiles) {
+        std::vector<RuntimeProfile*> pipeline_driver_profiles;
+        pipeline_profile->get_children(&pipeline_driver_profiles);
+
+        // Find the most time-consuming profile in all driver profiles
+        int64_t max_active_time = 0;
+        RuntimeProfile* pipeline_driver_profile_with_max_active_time = nullptr;
+        for (auto* pipeline_driver_profile : pipeline_driver_profiles) {
+            auto* active_timer = pipeline_driver_profile->get_counter("ActiveTime");
+            if (active_timer == nullptr) {
+                continue;
+            }
+            if (active_timer->value() > max_active_time) {
+                max_active_time = active_timer->value();
+                pipeline_driver_profile_with_max_active_time = pipeline_driver_profile;
+            }
+        }
+        if (pipeline_driver_profile_with_max_active_time == nullptr) {
+            continue;
+        }
+        pipeline_profile->remove_childs();
+        pipeline_driver_profile_with_max_active_time->reset_parent();
+        pipeline_profile->add_child(pipeline_driver_profile_with_max_active_time, true, nullptr);
+        pipeline_profile->add_info_string("ContainsAllPipelineDrivers", "false");
+    }
 }
 } // namespace starrocks::pipeline

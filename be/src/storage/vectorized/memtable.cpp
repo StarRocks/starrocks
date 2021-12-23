@@ -80,7 +80,7 @@ bool MemTable::is_full() const {
     return write_buffer_size() >= config::write_buffer_size;
 }
 
-bool MemTable::insert(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
+bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (_chunk == nullptr) {
         _chunk = ChunkHelper::new_chunk(_vectorized_schema, 0);
     }
@@ -90,14 +90,14 @@ bool MemTable::insert(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint
     // So the chunk can only be accessed by the subscript
     // instead of the column name.
     for (int i = 0; i < _slot_descs->size(); ++i) {
-        ColumnPtr& src = chunk->get_column_by_slot_id((*_slot_descs)[i]->id());
+        const ColumnPtr& src = chunk.get_column_by_slot_id((*_slot_descs)[i]->id());
         ColumnPtr& dest = _chunk->get_column_by_index(i);
         dest->append_selective(*src, indexes, from, size);
     }
 
-    if (chunk->has_rows()) {
-        _chunk_memory_usage += chunk->memory_usage() * size / chunk->num_rows();
-        _chunk_bytes_usage += chunk->bytes_usage() * size / chunk->num_rows();
+    if (chunk.has_rows()) {
+        _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
+        _chunk_bytes_usage += chunk.bytes_usage() * size / chunk.num_rows();
     }
 
     // if memtable is full, push it to the flush executor,
@@ -160,6 +160,9 @@ Status MemTable::finalize() {
             if (_keys_type == PRIMARY_KEYS &&
                 PrimaryKeyEncoder::encode_exceed_limit(_vectorized_schema, *_result_chunk.get(), 0,
                                                        _result_chunk->num_rows(), kPrimaryKeyLimitSize)) {
+                _aggregator.reset();
+                _aggregator_memory_usage = 0;
+                _aggregator_bytes_usage = 0;
                 return Status::Cancelled("primary key size exceed the limit.");
             }
             if (_has_op_slot) {
@@ -382,7 +385,7 @@ private:
         if (end_pos > perm->size()) {
             end_pos = perm->size();
         }
-        pdqsort(perm->begin() + offset, perm->begin() + end_pos, less_fn);
+        pdqsort(false, perm->begin() + offset, perm->begin() + end_pos, less_fn);
     }
 
     template <typename CppTypeName>
@@ -413,7 +416,7 @@ private:
             }
         };
 
-        pdqsort(sort_items.begin(), sort_items.end(), less_fn);
+        pdqsort(false, sort_items.begin(), sort_items.end(), less_fn);
 
         // output permutation
         for (size_t i = 0; i < row_num; ++i) {
@@ -439,7 +442,7 @@ private:
             }
         };
 
-        pdqsort(sort_items.begin(), sort_items.end(), less_fn);
+        pdqsort(false, sort_items.begin(), sort_items.end(), less_fn);
 
         for (size_t i = 0; i < row_num; ++i) {
             (*perm)[i + offset].index_in_chunk = sort_items[i].index_in_chunk;
@@ -464,7 +467,7 @@ private:
         if (end_pos > perm->size()) {
             end_pos = perm->size();
         }
-        pdqsort(perm->begin() + offset, perm->begin() + end_pos, less_fn);
+        pdqsort(false, perm->begin() + offset, perm->begin() + end_pos, less_fn);
     }
 };
 
@@ -543,7 +546,7 @@ void MemTable::_sort_chunk_by_columns() {
 }
 
 void MemTable::_sort_chunk_by_rows() {
-    pdqsort(_permutations.begin(), _permutations.end(),
+    pdqsort(false, _permutations.begin(), _permutations.end(),
             [this](const MemTable::PermutationItem& l, const MemTable::PermutationItem& r) {
                 size_t col_number = _tablet_schema->num_key_columns();
                 int compare_result = 0;

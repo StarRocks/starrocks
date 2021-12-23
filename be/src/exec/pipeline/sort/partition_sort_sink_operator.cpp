@@ -54,10 +54,42 @@ Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc));
     RETURN_IF_ERROR(_sort_exec_exprs.open(state));
+    RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, state));
     return Status::OK();
 }
 
+OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    static const uint SIZE_OF_CHUNK_FOR_TOPN = 3000;
+    static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;
+
+    std::shared_ptr<ChunksSorter> chunks_sorter;
+    if (_limit >= 0) {
+        if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
+            chunks_sorter =
+                    std::make_unique<HeapChunkSorter>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
+                                                      &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+        } else {
+            chunks_sorter =
+                    std::make_unique<ChunksSorterTopn>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
+                                                       &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+        }
+    } else {
+        chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                                           &_is_asc_order, &_is_null_first,
+                                                                           SIZE_OF_CHUNK_FOR_FULL_SORT);
+    }
+    auto sort_context = _sort_context_factory->create(driver_sequence);
+
+    sort_context->add_partition_chunks_sorter(chunks_sorter);
+    auto ope = std::make_shared<PartitionSortSinkOperator>(
+            this, _id, _plan_node_id, chunks_sorter, _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,
+            _parent_node_row_desc, _parent_node_child_row_desc, sort_context.get());
+    return ope;
+}
+
 void PartitionSortSinkOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_analytic_partition_exprs, state);
     _sort_exec_exprs.close(state);
     OperatorFactory::close(state);
 }

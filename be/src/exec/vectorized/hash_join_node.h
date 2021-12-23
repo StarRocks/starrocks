@@ -24,7 +24,11 @@ static constexpr size_t kHashJoinKeyColumnOffset = 1;
 class HashJoinNode final : public ExecNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~HashJoinNode() override = default;
+    ~HashJoinNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
@@ -83,6 +87,7 @@ private:
     bool _build_runtime_filters_from_planner;
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
+    TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
 
     bool _is_push_down = false;
 

@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 
+#include "exec/sort_exec_exprs.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/descriptors.h"
@@ -11,10 +12,10 @@
 
 namespace starrocks::pipeline {
 Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    SourceOperator::prepare(state);
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
-            config::exchg_node_buffer_size_bytes, _runtime_profile, true, nullptr, true);
+            config::exchg_node_buffer_size_bytes, _runtime_profile, true, nullptr, true, true);
     _stream_recvr->create_merger_for_pipeline(_sort_exec_exprs, &_is_asc_order, &_nulls_first);
     return Status::OK();
 }

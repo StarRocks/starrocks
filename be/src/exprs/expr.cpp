@@ -580,19 +580,18 @@ void Expr::close(const std::vector<Expr*>& exprs) {
     for (Expr* expr : exprs) expr->close();
 }
 
-bool Expr::is_vectorized() const {
-    return false;
-}
-
 ColumnPtr Expr::evaluate_const(ExprContext* context) {
     if (!is_constant()) {
         return nullptr;
     }
-    if (_constant_column != nullptr) {
+
+    if (_constant_column) {
         return _constant_column;
     }
 
-    _constant_column = context->evaluate(this, nullptr);
+    // prevent _constant_column from being assigned by multiple threads in pipeline engine.
+    std::call_once(_constant_column_evaluate_once,
+                   [this, context] { this->_constant_column = context->evaluate(this, nullptr); });
     return _constant_column;
 }
 

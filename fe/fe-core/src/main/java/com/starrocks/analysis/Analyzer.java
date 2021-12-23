@@ -46,28 +46,18 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.planner.PlanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.BetweenToCompoundRule;
 import com.starrocks.rewrite.ExprRewriteRule;
 import com.starrocks.rewrite.ExprRewriter;
-import com.starrocks.rewrite.FoldConstantsRule;
 import com.starrocks.rewrite.NormalizeBinaryPredicatesRule;
 import com.starrocks.rewrite.ReplaceDateFormatRule;
-import com.starrocks.rewrite.mvrewrite.CountDistinctToBitmap;
-import com.starrocks.rewrite.mvrewrite.CountDistinctToBitmapOrHLLRule;
-import com.starrocks.rewrite.mvrewrite.CountFieldToSum;
-import com.starrocks.rewrite.mvrewrite.HLLHashToSlotRefRule;
-import com.starrocks.rewrite.mvrewrite.NDVToHll;
-import com.starrocks.rewrite.mvrewrite.PercentileApproxToUnionRule;
-import com.starrocks.rewrite.mvrewrite.ToBitmapToSlotRefRule;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -88,8 +78,6 @@ import java.util.Set;
 @Deprecated
 public class Analyzer {
     private static final Logger LOG = LogManager.getLogger(Analyzer.class);
-    // used for contains inlineview analytic function's tuple changed
-    private ExprSubstitutionMap changeResSmap = new ExprSubstitutionMap();
 
     // NOTE: Alias of table is case sensitive
     // UniqueAlias used to check wheather the table ref or the alias is unique
@@ -114,20 +102,12 @@ public class Analyzer {
     // A predicate such as "t1.a = t2.b" has two entries, one for 't1' and
     // another one for 't2'.
 
-    // all conjuncts of the Where clause
-    private final Set<ExprId> whereClauseConjuncts = Sets.newHashSet();
-    // map from tuple id to list of Exprs referencing tuple
-    // which buffer can reuse in vectorized proccess
-    private final Map<TupleId, List<Expr>> bufferReuseExprs = Maps.newHashMap();
     // map from tuple id to the current output column index
     private final Map<TupleId, Integer> currentOutputColumn = Maps.newHashMap();
     // used for Information Schema Table Scan
     private String schemaDb;
     private String schemaWild;
     private String schemaTable; // table used in DESCRIBE Table
-
-    // True if the corresponding select block has a limit and/or offset clause.
-    private boolean hasLimitOffsetClause_ = false;
 
     // Current depth of nested analyze() calls. Used for enforcing a
     // maximum expr-tree depth. Needs to be manually maintained by the user
@@ -169,24 +149,12 @@ public class Analyzer {
         globalState.containsSubquery = true;
     }
 
-    public boolean setHasPlanHints() {
-        return globalState.hasPlanHints = true;
-    }
-
-    public boolean hasPlanHints() {
-        return globalState.hasPlanHints;
-    }
-
     public void setIsWithClause() {
         isWithClause_ = true;
     }
 
     public boolean isWithClause() {
         return isWithClause_;
-    }
-
-    public boolean isParentHasWithClause() {
-        return ancestors.stream().anyMatch(Analyzer::isWithClause);
     }
 
     public void setUDFAllowed(boolean val) {
@@ -219,17 +187,11 @@ public class Analyzer {
         // analysis.
         public boolean isExplain;
 
-        // Indicates whether the query has plan hints.
-        public boolean hasPlanHints = false;
-
         // True if at least one of the analyzers belongs to a subquery.
         public boolean containsSubquery = false;
 
         // all registered conjuncts (map from id to Predicate)
         private final Map<ExprId, Expr> conjuncts = Maps.newHashMap();
-
-        // all registered conjuncts bound by a single tuple id; used in getBoundPredicates()
-        public final ArrayList<ExprId> singleTidConjuncts = Lists.newArrayList();
 
         // eqJoinConjuncts[tid] contains all conjuncts of the form
         // "<lhs> = <rhs>" in which either lhs or rhs is fully bound by tid
@@ -286,8 +248,6 @@ public class Analyzer {
         // Expr rewriter for normalizing and rewriting expressions.
         private final ExprRewriter exprRewriter_;
 
-        private final ExprRewriter mvExprRewriter;
-
         public GlobalState(Catalog catalog, ConnectContext context) {
             this.catalog = catalog;
             this.context = context;
@@ -300,18 +260,7 @@ public class Analyzer {
             // pushdown and Parquet row group pruning based on min/max statistics.
             rules.add(NormalizeBinaryPredicatesRule.INSTANCE);
             rules.add(ReplaceDateFormatRule.INSTANCE);
-            rules.add(FoldConstantsRule.INSTANCE);
             exprRewriter_ = new ExprRewriter(rules);
-            // init mv rewriter
-            List<ExprRewriteRule> mvRewriteRules = Lists.newArrayList();
-            mvRewriteRules.add(ToBitmapToSlotRefRule.INSTANCE);
-            mvRewriteRules.add(CountDistinctToBitmapOrHLLRule.INSTANCE);
-            mvRewriteRules.add(CountDistinctToBitmap.INSTANCE);
-            mvRewriteRules.add(NDVToHll.INSTANCE);
-            mvRewriteRules.add(HLLHashToSlotRefRule.INSTANCE);
-            mvRewriteRules.add(CountFieldToSum.INSTANCE);
-            mvRewriteRules.add(PercentileApproxToUnionRule.INSTANCE);
-            mvExprRewriter = new ExprRewriter(mvRewriteRules);
         }
     }
 
@@ -491,10 +440,6 @@ public class Analyzer {
         return result;
     }
 
-    public List<TupleId> getAllTupleIds() {
-        return new ArrayList<>(tableRefMap_.keySet());
-    }
-
     /**
      * Resolves the given TableRef into a concrete BaseTableRef, ViewRef or
      * CollectionTableRef. Returns the new resolved table ref or the given table
@@ -575,10 +520,6 @@ public class Analyzer {
         return globalState.exprRewriter_;
     }
 
-    public ExprRewriter getMVExprRewriter() {
-        return globalState.mvExprRewriter;
-    }
-
     /**
      * Return descriptor of registered table/alias.
      *
@@ -591,15 +532,6 @@ public class Analyzer {
 
     public TupleDescriptor getTupleDesc(TupleId id) {
         return globalState.descTbl.getTupleDesc(id);
-    }
-
-    /**
-     * Given a "table alias"."column alias", return the SlotDescriptor
-     *
-     * @param qualifiedColumnName table qualified column name
-     */
-    public SlotDescriptor getSlotDescriptor(String qualifiedColumnName) {
-        return slotRefMap.get(qualifiedColumnName);
     }
 
     /**
@@ -822,24 +754,6 @@ public class Analyzer {
         }
     }
 
-    public void registerConjunct(Expr e, TupleId tupleId) throws AnalysisException {
-        final List<Expr> exprs = Lists.newArrayList();
-        exprs.add(e);
-        registerConjuncts(exprs, tupleId);
-    }
-
-    public void registerConjuncts(List<Expr> l, TupleId tupleId) throws AnalysisException {
-        final List<TupleId> tupleIds = Lists.newArrayList();
-        tupleIds.add(tupleId);
-        registerConjuncts(l, tupleIds);
-    }
-
-    public void registerConjunct(Expr e, List<TupleId> tupleIds) throws AnalysisException {
-        final List<Expr> exprs = Lists.newArrayList();
-        exprs.add(e);
-        registerConjuncts(exprs, tupleIds);
-    }
-
     // register all conjuncts and handle constant conjuncts with ids
     public void registerConjuncts(List<Expr> l, List<TupleId> ids) throws AnalysisException {
         for (Expr e : l) {
@@ -963,31 +877,6 @@ public class Analyzer {
     }
 
     /**
-     * Create and register an auxiliary predicate to express an equivalence
-     * between two exprs (BinaryPredicate with EQ); this predicate does not need
-     * to be assigned, but it's used for equivalence class computation. Does
-     * nothing if the lhs or rhs expr are NULL. Registering an equivalence with
-     * NULL would be incorrect, because <expr> = NULL is false (even NULL =
-     * NULL).
-     */
-    public void createAuxEquivPredicate(Expr lhs, Expr rhs) {
-        // Check the expr type as well as the class because NullLiteral could
-        // have been
-        // implicitly cast to a type different than NULL.
-        if (lhs instanceof NullLiteral || rhs instanceof NullLiteral
-                || lhs.getType().isNull() || rhs.getType().isNull()) {
-            return;
-        }
-        // create an eq predicate between lhs and rhs
-        BinaryPredicate p = new BinaryPredicate(BinaryPredicate.Operator.EQ, lhs, rhs);
-        p.setIsAuxExpr();
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("register equiv predicate: " + p.toSql() + " " + p.debugString());
-        }
-        registerConjunct(p);
-    }
-
-    /**
      * Return all unassigned registered conjuncts that are fully bound by the given
      * (logical) tuple ids, can be evaluated by 'tupleIds' and are not tied to an
      * Outer Join clause.
@@ -1060,100 +949,6 @@ public class Analyzer {
         return result;
     }
 
-    // Return all where conjuncts bound by given list of tuple ids
-    public List<Expr> getWhereConjuncts(List<TupleId> tupleIds) {
-        List<Expr> result = Lists.newArrayList();
-        List<ExprId> eqJoinConjunctIds = Lists.newArrayList();
-        for (List<ExprId> conjuncts : globalState.eqJoinConjuncts.values()) {
-            eqJoinConjunctIds.addAll(conjuncts);
-        }
-        for (Expr e : globalState.conjuncts.values()) {
-            if (e.isBoundByTupleIds(tupleIds)
-                    && !e.isAuxExpr()
-                    && !eqJoinConjunctIds.contains(e.getId())  // to exclude to conjuncts like (A.id = B.id)
-                    && !e.isOnClauseConjunct()) {
-                result.add(e);
-            }
-        }
-        return result;
-    }
-
-    // Remove the on conjuncts from inner join map and add to outer join map
-    public void migrateOuterJoinConjunctsToInner(TableRef tableRef) {
-        List<TupleId> tupleIds = Lists.newArrayList(tableRef.getAllTupleIds());
-        for (Expr e : globalState.conjuncts.values()) {
-            if (e.isBoundByTupleIds(tupleIds)
-                    && globalState.ojClauseByConjunct.containsKey(e.getId())
-                    && globalState.ojClauseByConjunct.get(e.getId()).getId() == tableRef.getId()) {
-                globalState.ijClauseByConjunct.put(e.id, tableRef);
-                globalState.ojClauseByConjunct.remove(e.id);
-                globalState.conjunctsByOjClause.remove(tableRef.getId());
-
-                if (tableRef.getJoinOp().isLeftOuterJoin()) {
-                    globalState.outerJoinedTupleIds.remove(tableRef.getId());
-                } else if (tableRef.getJoinOp().isRightOuterJoin()) {
-                    for (TupleId tupleId : tableRef.getLeftTblRef().getAllTupleIds()) {
-                        globalState.outerJoinedTupleIds.remove(tupleId);
-                    }
-                } else if (tableRef.getJoinOp().isFullOuterJoin()) {
-                    for (TupleId tupleId : tableRef.getAllTupleIds()) {
-                        globalState.outerJoinedTupleIds.remove(tupleId);
-                    }
-                    globalState.fullOuterJoinedConjuncts.remove(e.id);
-                }
-            }
-        }
-    }
-
-    // globalState.fullOuterJoinedTupleIds don't use any more, so we don't change it
-    public void removeFullOuterJoinConjuncts(TableRef tableRef) {
-        List<TupleId> tupleIds = Lists.newArrayList(tableRef.getAllTupleIds());
-        for (Expr e : globalState.conjuncts.values()) {
-            if (e.isBoundByTupleIds(tupleIds)
-                    && globalState.fullOuterJoinedConjuncts.containsKey(e.getId())) {
-                globalState.fullOuterJoinedConjuncts.remove(e.id);
-            }
-        }
-    }
-
-    /**
-     * Return all unassigned registered conjuncts that are fully bound by given
-     * list of tuple ids
-     */
-    public List<Expr> getAllUnassignedConjuncts(List<TupleId> tupleIds) {
-        List<Expr> result = Lists.newArrayList();
-        for (Expr e : globalState.conjuncts.values()) {
-            if (!e.isAuxExpr()
-                    && e.isBoundByTupleIds(tupleIds)
-                    && !globalState.assignedConjuncts.contains(e.getId())
-                    && !globalState.ojClauseByConjunct.containsKey(e.getId())) {
-                result.add(e);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * Return all unassigned conjuncts of the outer join referenced by
-     * right-hand side table ref.
-     */
-    public List<Expr> getUnassignedOjConjuncts(TableRef ref) {
-        Preconditions.checkState(ref.getJoinOp().isOuterJoin());
-        List<Expr> result = Lists.newArrayList();
-        List<ExprId> candidates = globalState.conjunctsByOjClause.get(ref.getId());
-        if (candidates == null) {
-            return result;
-        }
-        for (ExprId conjunctId : candidates) {
-            if (!globalState.assignedConjuncts.contains(conjunctId)) {
-                Expr e = globalState.conjuncts.get(conjunctId);
-                Preconditions.checkState(e != null);
-                result.add(e);
-            }
-        }
-        return result;
-    }
-
     /**
      * Returns true if 'e' must be evaluated after or by a join node. Note that it may
      * still be safe to evaluate 'e' elsewhere as well, but in any case 'e' must be
@@ -1196,10 +991,6 @@ public class Analyzer {
         return globalState.outerJoinedTupleIds.get(id);
     }
 
-    public boolean isWhereClauseConjunct(Expr e) {
-        return whereClauseConjuncts.contains(e.getId());
-    }
-
     public boolean isSemiJoined(TupleId tid) {
         return globalState.semiJoinedTupleIds.containsKey(tid);
     }
@@ -1239,20 +1030,6 @@ public class Analyzer {
 
     public Set<String> getAliases() {
         return uniqueTableAliasSet_;
-    }
-
-    public List<Expr> getAllConjuncts(TupleId id) {
-        List<ExprId> conjunctIds = tuplePredicates.get(id);
-        if (conjunctIds == null) {
-            return null;
-        }
-        List<Expr> result = Lists.newArrayList();
-        for (ExprId conjunctId : conjunctIds) {
-            Expr e = globalState.conjuncts.get(conjunctId);
-            Preconditions.checkState(e != null);
-            result.add(e);
-        }
-        return result;
     }
 
     /**
@@ -1297,10 +1074,6 @@ public class Analyzer {
 
     public boolean hasEmptySpjResultSet() {
         return hasEmptySpjResultSet_;
-    }
-
-    public void setHasLimitOffsetClause(boolean hasLimitOffset) {
-        this.hasLimitOffsetClause_ = hasLimitOffset;
     }
 
     /**
@@ -1414,75 +1187,6 @@ public class Analyzer {
         return globalState.fullOuterJoinedConjuncts.containsKey(e.getId());
     }
 
-    public TableRef getOjRef(Expr e) {
-        return globalState.ojClauseByConjunct.get(e.getId());
-    }
-
-    /**
-     * Returns false if 'e' originates from an outer-join On-clause and it is incorrect to
-     * evaluate 'e' at a node materializing 'tids'. Returns true otherwise.
-     */
-    public boolean canEvalOuterJoinedConjunct(Expr e, List<TupleId> tids) {
-        TableRef outerJoin = getOjRef(e);
-        if (outerJoin == null) {
-            return true;
-        }
-        return tids.containsAll(outerJoin.getAllTableRefIds());
-    }
-
-    /**
-     * Returns list of candidate equi-join conjuncts to be evaluated by the join node
-     * that is specified by the table ref ids of its left and right children.
-     * If the join to be performed is an outer join, then only equi-join conjuncts
-     * from its On-clause are returned. If an equi-join conjunct is full outer joined,
-     * then it is only added to the result if this join is the one to full-outer join it.
-     */
-    public List<Expr> getEqJoinConjuncts(List<TupleId> lhsTblRefIds,
-                                         List<TupleId> rhsTblRefIds) {
-        // Contains all equi-join conjuncts that have one child fully bound by one of the
-        // rhs table ref ids (the other child is not bound by that rhs table ref id).
-        List<ExprId> conjunctIds = Lists.newArrayList();
-        for (TupleId rhsId : rhsTblRefIds) {
-            List<ExprId> cids = globalState.eqJoinConjuncts.get(rhsId);
-            if (cids == null) {
-                continue;
-            }
-            for (ExprId eid : cids) {
-                if (!conjunctIds.contains(eid)) {
-                    conjunctIds.add(eid);
-                }
-            }
-        }
-
-        // Since we currently prevent join re-reordering across outer joins, we can never
-        // have a bushy outer join with multiple rhs table ref ids. A busy outer join can
-        // only be constructed with an inline view (which has a single table ref id).
-        List<ExprId> ojClauseConjuncts = null;
-        if (rhsTblRefIds.size() == 1) {
-            ojClauseConjuncts = globalState.conjunctsByOjClause.get(rhsTblRefIds.get(0));
-        }
-
-        // List of table ref ids that the join node will 'materialize'.
-        List<TupleId> nodeTblRefIds = Lists.newArrayList(lhsTblRefIds);
-        nodeTblRefIds.addAll(rhsTblRefIds);
-        List<Expr> result = Lists.newArrayList();
-        for (ExprId conjunctId : conjunctIds) {
-            Expr e = globalState.conjuncts.get(conjunctId);
-            Preconditions.checkState(e != null);
-            if (!canEvalFullOuterJoinedConjunct(e, nodeTblRefIds) ||
-                    !canEvalAntiJoinedConjunct(e, nodeTblRefIds) ||
-                    !canEvalOuterJoinedConjunct(e, nodeTblRefIds)) {
-                continue;
-            }
-
-            if (ojClauseConjuncts != null && !ojClauseConjuncts.contains(conjunctId)) {
-                continue;
-            }
-            result.add(e);
-        }
-        return result;
-    }
-
     /**
      * return equal conjuncts, used by OlapScanNode.normalizePredicate and SelectStmt.reorderTable
      */
@@ -1513,15 +1217,6 @@ public class Analyzer {
             }
         }
         return candidateEqJoinPredicates;
-    }
-
-    public List<Expr> getBufferReuseConjuncts(TupleId id) {
-        List<Expr> result = bufferReuseExprs.get(id);
-        if (null == result) {
-            result = Lists.newArrayList();
-            bufferReuseExprs.put(id, result);
-        }
-        return result;
     }
 
     public int getCurrentOutputColumn(TupleId id) {
@@ -1555,18 +1250,6 @@ public class Analyzer {
         globalState.assignedConjuncts.add(conjunct.getId());
     }
 
-    /**
-     * Return true if there's at least one unassigned conjunct.
-     */
-    public boolean hasUnassignedConjuncts() {
-        // for (Map.Entry<ExprId, Expr> entry : globalState.conjuncts.entrySet()) {
-        //     if (!globalState.assignedConjuncts.contains(entry.getKey())) {
-        //         LOG.warn("hasUnassignedConjuncts exps");
-        //         ((Expr)(entry.getValue())).printChild();
-        //     }
-        // }
-        return !globalState.assignedConjuncts.containsAll(globalState.conjuncts.keySet());
-    }
 
     /**
      * Returns assignment-compatible type of expr.getType() and lastCompatibleType.
@@ -1719,10 +1402,6 @@ public class Analyzer {
         return fnName.isFullyQualified() ? fnName.getDb() : getDefaultDb();
     }
 
-    public ExprSubstitutionMap getChangeResSmap() {
-        return changeResSmap;
-    }
-
     /**
      * Returns true if predicate 'e' can be correctly evaluated by a tree materializing
      * 'tupleIds', otherwise false:
@@ -1842,35 +1521,6 @@ public class Analyzer {
     }
 
     /**
-     * Return all unassigned registered conjuncts for node's table ref ids.
-     * Wrapper around getUnassignedConjuncts(List<TupleId> tupleIds).
-     */
-    public List<Expr> getUnassignedConjuncts(PlanNode node) {
-        return getUnassignedConjuncts(node.getTupleIds());
-    }
-
-    /**
-     * Returns true if e must be evaluated by a join node. Note that it may still be
-     * safe to evaluate e elsewhere as well, but in any case the join must evaluate e.
-     */
-    public boolean evalByJoin(Expr e) {
-        List<TupleId> tids = Lists.newArrayList();
-        e.getIds(tids, null);
-
-        if (tids.isEmpty()) {
-            return false;
-        }
-
-        if (tids.size() > 1 || globalState.ojClauseByConjunct.containsKey(e.getId())
-                || globalState.outerJoinedTupleIds.containsKey(e.getId()) && whereClauseConjuncts.contains(e.getId())
-                || globalState.conjunctsByOjClause.containsKey(e.getId())) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
      * Mark all slots that are referenced in exprs as materialized.
      */
     public void materializeSlots(List<Expr> exprs) {
@@ -1896,58 +1546,5 @@ public class Analyzer {
 
     public boolean isOuterJoined(TupleId tid) {
         return globalState.outerJoinedTupleIds.containsKey(tid);
-    }
-
-    public boolean containSubquery() {
-        return globalState.containsSubquery;
-    }
-
-    /**
-     * Mark slots that are being referenced by the plan tree itself or by the outputExprs exprs as materialized. If the
-     * latter is null, mark all slots in planRoot's tupleIds() as being referenced. All aggregate slots are
-     * materialized.
-     * <p/>
-     * TODO: instead of materializing everything produced by the plan root, derived referenced slots from destination
-     * fragment and add a materialization node if not all output is needed by destination fragment TODO 2: should the
-     * materialization decision be cost-based?
-     */
-    public void markRefdSlots(Analyzer analyzer, PlanNode planRoot,
-                              List<Expr> outputExprs, AnalyticInfo analyticInfo) {
-        if (planRoot == null) {
-            return;
-        }
-        List<SlotId> refdIdList = Lists.newArrayList();
-        planRoot.getMaterializedIds(analyzer, refdIdList);
-        if (outputExprs != null) {
-            Expr.getIds(outputExprs, null, refdIdList);
-        }
-
-        HashSet<SlotId> refdIds = Sets.newHashSet(refdIdList);
-        for (TupleDescriptor tupleDesc : analyzer.getDescTbl().getTupleDescs()) {
-            for (SlotDescriptor slotDesc : tupleDesc.getSlots()) {
-                if (refdIds.contains(slotDesc.getId())) {
-                    slotDesc.setIsMaterialized(true);
-                }
-            }
-        }
-        if (analyticInfo != null) {
-            ArrayList<SlotDescriptor> list = analyticInfo.getOutputTupleDesc().getSlots();
-
-            for (SlotDescriptor slotDesc : list) {
-                if (refdIds.contains(slotDesc.getId())) {
-                    slotDesc.setIsMaterialized(true);
-                }
-            }
-        }
-        if (outputExprs == null) {
-            // mark all slots in planRoot.getTupleIds() as materialized
-            ArrayList<TupleId> tids = planRoot.getTupleIds();
-            for (TupleId tid : tids) {
-                TupleDescriptor tupleDesc = analyzer.getDescTbl().getTupleDesc(tid);
-                for (SlotDescriptor slotDesc : tupleDesc.getSlots()) {
-                    slotDesc.setIsMaterialized(true);
-                }
-            }
-        }
     }
 }

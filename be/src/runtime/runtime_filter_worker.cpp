@@ -88,7 +88,8 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
         // print before setting data, otherwise it's too big.
         VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters. merge_node[0] = " << rf_desc->merge_nodes()[0]
                   << ", filter_size = " << filter->size() << ", query_id = " << params.query_id()
-                  << ", finst_id = " << params.finst_id() << ", be_number = " << params.build_be_number();
+                  << ", finst_id = " << params.finst_id() << ", be_number = " << params.build_be_number()
+                  << ", is_pipeline = " << params.is_pipeline();
 
         std::string* rf_data = params.mutable_data();
         size_t max_size = vectorized::RuntimeFilterHelper::max_runtime_filter_serialized_size(filter);
@@ -124,8 +125,9 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
         rf_desc->set_shared_runtime_filter(rf);
     }
 }
-RuntimeFilterMerger::RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options)
-        : _exec_env(env), _query_id(query_id), _query_options(query_options) {}
+RuntimeFilterMerger::RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options,
+                                         bool is_pipeline)
+        : _exec_env(env), _query_id(query_id), _query_options(query_options), _is_pipeline(is_pipeline) {}
 
 Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
     _targets = params.id_to_prober_params;
@@ -225,7 +227,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
 
     PTransmitRuntimeFilterParams request;
     // For pipeline engine
-    if (status->is_pipeline) {
+    if (_is_pipeline) {
         request.set_is_pipeline(true);
     }
     request.set_filter_id(filter_id);
@@ -347,12 +349,21 @@ enum EventType {
 struct RuntimeFilterWorkerEvent {
 public:
     RuntimeFilterWorkerEvent() = default;
+
     EventType type;
+
     TUniqueId query_id;
+
+    /// For OPEN_QUERY.
     TQueryOptions query_options;
     TRuntimeFilterParams create_rf_merger_request;
+    bool is_opened_by_pipeline;
+
+    /// For SEND_PART_RF.
     std::vector<TNetworkAddress> transmit_addrs;
     int transmit_timeout_ms;
+
+    /// For SEND_PART_RF, RECEIVE_PART_RF, and RECEIVE_TOTAL_RF.
     PTransmitRuntimeFilterParams transmit_rf_request;
 };
 
@@ -366,13 +377,14 @@ RuntimeFilterWorker::~RuntimeFilterWorker() {
 }
 
 void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
-                                     const TRuntimeFilterParams& params) {
+                                     const TRuntimeFilterParams& params, bool is_pipeline) {
     VLOG_FILE << "RuntimeFilterWorker::open_query. query_id = " << query_id << ", params = " << params;
     RuntimeFilterWorkerEvent ev;
     ev.type = OPEN_QUERY;
     ev.query_id = query_id;
     ev.query_options = query_options;
     ev.create_rf_merger_request = params;
+    ev.is_opened_by_pipeline = is_pipeline;
     _queue.put(std::move(ev));
 }
 
@@ -397,7 +409,7 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
 void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterParams& params) {
     VLOG_FILE << "RuntimeFilterWorker::receive_runtime_filter: partial = " << params.is_partial()
               << ", query_id = " << params.query_id() << ", finst_id = " << params.finst_id()
-              << ", # probe insts = " << params.probe_finst_ids_size();
+              << ", # probe insts = " << params.probe_finst_ids_size() << ", is_pipeline=" << params.is_pipeline();
 
     RuntimeFilterWorkerEvent ev;
     if (params.is_partial()) {
@@ -432,7 +444,7 @@ static inline Status receive_total_runtime_filter_pipeline(
         auto fragment_ctx = query_ctx->fragment_mgr()->get(finst_id);
         // FragmentContext is already destructed or invalid, so do nothing.
         if (!fragment_ctx || fragment_ctx->is_canceled()) {
-            return Status::OK();
+            continue;
         }
         fragment_ctx->runtime_filter_port()->receive_shared_runtime_filter(params.filter_id(), shared_rf);
     }
@@ -529,7 +541,7 @@ void RuntimeFilterWorker::execute() {
                 VLOG_QUERY << "open query: rf merger already existed. query_id = " << ev.query_id;
                 break;
             }
-            RuntimeFilterMerger merger(_exec_env, UniqueId(ev.query_id), ev.query_options);
+            RuntimeFilterMerger merger(_exec_env, UniqueId(ev.query_id), ev.query_options, ev.is_opened_by_pipeline);
             Status st = merger.init(ev.create_rf_merger_request);
             if (!st.ok()) {
                 VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.get_error_msg();

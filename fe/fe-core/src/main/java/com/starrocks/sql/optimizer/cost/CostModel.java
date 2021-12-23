@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -17,10 +18,14 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -35,6 +40,7 @@ import com.starrocks.statistic.Constants;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CostModel {
     public static double calculateCost(GroupExpression expression) {
@@ -109,7 +115,6 @@ public class CostModel {
                     inputStatistics.getComputeSize());
         }
 
-
         boolean canGenerateOneStageAggNode(ExpressionContext context) {
             // 1. Must do two stage aggregate if child operator is LogicalRepeatOperator
             //   If the repeat node is used as the input node of the Exchange node.
@@ -181,6 +186,10 @@ public class CostModel {
         public CostEstimate computeAggFunExtraCost(PhysicalHashAggregateOperator node, Statistics statistics,
                                                    Statistics inputStatistics) {
             CostEstimate costEstimate = CostEstimate.zero();
+            int distinctCount =
+                    node.getAggregations().values().stream().filter(aggregation -> isDistinctAggFun(aggregation, node))
+                            .collect(Collectors.toList()).size();
+
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : node.getAggregations().entrySet()) {
                 CallOperator aggregation = entry.getValue();
                 if (isDistinctAggFun(aggregation, node)) {
@@ -200,8 +209,10 @@ public class CostModel {
                     if (distinctColumn.getType().isStringType() && !(node.getType().isGlobal() && node.isSplit())) {
                         rowSize = rowSize + 16;
                     }
-                    // To avoid OOM
-                    if (buckets >= 15000000 && rowSize >= 20) {
+
+                    // only when distinct count == 1, consider to avoid OOM
+                    // because of distinct count more than 1, we must use multi_distinct function
+                    if (distinctCount == 1 && (buckets >= 15000000 && rowSize >= 20)) {
                         return CostEstimate.infinite();
                     }
 
@@ -246,24 +257,33 @@ public class CostModel {
             Preconditions.checkNotNull(statistics);
 
             CostEstimate result;
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
             switch (distributionSpec.getType()) {
                 case ANY:
                     result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
                     break;
                 case BROADCAST:
-                    if (statistics.getOutputSize(outputColumns) >
-                            ConnectContext.get().getSessionVariable().getMaxExecMemByte()) {
+                    if (statistics.getOutputSize(outputColumns) > sessionVariable.getMaxExecMemByte()) {
                         return CostEstimate.infinite();
                     }
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
+                    int pipelineDop = 1;
+                    if (sessionVariable.isEnablePipelineEngine()) {
+                        // pipelineDop is 0 means that the query executed in pipeline engine use the half number of cpu
+                        // cores, we use 32 as an estimate value
+                        // todo(ywb) we need to get BE cpu cores from BE heartbeat.
+                        pipelineDop = sessionVariable.getPipelineDop() > 0 ? sessionVariable.getPipelineDop() : 32;
+                    }
                     // beNum is the number of right table should broadcast, now use alive backends
                     int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
                     result = CostEstimate
                             .of(statistics.getOutputSize(outputColumns) *
                                             Catalog.getCurrentSystemInfo().getBackendIds(true).size(),
-                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
-                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum);
+                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum *
+                                            pipelineDop,
+                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum *
+                                            pipelineDop);
                     break;
                 case SHUFFLE:
                 case GATHER:
@@ -324,6 +344,31 @@ public class CostModel {
             Preconditions.checkNotNull(statistics);
 
             return CostEstimate.ofCpu(statistics.getComputeSize());
+        }
+
+        @Override
+        public CostEstimate visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
+            Statistics statistics = context.getStatistics();
+            Preconditions.checkNotNull(statistics);
+
+            // @TODO:
+            //  there only compute CTEConsume output columns, but we need compute CTEProduce output columns in fact
+            return CostEstimate.of(statistics.getComputeSize(), 0, statistics.getComputeSize());
+        }
+
+        @Override
+        public CostEstimate visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
         }
     }
 }

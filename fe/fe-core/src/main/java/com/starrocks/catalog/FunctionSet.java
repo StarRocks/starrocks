@@ -73,6 +73,7 @@ public class FunctionSet {
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
     public static final String DICT_MERGE = "dict_merge";
+    public static final String ANY_VALUE = "any_value";
 
     // Window functions:
     public static final String LEAD = "lead";
@@ -112,6 +113,12 @@ public class FunctionSet {
     public static final String HOUR = "hour";
     public static final String MINUTE = "minute";
     public static final String SECOND = "second";
+    public static final String CURDATE = "curdate";
+    public static final String CURRENT_TIMESTAMP = "current_timestamp";
+    public static final String CURRENT_TIME = "current_time";
+    public static final String NOW = "now";
+    public static final String UNIX_TIMESTAMP = "unix_timestamp";
+    public static final String UTC_TIMESTAMP = "utc_timestamp";
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
@@ -179,6 +186,26 @@ public class FunctionSet {
            "substring", 
            "trim",
            "upper");
+
+    public static final Set<String> alwaysReturnNonNullableFunctions =
+            ImmutableSet.<String>builder()
+                    .add(FunctionSet.COUNT)
+                    .add(FunctionSet.MULTI_DISTINCT_COUNT)
+                    .add(FunctionSet.NULL_OR_EMPTY)
+                    .add(FunctionSet.HLL_HASH)
+                    .add(FunctionSet.HLL_UNION_AGG)
+                    .add(FunctionSet.NDV)
+                    .add(FunctionSet.APPROX_COUNT_DISTINCT)
+                    .add(FunctionSet.BITMAP_UNION_INT)
+                    .add(FunctionSet.BITMAP_UNION_COUNT)
+                    .add(FunctionSet.BITMAP_COUNT)
+                    .add(FunctionSet.CURDATE)
+                    .add(FunctionSet.CURRENT_TIMESTAMP)
+                    .add(FunctionSet.CURRENT_TIME)
+                    .add(FunctionSet.NOW)
+                    .add(FunctionSet.UNIX_TIMESTAMP)
+                    .add(FunctionSet.UTC_TIMESTAMP)
+                    .build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -307,6 +334,7 @@ public class FunctionSet {
         if (getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
+        fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
     }
@@ -324,7 +352,7 @@ public class FunctionSet {
             return;
         }
         fn.setCouldApplyDictOptimize(couldApplyDictOptimizationFunctions.contains(fn.functionName()));
-
+        fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
     }
@@ -436,6 +464,10 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin("ndv",
                     Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
                     true, false, true));
+
+            // ANY_VALUE
+            addBuiltin(AggregateFunction.createBuiltin("any_value",
+                    Lists.newArrayList(t), t, t, true, false, false));
 
             //APPROX_COUNT_DISTINCT
             //alias of ndv, compute approx count distinct use HyperLogLog

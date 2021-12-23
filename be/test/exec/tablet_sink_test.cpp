@@ -31,11 +31,9 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_queue_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/thread_resource_mgr.h"
-#include "runtime/tuple_row.h"
 #include "service/brpc.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
@@ -278,26 +276,7 @@ public:
 
     void tablet_writer_add_batch(google::protobuf::RpcController* controller,
                                  const PTabletWriterAddBatchRequest* request, PTabletWriterAddBatchResult* response,
-                                 google::protobuf::Closure* done) override {
-        {
-            std::lock_guard<std::mutex> l(_lock);
-            row_counters += request->tablet_ids_size();
-            if (request->eos()) {
-                eof_counters++;
-            }
-            k_add_batch_status.to_protobuf(response->mutable_status());
-
-            if (request->has_row_batch() && _row_desc != nullptr) {
-                MemTracker tracker;
-                RowBatch batch(*_row_desc, request->row_batch(), &tracker);
-                for (int i = 0; i < batch.num_rows(); ++i) {
-                    LOG(INFO) << batch.get_row(i)->to_string(*_row_desc);
-                    _output_set->emplace(batch.get_row(i)->to_string(*_row_desc));
-                }
-            }
-        }
-        done->Run();
-    }
+                                 google::protobuf::Closure* done) override {}
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override {
         done->Run();
@@ -309,113 +288,6 @@ public:
     RowDescriptor* _row_desc = nullptr;
     std::set<std::string>* _output_set;
 };
-
-TEST_F(OlapTableSinkTest, normal) {
-    // start brpc service first
-    _server = new brpc::Server();
-    auto service = new TestInternalService();
-    ASSERT_EQ(_server->AddService(service, brpc::SERVER_OWNS_SERVICE), 0);
-    brpc::ServerOptions options;
-    {
-        debug::ScopedLeakCheckDisabler disable_lsan;
-        _server->Start(4356, &options);
-    }
-
-    TUniqueId fragment_id;
-    TQueryOptions query_options;
-    query_options.batch_size = 1;
-    RuntimeState state(fragment_id, query_options, TQueryGlobals(), _env);
-    state.init_mem_trackers(TUniqueId());
-    // state._query_mem_tracker.reset(new MemTracker());
-    // state._instance_mem_tracker.reset(new MemTracker(-1, "test", state._query_mem_tracker.get()));
-
-    ObjectPool obj_pool;
-    TDescriptorTable tdesc_tbl;
-    auto t_data_sink = get_data_sink(&tdesc_tbl);
-
-    // crate desc_tabl
-    DescriptorTbl* desc_tbl = nullptr;
-    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
-    ASSERT_TRUE(st.ok());
-    state._desc_tbl = desc_tbl;
-
-    TupleDescriptor* tuple_desc = desc_tbl->get_tuple_descriptor(0);
-    LOG(INFO) << "tuple_desc=" << tuple_desc->debug_string();
-
-    RowDescriptor row_desc(*desc_tbl, {0}, {false});
-
-    OlapTableSink sink(&obj_pool, row_desc, {}, &st, false);
-    ASSERT_TRUE(st.ok());
-
-    // init
-    st = sink.init(t_data_sink);
-    ASSERT_TRUE(st.ok());
-    // prepare
-    st = sink.prepare(&state);
-    ASSERT_TRUE(st.ok());
-    // open
-    st = sink.open(&state);
-    ASSERT_TRUE(st.ok()) << st.to_string();
-    // send
-    MemTracker tracker;
-    RowBatch batch(row_desc, 1024, &tracker);
-    // 12, 9, "abc"
-    {
-        Tuple* tuple = (Tuple*)batch.tuple_data_pool()->allocate(tuple_desc->byte_size());
-        batch.get_row(batch.add_row())->set_tuple(0, tuple);
-        memset(tuple, 0, tuple_desc->byte_size());
-
-        *reinterpret_cast<int*>(tuple->get_slot(4)) = 12;
-        *reinterpret_cast<int64_t*>(tuple->get_slot(8)) = 9;
-        StringValue* str_val = reinterpret_cast<StringValue*>(tuple->get_slot(16));
-        str_val->ptr = (char*)batch.tuple_data_pool()->allocate(10);
-        str_val->len = 3;
-        memcpy(str_val->ptr, "abc", str_val->len);
-        batch.commit_last_row();
-    }
-    // 13, 25, "abcd"
-    {
-        Tuple* tuple = (Tuple*)batch.tuple_data_pool()->allocate(tuple_desc->byte_size());
-        batch.get_row(batch.add_row())->set_tuple(0, tuple);
-        memset(tuple, 0, tuple_desc->byte_size());
-
-        *reinterpret_cast<int*>(tuple->get_slot(4)) = 13;
-        *reinterpret_cast<int64_t*>(tuple->get_slot(8)) = 25;
-        StringValue* str_val = reinterpret_cast<StringValue*>(tuple->get_slot(16));
-        str_val->ptr = (char*)batch.tuple_data_pool()->allocate(10);
-        str_val->len = 4;
-        memcpy(str_val->ptr, "abcd", str_val->len);
-
-        batch.commit_last_row();
-    }
-    // 14, 50, "abcde"
-    {
-        Tuple* tuple = (Tuple*)batch.tuple_data_pool()->allocate(tuple_desc->byte_size());
-        batch.get_row(batch.add_row())->set_tuple(0, tuple);
-        memset(tuple, 0, tuple_desc->byte_size());
-
-        *reinterpret_cast<int*>(tuple->get_slot(4)) = 14;
-        *reinterpret_cast<int64_t*>(tuple->get_slot(8)) = 50;
-        StringValue* str_val = reinterpret_cast<StringValue*>(tuple->get_slot(16));
-        str_val->ptr = reinterpret_cast<char*>(batch.tuple_data_pool()->allocate(16));
-        str_val->len = 15;
-        memcpy(str_val->ptr, "abcde1234567890", str_val->len);
-
-        batch.commit_last_row();
-    }
-    st = sink.send(&state, &batch);
-    ASSERT_TRUE(st.ok());
-    // close
-    st = sink.close(&state, Status::OK());
-    ASSERT_TRUE(st.ok());
-
-    // each node has a eof
-    ASSERT_EQ(2, service->eof_counters);
-    ASSERT_EQ(2 * 2, service->row_counters);
-
-    // 2node * 2
-    ASSERT_EQ(1, state.num_rows_load_filtered());
-}
 
 TEST_F(OlapTableSinkTest, init_fail1) {
     TUniqueId fragment_id;
@@ -592,103 +464,6 @@ TEST_F(OlapTableSinkTest, init_fail4) {
     st = sink.prepare(&state);
     EXPECT_FALSE(st.ok());
     sink.close(&state, st);
-}
-
-TEST_F(OlapTableSinkTest, decimal) {
-    // start brpc service first
-    _server = new brpc::Server();
-    auto* service = new TestInternalService();
-    ASSERT_EQ(_server->AddService(service, brpc::SERVER_OWNS_SERVICE), 0);
-    brpc::ServerOptions options;
-    {
-        debug::ScopedLeakCheckDisabler disable_lsan;
-        _server->Start(4356, &options);
-    }
-
-    TUniqueId fragment_id;
-    TQueryOptions query_options;
-    query_options.batch_size = 1;
-    RuntimeState state(fragment_id, query_options, TQueryGlobals(), _env);
-    state.init_mem_trackers(TUniqueId());
-
-    ObjectPool obj_pool;
-    TDescriptorTable tdesc_tbl;
-    auto t_data_sink = get_decimal_sink(&tdesc_tbl);
-
-    // crate desc_tabl
-    DescriptorTbl* desc_tbl = nullptr;
-    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
-    ASSERT_TRUE(st.ok());
-    state._desc_tbl = desc_tbl;
-
-    TupleDescriptor* tuple_desc = desc_tbl->get_tuple_descriptor(0);
-    LOG(INFO) << "tuple_desc=" << tuple_desc->debug_string();
-
-    RowDescriptor row_desc(*desc_tbl, {0}, {false});
-    service->_row_desc = &row_desc;
-    std::set<std::string> output_set;
-    service->_output_set = &output_set;
-
-    OlapTableSink sink(&obj_pool, row_desc, {}, &st, false);
-    ASSERT_TRUE(st.ok());
-
-    // init
-    st = sink.init(t_data_sink);
-    ASSERT_TRUE(st.ok());
-    // prepare
-    st = sink.prepare(&state);
-    ASSERT_TRUE(st.ok());
-    // open
-    st = sink.open(&state);
-    ASSERT_TRUE(st.ok());
-    // send
-    MemTracker tracker;
-    RowBatch batch(row_desc, 1024, &tracker);
-    // 12, 12.3
-    {
-        Tuple* tuple = (Tuple*)batch.tuple_data_pool()->allocate(tuple_desc->byte_size());
-        batch.get_row(batch.add_row())->set_tuple(0, tuple);
-        memset(tuple, 0, tuple_desc->byte_size());
-
-        *reinterpret_cast<int*>(tuple->get_slot(4)) = 12;
-        DecimalValue* dec_val = reinterpret_cast<DecimalValue*>(tuple->get_slot(16));
-        *dec_val = DecimalValue("12.3");
-        batch.commit_last_row();
-    }
-    // 13, 123.123456789
-    {
-        Tuple* tuple = (Tuple*)batch.tuple_data_pool()->allocate(tuple_desc->byte_size());
-        batch.get_row(batch.add_row())->set_tuple(0, tuple);
-        memset(tuple, 0, tuple_desc->byte_size());
-
-        *reinterpret_cast<int*>(tuple->get_slot(4)) = 13;
-        DecimalValue* dec_val = reinterpret_cast<DecimalValue*>(tuple->get_slot(16));
-        *dec_val = DecimalValue("123.123456789");
-
-        batch.commit_last_row();
-    }
-    // 14, 123456789123.1234
-    {
-        Tuple* tuple = (Tuple*)batch.tuple_data_pool()->allocate(tuple_desc->byte_size());
-        batch.get_row(batch.add_row())->set_tuple(0, tuple);
-        memset(tuple, 0, tuple_desc->byte_size());
-
-        *reinterpret_cast<int*>(tuple->get_slot(4)) = 14;
-        DecimalValue* dec_val = reinterpret_cast<DecimalValue*>(tuple->get_slot(16));
-        *dec_val = DecimalValue("123456789123.1234");
-
-        batch.commit_last_row();
-    }
-    st = sink.send(&state, &batch);
-    ASSERT_TRUE(st.ok());
-    // close
-    st = sink.close(&state, Status::OK());
-    ASSERT_TRUE(st.ok());
-
-    ASSERT_EQ(2, output_set.size());
-    ASSERT_TRUE(output_set.count("[(12 12.3)]") > 0);
-    ASSERT_TRUE(output_set.count("[(13 123.12)]") > 0);
-    // ASSERT_TRUE(output_set.count("[(14 999.99)]") > 0);
 }
 
 } // namespace stream_load

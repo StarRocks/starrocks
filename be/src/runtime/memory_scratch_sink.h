@@ -40,7 +40,6 @@ class Schema;
 namespace starrocks {
 
 class ObjectPool;
-class RowBatch;
 class ObjectPool;
 class RuntimeState;
 class RuntimeProfile;
@@ -48,7 +47,6 @@ class BufferControlBlock;
 class ExprContext;
 class ResultWriter;
 class MemTracker;
-class TupleRow;
 
 // used to push data to blocking queue
 class MemoryScratchSink : public DataSink {

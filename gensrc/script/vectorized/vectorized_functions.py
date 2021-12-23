@@ -254,19 +254,27 @@ vectorized_functions = [
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
 
     # 50xxx: timestamp functions
+    [50009, 'year', 'SMALLINT', ['DATETIME'], 'TimeFunctions::yearV2'],
     [50010, 'year', 'INT', ['DATETIME'], 'TimeFunctions::year'],
+    [50019, 'month', 'TINYINT', ['DATETIME'], 'TimeFunctions::monthV2'],
     [50020, 'month', 'INT', ['DATETIME'], 'TimeFunctions::month'],
     [50030, 'quarter', 'INT', ['DATETIME'], 'TimeFunctions::quarter'],
     [50040, 'dayofweek', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week'],
     [50050, 'to_date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50051, 'date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
+
+    [50058, 'day', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
+    [50059, 'dayofmonth', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
     [50060, 'dayofmonth', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50061, 'day', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50062, 'dayofyear', 'INT', ['DATETIME'], 'TimeFunctions::day_of_year'],
     [50063, 'weekofyear', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year'],
 
+    [50069, 'hour', 'TINYINT', ['DATETIME'], 'TimeFunctions::hourV2'],
     [50070, 'hour', 'INT', ['DATETIME'], 'TimeFunctions::hour'],
+    [50079, 'minute', 'TINYINT', ['DATETIME'], 'TimeFunctions::minuteV2'],
     [50080, 'minute', 'INT', ['DATETIME'], 'TimeFunctions::minute'],
+    [50089, 'second', 'TINYINT', ['DATETIME'], 'TimeFunctions::secondV2'],
     [50090, 'second', 'INT', ['DATETIME'], 'TimeFunctions::second'],
 
     [50110, 'years_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_add'],
@@ -368,6 +376,7 @@ vectorized_functions = [
     [70112, 'if', 'BITMAP', ['BOOLEAN', 'BITMAP', 'BITMAP'], 'nullptr'],
     [70113, 'if', 'PERCENTILE', ['BOOLEAN', 'PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70114, 'if', 'HLL', ['BOOLEAN', 'HLL', 'HLL'], 'nullptr'],
+    [70115, 'if', 'TIME', ['BOOLEAN', 'TIME', 'TIME'], 'nullptr'],
 
     [70200, 'ifnull', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70201, 'ifnull', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -387,6 +396,7 @@ vectorized_functions = [
     [70212, 'ifnull', 'BITMAP', ['BITMAP', 'BITMAP'], 'nullptr'],
     [70213, 'ifnull', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70214, 'ifnull', 'HLL', ['HLL', 'HLL'], 'nullptr'],
+    [70215, 'ifnull', 'TIME', ['TIME', 'TIME'], 'nullptr'],
 
     [70300, 'nullif', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70301, 'nullif', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -406,6 +416,7 @@ vectorized_functions = [
     [70312, 'nullif', 'BITMAP', ['BITMAP', 'BITMAP'], 'nullptr'],
     [70313, 'nullif', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70314, 'nullif', 'HLL', ['HLL', 'HLL'], 'nullptr'],
+    [70315, 'nullif', 'TIME', ['TIME', 'TIME'], 'nullptr'],
 
     [70400, 'coalesce', 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
     [70401, 'coalesce', 'TINYINT', ['TINYINT', '...'], 'nullptr'],
@@ -425,6 +436,7 @@ vectorized_functions = [
     [70412, 'coalesce', 'BITMAP', ['BITMAP', '...'], 'nullptr'],
     [70413, 'coalesce', 'PERCENTILE', ['PERCENTILE', '...'], 'nullptr'],
     [70414, 'coalesce', 'HLL', ['HLL', '...'], 'nullptr'],
+    [70416, 'coalesce', 'TIME', ['TIME', '...'], 'nullptr'],
 
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
@@ -569,4 +581,6 @@ vectorized_functions = [
     #[150012, 'array_max', 'DECIMAL64', ['ARRAY_DECIMAL32'], 'ArrayFunctions::array_max'],
     #[150013, 'array_max', 'DECIMAL64', ['ARRAY_DECIMAL64'], 'ArrayFunctions::array_max'],
     #[150014, 'array_max', 'DECIMAL128', ['ARRAY_DECIMAL128'], 'ArrayFunctions::array_max'],
+
+    [150083, 'array_remove', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_remove'],
 ]

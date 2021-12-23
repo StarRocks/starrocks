@@ -13,6 +13,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "gutil/casts.h"
 #include "simd/mulselector.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 
@@ -297,6 +298,12 @@ private:
                 }
 
                 auto res = RunTimeColumnType<ResultType>::create();
+
+                if constexpr (pt_is_decimal<ResultType>) {
+                    res->set_scale(this->type().scale);
+                    res->set_precision(this->type().precision);
+                }
+
                 auto& container = res->get_data();
                 container.resize(size);
                 SIMD_muti_selector<ResultType>::multi_select_if(select_vec, when_column_size, container, select_list,

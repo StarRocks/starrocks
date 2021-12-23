@@ -14,6 +14,7 @@
 #include "runtime/primitive_type.h"
 #include "simd/selector.h"
 #include "util/dispatch.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 
@@ -298,6 +299,7 @@ public:
     CASE_TYPE(TYPE_DOUBLE, CLASS);     \
     CASE_TYPE(TYPE_CHAR, CLASS);       \
     CASE_TYPE(TYPE_VARCHAR, CLASS);    \
+    CASE_TYPE(TYPE_TIME, CLASS);       \
     CASE_TYPE(TYPE_DATE, CLASS);       \
     CASE_TYPE(TYPE_DATETIME, CLASS);   \
     CASE_TYPE(TYPE_DECIMALV2, CLASS);  \

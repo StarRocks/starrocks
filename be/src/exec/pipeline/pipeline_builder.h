@@ -21,8 +21,11 @@ public:
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipe_id(), operators));
     }
 
+    OpFactories maybe_interpolate_local_broadcast_exchange(OpFactories& pred_operators, int num_receivers);
+
     // Input the output chunks from the drivers of pred operators into ONE driver of the post operators.
     OpFactories maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators);
+    OpFactories maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators, int num_receivers);
 
     // Input the output chunks from multiple drivers of pred operators into DOP drivers of the post operators,
     // by partitioning each row output chunk to DOP partitions according to the key,
@@ -44,6 +47,8 @@ public:
 
     uint32_t next_operator_id() { return _next_operator_id++; }
 
+    int32_t next_pseudo_plan_node_id() { return _next_pseudo_plan_node_id--; }
+
     size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
     Pipelines get_pipelines() const { return _pipelines; }
@@ -55,6 +60,7 @@ private:
     Pipelines _pipelines;
     uint32_t _next_pipeline_id = 0;
     uint32_t _next_operator_id = 0;
+    int32_t _next_pseudo_plan_node_id = Operator::s_pseudo_plan_node_id_upper_bound;
     size_t _degree_of_parallelism = 1;
 };
 

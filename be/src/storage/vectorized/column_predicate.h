@@ -26,12 +26,9 @@ class ObjectPool;
 class ExprContext;
 class RuntimeState;
 class SlotDescriptor;
-} // namespace starrocks
-
-namespace starrocks::segment_v2 {
 class BitmapIndexIterator;
 class BloomFilter;
-} // namespace starrocks::segment_v2
+} // namespace starrocks
 
 namespace starrocks::vectorized {
 
@@ -124,9 +121,9 @@ public:
     virtual bool support_bloom_filter() const { return false; }
 
     // Return false to filter out a data page.
-    virtual bool bloom_filter(const segment_v2::BloomFilter* bf) const { return true; }
+    virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
 
-    virtual Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const {
+    virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const {
         return Status::Cancelled("not implemented");
     }
 

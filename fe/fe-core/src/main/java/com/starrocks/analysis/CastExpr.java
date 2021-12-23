@@ -33,7 +33,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -164,21 +163,20 @@ public class CastExpr extends Expr {
     }
 
     @Override
+    public String toDigestImpl() {
+        if (isImplicit) {
+            return getChild(0).toDigest();
+        }
+        return "cast(" + getChild(0).toDigest() + " as " + targetTypeDef.toString() + ")";
+    }
+
+    @Override
     protected String explainImpl() {
         if (noOp) {
             return getChild(0).explain();
         } else {
             return "cast(" + getChild(0).explain() + " as " + type.toString() + ")";
         }
-    }
-
-    @Override
-    protected void treeToThriftHelper(TExpr container) {
-        if (getChild(0).getType().matchesType(this.type)) {
-            getChild(0).treeToThriftHelper(container);
-            return;
-        }
-        super.treeToThriftHelper(container);
     }
 
     @Override

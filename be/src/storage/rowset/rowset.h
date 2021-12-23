@@ -37,7 +37,7 @@ namespace starrocks {
 
 class DataDir;
 class OlapTuple;
-class RowCursor;
+class PrimaryIndex;
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class RowsetFactory;
@@ -125,9 +125,7 @@ public:
     Status load();
 
     const TabletSchema& schema() const { return *_schema; }
-
-    // returns OLAP_ERR_ROWSET_CREATE_READER when failed to create reader
-    virtual OLAPStatus create_reader(std::shared_ptr<RowsetReader>* result) = 0;
+    inline void set_schema(const TabletSchema* schema) { _schema = schema; }
 
     virtual StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                                 const vectorized::RowsetReadOptions& options) = 0;

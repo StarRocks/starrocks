@@ -12,13 +12,11 @@
 
 namespace starrocks::vectorized {
 
-#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)                                                          \
-    CLASS_NAME(const TExprNode& node) : Expr(node) {}                                                 \
-    virtual ~CLASS_NAME() {}                                                                          \
-                                                                                                      \
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); } \
-                                                                                                      \
-    virtual bool is_vectorized() const override { return true; };
+#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)          \
+    CLASS_NAME(const TExprNode& node) : Expr(node) {} \
+    virtual ~CLASS_NAME() {}                          \
+                                                      \
+    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
 
 template <PrimitiveType Type, typename OP>
 class VectorizedArithmeticExpr final : public Expr {

@@ -396,9 +396,7 @@ public class OlapScanNode extends ScanNode {
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
-        long visibleVersionHash = partition.getVisibleVersionHash();
         String visibleVersionStr = String.valueOf(visibleVersion);
-        String visibleVersionHashStr = String.valueOf(partition.getVisibleVersionHash());
 
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
@@ -409,17 +407,17 @@ public class OlapScanNode extends ScanNode {
             internalRange.setDb_name("");
             internalRange.setSchema_hash(schemaHashStr);
             internalRange.setVersion(visibleVersionStr);
-            internalRange.setVersion_hash(visibleVersionHashStr);
+            internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                    visibleVersion, visibleVersionHash, localBeId, schemaHash);
+                    visibleVersion, localBeId, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
                 LOG.error("no queryable replica found in tablet {}. visible version {}-{}",
-                        tabletId, visibleVersion, visibleVersionHash);
+                        tabletId, visibleVersion);
                 if (LOG.isDebugEnabled()) {
                     for (Replica replica : tablet.getReplicas()) {
                         LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
@@ -724,7 +722,7 @@ public class OlapScanNode extends ScanNode {
         }
         if (ConnectContext.get() != null) {
             msg.olap_scan_node.setEnable_column_expr_predicate(
-                    ConnectContext.get().getSessionVariable().getEnableColumnExprPredicate());
+                    ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
         }
         msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 

@@ -37,13 +37,13 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
+#include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
 #include "runtime/raw_value.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple_row.h"
+#include "service/backend_options.h"
 #include "service/brpc.h"
 #include "util/block_compression.h"
 #include "util/brpc_stub_cache.h"
@@ -235,6 +235,7 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
 
     _need_close = true;
     _is_inited = true;
+
     return Status::OK();
 }
 
@@ -333,18 +334,15 @@ Status DataStreamSender::Channel::close_internal() {
         return Status::OK();
     }
 
-    if (_parent->_is_vectorized) {
-        VLOG_RPC << "_chunk Channel::close() instance_id=" << _fragment_instance_id << " dest_node=" << _dest_node_id
-                 << " #rows= " << ((_chunk == nullptr) ? 0 : _chunk->num_rows());
-        if (_chunk != nullptr && _chunk->num_rows() > 0) {
-            RETURN_IF_ERROR(_send_current_chunk(true));
-        } else {
-            bool is_real_sent = false;
-            RETURN_IF_ERROR(send_one_chunk(nullptr, true, &is_real_sent));
-        }
+    VLOG_RPC << "_chunk Channel::close() instance_id=" << _fragment_instance_id << " dest_node=" << _dest_node_id
+             << " #rows= " << ((_chunk == nullptr) ? 0 : _chunk->num_rows());
+    if (_chunk != nullptr && _chunk->num_rows() > 0) {
+        RETURN_IF_ERROR(_send_current_chunk(true));
     } else {
-        return Status::InternalError("Non-vectorized execute engine is not supported");
+        bool is_real_sent = false;
+        RETURN_IF_ERROR(send_one_chunk(nullptr, true, &is_real_sent));
     }
+
     // Don't wait for the last packet to finish, left it to close_wait.
     return Status::OK();
 }
@@ -355,15 +353,13 @@ void DataStreamSender::Channel::close(RuntimeState* state) {
 
 void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     if (_need_close) {
-        if (_parent->_is_vectorized) {
-            auto st = _wait_prev_request();
-            if (!st.ok()) {
-                LOG(WARNING) << "fail to close channel, st=" << st.to_string()
-                             << ", instance_id=" << print_id(_fragment_instance_id)
-                             << ", dest=" << _brpc_dest_addr.hostname << ":" << _brpc_dest_addr.port;
-                if (_parent->_close_status.ok()) {
-                    _parent->_close_status = st;
-                }
+        auto st = _wait_prev_request();
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to close channel, st=" << st.to_string()
+                         << ", instance_id=" << print_id(_fragment_instance_id) << ", dest=" << _brpc_dest_addr.hostname
+                         << ":" << _brpc_dest_addr.port;
+            if (_parent->_close_status.ok()) {
+                _parent->_close_status = st;
             }
         }
         _need_close = false;
@@ -371,13 +367,14 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     _chunk.reset();
 }
 
-DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sender_id, const RowDescriptor& row_desc,
+DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc,
                                    const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
-                                   int per_channel_buffer_size, bool send_query_statistics_with_every_batch)
-        : _is_vectorized(true),
-          _sender_id(sender_id),
-          _pool(pool),
+                                   int per_channel_buffer_size, bool send_query_statistics_with_every_batch,
+                                   bool enable_exchange_pass_through)
+        : _sender_id(sender_id),
+          _state(state),
+          _pool(state->obj_pool()),
           _row_desc(row_desc),
           _current_channel_idx(0),
           _part_type(sink.output_partition.type),
@@ -385,7 +382,9 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
           _profile(nullptr),
           _serialize_batch_timer(nullptr),
           _bytes_sent_counter(nullptr),
-          _dest_node_id(sink.dest_node_id) {
+          _dest_node_id(sink.dest_node_id),
+          _destinations(destinations),
+          _enable_exchange_pass_through(enable_exchange_pass_through) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
            sink.output_partition.type == TPartitionType::HASH_PARTITIONED ||
@@ -532,6 +531,7 @@ DataStreamSender::~DataStreamSender() {
 }
 
 Status DataStreamSender::open(RuntimeState* state) {
+    // RETURN_IF_ERROR(DataSink::open(state));
     DCHECK(state != nullptr);
     RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     for (auto iter : _partition_infos) {
@@ -641,6 +641,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
 }
 
 Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
+    RETURN_IF_ERROR(DataSink::close(state, exec_status));
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
     // TODO: only close channels that didn't have any errors
     // make all channels close parallel

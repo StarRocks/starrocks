@@ -149,12 +149,12 @@ TEST_F(ChunkTest, test_serde) {
 
     std::string buffer;
     buffer.resize(chunk->serialize_size());
-    chunk->serialize((uint8_t*)buffer.data());
+    size_t written_size = chunk->serialize((uint8_t*)buffer.data());
 
     RuntimeChunkMeta meta;
-    meta.slot_id_to_index.init(2);
-    meta.slot_id_to_index.insert(0, 0);
-    meta.slot_id_to_index.insert(1, 1);
+    meta.slot_id_to_index.reserve(2);
+    meta.slot_id_to_index[0] = 0;
+    meta.slot_id_to_index[1] = 1;
     meta.is_nulls.resize(2, false);
     meta.is_consts.resize(2, false);
     meta.types.resize(2);
@@ -162,7 +162,7 @@ TEST_F(ChunkTest, test_serde) {
     meta.types[1] = TypeDescriptor(PrimitiveType::TYPE_INT);
 
     std::unique_ptr<Chunk> new_chunk = chunk->clone_empty_with_schema();
-    new_chunk->deserialize((uint8_t*)buffer.data(), buffer.size(), meta);
+    new_chunk->deserialize((uint8_t*)buffer.data(), buffer.size(), meta, written_size);
 
     ASSERT_EQ(new_chunk->num_rows(), chunk->num_rows());
     for (size_t i = 0; i < chunk->columns().size(); ++i) {
@@ -222,7 +222,7 @@ TEST_F(ChunkTest, test_reset) {
     chk->reset();
     ASSERT_EQ(1, chk->num_columns());
     ASSERT_EQ(1, chk->get_slot_id_to_index_map().size());
-    ASSERT_EQ(0, *(chk->get_slot_id_to_index_map().seek(1)));
+    ASSERT_EQ(0, chk->get_slot_id_to_index_map().find(1)->second);
     ASSERT_EQ(0, chk->num_rows());
     ASSERT_EQ(DEL_NOT_SATISFIED, chk->delete_state());
 }
@@ -249,6 +249,20 @@ TEST_F(ChunkTest, test_append_chunk_safe) {
             ASSERT_EQ(column->get(j + 100).get_int32(), j);
         }
     }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_clone_unique) {
+    auto chunk = std::make_shared<Chunk>();
+
+    auto c1 = make_column(0);
+    auto c2 = make_column(20);
+    chunk->append_column(c1, 0);
+    chunk->append_column(c2, 1);
+
+    auto copy = chunk->clone_unique();
+    copy->check_or_die();
+    ASSERT_EQ(copy->num_rows(), chunk->num_rows());
 }
 
 } // namespace starrocks::vectorized

@@ -157,9 +157,9 @@ void StreamLoadAction::handle(HttpRequest* req) {
 
 Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
     if (ctx->body_bytes > 0 && ctx->receive_bytes != ctx->body_bytes) {
-        LOG(WARNING) << "recevie body don't equal with body bytes, body_bytes=" << ctx->body_bytes
+        LOG(WARNING) << "receive body don't equal with body bytes, body_bytes=" << ctx->body_bytes
                      << ", receive_bytes=" << ctx->receive_bytes << ", id=" << ctx->id;
-        return Status::InternalError("receive body dont't equal with body bytes");
+        return Status::InternalError("receive body don't equal with body bytes");
     }
     if (!ctx->use_streaming) {
         // if we use non-streaming, we need to close file first,
@@ -293,7 +293,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
         return;
     }
 
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->instance_mem_tracker.get());
 
     struct evhttp_request* ev_req = req->get_evhttp_request();
     auto evbuf = evhttp_request_get_input_buffer(ev_req);
@@ -431,6 +431,11 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
     } else {
         request.__set_strip_outer_array(false);
+    }
+    if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
+        request.__set_partial_update(true);
+    } else {
+        request.__set_partial_update(false);
     }
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);

@@ -137,9 +137,6 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
         } else if (iter->second == "chunk_allocator") {
             start_mem_tracker = ExecEnv::GetInstance()->chunk_allocator_mem_tracker();
             cur_level = 2;
-        } else if (iter->second == "clone") {
-            start_mem_tracker = ExecEnv::GetInstance()->clone_mem_tracker();
-            cur_level = 2;
         } else if (iter->second == "consistency") {
             start_mem_tracker = ExecEnv::GetInstance()->consistency_mem_tracker();
             cur_level = 2;
@@ -154,8 +151,32 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
 
     std::vector<MemTracker::SimpleItem> items;
 
+    // Metadata memory statistics use the old memory framework,
+    // not in RootMemTrackerTree, so it needs to be added here
+    MemTracker* meta_mem_tracker = ExecEnv::GetInstance()->tablet_meta_mem_tracker();
+    MemTracker::SimpleItem meta_item{"tablet_meta",
+                                     "process",
+                                     2,
+                                     meta_mem_tracker->limit(),
+                                     meta_mem_tracker->consumption(),
+                                     meta_mem_tracker->peak_consumption()};
+
+    // Update memory statistics use the old memory framework,
+    // not in RootMemTrackerTree, so it needs to be added here
+    MemTracker* update_mem_tracker = ExecEnv::GetInstance()->update_mem_tracker();
+    MemTracker::SimpleItem update_item{"update",
+                                       "process",
+                                       2,
+                                       update_mem_tracker->limit(),
+                                       update_mem_tracker->consumption(),
+                                       update_mem_tracker->peak_consumption()};
+
     if (start_mem_tracker != nullptr) {
         start_mem_tracker->list_mem_usage(&items, cur_level, upper_level);
+        if (start_mem_tracker == ExecEnv::GetInstance()->process_mem_tracker()) {
+            items.emplace_back(meta_item);
+            items.emplace_back(update_item);
+        }
 
         for (const auto& item : items) {
             std::string level_str = ItoaKMGT(item.level);

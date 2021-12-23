@@ -19,6 +19,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
+#include "util/hdfs_util.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {
@@ -165,7 +166,7 @@ Status HdfsScanNode::_start_scan_thread(RuntimeState* state) {
     int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    _fill_chunk_pool(chunks);
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks));
 
     // start scanner
     std::lock_guard<std::mutex> l(_mtx);
@@ -457,7 +458,7 @@ Status HdfsScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     if (_result_chunks.blocking_get(chunk)) {
-        _fill_chunk_pool(1);
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1));
 
         eval_join_runtime_filters(chunk);
 
@@ -587,7 +588,9 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
     file_path /= scan_range.relative_path;
     const std::string& native_file_path = file_path.native();
     std::string namenode;
-    RETURN_IF_ERROR(_get_name_node_from_path(native_file_path, &namenode));
+    RETURN_IF_ERROR(get_name_node_from_path(native_file_path, &namenode));
+    _is_hdfs_fs = is_hdfs_path(namenode.c_str());
+    bool usePread = starrocks::config::use_hdfs_pread || is_object_storage_path(namenode.c_str());
 
     if (namenode.compare("default") == 0) {
         // local file, current only for test
@@ -611,7 +614,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs, &open_limit));
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         hdfs_file_desc->hdfs_fs = hdfs;
-        hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, native_file_path);
+        hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, native_file_path, usePread);
         hdfs_file_desc->partition_id = scan_range.partition_id;
         hdfs_file_desc->path = scan_range.relative_path;
         hdfs_file_desc->file_length = scan_range.file_length;
@@ -621,41 +624,6 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         _hdfs_files.emplace_back(hdfs_file_desc);
     }
 
-    std::unordered_set<std::string> object_storage_scheme_set = {"s3a://", "oss://"};
-    for (string scheme : object_storage_scheme_set) {
-        if (namenode.rfind(scheme, 0) == 0) {
-            _is_hdfs_fs = false;
-            break;
-        }
-    }
-
-    return Status::OK();
-}
-
-Status HdfsScanNode::_get_name_node_from_path(const std::string& path, std::string* namenode) {
-    const string local_fs("file:/");
-    size_t n = path.find("://");
-
-    if (n == string::npos) {
-        if (path.compare(0, local_fs.length(), local_fs) == 0) {
-            // Hadoop Path routines strip out consecutive /'s, so recognize 'file:/blah'.
-            *namenode = "file:///";
-        } else {
-            // Path is not qualified, so use the default FS.
-            *namenode = "default";
-        }
-    } else if (n == 0) {
-        return Status::InternalError("Path missing schema");
-    } else {
-        // Path is qualified, i.e. "scheme://authority/path/to/file".  Extract
-        // "scheme://authority/".
-        n = path.find('/', n + 3);
-        if (n == string::npos) {
-            return Status::InternalError("Path missing '/' after authority");
-        }
-        // Include the trailing '/' for local filesystem case, i.e. "file:///".
-        *namenode = path.substr(0, n + 1);
-    }
     return Status::OK();
 }
 

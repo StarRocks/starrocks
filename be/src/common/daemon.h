@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_COMMON_DAEMON_H
-#define STARROCKS_BE_SRC_COMMON_COMMON_DAEMON_H
-
+#pragma once
 #include <atomic>
 #include <thread>
 #include <vector>
@@ -47,5 +45,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

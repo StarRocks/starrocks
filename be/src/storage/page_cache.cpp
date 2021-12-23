@@ -21,6 +21,8 @@
 
 #include "storage/page_cache.h"
 
+#include <malloc.h>
+
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"

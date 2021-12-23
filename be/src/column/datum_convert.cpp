@@ -25,7 +25,7 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
         bool v;
         auto st = type_info->from_string(&v, str);
         if (st != OLAP_SUCCESS) {
-            return Status::InvalidArgument(Substitute("Failed to conert $0 to Bool type", str));
+            return Status::InvalidArgument(Substitute("Failed to convert $0 to Bool type", str));
         }
         dst->set_int8(v);
         return Status::OK();
@@ -72,9 +72,7 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
             slice.data = (char*)str.data();
         } else {
             slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
-            if (UNLIKELY(slice.data == nullptr)) {
-                return Status::InternalError("Mem usage has exceed the limit of BE");
-            }
+            RETURN_IF_UNLIKELY_NULL(slice.data, Status::MemoryAllocFailed("alloc mem for varchar field failed"));
             memcpy(slice.data, str.data(), slice.size);
         }
         // If type is OLAP_FIELD_TYPE_CHAR, strip its tailing '\0'

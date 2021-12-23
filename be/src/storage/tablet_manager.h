@@ -37,6 +37,7 @@
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "storage/kv_store.h"
+#include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/tablet.h"
@@ -47,12 +48,18 @@ namespace starrocks {
 class Tablet;
 class DataDir;
 
+enum TabletDropFlag {
+    kMoveFilesToTrash = 0,
+    kDeleteFiles = 1,
+    kKeepMetaAndFiles = 2,
+};
+
 // TabletManager provides get, add, delete tablet method for storage engine
 // NOTE: If you want to add a method that needs to hold meta-lock before you can call it,
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
+    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -64,7 +71,7 @@ public:
     // task to be fail, even if there is enough space on other disks
     Status create_tablet(const TCreateTabletReq& request, std::vector<DataDir*> stores);
 
-    Status drop_tablet(TTabletId tablet_id, bool keep_state = false);
+    Status drop_tablet(TTabletId tablet_id, TabletDropFlag flag = kMoveFilesToTrash);
 
     Status drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec);
 
@@ -137,6 +144,8 @@ public:
         return _shutdown_tablets.size();
     }
 
+    MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
+
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
     using TabletSet = std::unordered_set<int64_t>;
@@ -145,6 +154,11 @@ private:
         mutable std::shared_mutex lock;
         TabletMap tablet_map;
         TabletSet tablets_under_clone;
+    };
+
+    struct DroppedTabletInfo {
+        TabletSharedPtr tablet;
+        TabletDropFlag flag;
     };
 
     class LockTable {
@@ -173,9 +187,9 @@ private:
 
     Status _create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet);
 
-    Status _drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_state = false);
+    Status _drop_tablet_directly_unlocked(TTabletId tablet_id, TabletDropFlag flag);
 
-    Status _drop_tablet_unlocked(TTabletId tablet_id, bool keep_state);
+    Status _drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag);
 
     TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id);
     TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err);
@@ -201,6 +215,10 @@ private:
 
     TabletsShard& _get_tablets_shard(TTabletId tabletId);
 
+    Status _remove_tablet_meta(const TabletSharedPtr& tablet);
+    Status _remove_tablet_directories(const TabletSharedPtr& tablet);
+    Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
+
     MemTracker* _mem_tracker = nullptr;
 
     std::vector<TabletsShard> _tablets_shards;
@@ -213,7 +231,7 @@ private:
     mutable std::shared_mutex _shutdown_tablets_lock;
     // partition_id => tablet_info
     std::map<int64_t, std::set<TabletInfo>> _partition_tablet_map;
-    std::map<int64_t, TabletSharedPtr> _shutdown_tablets;
+    std::map<int64_t, DroppedTabletInfo> _shutdown_tablets;
 
     std::mutex _tablet_stat_mutex;
     // cache to save tablets' statistics, such as data-size and row-count

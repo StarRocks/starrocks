@@ -17,6 +17,7 @@ class ExprContext;
 class RuntimeProfile;
 class RuntimeState;
 using RuntimeFilterProbeCollector = starrocks::vectorized::RuntimeFilterProbeCollector;
+
 namespace pipeline {
 class Operator;
 class OperatorFactory;
@@ -32,7 +33,7 @@ public:
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
-    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
     virtual Status prepare(RuntimeState* state);
 
@@ -43,7 +44,7 @@ public:
     // finish function is used to finish the following operator of the current operator that encounters its EOS
     // and has no data to push into its following operator, but the operator is not finished until its buffered
     // data inside is processed.
-    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
     virtual void set_finishing(RuntimeState* state) {}
 
@@ -55,15 +56,21 @@ public:
     // an implementation-specific context should override set_finished function, such as LocalExchangeSourceOperator.
     // For an ordinary operator, set_finished function is trivial and just has the same implementation with
     // set_finishing function.
-    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
     virtual void set_finished(RuntimeState* state) {}
+
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
+    // - When the fragment exits abnormally, the stage operator will become to CANCELLED between FINISHED and CLOSE.
+    // - When the fragment exits normally, there isn't CANCELLED stage for the drivers.
+    // Sometimes, the operator need to realize it is cancelled to stop earlier than normal, such as ExchangeSink.
+    virtual void set_cancelled(RuntimeState* state) {}
 
     // when local runtime filters are ready, the operator should bound its corresponding runtime in-filters.
     virtual void set_precondition_ready(RuntimeState* state);
 
     // close is used to do the cleanup work
-    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> closed)
+    // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
     virtual Status close(RuntimeState* state);
 
@@ -112,18 +119,27 @@ public:
 
     RuntimeFilterProbeCollector* runtime_bloom_filters();
 
+    const std::vector<SlotId>& filter_null_value_columns() const;
+
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     void eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk);
 
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(vectorized::Chunk* chunk);
 
+    // 1. (-∞, s_pseudo_plan_node_id_upper_bound] is for operator which is not in the query's plan
+    // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
+    // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
+    // for example, ResultSink
+    static const int32_t s_pseudo_plan_node_id_for_result_sink;
+    static const int32_t s_pseudo_plan_node_id_upper_bound;
+
 protected:
     OperatorFactory* _factory;
-    int32_t _id = 0;
-    std::string _name;
+    const int32_t _id;
+    const std::string _name;
     // Which plan node this operator belongs to
-    int32_t _plan_node_id = -1;
+    const int32_t _plan_node_id;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
     std::unique_ptr<MemTracker> _mem_tracker;
     bool _conjuncts_and_in_filters_is_cached = false;
@@ -132,8 +148,12 @@ protected:
     vectorized::RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
     // Common metrics
+    RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _push_timer = nullptr;
     RuntimeProfile::Counter* _pull_timer = nullptr;
+    RuntimeProfile::Counter* _finishing_timer = nullptr;
+    RuntimeProfile::Counter* _finished_timer = nullptr;
+    RuntimeProfile::Counter* _close_timer = nullptr;
 
     RuntimeProfile::Counter* _push_chunk_num_counter = nullptr;
     RuntimeProfile::Counter* _push_row_num_counter = nullptr;
@@ -145,6 +165,10 @@ protected:
     RuntimeProfile::Counter* _conjuncts_input_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
+
+private:
+    void _init_rf_counters(bool init_bloom);
+    void _init_conjuct_counters();
 };
 
 class OperatorFactory {
@@ -167,12 +191,14 @@ public:
     // invoked by ExecNode::init_runtime_filter_for_operator to initialize fields involving runtime filter
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
                              const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
-                             const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector) {
+                             const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,
+                             std::vector<SlotId>&& filter_null_value_columns) {
         _runtime_filter_hub = runtime_filter_hub;
         _tuple_ids = tuple_ids;
         _rf_waiting_set = rf_waiting_set;
         _row_desc = row_desc;
         _runtime_filter_collector = runtime_filter_collector;
+        _filter_null_value_columns = std::move(filter_null_value_columns);
     }
     // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
     // to bound its runtime in-filters.
@@ -193,6 +219,7 @@ public:
             return nullptr;
         }
     }
+    const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
 
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state) {
@@ -209,9 +236,9 @@ protected:
         }
     }
 
-    int32_t _id = 0;
-    std::string _name;
-    int32_t _plan_node_id = -1;
+    const int32_t _id;
+    const std::string _name;
+    const int32_t _plan_node_id;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
     RuntimeFilterHub* _runtime_filter_hub;
     std::vector<TupleId> _tuple_ids;
@@ -221,6 +248,7 @@ protected:
     RowDescriptor _row_desc;
     std::vector<ExprContext*> _runtime_in_filters;
     std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector;
+    std::vector<SlotId> _filter_null_value_columns;
 };
 
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;

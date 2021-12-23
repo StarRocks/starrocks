@@ -78,6 +78,7 @@ public class LoadStmt extends DdlStmt {
     private static final String VERSION = "version";
     public static final String STRICT_MODE = "strict_mode";
     public static final String TIMEZONE = "timezone";
+    public static final String PARTIAL_UPDATE = "partial_update";
 
     // for load data from Baidu Object Store(BOS)
     public static final String BOS_ENDPOINT = "bos_endpoint";
@@ -113,6 +114,7 @@ public class LoadStmt extends DdlStmt {
             .add(STRICT_MODE)
             .add(VERSION)
             .add(TIMEZONE)
+            .add(PARTIAL_UPDATE)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions,

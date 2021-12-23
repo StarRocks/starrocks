@@ -66,9 +66,9 @@ public:
     // and is specified in bytes.
     // The RowDescriptor must live until close() is called.
     // NOTE: supported partition types are UNPARTITIONED (broadcast) and HASH_PARTITIONED
-    DataStreamSender(ObjectPool* pool, bool is_vectorized, int sender_id, const RowDescriptor& row_desc,
-                     const TDataStreamSink& sink, const std::vector<TPlanFragmentDestination>& destinations,
-                     int per_channel_buffer_size, bool send_query_statistics_with_every_batch);
+    DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc, const TDataStreamSink& sink,
+                     const std::vector<TPlanFragmentDestination>& destinations, int per_channel_buffer_size,
+                     bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through);
     ~DataStreamSender() override;
 
     Status init(const TDataSink& thrift_sink) override;
@@ -108,10 +108,14 @@ public:
 
     PlanNodeId get_dest_node_id() const { return _dest_node_id; }
 
+    const std::vector<TPlanFragmentDestination>& destinations() { return _destinations; }
+
+    int sender_id() const { return _sender_id; }
+
+    const bool get_enable_exchange_pass_through() const { return _enable_exchange_pass_through; }
+
 private:
     class Channel;
-
-    bool _is_vectorized;
 
     // Sender instance id, unique within a fragment.
     int _sender_id;
@@ -197,6 +201,10 @@ private:
 
     // Identifier of the destination plan node.
     PlanNodeId _dest_node_id;
+
+    std::vector<TPlanFragmentDestination> _destinations;
+
+    bool _enable_exchange_pass_through = false;
 };
 
 } // namespace starrocks

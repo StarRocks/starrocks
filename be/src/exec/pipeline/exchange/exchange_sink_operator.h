@@ -34,7 +34,7 @@ public:
                          const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
                          const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
                          PlanNodeId dest_node_id, const std::vector<ExprContext*>& partition_expr_ctxs,
-                         FragmentContext* const fragment_ctx);
+                         bool enable_exchange_pass_through, FragmentContext* const fragment_ctx);
 
     ~ExchangeSinkOperator() override = default;
 
@@ -52,7 +52,7 @@ public:
 
     void set_finishing(RuntimeState* state) override;
 
-    void set_finished(RuntimeState* state) override;
+    void set_cancelled(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -116,6 +116,7 @@ private:
     RuntimeProfile::Counter* _serialize_batch_timer;
     RuntimeProfile::Counter* _compress_timer{};
     RuntimeProfile::Counter* _bytes_sent_counter;
+    RuntimeProfile::Counter* _bytes_pass_through_counter;
     RuntimeProfile::Counter* _uncompressed_bytes_counter{};
     RuntimeProfile::Counter* _ignore_rows{};
 
@@ -151,7 +152,7 @@ public:
                                 TPartitionType::type part_type,
                                 const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
-                                FragmentContext* const fragment_ctx);
+                                bool enable_exchange_pass_through, FragmentContext* const fragment_ctx);
 
     ~ExchangeSinkOperatorFactory() override = default;
 
@@ -176,6 +177,8 @@ private:
 
     // For shuffle exchange
     std::vector<ExprContext*> _partition_expr_ctxs; // compute per-row partition values
+
+    bool _enable_exchange_pass_through;
 
     FragmentContext* const _fragment_ctx;
 };

@@ -20,7 +20,9 @@ class ChunksSorter;
 
 namespace pipeline {
 using namespace vectorized;
-
+class SortContext;
+using SortContextPtr = std::shared_ptr<SortContext>;
+using SortContexts = std::vector<SortContextPtr>;
 class SortContext final : public ContextWithDependency {
 public:
     explicit SortContext(int64_t limit, const int32_t num_right_sinkers, const std::vector<bool>& is_asc_order,
@@ -73,7 +75,9 @@ public:
      * Output the result data in a streaming manner,
      * And dynamically adjust the heap.
      */
-    ChunkPtr pull_chunk(const std::function<uint32_t(DataSegment* min_heap_entry)>& get_and_update_min_entry_func) {
+    // uint32_t UpdateFunc(DataSegment* min_heap_entry)
+    template <class UpdateFunc>
+    ChunkPtr pull_chunk(UpdateFunc&& get_and_update_min_entry_func) {
         // Get appropriate size
         uint32_t needed_rows = std::min((uint64_t)config::vector_chunk_size, _require_rows - _next_output_row);
 
@@ -232,6 +236,26 @@ private:
 
     size_t _next_output_row = 0;
 };
+class SortContextFactory;
+using SortContextFactoryPtr = std::shared_ptr<SortContextFactory>;
+class SortContextFactory {
+public:
+    SortContextFactory(bool is_merging, int64_t limit, int32_t num_right_sinkers,
+                       const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
 
+    SortContextPtr create(int32_t idx);
+
+private:
+    // _is_merging is true means to merge multiple output streams of PartitionSortSinkOperators into a common
+    // LocalMergeSortSourceOperator that will produce a total order output stream.
+    // _is_merging is false means to pipe each output stream of PartitionSortSinkOperators to an independent
+    // LocalMergeSortSourceOperator respectively for scenarios of AnalyticNode with partition by.
+    const bool _is_merging;
+    SortContexts _sort_contexts;
+    const int64_t _limit;
+    const int32_t _num_right_sinkers;
+    std::vector<bool> _is_asc_order;
+    std::vector<bool> _is_null_first;
+};
 } // namespace pipeline
 } // namespace starrocks

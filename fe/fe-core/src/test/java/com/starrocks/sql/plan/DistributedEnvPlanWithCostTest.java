@@ -3,14 +3,18 @@ package com.starrocks.sql.plan;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -149,7 +153,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
-
     public static String getInsertExecPlan(String originStmt) throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
         SqlScanner input =
@@ -198,7 +201,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     avgRowSize=10.0\n" +
                 "     numNodes=0\n" +
                 "     limit: 5"));
-
 
         sql = "insert into test_all_type select * from test_all_type";
         planFragment = getInsertExecPlan(sql);
@@ -491,7 +493,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testJoinOnExpression() throws Exception {
-        String sql = "SELECT COUNT(*)  FROM lineitem JOIN [shuffle] orders ON l_orderkey = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
+        String sql =
+                "SELECT COUNT(*)  FROM lineitem JOIN [shuffle] orders ON l_orderkey = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
@@ -502,9 +505,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
                 "     cardinality: 600000000"));
-        sql = "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
+        sql =
+                "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
+        Assert.assertTrue(
+                plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
                         "  |  cardinality: 600000000"));
     }
 
@@ -562,7 +567,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  column statistics: \n" +
                 "  |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
                 "  |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
-                "  |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE\n" +
+                "  |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
                 "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
                 "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE"));
     }
@@ -701,31 +706,31 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testDateFunctionCardinality() throws Exception {
         String sql = "SELECT Month(P_PARTKEY) AS month FROM part GROUP BY month ORDER BY month DESC LIMIT 5";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("* month-->[1.0, 12.0, 0.0, 4.0, 12.0]"));
+        Assert.assertTrue(plan.contains("* month-->[1.0, 12.0, 0.0, 1.0, 12.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
 
         sql = "SELECT day(P_PARTKEY) AS day FROM part GROUP BY day ORDER BY day DESC LIMIT 5";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("day-->[1.0, 31.0, 0.0, 4.0, 31.0]"));
+        Assert.assertTrue(plan.contains("day-->[1.0, 31.0, 0.0, 1.0, 31.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
 
         sql = "SELECT hour(P_PARTKEY) AS hour FROM part GROUP BY hour ORDER BY hour DESC LIMIT 5";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains(" hour-->[0.0, 23.0, 0.0, 4.0, 24.0]"));
+        Assert.assertTrue(plan.contains(" hour-->[0.0, 23.0, 0.0, 1.0, 24.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
 
         sql = "SELECT minute(P_PARTKEY) AS minute FROM part GROUP BY minute ORDER BY minute DESC LIMIT 5";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("minute-->[0.0, 59.0, 0.0, 4.0, 60.0]"));
+        Assert.assertTrue(plan.contains("minute-->[0.0, 59.0, 0.0, 1.0, 60.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
 
         sql = "SELECT second(P_PARTKEY) AS second FROM part GROUP BY second ORDER BY second DESC LIMIT 5";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("* second-->[0.0, 59.0, 0.0, 4.0, 60.0]"));
+        Assert.assertTrue(plan.contains("* second-->[0.0, 59.0, 0.0, 1.0, 60.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
     }
@@ -755,7 +760,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testLocalAggregationUponJoin() throws Exception {
         // check that local aggregation is set colocate which upon join with colocate table
-        String sql = "select tbl5.c2,sum(tbl5.c3) from db1.tbl5 join[broadcast] db1.tbl4 on tbl5.c2 = tbl4.c2 group by tbl5.c2;";
+        String sql =
+                "select tbl5.c2,sum(tbl5.c3) from db1.tbl5 join[broadcast] db1.tbl4 on tbl5.c2 = tbl4.c2 group by tbl5.c2;";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         ExecPlan execPlan = pair.second;
         Assert.assertTrue(execPlan.getFragments().get(1).getPlanRoot() instanceof AggregationNode);
@@ -828,24 +834,146 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE"));
 
-        sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', 'others')) a from orders group by 1";
+        sql =
+                "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', 'others')) a from orders group by 1";
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE"));
 
-        sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
+        sql =
+                "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0] ESTIMATE"));
     }
 
     @Test
     public void testPartitionColumnColumnStatistics() throws Exception {
-        String sql = "select l_shipdate, count(1) from lineitem_partition where l_shipdate = '1992-01-01' group by l_shipdate";
+        String sql =
+                "select l_shipdate, count(1) from lineitem_partition where l_shipdate = '1992-01-01' group by l_shipdate";
         String plan = getCostExplain(sql);
         // check L_SHIPDATE is not unknown
-        Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
+        Assert.assertTrue(
+                plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
 
         sql = "select count(1) from lineitem_partition where l_shipdate = '1992-01-01'";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
+        Assert.assertTrue(
+                plan.contains("* L_SHIPDATE-->[6.941952E8, 6.941952E8, 0.0, 4.0, 360.85714285714283] ESTIMATE"));
+    }
+
+    @Test
+    public void testCastDatePredicate() throws Exception {
+        OlapTable lineitem = (OlapTable) connectContext.getCatalog().getDb("default_cluster:test").getTable("lineitem");
+
+        MockTpchStatisticStorage mock = new MockTpchStatisticStorage(100);
+        connectContext.getCatalog().setStatisticStorage(mock);
+
+        // ===========================
+        // To handle cast(int) in normal range
+        String sql = "select L_PARTKEY from lineitem where year(L_PARTKEY) = 1998";
+        new Expectations(mock) {
+            {
+                mock.getColumnStatistic(lineitem, "L_PARTKEY");
+                result = new ColumnStatistic(19921212, 19980202, 0, 8, 20000);
+            }
+        };
+
+        String plan = getCostExplain(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
+                "     * L_PARTKEY-->[1.9921212E7, 1.9980202E7, 0.0, 8.0, 20000.0] ESTIMATE"));
+
+        // ===========================
+        // To handle cast(int) in infinity range
+        sql = "select L_PARTKEY from lineitem where year(L_PARTKEY) = 1998";
+        new Expectations(mock) {
+            {
+                mock.getColumnStatistic(lineitem, "L_PARTKEY");
+                result = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 8, 20000);
+            }
+        };
+
+        plan = getCostExplain(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
+                "     * L_PARTKEY-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE"));
+
+        // ===========================
+        // To handle cast(date) in normal range
+        sql = "select L_SHIPDATE from lineitem where year(L_SHIPDATE) = 1998";
+        new Expectations(mock) {
+            {
+                mock.getColumnStatistic(lineitem, "L_SHIPDATE");
+                result = new ColumnStatistic(19921212, 19980202, 0, 8, 20000);
+            }
+        };
+
+        plan = getCostExplain(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
+                "     * L_SHIPDATE-->[1.9921212E7, 1.9980202E7, 0.0, 8.0, 1.0] ESTIMATE"));
+
+        // ===========================
+        // To handle cast(date) in infinity range
+        new Expectations(mock) {
+            {
+                mock.getColumnStatistic(lineitem, "L_SHIPDATE");
+                result = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 8, 20000);
+            }
+        };
+
+        plan = getCostExplain(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("     column statistics: \n" +
+                "     * L_SHIPDATE-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE"));
+
+        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(100));
+    }
+
+    @Test
+    public void testInPredicateStatisticsEstimate() throws Exception {
+        String sql = "select * from lineitem where L_LINENUMBER in (1,2,3,4)";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 342857143"));
+        Assert.assertTrue(plan.contains("* L_LINENUMBER-->[1.0, 4.0, 0.0, 4.0, 4.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 342857143"));
+        Assert.assertTrue(plan.contains("* L_LINENUMBER-->[2.0, 5.0, 0.0, 4.0, 4.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER in (L_RETURNFLAG+1,2+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 4.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER + 1 in (L_RETURNFLAG+1,2+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("* L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
+        // check without column statistics
+        sql = "select * from test_all_type where t1b in (1,2,3,4)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+
+        sql = "select * from test_all_type where t1b in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+
+        sql = "select * from test_all_type where t1b+1 in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+        // check not in
+        sql = "select * from lineitem where L_LINENUMBER not in (1,2,3,4)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 257142857"));
+        Assert.assertTrue(plan.contains(" * L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER not in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 257142857"));
+        Assert.assertTrue(plan.contains(" * L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
+
+        sql = "select * from lineitem where L_LINENUMBER + 1 not in (1+1,2+1,3+1,4+1)";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("cardinality: 3000000"));
+        Assert.assertTrue(plan.contains(" * L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
     }
 }

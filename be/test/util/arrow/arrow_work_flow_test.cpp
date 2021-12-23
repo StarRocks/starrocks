@@ -35,11 +35,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/result_queue_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/thread_resource_mgr.h"
-#include "runtime/tuple_row.h"
-#include "storage/row.h"
 #include "util/arrow/row_batch.h"
 #include "util/cpu_info.h"
 #include "util/debug_util.h"
@@ -318,46 +315,6 @@ void ArrowWorkFlowTest::init_desc_tbl() {
     _tnode.csv_scan_node.__isset.default_values = true;
     _tnode.csv_scan_node.max_filter_ratio = 0.5;
     _tnode.__isset.csv_scan_node = true;
-}
-
-TEST_F(ArrowWorkFlowTest, NormalUse) {
-    std::vector<std::string> file_paths;
-    file_paths.push_back("./test_run/test_data/csv_data");
-    _tnode.csv_scan_node.__set_file_paths(file_paths);
-
-    CsvScanNode scan_node(&_obj_pool, _tnode, *_desc_tbl);
-    Status status = scan_node.prepare(_state);
-    ASSERT_TRUE(status.ok());
-
-    status = scan_node.open(_state);
-    ASSERT_TRUE(status.ok());
-
-    std::unique_ptr<MemTracker> mem_tracker(new MemTracker(-1));
-    RowBatch row_batch(scan_node._row_descriptor, _state->batch_size(), mem_tracker.get());
-    bool eos = false;
-
-    while (!eos) {
-        status = scan_node.get_next(_state, &row_batch, &eos);
-        ASSERT_TRUE(status.ok());
-        // int num = std::min(row_batch.num_rows(), 10);
-        int num = row_batch.num_rows();
-        ASSERT_EQ(6, num);
-        std::shared_ptr<arrow::Schema> schema;
-        status = convert_to_arrow_schema(scan_node._row_descriptor, &schema);
-        ASSERT_TRUE(status.ok());
-        std::shared_ptr<arrow::RecordBatch> record_batch;
-        status = convert_to_arrow_batch(row_batch, schema, arrow::default_memory_pool(), &record_batch);
-        ASSERT_TRUE(status.ok());
-        ASSERT_EQ(6, record_batch->num_rows());
-        ASSERT_EQ(6, record_batch->num_columns());
-        std::string result;
-        status = serialize_record_batch(*record_batch, &result);
-        ASSERT_TRUE(status.ok());
-        size_t len = result.length();
-        ASSERT_TRUE(len > 0);
-    }
-
-    ASSERT_TRUE(scan_node.close(_state).ok());
 }
 
 } // end namespace starrocks

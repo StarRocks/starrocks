@@ -33,7 +33,7 @@ public:
     size_t write_buffer_size() const;
 
     // return true suggests caller should flush this memory table
-    bool insert(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+    bool insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
     OLAPStatus flush();
     Status finalize();
 
@@ -92,7 +92,7 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
-}; // class MemTable
+};
 
 } // namespace vectorized
 

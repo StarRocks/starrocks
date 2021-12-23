@@ -302,9 +302,13 @@ public class FileScanNode extends LoadScanNode {
                     expr = new SlotRef(srcSlotDesc);
                 } else {
                     Column column = destSlotDesc.getColumn();
-                    if (column.getDefaultValue() != null) {
-                        expr = new StringLiteral(destSlotDesc.getColumn().getDefaultValue());
-                    } else {
+                    Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                    if (defaultValueType == Column.DefaultValueType.CONST) {
+                        expr = new StringLiteral(column.calculatedDefaultValue());
+                    } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                        throw new UserException("Column(" + column + ") has unsupported default value:"
+                                + column.getDefaultExpr().getExpr());
+                    } else if (defaultValueType == Column.DefaultValueType.NULL) {
                         if (column.isAllowNull()) {
                             expr = NullLiteral.create(column.getType());
                         } else {
