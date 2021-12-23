@@ -94,8 +94,6 @@ struct FakeChunks {
             _slot_refs.push_back(pool->add(new SlotRef(*_type_descs[i], 0, i)));
         }
 
-        map.init(_type_descs.size() * 2);
-
         for (int i = 0; i < _type_descs.size(); ++i) {
             map[i] = i;
         }
@@ -136,7 +134,7 @@ private:
     std::vector<TypeDescriptor*> _type_descs;
     std::vector<BuildOptions> _build_options;
     std::vector<SlotRef*> _slot_refs;
-    butil::FlatMap<SlotId, size_t> map;
+    Chunk::SlotHashMap map;
 };
 
 TEST_F(HeapChunkSorterTest, single_column_order_by_notnull_test) {
