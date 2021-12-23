@@ -77,7 +77,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -433,17 +433,16 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
             LogicalPlan leftPlan = visit(node.getLeft());
             LogicalPlan rightPlan = visit(node.getRight(), leftPlan.getRootBuilder().getExpressionMapping());
 
-            ExpressionMapping expressionMapping = new ExpressionMapping(
-                    new Scope(RelationId.of(node),
-                            node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
+            ExpressionMapping expressionMapping = new ExpressionMapping(new Scope(RelationId.of(node),
+                    node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
                     Streams.concat(leftPlan.getRootBuilder().getFieldMappings().stream(),
-                                    rightPlan.getRootBuilder().getFieldMappings().stream())
+                            rightPlan.getRootBuilder().getFieldMappings().stream())
                             .collect(Collectors.toList()));
 
             Operator root = new LogicalApplyOperator(null, null, correlation, false);
             return new LogicalPlan(
                     new OptExprBuilder(root, Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
-                            expressionMapping), null, null);
+                            expressionMapping), expressionMapping.getFieldMappings(), null);
         }
 
         LogicalPlan leftPlan = visit(node.getLeft());
@@ -455,8 +454,8 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                 node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields()));
         joinScope.setParent(node.getScope().getParent());
         ExpressionMapping expressionMapping = new ExpressionMapping(joinScope, Streams.concat(
-                        leftPlan.getRootBuilder().getFieldMappings().stream(),
-                        rightPlan.getRootBuilder().getFieldMappings().stream())
+                leftPlan.getRootBuilder().getFieldMappings().stream(),
+                rightPlan.getRootBuilder().getFieldMappings().stream())
                 .collect(Collectors.toList()));
 
         if (node.getOnPredicate() == null) {
@@ -469,7 +468,8 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
             LogicalProjectOperator projectOperator =
                     new LogicalProjectOperator(expressionMapping.getFieldMappings().stream().distinct()
                             .collect(Collectors.toMap(Function.identity(), Function.identity())));
-            return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator), null, null);
+            return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
+                    expressionMapping.getFieldMappings(), null);
         }
 
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
@@ -484,21 +484,15 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         if (onPredicate.isConstant() && onPredicate.getType().isBoolean()
                 && !node.getType().isCrossJoin() && !node.getType().isInnerJoin()) {
 
-            List<ScalarOperator> eqConj = new ArrayList<>();
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicateWithoutRewrite);
-            for (ScalarOperator conj : conjuncts) {
-                if (conj instanceof BinaryPredicateOperator && ((BinaryPredicateOperator) conj).getBinaryType()
-                        .equals(BinaryPredicateOperator.BinaryType.EQ)) {
-                    if (!Utils.extractColumnRef(conj.getChild(0)).isEmpty() && !Utils.extractColumnRef(conj.getChild(1))
-                            .isEmpty()) {
-                        eqConj.add(conj);
-                    }
-                }
-            }
 
-            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-            onPredicate = Utils.compoundAnd(scalarRewriter.rewrite(Utils.compoundAnd(eqConj),
-                    ScalarOperatorRewriter.DEFAULT_REWRITE_RULES), onPredicate);
+            List<BinaryPredicateOperator> eqPredicate = JoinPredicateUtils.getEqConj(
+                    new ColumnRefSet(leftPlan.getOutputColumn()),
+                    new ColumnRefSet(rightPlan.getOutputColumn()), conjuncts);
+
+            Preconditions.checkState(eqPredicate.size() > 0);
+
+            onPredicate = Utils.compoundAnd(eqPredicate.get(0), onPredicate);
         }
 
         ExpressionMapping outputExpressionMapping;
@@ -510,8 +504,8 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                     Lists.newArrayList(rightPlan.getRootBuilder().getFieldMappings()));
         } else {
             outputExpressionMapping = new ExpressionMapping(node.getScope(), Streams.concat(
-                            leftPlan.getRootBuilder().getFieldMappings().stream(),
-                            rightPlan.getRootBuilder().getFieldMappings().stream())
+                    leftPlan.getRootBuilder().getFieldMappings().stream(),
+                    rightPlan.getRootBuilder().getFieldMappings().stream())
                     .collect(Collectors.toList()));
         }
 
@@ -528,7 +522,8 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         LogicalProjectOperator projectOperator =
                 new LogicalProjectOperator(outputExpressionMapping.getFieldMappings().stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
-        return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator), null, null);
+        return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
+                outputExpressionMapping.getFieldMappings(), null);
     }
 
     @Override
