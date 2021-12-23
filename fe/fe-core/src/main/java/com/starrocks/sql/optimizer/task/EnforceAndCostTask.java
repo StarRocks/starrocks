@@ -284,25 +284,29 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (aggStage == 1) {
             return true;
         }
+        // Must do one stage aggregate If the child contains limit
+        if (childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
+            PhysicalDistributionOperator distributionOperator =
+                    (PhysicalDistributionOperator) childBestExpr.getOp();
+            if (distributionOperator.getDistributionSpec().getType().equals(DistributionSpec.DistributionType.GATHER) &&
+                    ((GatherDistributionSpec) distributionOperator.getDistributionSpec()).hasLimit()) {
+                return true;
+            }
+        }
 
         PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
         // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator
         if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
                 childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
-            // 2. check default column statistics or child output row may not be accurate
+            // 1.1 check default column statistics or child output row may not be accurate
             if (groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
                     .anyMatch(ColumnStatistic::isUnknown) ||
                     childBestExpr.getGroup().getStatistics().isTableRowCountMayInaccurate()) {
-                // 3. check child expr distribution, if it is shuffle or gather without limit, could disable this plan
-                PhysicalDistributionOperator distributionOperator =
-                        (PhysicalDistributionOperator) childBestExpr.getOp();
-                if (distributionOperator.getDistributionSpec().getType()
-                        .equals(DistributionSpec.DistributionType.SHUFFLE) ||
-                        (distributionOperator.getDistributionSpec().getType()
-                                .equals(DistributionSpec.DistributionType.GATHER) &&
-                                !((GatherDistributionSpec) distributionOperator.getDistributionSpec()).hasLimit())) {
-                    return false;
-                }
+                return false;
+            }
+            // 1.2 disable one stage agg with multi group by columns
+            if (aggregate.getGroupBys().size() > 1) {
+                return false;
             }
         }
         return true;
