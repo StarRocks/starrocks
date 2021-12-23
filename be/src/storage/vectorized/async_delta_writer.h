@@ -2,7 +2,12 @@
 
 #pragma once
 
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/execution_queue.h>
+DIAGNOSTIC_POP
+
 #include <google/protobuf/service.h>
 
 #include "storage/vectorized/delta_writer.h"
