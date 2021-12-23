@@ -225,6 +225,13 @@ public class InsertPlanTest extends PlanTestBase {
                         "  |  <slot 6> : to_bitmap(CAST(1: v1 AS VARCHAR))\n" +
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
                         "  |  <slot 8> : CAST(NULL AS BIGINT)\n"));
+
+        explainString = getInsertExecPlan("insert into ti2 select * from ti2");
+        Assert.assertTrue(explainString.contains("  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 5> : to_bitmap(CAST(2: v2 AS VARCHAR))"));
     }
 
     @Test
