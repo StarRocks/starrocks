@@ -835,7 +835,8 @@ public class FunctionCallExpr extends Expr {
 
     // TODO(kks): improve this
     public boolean isNullable() {
-        if (FunctionSet.alwaysReturnNonNullableFunctions.contains(fnName.getFunction())) {
+        // check if fn always return non null
+        if (!fn.isNullable()) {
             return false;
         }
         // check children nullable
