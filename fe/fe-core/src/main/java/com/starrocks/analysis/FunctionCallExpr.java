@@ -836,7 +836,7 @@ public class FunctionCallExpr extends Expr {
     // TODO(kks): improve this
     public boolean isNullable() {
         // check if fn always return non null
-        if (!fn.isNullable()) {
+        if (fn != null && !fn.isNullable()) {
             return false;
         }
         // check children nullable
