@@ -134,7 +134,8 @@ private:
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
 
-    // _first_shot denotes wheather the first element of the document stream would be returned.
+    // _first_shot denotes whether the first element of the document stream would be returned,
+    // telling us whether to forward the stream iterator.
     bool _first_shot = false;
     simdjson::ondemand::document_stream _doc_stream;
     simdjson::ondemand::document_stream::iterator _doc_stream_itr;
@@ -149,7 +150,8 @@ private:
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
 
-    // _first_shot denotes wheather the first element of the array would be returned.
+    // _first_shot denotes whether the first element of the array would be returned.
+    // telling us whether to forward the array iterator.
     bool _first_shot = false;
     simdjson::ondemand::document _doc;
     simdjson::ondemand::array _array;
