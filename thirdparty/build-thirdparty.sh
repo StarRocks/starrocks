@@ -741,7 +741,7 @@ build_mariadb() {
 # aliyun_oss_jars
 build_aliyun_oss_jars() {
     check_if_source_exist $ALIYUN_OSS_JARS_SOURCE
-    cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/aliyun_oss_jars
+    cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/
 }
 
 build_libevent
