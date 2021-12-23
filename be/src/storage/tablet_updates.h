@@ -33,6 +33,7 @@ class RowsetReadOptions;
 class Schema;
 class TabletReader;
 class ChunkChanger;
+class SegmentIterator;
 } // namespace vectorized
 
 struct EditVersion {

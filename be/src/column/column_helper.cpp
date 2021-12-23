@@ -260,7 +260,7 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         break;
     }
     case TYPE_PERCENTILE:
-        p = PercentileColumn ::create();
+        p = PercentileColumn::create();
         break;
     case TYPE_ARRAY: {
         auto offsets = UInt32Column::create();

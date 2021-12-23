@@ -22,6 +22,8 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/vectorized/rowset_options.h"
+#include "storage/rowset/vectorized/segment_iterator.h"
+#include "storage/rowset/vectorized/segment_options.h"
 #include "storage/rowset_update_state.h"
 #include "storage/snapshot_meta.h"
 #include "storage/storage_engine.h"
@@ -2373,7 +2375,53 @@ void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets) {
 Status TabletUpdates::_get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
                                          std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                          vector<std::unique_ptr<vectorized::Column>>* columns) {
-    // TODO(cbl): impl
+    std::map<uint32_t, RowsetSharedPtr> rssid_to_rowsets;
+    {
+        std::lock_guard<std::mutex> l(_rowsets_lock);
+        for (const auto& rowset : _rowsets) {
+            rssid_to_rowsets.insert(rowset);
+        }
+    }
+    for (const auto& [rssid, rowids] : rowids_by_rssid) {
+        auto iter = rssid_to_rowsets.upper_bound(rssid);
+        --iter;
+        const auto& rowset = iter->second.get();
+        std::string seg_path = BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid);
+        auto segment_res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(),
+                                         fs::fs_util::block_manager(), seg_path, rssid, &rowset->schema());
+        if (!segment_res.ok()) {
+            LOG(WARNING) << "Fail to open " << seg_path << ": " << segment_res.status();
+            return segment_res.status();
+        }
+        if ((*segment_res)->num_rows() == 0) {
+            continue;
+        }
+        vectorized::SegmentReadOptions seg_options;
+        seg_options.block_mgr = fs::fs_util::block_manager();
+        OlapReaderStatistics stats;
+        seg_options.stats = &stats;
+        vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(rowset->schema());
+        auto iter_res = (*segment_res)->new_iterator(schema, seg_options);
+        if (iter_res.status().is_end_of_file()) {
+            continue;
+        }
+        if (!iter_res.ok()) {
+            return iter_res.status();
+        }
+        auto* seg_iter = down_cast<vectorized::SegmentIterator*>(iter_res.value().get());
+        if (seg_iter == nullptr) {
+            continue;
+        }
+        int i = 0;
+        for (const auto column_id : column_ids) {
+            if (with_default) {
+                (*columns)[i]->append_default();
+            }
+            auto* col_iter = seg_iter->get_column_iterator(column_id);
+            col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get());
+            ++i;
+        }
+    }
     return Status::OK();
 }
 
