@@ -545,12 +545,14 @@ public class QueryAnalyzer {
         for (SelectListItem item : stmt.getSelectList().getItems()) {
             if (item.isStar()) {
                 if (item.getTblName() == null) {
-                    outputFields.addAll(scope.getRelationFields().getAllFields().stream().map(f ->
-                            new Field(f.getName(), f.getType(), f.getRelationAlias(),
+                    outputFields.addAll(scope.getRelationFields().getAllFields()
+                            .stream().filter(Field::isVisible)
+                            .map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
                                     f.getOriginExpression(), f.isVisible())).collect(Collectors.toList()));
                 } else {
                     outputFields.addAll(scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName())
-                            .stream().map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
+                            .stream().filter(Field::isVisible)
+                            .map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
                                     f.getOriginExpression(), f.isVisible())).collect(Collectors.toList()));
                 }
             } else {
