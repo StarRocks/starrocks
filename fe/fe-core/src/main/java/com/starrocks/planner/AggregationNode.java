@@ -352,6 +352,7 @@ public class AggregationNode extends PlanNode {
 
     @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!canPushDownRuntimeFilter()) return false;
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
             if (probeExpr instanceof SlotRef) {
                 for (Expr gexpr : aggInfo.getGroupingExprs()) {
