@@ -61,11 +61,19 @@ struct ArithmeticBinaryOperator {
         } else if constexpr (is_sub_op<Op>) {
             return l - r;
         } else if constexpr (is_mul_op<Op>) {
+            // avoid 0 mul a negative num, make result -0
+            if constexpr (std::is_floating_point<LType>::value) {
+                if (UNLIKELY(l == LType(0) || r == RType(0))) {
+                    return LType(0);
+                }
+            }
             return l * r;
         } else if constexpr (is_div_op<Op>) {
             // avoid 0 div a negative num, make result -0
-            if (UNLIKELY(l == 0)) {
-                return 0;
+            if constexpr (std::is_floating_point<LType>::value) {
+                if (UNLIKELY(l == 0)) {
+                    return 0;
+                }
             }
             if constexpr (may_cause_fpe<ResultType>) {
                 if (UNLIKELY(check_fpe_of_min_div_by_minus_one(l, r))) {
@@ -106,8 +114,10 @@ struct ArithmeticBinaryOperator<Op, TYPE_DECIMALV2, DivModOpGuard<Op>, guard::Gu
     static inline ReturnType<TYPE_DECIMALV2, ResultType> apply(const LType& l, const RType& r) {
         if constexpr (is_div_op<Op>) {
             // avoid 0 div a negative num, make result -0
-            if (UNLIKELY(l == DecimalV2Value::ZERO)) {
-                return DecimalV2Value::ZERO;
+            if constexpr (std::is_floating_point<LType>::value) {
+                if (UNLIKELY(l == DecimalV2Value::ZERO)) {
+                    return DecimalV2Value::ZERO;
+                }
             }
             return (r == DecimalV2Value::ZERO) ? l : (l / r);
         } else if constexpr (is_mod_op<Op>) {
