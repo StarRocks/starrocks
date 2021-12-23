@@ -327,7 +327,7 @@ public class Catalog {
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
 
     private MasterDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
-    private MasterDaemon txnCleaner; // To clean aborted or timeout txns
+    private MasterDaemon txnTimeoutChecker; // To abort timeout txns
     private Daemon replayer;
     private Daemon timePrinter;
     private Daemon listener;
@@ -853,8 +853,8 @@ public class Catalog {
         // 4. create load and export job label cleaner thread
         createLabelCleaner();
 
-        // 5. create txn cleaner thread
-        createTxnCleaner();
+        // 5. create txn timeout checker thread
+        createTxnTimeoutChecker();
 
         // 6. start state listener thread
         createStateListener();
@@ -1308,8 +1308,8 @@ public class Catalog {
         ColocateTableBalancer.getInstance().start();
         // Publish Version Daemon
         publishVersionDaemon.start();
-        // Start txn cleaner
-        txnCleaner.start();
+        // Start txn timeout checker
+        txnTimeoutChecker.start();
         // Alter
         getAlterInstance().start();
         // Consistency checker
@@ -2237,8 +2237,8 @@ public class Catalog {
         };
     }
 
-    public void createTxnCleaner() {
-        txnCleaner = new MasterDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
+    public void createTxnTimeoutChecker() {
+        txnTimeoutChecker = new MasterDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
