@@ -178,6 +178,8 @@ public class ExchangeNode extends PlanNode {
 
     @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!canPushDownRuntimeFilter()) return false;
+
         boolean accept = false;
         if (description.canPushAcrossExchangeNode()) {
             description.enterExchangeNode();
