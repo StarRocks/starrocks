@@ -1,0 +1,24 @@
+--- a/crypto/sha/asm/sha1-armv8.pl
++++ b/crypto/sha/asm/sha1-armv8.pl
+@@ -303,7 +303,7 @@ $code.=<<___;
+ .quad  OPENSSL_armcap_P-.
+ .asciz "SHA1 block transform for ARMv8, CRYPTOGAMS by <appro\@openssl.org>"
+ .align 2
+-.comm  OPENSSL_armcap_P,4,4
++.hidden OPENSSL_armcap_P
+ ___
+ }}}
+ 
+diff --git a/crypto/sha/asm/sha512-armv8.pl b/crypto/sha/asm/sha512-armv8.pl
+index f7b36b986a..5e83e56385 100644
+--- a/crypto/sha/asm/sha512-armv8.pl
++++ b/crypto/sha/asm/sha512-armv8.pl
+@@ -389,7 +389,7 @@ ___
+ }
+ 
+ $code.=<<___;
+-.comm  OPENSSL_armcap_P,4,4
++.hidden        OPENSSL_armcap_P
+ ___
+ 
+ {   my  %opcode = (
