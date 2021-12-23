@@ -22,7 +22,7 @@ public:
         _has_null = false;
         _column = RunTimeColumnType<Type>::create();
         _null_column = NullColumn::create();
-        reserve(config::vector_chunk_size);
+        reserve(4096);
     }
 
     ColumnBuilder(int precision, int scale) {
