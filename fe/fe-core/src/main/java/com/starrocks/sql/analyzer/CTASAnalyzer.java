@@ -70,8 +70,10 @@ public class CTASAnalyzer {
                     defaultReplicationNum = replicationNum;
                 }
             }
-            for (String alias : aliases) {
-                tableRefToTable.put(alias, table);
+            if (aliases != null) {
+                for (String alias : aliases) {
+                    tableRefToTable.put(alias, table);
+                }
             }
         }
 
@@ -96,6 +98,8 @@ public class CTASAnalyzer {
             Type type = allFields.get(i).getType();
             if (PrimitiveType.VARCHAR == type.getPrimitiveType()) {
                 type = stringType;
+            } else if (PrimitiveType.DOUBLE == type.getPrimitiveType()) {
+                type = Type.DEFAULT_DECIMAL128;
             }
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                     null, true, ColumnDef.DefaultValueDef.NOT_SET, "");
