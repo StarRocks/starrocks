@@ -51,7 +51,6 @@ public:
     static bool is_nullable(Expr* expr);
     std::string debug_string() const override;
     bool is_constant() const override { return false; }
-    bool is_vectorized() const override { return true; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const override;
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
     SlotId slot_id() const { return _slot_id; }

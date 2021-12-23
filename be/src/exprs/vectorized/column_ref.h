@@ -29,7 +29,6 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ColumnRef(*this)); }
 
     bool is_constant() const override { return false; }
-    bool is_vectorized() const override { return true; }
 
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
 
