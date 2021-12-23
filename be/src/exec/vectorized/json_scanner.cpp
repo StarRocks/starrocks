@@ -342,14 +342,25 @@ Status JsonReader::close() {
  *      value2     30
  */
 Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
+    if (!_scanner->_strip_outer_array) {
+        return _read_chunk_from_document_stream(chunk, rows_to_read, slot_descs);
+    } else {
+        return _read_chunk_from_array(chunk, rows_to_read, slot_descs);
+    }
+}
+
+Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_to_read,
+                                                    const std::vector<SlotDescriptor*>& slot_descs) {
     if (_empty_parser) {
         RETURN_IF_ERROR(_read_and_parse_json());
     }
     simdjson::ondemand::object row;
 
+    auto parser = down_cast<JsonDocumentStreamParser*>(_parser.get());
+
     std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
     for (int32_t n = 0; n < rows_to_read; n++) {
-        auto st = _parser->get(&row);
+        auto st = parser->get_current(&row);
         if (!st.ok()) {
             if (st.is_end_of_file()) {
                 _empty_parser = true;
@@ -382,7 +393,66 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
             continue;
         }
 
-        st = _parser->next();
+        st = parser->advance();
+        if (!st.ok()) {
+            if (st.is_end_of_file()) {
+                _empty_parser = true;
+                return Status::OK();
+            }
+            chunk->set_num_rows(n);
+            _counter->num_rows_filtered++;
+            _state->append_error_msg_to_file("", st.to_string());
+            return st;
+        }
+    }
+    return Status::OK();
+}
+
+Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
+                                          const std::vector<SlotDescriptor*>& slot_descs) {
+    if (_empty_parser) {
+        RETURN_IF_ERROR(_read_and_parse_json());
+    }
+    simdjson::ondemand::object row;
+
+    auto parser = down_cast<JsonArrayParser*>(_parser.get());
+
+    std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
+    for (int32_t n = 0; n < rows_to_read; n++) {
+        auto st = _parser->get_current(&row);
+        if (!st.ok()) {
+            if (st.is_end_of_file()) {
+                _empty_parser = true;
+                return Status::OK();
+            }
+            chunk->set_num_rows(n);
+            _counter->num_rows_filtered++;
+            _state->append_error_msg_to_file("", st.to_string());
+            return st;
+        }
+
+        if (n == 0 && _scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
+            // Try to reorder the column according to the column order of first json row.
+            // It is much faster when we access the json field as the json key order.
+            _reorder_column(&reordered_slot_descs, row);
+            row.reset();
+        }
+
+        st = _construct_row(&row, chunk, reordered_slot_descs);
+        if (!st.ok()) {
+            chunk->set_num_rows(n);
+            if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
+                // We would continue to construct row even if error is returned,
+                // hence the number of error appended to the file should be limited.
+                row.reset();
+                std::string_view sv;
+                (void)!row.raw_json().get(sv);
+                _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
+            }
+            continue;
+        }
+
+        st = _parser->advance();
         if (!st.ok()) {
             if (st.is_end_of_file()) {
                 _empty_parser = true;
@@ -588,7 +658,7 @@ Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocat
     return Status::OK();
 }
 
-Status JsonDocumentStreamParser::get(simdjson::ondemand::object* row) {
+Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) {
     try {
         if (_doc_stream_itr != _doc_stream.end()) {
             simdjson::ondemand::document_reference doc = *_doc_stream_itr;
@@ -616,7 +686,7 @@ Status JsonDocumentStreamParser::get(simdjson::ondemand::object* row) {
     }
 }
 
-Status JsonDocumentStreamParser::next() {
+Status JsonDocumentStreamParser::advance() {
     try {
         if (++_doc_stream_itr != _doc_stream.end()) {
             return Status::OK();
@@ -649,7 +719,7 @@ Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) {
     return Status::OK();
 }
 
-Status JsonArrayParser::get(simdjson::ondemand::object* row) {
+Status JsonArrayParser::get_current(simdjson::ondemand::object* row) {
     try {
         if (_array_itr == _array.end()) {
             return Status::EndOfFile("all values of the array are iterated");
@@ -670,7 +740,7 @@ Status JsonArrayParser::get(simdjson::ondemand::object* row) {
     }
 }
 
-Status JsonArrayParser::next() {
+Status JsonArrayParser::advance() {
     try {
         if (++_array_itr == _array.end()) {
             return Status::EndOfFile("all values of the array are iterated");

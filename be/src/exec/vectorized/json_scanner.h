@@ -76,6 +76,10 @@ public:
     Status close();
 
 private:
+    Status _read_chunk_from_document_stream(Chunk* chunk, int32_t rows_to_read,
+                                            const std::vector<SlotDescriptor*>& slot_descs);
+    Status _read_chunk_from_array(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
+
     Status _read_and_parse_json();
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk,
@@ -124,16 +128,16 @@ public:
     // parse initiates the parser. The inner iterator would point to the first object to be returned.
     virtual Status parse(uint8_t* data, size_t len, size_t allocated) = 0;
     // get returns the object pointed by the inner iterator.
-    virtual Status get(simdjson::ondemand::object* row) = 0;
+    virtual Status get_current(simdjson::ondemand::object* row) = 0;
     // next forwards the inner iterator.
-    virtual Status next() = 0;
+    virtual Status advance() = 0;
 };
 
 class JsonDocumentStreamParser : public JsonParser {
 public:
     Status parse(uint8_t* data, size_t len, size_t allocated) override;
-    Status get(simdjson::ondemand::object* row) override;
-    Status next() override;
+    Status get_current(simdjson::ondemand::object* row) override;
+    Status advance() override;
 
 private:
     uint8_t* _data;
@@ -146,8 +150,8 @@ private:
 class JsonArrayParser : public JsonParser {
 public:
     Status parse(uint8_t* data, size_t len, size_t allocated) override;
-    Status get(simdjson::ondemand::object* row) override;
-    Status next() override;
+    Status get_current(simdjson::ondemand::object* row) override;
+    Status advance() override;
 
 private:
     uint8_t* _data;
