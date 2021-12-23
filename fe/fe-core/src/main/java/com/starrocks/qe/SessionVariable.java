@@ -139,8 +139,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String FORCE_SCHEDULE_LOCAL = "force_schedule_local";
 
     // --------  New planner session variables start --------
-    public static final String ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG =
-            "enable_new_planner_push_down_join_to_agg";
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
@@ -369,9 +367,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = FORCE_SCHEDULE_LOCAL)
     private boolean forceScheduleLocal = false;
-
-    @VariableMgr.VarAttr(name = ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG)
-    private boolean enableNewPlannerPushDownJoinToAgg = false;
 
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
@@ -638,14 +633,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isForceScheduleLocal() {
         return forceScheduleLocal;
-    }
-
-    public boolean isEnableNewPlannerPushDownJoinToAgg() {
-        return enableNewPlannerPushDownJoinToAgg;
-    }
-
-    public void setEnableNewPlannerPushDownJoinToAgg(boolean enableNewPlannerPushDownJoinToAgg) {
-        this.enableNewPlannerPushDownJoinToAgg = enableNewPlannerPushDownJoinToAgg;
     }
 
     public int getCboMaxReorderNodeUseExhaustive() {

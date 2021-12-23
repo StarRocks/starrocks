@@ -97,9 +97,7 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testTPCH17() {
-        connectContext.getSessionVariable().setEnableNewPlannerPushDownJoinToAgg(true);
         runFileUnitTest("tpchcost/q17");
-        connectContext.getSessionVariable().setEnableNewPlannerPushDownJoinToAgg(false);
     }
 
     @Test

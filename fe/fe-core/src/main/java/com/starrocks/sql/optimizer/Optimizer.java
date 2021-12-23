@@ -66,19 +66,87 @@ public class Optimizer {
         memo.init(logicOperatorTree);
 
         CTEContext cteContext = new CTEContext();
-        cteContext.init(logicOperatorTree);
+        cteContext.collectCTEColumns(logicOperatorTree);
         context = new OptimizerContext(memo, columnRefFactory, connectContext, cteContext);
 
-        ColumnRefSet requiredColumnsFull = ((ColumnRefSet) requiredColumns.clone());
-        requiredColumnsFull.union(cteContext.getAllRequiredColumns());
+        ColumnRefSet requiredColumnsWithFullCteColumns = ((ColumnRefSet) requiredColumns.clone());
+        requiredColumnsWithFullCteColumns.union(cteContext.getAllRequiredColumns());
 
-        TaskContext rootTaskContext = new TaskContext(context, requiredProperty, requiredColumnsFull, Double.MAX_VALUE);
+        TaskContext rootTaskContext =
+                new TaskContext(context, requiredProperty, requiredColumnsWithFullCteColumns, Double.MAX_VALUE);
         context.addTaskContext(rootTaskContext);
 
         // Note: root group of memo maybe change after rewrite,
         // so we should always get root group and root group expression
         // directly from memo.
+        logicalRuleRewrite(memo, rootTaskContext);
 
+        // collect all olap scan operator
+        collectAllScanOperators(memo, rootTaskContext);
+
+        // Currently, we cache output columns in logic property.
+        // We derive logic property Bottom Up firstly when new group added to memo,
+        // but we do column prune rewrite top down later.
+        // So after column prune rewrite, the output columns for each operator maybe change,
+        // but the logic property is cached and never change.
+        // So we need to explicitly derive all group logic property again
+        memo.deriveAllGroupLogicalProperty();
+
+        // Phase 3: optimize based on memo and group
+        memoOptimize(connectContext, memo, rootTaskContext);
+
+        OptExpression result;
+        if (!connectContext.getSessionVariable().isSetUseNthExecPlan()) {
+            result = extractBestPlan(requiredProperty, memo.getRootGroup());
+        } else {
+            // extract the nth execution plan
+            int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
+            result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
+        }
+
+        return physicalRuleRewrite(rootTaskContext, result);
+    }
+
+    void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
+        OptExpression tree = memo.getRootGroup().extractLogicalTree();
+
+        // Join reorder
+        if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
+            if (Utils.countInnerJoinNodeSize(tree) >
+                    connectContext.getSessionVariable().getCboMaxReorderNodeUseExhaustive()) {
+                new ReorderJoinRule().transform(tree, context);
+                context.getRuleSet().addJoinCommutativityWithOutInnerRule();
+            } else {
+                context.getRuleSet().addJoinTransformationRules();
+            }
+        }
+
+        context.getTaskScheduler().pushTask(new OptimizeGroupTask(
+                rootTaskContext, memo.getRootGroup()));
+
+        context.getTaskScheduler().pushTask(new DeriveStatsTask(
+                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
+
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+    }
+
+    OptExpression physicalRuleRewrite(TaskContext rootTaskContext, OptExpression result) {
+        Preconditions.checkState(result.getOp().isPhysical());
+
+        // Since there may be many different plans in the logic phase, it's possible
+        // that this switch can't turned on after logical optimization, so we only determine
+        // whether the PreAggregate can be turned on in the final
+        PreAggregateTurnOnRule.tryOpenPreAggregate(result);
+
+        // Rewrite Exchange on top of Sort to Final Sort
+        result = new ExchangeSortToMergeRule().rewrite(result);
+        result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
+        // This rule should be last
+        result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
+        return result;
+    }
+
+    void logicalRuleRewrite(Memo memo, TaskContext rootTaskContext) {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
@@ -90,6 +158,7 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+
         // After prune columns, the output column in the logical property may outdated, because of the following rule
         // will use the output column, we need to derive the logical property here.
         memo.deriveAllGroupLogicalProperty();
@@ -116,66 +185,15 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
+
+        // reset cte context
+        CTEContext cteContext = new CTEContext();
+        cteContext.collectCTEColumns(tree);
+        context.setCteContext(cteContext);
+
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
         memo.removeUnreachableGroup();
-
-        // collect all olap scan operator
-        collectAllScanOperators(memo, rootTaskContext);
-
-        // Currently, we cache output columns in logic property.
-        // We derive logic property Bottom Up firstly when new group added to memo,
-        // but we do column prune rewrite top down later.
-        // So after column prune rewrite, the output columns for each operator maybe change,
-        // but the logic property is cached and never change.
-        // So we need to explicitly derive all group logic property again
-        memo.deriveAllGroupLogicalProperty();
-
-        // Phase 3: optimize based on memo and group
-        tree = memo.getRootGroup().extractLogicalTree();
-
-        // reset cte context
-        cteContext = new CTEContext();
-        cteContext.init(tree);
-        context.setCteContext(cteContext);
-
-        if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
-            if (Utils.countInnerJoinNodeSize(tree) >
-                    connectContext.getSessionVariable().getCboMaxReorderNodeUseExhaustive()) {
-                new ReorderJoinRule().transform(tree, context);
-                context.getRuleSet().addJoinCommutativityWithOutInnerRule();
-            } else {
-                context.getRuleSet().addJoinTransformationRules();
-            }
-        }
-
-        if (connectContext.getSessionVariable().isEnableNewPlannerPushDownJoinToAgg()) {
-            context.getRuleSet().addPushDownJoinToAggRule();
-        }
-
-        context.getTaskScheduler().pushTask(new OptimizeGroupTask(
-                rootTaskContext, memo.getRootGroup()));
-
-        context.getTaskScheduler().pushTask(new DeriveStatsTask(
-                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
-
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
-
-        OptExpression result;
-        if (!connectContext.getSessionVariable().isSetUseNthExecPlan()) {
-            result = extractBestPlan(requiredProperty, memo.getRootGroup());
-        } else {
-            // extract the nth execution plan
-            int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
-            result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
-        }
-        tryOpenPreAggregate(result);
-        // Rewrite Exchange on top of Sort to Final Sort
-        result = new ExchangeSortToMergeRule().rewrite(result);
-        result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
-        // This rule should be last
-        result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
-        return result;
     }
 
     /**
@@ -205,14 +223,6 @@ public class Optimizer {
         // When build plan fragment, we need the output column of logical property
         expression.setLogicalProperty(rootGroup.getLogicalProperty());
         return expression;
-    }
-
-    // Since there may be many different plans in the logic phase, it's possible
-    // that this switch can't turned on after logical optimization, so we only determine
-    // whether the PreAggregate can be turned on in the final
-    private void tryOpenPreAggregate(OptExpression optExpression) {
-        Preconditions.checkState(optExpression.getOp().isPhysical());
-        PreAggregateTurnOnRule.tryOpenPreAggregate(optExpression);
     }
 
     private void collectAllScanOperators(Memo memo, TaskContext rootTaskContext) {
