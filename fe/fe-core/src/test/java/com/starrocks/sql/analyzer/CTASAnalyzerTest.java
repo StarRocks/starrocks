@@ -1,29 +1,18 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.CreateTableAsSelectStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
 import java.util.UUID;
 
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccessUseInsert;
 
 public class CTASAnalyzerTest {
     // use a unique dir so that it won't be conflict with other unit test which
