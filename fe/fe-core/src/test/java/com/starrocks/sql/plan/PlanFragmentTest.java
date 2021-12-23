@@ -16,7 +16,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -49,9 +48,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         starRocksAssert.withTable("create table test.colocate1\n" +
-                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                        "properties(\"replication_num\" = \"1\"," +
-                        "\"colocate_with\" = \"group1\");")
+                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                "properties(\"replication_num\" = \"1\"," +
+                "\"colocate_with\" = \"group1\");")
                 .withTable("create table test.colocate2\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
                         "properties(\"replication_num\" = \"1\"," +
@@ -5100,7 +5099,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testJoinOnPredicateRewrite() throws Exception {
         String sql = "select * from t0 left outer join t1 on v1=v4 and cast(v2 as bigint) = v5 and false";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("equal join conjunct: 2: v2 = 5: v5"));
+        Assert.assertTrue(plan.contains("equal join conjunct: 1: v1 = 4: v4"));
         Assert.assertTrue(plan.contains("1:EMPTYSET"));
     }
 
@@ -5110,15 +5109,16 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(
                 "  0:UNION\n" +
-                "  |  child exprs:\n" +
-                "  |      [1, BIGINT, true] | [4, VARCHAR(20), true] | [5, DOUBLE, true]\n" +
-                "  |      [23, BIGINT, true] | [24, VARCHAR(20), true] | [25, DOUBLE, true]"));
+                        "  |  child exprs:\n" +
+                        "  |      [1, BIGINT, true] | [4, VARCHAR(20), true] | [5, DOUBLE, true]\n" +
+                        "  |      [23, BIGINT, true] | [24, VARCHAR(20), true] | [25, DOUBLE, true]"));
         Assert.assertTrue(plan.contains(
                 "  |  19 <-> [19: k7, VARCHAR, true]\n" +
-                "  |  20 <-> [20: k8, DOUBLE, true]\n" +
-                "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)"));
+                        "  |  20 <-> [20: k8, DOUBLE, true]\n" +
+                        "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)"));
 
-        sql = "select * from t0 union all (select cast(v4 as int), v5,v6 from t1 except select cast(v7 as int), v8, v9 from t2)";
+        sql =
+                "select * from t0 union all (select cast(v4 as int), v5,v6 from t1 except select cast(v7 as int), v8, v9 from t2)";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  child exprs:\n" +
@@ -5150,5 +5150,16 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  child exprs:\n" +
                 "  |      [7, INT, true] | [5, BIGINT, true] | [6, BIGINT, true]\n" +
                 "  |      [11, INT, true] | [9, BIGINT, true] | [10, BIGINT, true]"));
+    }
+
+    @Test
+    public void testSemiJoinFalsePredicate() throws Exception {
+        String sql = "select * from t0 left semi join t3 on t0.v1 = t3.v1 " +
+                "AND CASE WHEN NULL THEN t0.v1 ELSE '' END = CASE WHEN true THEN 'fGrak3iTt' WHEN false THEN t3.v1 ELSE 'asf' END";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: RIGHT SEMI JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v1 = 1: v1"));
     }
 }
