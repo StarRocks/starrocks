@@ -330,7 +330,7 @@ void HdfsOrcScanner::update_counter() {
 #endif
 }
 
-Status HdfsOrcScanner::do_open(RuntimeState* state) {
+Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_scanner_params.fs,
                                                             _scanner_params.scan_ranges[0]->file_length, &_stats);
     std::unique_ptr<orc::Reader> reader;
@@ -366,8 +366,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* state) {
             std::make_shared<OrcRowReaderFilter>(_scanner_params, _file_read_param, _orc_adapter.get());
     _orc_adapter->disable_broker_load_mode();
     _orc_adapter->set_row_reader_filter(_orc_row_reader_filter);
-    _orc_adapter->set_read_chunk_size(state->batch_size());
-    _orc_adapter->set_runtime_state(state);
+    _orc_adapter->set_read_chunk_size(config::vector_chunk_size);
+    _orc_adapter->set_runtime_state(runtime_state);
     _orc_adapter->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
     RETURN_IF_ERROR(_orc_adapter->set_timezone(_file_read_param.timezone));
     if (_use_orc_sargs) {
@@ -384,12 +384,12 @@ Status HdfsOrcScanner::do_open(RuntimeState* state) {
     return Status::OK();
 }
 
-void HdfsOrcScanner::do_close(RuntimeState* state) noexcept {
+void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
     _orc_adapter.reset(nullptr);
     update_counter();
 }
 
-Status HdfsOrcScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
+Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     CHECK(chunk != nullptr);
     if (_should_skip_file) {
         return Status::EndOfFile("");
@@ -440,7 +440,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
-Status HdfsOrcScanner::do_init(RuntimeState* state, const HdfsScannerParams& scanner_params) {
+Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _should_skip_file = false;
     _use_orc_sargs = true;
     // todo: build predicate hook and ranges hook.

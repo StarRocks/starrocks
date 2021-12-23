@@ -135,7 +135,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // is the first time of calling `get_next`, pass the second argument of `_fill_chunk_pool` as
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
-        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call, state));
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call));
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -184,7 +184,7 @@ Status OlapScanNode::close(RuntimeState* state) {
     _dict_optimize_parser.close(state);
 
     // Reduce the memory usage if the the average string size is greater than 512.
-    release_large_columns<BinaryColumn>(state->batch_size() * 512);
+    release_large_columns<BinaryColumn>(config::vector_chunk_size * 512);
 
     return ScanNode::close(state);
 }
@@ -196,8 +196,8 @@ OlapScanNode::~OlapScanNode() {
     DCHECK(is_closed());
 }
 
-void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool, RuntimeState* state) {
-    const size_t capacity = state->batch_size();
+void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
+    const size_t capacity = config::vector_chunk_size;
     for (int i = 0; i < count; i++) {
         ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity, force_column_pool));
         {
@@ -503,12 +503,12 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     }
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / state->batch_size();
-    _chunks_per_scanner += (config::doris_scanner_row_num % state->batch_size() != 0);
+    _chunks_per_scanner = config::doris_scanner_row_num / config::vector_chunk_size;
+    _chunks_per_scanner += (config::doris_scanner_row_num % config::vector_chunk_size != 0);
     int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true, state));
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));

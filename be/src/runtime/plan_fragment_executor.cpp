@@ -70,6 +70,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;
 
+    _runtime_state->set_batch_size(config::vector_chunk_size);
+
     _runtime_state->set_be_number(request.backend_num);
     if (request.__isset.import_label) {
         _runtime_state->set_import_label(request.import_label);
@@ -149,6 +151,9 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     // otherwise the adapter node will crash when convert
     std::vector<ExecNode*> adaptor_nodes;
     _plan->collect_nodes(TPlanNodeType::ADAPTER_NODE, &adaptor_nodes);
+    if (!adaptor_nodes.empty()) {
+        _runtime_state->set_batch_size(config::vector_chunk_size);
+    }
 
     RETURN_IF_ERROR(_plan->prepare(_runtime_state));
     // set scan ranges

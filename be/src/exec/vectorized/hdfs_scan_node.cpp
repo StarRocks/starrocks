@@ -161,12 +161,12 @@ Status HdfsScanNode::_start_scan_thread(RuntimeState* state) {
     // init chunk pool
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / state->batch_size();
-    _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % state->batch_size() != 0);
+    _chunks_per_scanner = config::doris_scanner_row_num / config::vector_chunk_size;
+    _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % config::vector_chunk_size != 0);
     int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, state));
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks));
 
     // start scanner
     std::lock_guard<std::mutex> l(_mtx);
@@ -414,11 +414,11 @@ Status HdfsScanNode::_get_status() {
     return _status;
 }
 
-void HdfsScanNode::_fill_chunk_pool(int count, RuntimeState* state) {
+void HdfsScanNode::_fill_chunk_pool(int count) {
     std::lock_guard<std::mutex> l(_mtx);
 
     for (int i = 0; i < count; i++) {
-        auto chunk = ChunkHelper::new_chunk(*_tuple_desc, state->batch_size());
+        auto chunk = ChunkHelper::new_chunk(*_tuple_desc, config::vector_chunk_size);
         _chunk_pool.push(std::move(chunk));
     }
 }
@@ -458,7 +458,7 @@ Status HdfsScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     if (_result_chunks.blocking_get(chunk)) {
-        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, state));
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1));
 
         eval_join_runtime_filters(chunk);
 

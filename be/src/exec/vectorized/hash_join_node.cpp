@@ -313,7 +313,7 @@ Status HashJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         }
     }
 
-    DCHECK_LE((*chunk)->num_rows(), state->batch_size());
+    DCHECK_LE((*chunk)->num_rows(), config::vector_chunk_size);
     _num_rows_returned += (*chunk)->num_rows();
     _output_chunk_count++;
     if (reached_limit()) {
@@ -509,8 +509,8 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                         } else {
                             if (_cur_left_input_chunk->num_rows() <= 0) {
                                 continue;
-                            } else if (_cur_left_input_chunk->num_rows() >= state->batch_size() / 2) {
-                                // the probe chunk size of read from right child >= state->batch_size(), direct return
+                            } else if (_cur_left_input_chunk->num_rows() >= config::vector_chunk_size / 2) {
+                                // the probe chunk size of read from right child >= config::vector_chunk_size, direct return
                                 _probing_chunk = std::move(_cur_left_input_chunk);
                             } else if (_pre_left_input_chunk == nullptr) {
                                 // the probe chunk size is small, reserve for merge next probe chunk
@@ -518,8 +518,8 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                                 continue;
                             } else {
                                 if (_cur_left_input_chunk->num_rows() + _pre_left_input_chunk->num_rows() >
-                                    state->batch_size()) {
-                                    // the two chunk size > state->batch_size(), return the first reserved chunk
+                                    config::vector_chunk_size) {
+                                    // the two chunk size > config::vector_chunk_size, return the first reserved chunk
                                     _probing_chunk = std::move(_pre_left_input_chunk);
                                     _pre_left_input_chunk = std::move(_cur_left_input_chunk);
                                 } else {

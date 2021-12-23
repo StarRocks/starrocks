@@ -51,7 +51,7 @@ private:
                                                 size_t row_count);
 
     void _init_row_desc();
-    void _init_chunk(ChunkPtr* chunk, RuntimeState* state);
+    void _init_chunk(ChunkPtr* chunk);
 
     // previsou saved chunk.
     ChunkPtr _pre_output_chunk = nullptr;
