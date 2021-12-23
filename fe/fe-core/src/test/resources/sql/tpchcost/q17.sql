@@ -23,38 +23,38 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-14:Project
+15:Project
 |  <slot 49> : 48: sum / 7.0
 |
-13:AGGREGATE (merge finalize)
+14:AGGREGATE (merge finalize)
 |  output: sum(48: sum)
 |  group by:
 |
-12:EXCHANGE
+13:EXCHANGE
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 12
+EXCHANGE ID: 13
 UNPARTITIONED
 
-11:AGGREGATE (update serialize)
+12:AGGREGATE (update serialize)
 |  output: sum(6: L_EXTENDEDPRICE)
 |  group by:
 |
-10:Project
+11:Project
 |  <slot 6> : 6: L_EXTENDEDPRICE
 |
-9:HASH JOIN
+10:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: L_PARTKEY = 18: P_PARTKEY
 |  other join predicates: 5: L_QUANTITY < 0.2 * 45: avg
 |
-|----8:EXCHANGE
+|----9:EXCHANGE
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -72,23 +72,28 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 18: P_PARTKEY, 29: L_PARTKEY
 
 STREAM DATA SINK
-EXCHANGE ID: 08
+EXCHANGE ID: 09
 UNPARTITIONED
 
-7:AGGREGATE (update finalize)
-|  output: avg(32: L_QUANTITY)
+8:AGGREGATE (merge finalize)
+|  output: avg(45: avg)
 |  group by: 18: P_PARTKEY, 29: L_PARTKEY
 |
-6:EXCHANGE
+7:EXCHANGE
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 06
+EXCHANGE ID: 07
 HASH_PARTITIONED: 18: P_PARTKEY, 29: L_PARTKEY
 
+6:AGGREGATE (update serialize)
+|  STREAMING
+|  output: avg(32: L_QUANTITY)
+|  group by: 18: P_PARTKEY, 29: L_PARTKEY
+|
 5:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
