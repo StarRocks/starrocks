@@ -34,7 +34,7 @@ set(RUNTIME_FILES
     local_pass_through_buffer.cpp
     data_stream_mgr.cpp
     data_stream_sender.cpp
-    mcast_data_stream_sink.cpp
+    multi_cast_data_stream_sink.cpp
     datetime_value.cpp
     descriptors.cpp
     exec_env.cpp
