@@ -349,7 +349,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 
     std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
     for (int32_t n = 0; n < rows_to_read; n++) {
-        auto st = _parser->get_next(&row);
+        auto st = _parser->get(&row);
         if (!st.ok()) {
             if (st.is_end_of_file()) {
                 _empty_parser = true;
@@ -380,6 +380,18 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
             }
             continue;
+        }
+
+        st = _parser->next();
+        if (!st.ok()) {
+            if (st.is_end_of_file()) {
+                _empty_parser = true;
+                return Status::OK();
+            }
+            chunk->set_num_rows(n);
+            _counter->num_rows_filtered++;
+            _state->append_error_msg_to_file("", st.to_string());
+            return st;
         }
     }
     return Status::OK();
@@ -566,7 +578,6 @@ Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocat
         _doc_stream = _parser.iterate_many(data, len);
 
         _doc_stream_itr = _doc_stream.begin();
-        _first_shot = true;
 
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =
@@ -577,28 +588,39 @@ Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocat
     return Status::OK();
 }
 
-Status JsonDocumentStreamParser::get_next(simdjson::ondemand::object* row) {
+Status JsonDocumentStreamParser::get(simdjson::ondemand::object* row) {
     try {
-        simdjson::ondemand::document_stream::iterator cur;
-        if (_first_shot) {
-            cur = _doc_stream_itr;
-            _first_shot = false;
+        if (_doc_stream_itr != _doc_stream.end()) {
+            simdjson::ondemand::document_reference doc = *_doc_stream_itr;
+
+            if (doc.type() != simdjson::ondemand::json_type::object) {
+                return Status::DataQualityError("JSON data is an object, strip_outer_array must be set false");
+            }
+
+            *row = doc.get_object();
+            return Status::OK();
+        }
+        return Status::EndOfFile("all documents of the stream are iterated");
+    } catch (simdjson::simdjson_error& e) {
+        std::string err_msg;
+        if (e.error() == simdjson::CAPACITY) {
+            err_msg =
+                    "The input payload size is beyond parser limit. Please set strip_outer_array true if you want to "
+                    "load json array";
         } else {
-            cur = ++_doc_stream_itr;
+            err_msg = strings::Substitute("Failed to iterate json as object. error: $0",
+                                          simdjson::error_message(e.error()));
         }
+        return Status::DataQualityError(err_msg);
+    }
+}
 
-        if (!(cur != _doc_stream.end())) {
-            return Status::EndOfFile("all documents of the stream are iterated");
+Status JsonDocumentStreamParser::next() {
+    try {
+        if (++_doc_stream_itr != _doc_stream.end()) {
+            return Status::OK();
         }
-
-        simdjson::ondemand::document_reference doc = *cur;
-
-        if (doc.type() != simdjson::ondemand::json_type::object) {
-            return Status::DataQualityError("JSON data is an object, strip_outer_array must be set false");
-        }
-
-        *row = doc.get_object();
-        return Status::OK();
+        return Status::EndOfFile("all documents of the stream are iterated");
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =
                 strings::Substitute("Failed to iterate json as object. error: $0", simdjson::error_message(e.error()));
@@ -616,7 +638,6 @@ Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) {
 
         _array = _doc.get_array();
         _array_itr = _array.begin();
-        _first_shot = true;
 
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =
@@ -627,27 +648,32 @@ Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) {
     return Status::OK();
 }
 
-Status JsonArrayParser::get_next(simdjson::ondemand::object* row) {
+Status JsonArrayParser::get(simdjson::ondemand::object* row) {
     try {
-        simdjson::ondemand::array_iterator cur;
-        if (_first_shot) {
-            cur = _array_itr;
-            _first_shot = false;
-        } else {
-            cur = (++_array_itr);
-        }
-
-        if (cur == _array.end()) {
+        if (_array_itr == _array.end()) {
             return Status::EndOfFile("all values of the array are iterated");
         }
 
-        simdjson::ondemand::value val = *cur;
+        simdjson::ondemand::value val = *_array_itr;
 
         if (val.type() != simdjson::ondemand::json_type::object) {
             return Status::DataQualityError("nested array is not supported");
         }
 
         *row = val.get_object();
+        return Status::OK();
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg =
+                strings::Substitute("Failed to iterate json as array. error: $0", simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
+    }
+}
+
+Status JsonArrayParser::next() {
+    try {
+        if (++_array_itr == _array.end()) {
+            return Status::EndOfFile("all values of the array are iterated");
+        }
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =

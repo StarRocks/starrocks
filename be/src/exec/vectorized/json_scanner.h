@@ -122,21 +122,20 @@ public:
     JsonParser() = default;
     virtual ~JsonParser() = default;
     virtual Status parse(uint8_t* data, size_t len, size_t allocated) = 0;
-    virtual Status get_next(simdjson::ondemand::object* row) = 0;
+    virtual Status get(simdjson::ondemand::object* row) = 0;
+    virtual Status next() = 0;
 };
 
 class JsonDocumentStreamParser : public JsonParser {
 public:
     Status parse(uint8_t* data, size_t len, size_t allocated) override;
-    Status get_next(simdjson::ondemand::object* row) override;
+    Status get(simdjson::ondemand::object* row) override;
+    Status next() override;
 
 private:
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
 
-    // _first_shot denotes whether the first element of the document stream would be returned,
-    // telling us whether to forward the stream iterator.
-    bool _first_shot = false;
     simdjson::ondemand::document_stream _doc_stream;
     simdjson::ondemand::document_stream::iterator _doc_stream_itr;
 };
@@ -144,15 +143,13 @@ private:
 class JsonArrayParser : public JsonParser {
 public:
     Status parse(uint8_t* data, size_t len, size_t allocated) override;
-    Status get_next(simdjson::ondemand::object* row) override;
+    Status get(simdjson::ondemand::object* row) override;
+    Status next() override;
 
 private:
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
 
-    // _first_shot denotes whether the first element of the array would be returned.
-    // telling us whether to forward the array iterator.
-    bool _first_shot = false;
     simdjson::ondemand::document _doc;
     simdjson::ondemand::array _array;
     simdjson::ondemand::array_iterator _array_itr;
