@@ -31,6 +31,7 @@ typedef int TableId;
 typedef int PlanNodeId;
 
 // Mapping from input slot to output slot of an ExecNode.
+// It is used for pipeline to rewrite runtime in filters.
 struct TupleSlotMapping {
     TupleId from_tuple_id;
     SlotId from_slot_id;
