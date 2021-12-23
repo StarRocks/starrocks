@@ -436,6 +436,7 @@ public abstract class SetOperationNode extends PlanNode {
 
     @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!canPushDownRuntimeFilter()) return false;
         if (!probeExpr.isBoundByTupleIds(getTupleIds())) return false;
 
         if (probeExpr instanceof SlotRef) {
