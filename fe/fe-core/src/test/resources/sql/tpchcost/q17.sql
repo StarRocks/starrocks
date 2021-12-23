@@ -23,38 +23,38 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-15:Project
+16:Project
 |  <slot 49> : 48: sum / 7.0
 |
-14:AGGREGATE (merge finalize)
+15:AGGREGATE (merge finalize)
 |  output: sum(48: sum)
 |  group by:
 |
-13:EXCHANGE
+14:EXCHANGE
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 13
+EXCHANGE ID: 14
 UNPARTITIONED
 
-12:AGGREGATE (update serialize)
+13:AGGREGATE (update serialize)
 |  output: sum(6: L_EXTENDEDPRICE)
 |  group by:
 |
-11:Project
+12:Project
 |  <slot 6> : 6: L_EXTENDEDPRICE
 |
-10:HASH JOIN
+11:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: L_PARTKEY = 18: P_PARTKEY
 |  other join predicates: 5: L_QUANTITY < 0.2 * 45: avg
 |
-|----9:EXCHANGE
+|----10:EXCHANGE
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -69,17 +69,29 @@ numNodes=0
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 18: P_PARTKEY, 29: L_PARTKEY
+PARTITION: HASH_PARTITIONED: 29: L_PARTKEY
 
 STREAM DATA SINK
-EXCHANGE ID: 09
+EXCHANGE ID: 10
 UNPARTITIONED
 
-8:AGGREGATE (merge finalize)
-|  output: avg(45: avg)
-|  group by: 18: P_PARTKEY, 29: L_PARTKEY
+9:Project
+|  <slot 18> : 18: P_PARTKEY
+|  <slot 45> : 45: avg
 |
-7:EXCHANGE
+8:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
+|  hash predicates:
+|  colocate: false, reason:
+|  equal join conjunct: 29: L_PARTKEY = 18: P_PARTKEY
+|
+|----7:EXCHANGE
+|
+4:AGGREGATE (merge finalize)
+|  output: avg(45: avg)
+|  group by: 29: L_PARTKEY
+|
+3:EXCHANGE
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -87,20 +99,35 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 07
-HASH_PARTITIONED: 18: P_PARTKEY, 29: L_PARTKEY
+UNPARTITIONED
 
-6:AGGREGATE (update serialize)
+6:Project
+|  <slot 18> : 18: P_PARTKEY
+|
+5:OlapScanNode
+TABLE: part
+PREAGGREGATION: ON
+PREDICATES: 21: P_BRAND = 'Brand#35', 24: P_CONTAINER = 'JUMBO CASE'
+partitions=1/1
+rollup: part
+tabletRatio=10/10
+tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
+cardinality=20000
+avgRowSize=28.0
+numNodes=0
+
+PLAN FRAGMENT 4
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 03
+HASH_PARTITIONED: 29: L_PARTKEY
+
+2:AGGREGATE (update serialize)
 |  STREAMING
 |  output: avg(32: L_QUANTITY)
-|  group by: 18: P_PARTKEY, 29: L_PARTKEY
-|
-5:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
-|  colocate: false, reason:
-|  equal join conjunct: 29: L_PARTKEY = 18: P_PARTKEY
-|
-|----4:EXCHANGE
+|  group by: 29: L_PARTKEY
 |
 1:OlapScanNode
 TABLE: lineitem
@@ -111,29 +138,6 @@ tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=16.0
-numNodes=0
-
-PLAN FRAGMENT 4
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 04
-UNPARTITIONED
-
-3:Project
-|  <slot 18> : 18: P_PARTKEY
-|
-2:OlapScanNode
-TABLE: part
-PREAGGREGATION: ON
-PREDICATES: 21: P_BRAND = 'Brand#35', 24: P_CONTAINER = 'JUMBO CASE'
-partitions=1/1
-rollup: part
-tabletRatio=10/10
-tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
-cardinality=20000
-avgRowSize=28.0
 numNodes=0
 [end]
 

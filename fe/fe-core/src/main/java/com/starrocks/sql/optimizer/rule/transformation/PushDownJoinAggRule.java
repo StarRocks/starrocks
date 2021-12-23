@@ -33,6 +33,9 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Deprecated
+// Can't promise output unique columns
+//
 // Push down Join
 // Before:
 //        Join

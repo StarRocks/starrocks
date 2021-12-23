@@ -28,7 +28,11 @@ public class CTEContext {
         requiredColumns = Maps.newHashMap();
     }
 
-    public void init(OptExpression tree) {
+    public int getAllCTEConsumerNums() {
+        return consumeNums.values().stream().reduce(Integer::sum).orElse(0);
+    }
+
+    public void collectCTEColumns(OptExpression tree) {
         tree.getOp().accept(new CTEVisitor(), tree, this);
     }
 
@@ -76,7 +80,8 @@ public class CTEContext {
             int nums = context.consumeNums.getOrDefault(consume.getCteId(), 0);
             context.consumeNums.put(consume.getCteId(), nums + 1);
 
-            ColumnRefSet requiredColumnRef =  context.requiredColumns.getOrDefault(consume.getCteId(), new ColumnRefSet());
+            ColumnRefSet requiredColumnRef =
+                    context.requiredColumns.getOrDefault(consume.getCteId(), new ColumnRefSet());
             consume.getCteOutputColumnRefMap().values().forEach(requiredColumnRef::union);
             context.requiredColumns.put(consume.getCteId(), requiredColumnRef);
 
