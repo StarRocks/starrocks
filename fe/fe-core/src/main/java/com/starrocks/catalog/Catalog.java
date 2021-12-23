@@ -2232,7 +2232,7 @@ public class Catalog {
         labelCleaner = new MasterDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
-                clearExpiredLabel();
+                clearExpiredJobs();
             }
         };
     }
@@ -7484,7 +7484,7 @@ public class Catalog {
         this.imageJournalId = imageJournalId;
     }
 
-    public void clearExpiredLabel() {
+    public void clearExpiredJobs() {
         loadManager.removeOldLoadJob();
         exportMgr.removeOldExportJobs();
         deleteHandler.removeOldDeleteInfo();

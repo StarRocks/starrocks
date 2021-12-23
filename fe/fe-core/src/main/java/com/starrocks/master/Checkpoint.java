@@ -100,7 +100,7 @@ public class Checkpoint extends MasterDaemon {
                 return;
             }
 
-            catalog.clearExpiredLabel();
+            catalog.clearExpiredJobs();
 
             catalog.saveImage();
             replayedJournalId = catalog.getReplayedJournalId();
