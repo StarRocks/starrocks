@@ -35,6 +35,7 @@
 #include "util/debug_util.h"
 #include "util/monotime.h"
 #include "util/pretty_printer.h"
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -663,6 +664,7 @@ void RuntimeProfile::add_bucketing_counters(const std::string& name, const std::
     if (_s_periodic_counter_update_state.update_thread == nullptr) {
         _s_periodic_counter_update_state.update_thread =
                 std::make_unique<std::thread>(&RuntimeProfile::periodic_counter_update_loop);
+        Thread::set_thread_name(_s_periodic_counter_update_state.update_thread.get()->native_handle(), "rf_cnt_update");
     }
 
     BucketCountersInfo info{.src_counter = src_counter, .num_sampled = 0};
@@ -691,6 +693,7 @@ void RuntimeProfile::register_periodic_counter(Counter* src_counter, SampleFn sa
     if (_s_periodic_counter_update_state.update_thread == nullptr) {
         _s_periodic_counter_update_state.update_thread =
                 std::make_unique<std::thread>(&RuntimeProfile::periodic_counter_update_loop);
+        Thread::set_thread_name(_s_periodic_counter_update_state.update_thread.get()->native_handle(), "rf_cnt_update");
     }
 
     switch (type) {

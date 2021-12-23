@@ -27,7 +27,9 @@
 #include <boost/thread.hpp>
 #include <functional>
 
+#include "common/logging.h"
 #include "util/blocking_priority_queue.hpp"
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -58,7 +60,8 @@ public:
     //     queue exceeds this size, subsequent calls to Offer will block until there is
     //     capacity available.
     //  -- work_function: the function to run every time an item is consumed from the queue
-    PriorityThreadPool(uint32_t num_threads, uint32_t queue_size) : _work_queue(queue_size), _shutdown(false) {
+    PriorityThreadPool(const std::string name, uint32_t num_threads, uint32_t queue_size)
+            : _name(name), _work_queue(queue_size), _shutdown(false) {
         for (int i = 0; i < num_threads; ++i) {
             new_thread(++_current_thread_id);
         }
@@ -155,6 +158,7 @@ private:
     // we need acquire _lock before call this function
     void new_thread(int tid) {
         auto* thr = _threads.create_thread(std::bind<void>(std::mem_fn(&PriorityThreadPool::work_thread), this, tid));
+        Thread::set_thread_name(thr->native_handle(), _name);
         _threads_holder.emplace_back(thr, tid);
     }
 
@@ -204,6 +208,9 @@ private:
         std::lock_guard<std::mutex> l(_lock);
         return _shutdown;
     }
+
+    const std::string _name;
+
     // thread pointer
     // tid
     std::vector<std::pair<boost::thread*, int>> _threads_holder;

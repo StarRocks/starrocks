@@ -561,8 +561,7 @@ void ThreadPool::dispatch_thread() {
 }
 
 Status ThreadPool::create_thread() {
-    return Thread::create("thread pool", strings::Substitute("$0 [worker]", _name), &ThreadPool::dispatch_thread, this,
-                          nullptr);
+    return Thread::create("thread pool", _name, &ThreadPool::dispatch_thread, this, nullptr);
 }
 
 void ThreadPool::check_not_pool_thread_unlocked() {

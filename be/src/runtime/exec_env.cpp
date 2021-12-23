@@ -129,14 +129,16 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
     _thread_mgr = new ThreadResourceMgr();
-    _thread_pool = new PriorityThreadPool(config::doris_scanner_thread_pool_thread_num,
+    _thread_pool = new PriorityThreadPool("olap_scan_io", // olap scan io
+                                          config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
-    _pipeline_scan_io_thread_pool = new PriorityThreadPool(config::pipeline_scan_thread_pool_thread_num <= 0
+    _pipeline_scan_io_thread_pool = new PriorityThreadPool("pip_scan_io", // pipeline scan io
+                                                           config::pipeline_scan_thread_pool_thread_num <= 0
                                                                    ? std::thread::hardware_concurrency()
                                                                    : config::pipeline_scan_thread_pool_thread_num,
                                                            config::pipeline_scan_thread_pool_queue_size);
     _num_scan_operators = 0;
-    _etl_thread_pool = new PriorityThreadPool(config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
+    _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
 
     std::unique_ptr<ThreadPool> driver_dispatcher_thread_pool;
@@ -145,7 +147,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
         max_thread_num = config::pipeline_exec_thread_pool_thread_num;
     }
     LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", max_thread_num);
-    RETURN_IF_ERROR(ThreadPoolBuilder("driver_dispatcher_thread_pool")
+    RETURN_IF_ERROR(ThreadPoolBuilder("pip_dispatcher") // pipeline dispatcher
                             .set_min_threads(0)
                             .set_max_threads(max_thread_num)
                             .set_max_queue_size(1000)

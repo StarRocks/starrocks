@@ -48,7 +48,8 @@ public:
 
     RoutineLoadTaskExecutor(ExecEnv* exec_env)
             : _exec_env(exec_env),
-              _thread_pool(config::routine_load_thread_pool_size, config::routine_load_thread_pool_size),
+              _thread_pool("routine_load", config::routine_load_thread_pool_size,
+                           config::routine_load_thread_pool_size),
               _data_consumer_pool(10) {
         REGISTER_GAUGE_STARROCKS_METRIC(routine_load_task_count, [this]() {
             std::lock_guard<std::mutex> l(_lock);
