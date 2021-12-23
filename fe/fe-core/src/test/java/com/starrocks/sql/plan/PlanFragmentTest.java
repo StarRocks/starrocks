@@ -16,7 +16,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -2248,7 +2247,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "   union all\n"
                 + "   (select * from db1.tbl6 where k1='b' and k4=5)\n"
                 + "   order by 3 limit 3)";
-        starRocksAssert.query(sql2).explainContains("UNION", 5);
+        starRocksAssert.query(sql2).explainContains("UNION", 6);
 
         // intersect
         String sql3 = "select * from\n"
