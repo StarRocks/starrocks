@@ -45,7 +45,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.ExprVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -172,6 +171,14 @@ public class FunctionCallExpr extends Expr {
         this.mergeAggFnHasNullableChild = other.mergeAggFnHasNullableChild;
         fn = other.fn;
     }
+
+    public static final Set<String> nullableSameWithChildrenFunctions =
+            ImmutableSet.<String>builder()
+                    .add(FunctionSet.YEAR)
+                    .add(FunctionSet.MONTH)
+                    .add(FunctionSet.DAY)
+                    .add(FunctionSet.HOUR)
+                    .build();
 
     public boolean isMergeAggFn() {
         return isMergeAggFn;
@@ -811,7 +818,15 @@ public class FunctionCallExpr extends Expr {
 
     // TODO(kks): improve this
     public boolean isNullable() {
-        return !CallOperator.AlwaysReturnNonNullableFunctions.contains(fnName.getFunction());
+        // check if fn always return non null
+        if (fn != null && !fn.isNullable()) {
+            return false;
+        }
+        // check children nullable
+        if (nullableSameWithChildrenFunctions.contains(fnName.getFunction())) {
+            return children.stream().anyMatch(Expr::isNullable);
+        }
+        return true;
     }
 
     public static FunctionCallExpr createMergeAggCall(
