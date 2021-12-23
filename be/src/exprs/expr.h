@@ -188,10 +188,6 @@ public:
 
     static Expr* copy(ObjectPool* pool, Expr* old_expr);
 
-    // Returns true ifi expr support vectorized process
-    // The default implementation returns true if all the children was supported
-    virtual bool is_vectorized() const;
-
     // for vector query engine
     virtual ColumnPtr evaluate_const(ExprContext* context);
 

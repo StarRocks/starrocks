@@ -49,9 +49,9 @@ static std::unique_ptr<DataStreamSender> create_data_stream_sink(
     bool enable_exchange_pass_through =
             params.__isset.enable_exchange_pass_through && params.enable_exchange_pass_through;
     // TODO: figure out good buffer size based on size of output row
-    auto ret = std::make_unique<DataStreamSender>(state, params.use_vectorized, params.sender_id, row_desc,
-                                                  data_stream_sink, destinations, 16 * 1024,
-                                                  send_query_statistics_with_every_batch, enable_exchange_pass_through);
+    auto ret = std::make_unique<DataStreamSender>(state, params.sender_id, row_desc, data_stream_sink, destinations,
+                                                  16 * 1024, send_query_statistics_with_every_batch,
+                                                  enable_exchange_pass_through);
     return ret;
 }
 

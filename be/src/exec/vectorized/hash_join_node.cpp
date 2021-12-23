@@ -793,7 +793,7 @@ Status HashJoinNode::_push_down_in_filter(RuntimeState* state) {
     }
 
     COUNTER_UPDATE(_push_down_expr_num, static_cast<int64_t>(_runtime_in_filters.size()));
-    push_down_predicate(state, &_runtime_in_filters, true);
+    push_down_predicate(state, &_runtime_in_filters);
 
     return Status::OK();
 }
