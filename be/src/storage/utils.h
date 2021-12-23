@@ -41,9 +41,6 @@
 
 #include "common/logging.h"
 #include "common/status.h"
-#if defined(__i386) || defined(__x86_64__)
-#include "storage/bhp_lib.h"
-#endif
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 
