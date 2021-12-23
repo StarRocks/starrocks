@@ -29,7 +29,9 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PKafkaLoadInfo;
 import com.starrocks.proto.PKafkaMetaProxyRequest;
+import com.starrocks.proto.PKafkaOffsetBatchProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
+import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PStringPair;
@@ -69,25 +71,34 @@ public class KafkaUtil {
         return proxyApi.getBeginningOffsets(brokerList, topic, properties, partitions);
     }
 
+    public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests) throws UserException {
+        return proxyApi.getBatchOffsets(requests);
+    }
+
+    public static PKafkaLoadInfo genPKafkaLoadInfo(String brokerList, String topic,
+                                                   ImmutableMap<String, String> properties) {
+        PKafkaLoadInfo kafkaLoadInfo = new PKafkaLoadInfo();
+        kafkaLoadInfo.brokers = brokerList;
+        kafkaLoadInfo.topic = topic;
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            PStringPair pair = new PStringPair();
+            pair.key = entry.getKey();
+            pair.val = entry.getValue();
+            if (kafkaLoadInfo.properties == null) {
+                kafkaLoadInfo.properties = Lists.newArrayList();
+            }
+            kafkaLoadInfo.properties.add(pair);
+        }
+        return kafkaLoadInfo;
+    }
+
     static class ProxyAPI {
         public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                    ImmutableMap<String, String> convertedCustomProperties)
                 throws UserException {
             // create request
-            PKafkaLoadInfo kafkaLoadInfo = new PKafkaLoadInfo();
-            kafkaLoadInfo.brokers = brokerList;
-            kafkaLoadInfo.topic = topic;
-            for (Map.Entry<String, String> entry : convertedCustomProperties.entrySet()) {
-                PStringPair pair = new PStringPair();
-                pair.key = entry.getKey();
-                pair.val = entry.getValue();
-                if (kafkaLoadInfo.properties == null) {
-                    kafkaLoadInfo.properties = Lists.newArrayList();
-                }
-                kafkaLoadInfo.properties.add(pair);
-            }
             PKafkaMetaProxyRequest metaRequest = new PKafkaMetaProxyRequest();
-            metaRequest.kafkaInfo = kafkaLoadInfo;
+            metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties);
             PProxyRequest request = new PProxyRequest();
             request.kafkaMetaRequest = metaRequest;
 
@@ -111,20 +122,8 @@ public class KafkaUtil {
                                              ImmutableMap<String, String> properties,
                                              List<Integer> partitions, boolean isLatest) throws UserException {
             // create request
-            PKafkaLoadInfo kafkaLoadInfo = new PKafkaLoadInfo();
-            kafkaLoadInfo.brokers = brokerList;
-            kafkaLoadInfo.topic = topic;
-            for (Map.Entry<String, String> entry : properties.entrySet()) {
-                PStringPair pair = new PStringPair();
-                pair.key = entry.getKey();
-                pair.val = entry.getValue();
-                if (kafkaLoadInfo.properties == null) {
-                    kafkaLoadInfo.properties = Lists.newArrayList();
-                }
-                kafkaLoadInfo.properties.add(pair);
-            }
             PKafkaOffsetProxyRequest offsetRequest = new PKafkaOffsetProxyRequest();
-            offsetRequest.kafkaInfo = kafkaLoadInfo;
+            offsetRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, properties);
             offsetRequest.partitionIds = partitions;
             PProxyRequest request = new PProxyRequest();
             request.kafkaOffsetRequest = offsetRequest;
@@ -144,6 +143,19 @@ public class KafkaUtil {
                 partitionOffsets.put(result.kafkaOffsetResult.partitionIds.get(i), offsets.get(i));
             }
             return partitionOffsets;
+        }
+
+        public List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests) throws UserException {
+            // create request
+            PProxyRequest pProxyRequest = new PProxyRequest();
+            PKafkaOffsetBatchProxyRequest pKafkaOffsetBatchProxyRequest = new PKafkaOffsetBatchProxyRequest();
+            pKafkaOffsetBatchProxyRequest.requests = requests;
+            pProxyRequest.kafkaOffsetBatchRequest = pKafkaOffsetBatchProxyRequest;
+
+            // send request
+            PProxyResult result = sendProxyRequest(pProxyRequest);
+
+            return result.kafkaOffsetBatchResult.results;
         }
 
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {

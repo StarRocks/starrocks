@@ -82,6 +82,10 @@ public class KafkaProgress extends RoutineLoadProgress {
         return result;
     }
 
+    public ImmutableMap<Integer, Long> getPartitionIdToOffset() {
+        return ImmutableMap.copyOf(partitionIdToOffset);
+    }
+
     public void addPartitionOffset(Pair<Integer, Long> partitionOffset) {
         partitionIdToOffset.put(partitionOffset.first, partitionOffset.second);
     }
@@ -119,7 +123,7 @@ public class KafkaProgress extends RoutineLoadProgress {
         }
     }
 
-    // modify the partition offset of this progess.
+    // modify the partition offset of this progress.
     // throw exception is the specified partition does not exist in progress.
     public void modifyOffset(List<Pair<Integer, Long>> kafkaPartitionOffsets) throws DdlException {
         for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {

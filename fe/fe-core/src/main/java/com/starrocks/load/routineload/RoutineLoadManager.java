@@ -68,9 +68,6 @@ import java.util.stream.Collectors;
 public class RoutineLoadManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadManager.class);
 
-    // Long is beId, integer is the size of tasks in be
-    private Map<Long, Integer> beIdToMaxConcurrentTasks = Maps.newHashMap();
-
     // be => running tasks num
     private Map<Long, Integer> beTasksNum = Maps.newHashMap();
     private ReentrantLock slotLock = new ReentrantLock();
@@ -80,14 +77,6 @@ public class RoutineLoadManager implements Writable {
     private Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
-
-    private void readLock() {
-        lock.readLock().lock();
-    }
-
-    private void readUnlock() {
-        lock.readLock().unlock();
-    }
 
     private void writeLock() {
         lock.writeLock().lock();
