@@ -228,6 +228,24 @@ void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext
     ExecNode::push_down_predicate(state, expr_ctxs);
 }
 
+void ProjectNode::push_down_tuple_slot_mappings(RuntimeState* state,
+                                                const std::vector<TupleSlotMapping>& parent_mappings) {
+    _tuple_slot_mappings = parent_mappings;
+
+    DCHECK(_tuple_ids.size() == 1);
+    for (int i = 0; i < _slot_ids.size(); ++i) {
+        if (_expr_ctxs[i]->root()->is_slotref()) {
+            DCHECK(nullptr != dynamic_cast<vectorized::ColumnRef*>(_expr_ctxs[i]->root()));
+            auto ref = ((vectorized::ColumnRef*)_expr_ctxs[i]->root());
+            _tuple_slot_mappings.emplace_back(ref->tuple_id(), ref->slot_id(), _tuple_ids[0], _slot_ids[i]);
+        }
+    }
+
+    for (auto& child : _children) {
+        child->push_down_tuple_slot_mappings(state, _tuple_slot_mappings);
+    }
+}
+
 void ProjectNode::push_down_join_runtime_filter(RuntimeState* state,
                                                 vectorized::RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
