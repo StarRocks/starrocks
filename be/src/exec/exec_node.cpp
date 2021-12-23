@@ -98,10 +98,10 @@ ExecNode::~ExecNode() {
     }
 }
 
-void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
+void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
         for (auto& i : _children) {
-            i->push_down_predicate(state, expr_ctxs, is_vectorized);
+            i->push_down_predicate(state, expr_ctxs);
             if (expr_ctxs->size() == 0) {
                 return;
             }

@@ -334,18 +334,15 @@ Status DataStreamSender::Channel::close_internal() {
         return Status::OK();
     }
 
-    if (_parent->_is_vectorized) {
-        VLOG_RPC << "_chunk Channel::close() instance_id=" << _fragment_instance_id << " dest_node=" << _dest_node_id
-                 << " #rows= " << ((_chunk == nullptr) ? 0 : _chunk->num_rows());
-        if (_chunk != nullptr && _chunk->num_rows() > 0) {
-            RETURN_IF_ERROR(_send_current_chunk(true));
-        } else {
-            bool is_real_sent = false;
-            RETURN_IF_ERROR(send_one_chunk(nullptr, true, &is_real_sent));
-        }
+    VLOG_RPC << "_chunk Channel::close() instance_id=" << _fragment_instance_id << " dest_node=" << _dest_node_id
+             << " #rows= " << ((_chunk == nullptr) ? 0 : _chunk->num_rows());
+    if (_chunk != nullptr && _chunk->num_rows() > 0) {
+        RETURN_IF_ERROR(_send_current_chunk(true));
     } else {
-        return Status::InternalError("Non-vectorized execute engine is not supported");
+        bool is_real_sent = false;
+        RETURN_IF_ERROR(send_one_chunk(nullptr, true, &is_real_sent));
     }
+
     // Don't wait for the last packet to finish, left it to close_wait.
     return Status::OK();
 }
@@ -356,15 +353,13 @@ void DataStreamSender::Channel::close(RuntimeState* state) {
 
 void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     if (_need_close) {
-        if (_parent->_is_vectorized) {
-            auto st = _wait_prev_request();
-            if (!st.ok()) {
-                LOG(WARNING) << "fail to close channel, st=" << st.to_string()
-                             << ", instance_id=" << print_id(_fragment_instance_id)
-                             << ", dest=" << _brpc_dest_addr.hostname << ":" << _brpc_dest_addr.port;
-                if (_parent->_close_status.ok()) {
-                    _parent->_close_status = st;
-                }
+        auto st = _wait_prev_request();
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to close channel, st=" << st.to_string()
+                         << ", instance_id=" << print_id(_fragment_instance_id) << ", dest=" << _brpc_dest_addr.hostname
+                         << ":" << _brpc_dest_addr.port;
+            if (_parent->_close_status.ok()) {
+                _parent->_close_status = st;
             }
         }
         _need_close = false;
@@ -372,13 +367,12 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     _chunk.reset();
 }
 
-DataStreamSender::DataStreamSender(RuntimeState* state, bool is_vectorized, int sender_id,
-                                   const RowDescriptor& row_desc, const TDataStreamSink& sink,
+DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc,
+                                   const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
                                    int per_channel_buffer_size, bool send_query_statistics_with_every_batch,
                                    bool enable_exchange_pass_through)
-        : _is_vectorized(true),
-          _sender_id(sender_id),
+        : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
           _row_desc(row_desc),

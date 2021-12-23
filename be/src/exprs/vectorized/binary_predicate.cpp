@@ -33,8 +33,6 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedBinaryPredicate(*this)); }
 
-    bool is_vectorized() const override { return true; }
-
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
@@ -49,8 +47,6 @@ public:
     ~VectorizedNullSafeEqPredicate() override = default;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedNullSafeEqPredicate(*this)); }
-
-    bool is_vectorized() const override { return true; }
 
     // if v1 null and v2 null = true
     // if v1 null and v2 not null = false

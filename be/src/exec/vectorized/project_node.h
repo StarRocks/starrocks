@@ -21,7 +21,7 @@ public:
     Status reset(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
 
-    void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) override;
+    void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) override;
     void push_down_join_runtime_filter(RuntimeState* state,
                                        vectorized::RuntimeFilterProbeCollector* collector) override;
 
