@@ -318,7 +318,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "SELECT -v3 from t0 group by v3, v2 having -v3 < 63;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:Project\n"
+        Assert.assertTrue(planFragment.contains("  4:Project\n"
                 + "  |  <slot 4> : -1 * 3: v3"));
     }
 
@@ -497,12 +497,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) " +
                 "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  10:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (REPLICATED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY"));
-        Assert.assertTrue(plan.contains("  13:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("  14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
