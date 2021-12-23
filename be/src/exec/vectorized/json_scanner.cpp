@@ -604,6 +604,7 @@ Status JsonDocumentStreamParser::get(simdjson::ondemand::object* row) {
     } catch (simdjson::simdjson_error& e) {
         std::string err_msg;
         if (e.error() == simdjson::CAPACITY) {
+            // It's necessary to tell the user when they try to load json array whose payload size is beyond the simdjson::ondemand::parser's buffer.
             err_msg =
                     "The input payload size is beyond parser limit. Please set strip_outer_array true if you want to "
                     "load json array";

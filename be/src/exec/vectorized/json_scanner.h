@@ -121,8 +121,11 @@ class JsonParser {
 public:
     JsonParser() = default;
     virtual ~JsonParser() = default;
+    // parse initiates the parser. The inner iterator would point to the first object to be returned.
     virtual Status parse(uint8_t* data, size_t len, size_t allocated) = 0;
+    // get returns the object pointed by the inner iterator.
     virtual Status get(simdjson::ondemand::object* row) = 0;
+    // next forwards the inner iterator.
     virtual Status next() = 0;
 };
 
