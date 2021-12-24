@@ -119,8 +119,6 @@ public class PublishVersionDaemon extends MasterDaemon {
                 globalTransactionMgr.finishTransaction(transactionState.getDbId(), transactionState.getTransactionId(),
                         publishErrorReplicaIds);
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
-                    // if finish transaction state failed, then update publish version time, should check 
-                    // to finish after some interval
                     transactionState.updateSendTaskTime();
                     LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
                             transactionState, publishErrorReplicaIds.size());
@@ -128,6 +126,7 @@ public class PublishVersionDaemon extends MasterDaemon {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
                         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
                     }
+                    transactionState.clearPublishVersionTasks();
                 }
             }
         } // end for readyTransactionStates
