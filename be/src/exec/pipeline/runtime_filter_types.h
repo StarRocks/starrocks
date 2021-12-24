@@ -47,6 +47,30 @@ struct RuntimeFilterCollector {
     RuntimeBloomFilters& get_bloom_filters() { return _bloom_filters; }
     RuntimeInFilters& get_in_filters() { return _in_filters; }
 
+    // In-filters are constructed by a node and may be pushed down to its descendant node.
+    // Different tuple id and slot id between descendant and ancestor nodes may be referenced to the same column,
+    // such as ProjectNode, so we need use ancestor's tuple slot mappings to rewrite in filters.
+    void rewrite_in_filters(const std::vector<TupleSlotMapping>& mappings) {
+        std::vector<TupleId> tuple_ids(1);
+        for (const auto& mapping : mappings) {
+            tuple_ids[0] = mapping.to_tuple_id;
+
+            for (auto in_filter : _in_filters) {
+                if (!in_filter->root()->is_bound(tuple_ids)) {
+                    continue;
+                }
+
+                DCHECK(nullptr != dynamic_cast<vectorized::ColumnRef*>(in_filter->root()->get_child(0)));
+                auto column = ((vectorized::ColumnRef*)in_filter->root()->get_child(0));
+
+                if (column->slot_id() == mapping.to_slot_id) {
+                    column->set_slot_id(mapping.from_slot_id);
+                    column->set_tuple_id(mapping.from_tuple_id);
+                }
+            }
+        }
+    }
+
     std::vector<RuntimeInFilterPtr> get_in_filters_bounded_by_tuple_ids(const std::vector<TupleId>& tuple_ids) {
         std::vector<ExprContext*> selected_in_filters;
         for (auto* in_filter : _in_filters) {
