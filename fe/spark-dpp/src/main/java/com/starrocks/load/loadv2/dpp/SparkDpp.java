@@ -476,6 +476,7 @@ public final class SparkDpp implements java.io.Serializable {
                         List<Tuple2<List<Object>, Object[]>> result = new ArrayList<>();
                         List<Object> keyColumns = new ArrayList<>();
                         List<Object> valueColumns = new ArrayList<>(valueColumnNames.size());
+                        List<Object> allColumns = new ArrayList<>();
                         for (int i = 0; i < keyColumnNames.size(); i++) {
                             String columnName = keyColumnNames.get(i);
                             Object columnObject = row.get(row.fieldIndex(columnName));
@@ -484,6 +485,7 @@ public final class SparkDpp implements java.io.Serializable {
                                 return result.iterator();
                             }
                             keyColumns.add(columnObject);
+                            allColumns.add(columnObject);
                         }
 
                         for (int i = 0; i < valueColumnNames.size(); i++) {
@@ -495,11 +497,11 @@ public final class SparkDpp implements java.io.Serializable {
                                 return result.iterator();
                             }
                             valueColumns.add(columnObject);
+                            allColumns.add(columnObject);
                             loadEstimateSizeAcc.add(SizeEstimator.estimate(columnObject));
                         }
 
-                        DppColumns key = new DppColumns(keyColumns);
-                        int pid = partitioner.getPartition(key);
+                        int pid = partitioner.getPartition(new DppColumns(allColumns));
                         if (pid < 0) {
                             abnormalRowAcc.add(1);
                             LOG.warn("invalid partition for row:" + row + ", abnormal rows num:" +
