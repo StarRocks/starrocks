@@ -124,8 +124,6 @@ public class RoutineLoadScheduler extends MasterDaemon {
 
         // check timeout tasks
         routineLoadManager.processTimeoutTasks();
-
-        routineLoadManager.cleanOldRoutineLoadJobs();
     }
 
     private List<RoutineLoadJob> getNeedScheduleRoutineJobs() throws LoadException {
