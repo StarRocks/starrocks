@@ -43,7 +43,7 @@ namespace starrocks {
 
 template <typename T>
 PInternalServiceImpl<T>::PInternalServiceImpl(ExecEnv* exec_env)
-        : _exec_env(exec_env), _tablet_worker_pool(config::number_tablet_writer_threads, 10240) {}
+        : _exec_env(exec_env), _tablet_worker_pool("tablet", config::number_tablet_writer_threads, 10240) {}
 
 template <typename T>
 PInternalServiceImpl<T>::~PInternalServiceImpl() = default;

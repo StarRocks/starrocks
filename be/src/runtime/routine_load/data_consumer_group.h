@@ -34,7 +34,7 @@ class DataConsumerGroup {
 public:
     typedef std::function<void(const Status&)> ConsumeFinishCallback;
 
-    DataConsumerGroup() : _grp_id(UniqueId::gen_uid()), _thread_pool(3, 10) {}
+    DataConsumerGroup() : _grp_id(UniqueId::gen_uid()), _thread_pool("data_consume", 3, 10) {}
 
     virtual ~DataConsumerGroup() { _consumers.clear(); }
 

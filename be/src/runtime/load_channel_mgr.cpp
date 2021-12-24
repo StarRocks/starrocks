@@ -31,6 +31,7 @@
 #include "storage/lru_cache.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -180,6 +181,7 @@ Status LoadChannelMgr::_start_bg_worker() {
             sleep(interval);
         }
     });
+    Thread::set_thread_name(_load_channels_clean_thread, "load_chan_clean");
     return Status::OK();
 }
 

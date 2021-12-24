@@ -45,6 +45,7 @@
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/system_metrics.h"
+#include "util/thread.h"
 #include "util/thrift_util.h"
 #include "util/time.h"
 
@@ -265,12 +266,14 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     vectorized::date::init_date_cache();
 
     std::thread tcmalloc_gc_thread(gc_tcmalloc_memory, this);
+    Thread::set_thread_name(tcmalloc_gc_thread, "tcmalloc_daemon");
     _daemon_threads.emplace_back(std::move(tcmalloc_gc_thread));
 
     init_starrocks_metrics(paths);
 
     if (config::enable_metric_calculator) {
         std::thread calculate_metrics_thread(calculate_metrics, this);
+        Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
     }
 

@@ -34,6 +34,7 @@
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "util/file_utils.h"
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -56,6 +57,7 @@ Status LoadPathMgr::init() {
 
     _idx = 0;
     pthread_create(&_cleaner_id, nullptr, LoadPathMgr::cleaner, this);
+    Thread::set_thread_name(_cleaner_id, "load_path_mgr");
     return Status::OK();
 }
 
