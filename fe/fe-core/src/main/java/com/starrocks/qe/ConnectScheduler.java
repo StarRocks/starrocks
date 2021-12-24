@@ -43,26 +43,25 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConnectScheduler {
     private static final Logger LOG = LogManager.getLogger(ConnectScheduler.class);
-    private int maxConnections;
-    private int numberConnection;
-    private AtomicInteger nextConnectionId;
+    private final AtomicInteger maxConnections;
+    private final AtomicInteger numberConnection;
+    private final AtomicInteger nextConnectionId;
 
-    private Map<Long, ConnectContext> connectionMap = Maps.newHashMap();
-    private Map<String, AtomicInteger> connByUser = Maps.newHashMap();
-    private ExecutorService executor = ThreadPoolManager
+    private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
+    private final Map<String, AtomicInteger> connByUser = Maps.newConcurrentMap();
+    private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_connection_scheduler_threads_num, "connect-scheduler-pool", true);
 
-    // Use a thread to check whether connection is timeout. Because
-    // 1. If use a scheduler, the task maybe a huge number when query is messy.
-    //    Let timeout is 10m, and 5000 qps, then there are up to 3000000 tasks in scheduler.
-    // 2. Use a thread to poll maybe lose some accurate, but is enough to us.
-    private ScheduledExecutorService checkTimer = ThreadPoolManager.newDaemonScheduledThreadPool(1,
-            "Connect-Scheduler-Check-Timer", true);
-
     public ConnectScheduler(int maxConnections) {
-        this.maxConnections = maxConnections;
-        numberConnection = 0;
+        this.maxConnections = new AtomicInteger(maxConnections);
+        numberConnection = new AtomicInteger(0);
         nextConnectionId = new AtomicInteger(0);
+        // Use a thread to check whether connection is timeout. Because
+        // 1. If use a scheduler, the task maybe a huge number when query is messy.
+        //    Let timeout is 10m, and 5000 qps, then there are up to 3000000 tasks in scheduler.
+        // 2. Use a thread to poll maybe lose some accurate, but is enough to us.
+        ScheduledExecutorService checkTimer = ThreadPoolManager.newDaemonScheduledThreadPool(1,
+                "Connect-Scheduler-Check-Timer", true);
         checkTimer.scheduleAtFixedRate(new TimeoutChecker(), 0, 1000L, TimeUnit.MILLISECONDS);
     }
 
@@ -110,8 +109,8 @@ public class ConnectScheduler {
     }
 
     // Register one connection with its connection id.
-    public synchronized boolean registerConnection(ConnectContext ctx) {
-        if (numberConnection >= maxConnections) {
+    public boolean registerConnection(ConnectContext ctx) {
+        if (numberConnection.get() >= maxConnections.get()) {
             return false;
         }
         // Check user
@@ -122,15 +121,15 @@ public class ConnectScheduler {
         if (conns >= ctx.getCatalog().getAuth().getMaxConn(ctx.getQualifiedUser())) {
             return false;
         }
-        numberConnection++;
+        numberConnection.incrementAndGet();
         connByUser.get(ctx.getQualifiedUser()).incrementAndGet();
         connectionMap.put((long) ctx.getConnectionId(), ctx);
         return true;
     }
 
-    public synchronized void unregisterConnection(ConnectContext ctx) {
+    public void unregisterConnection(ConnectContext ctx) {
         if (connectionMap.remove((long) ctx.getConnectionId()) != null) {
-            numberConnection--;
+            numberConnection.decrementAndGet();
             AtomicInteger conns = connByUser.get(ctx.getQualifiedUser());
             if (conns != null) {
                 conns.decrementAndGet();
@@ -138,15 +137,15 @@ public class ConnectScheduler {
         }
     }
 
-    public synchronized ConnectContext getContext(long connectionId) {
+    public ConnectContext getContext(long connectionId) {
         return connectionMap.get(connectionId);
     }
 
-    public synchronized int getConnectionNum() {
-        return numberConnection;
+    public int getConnectionNum() {
+        return numberConnection.get();
     }
 
-    public synchronized List<ConnectContext.ThreadInfo> listConnection(String user) {
+    public List<ConnectContext.ThreadInfo> listConnection(String user) {
         List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
 
         for (ConnectContext ctx : connectionMap.values()) {
