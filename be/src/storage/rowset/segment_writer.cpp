@@ -80,8 +80,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         return Status::InvalidArgument(strings::Substitute("Invalid storage_format_version $0", v));
     }
 
-    // use for partital update
-    // merge partital segment footer
+    // merge partial segment footer
+    // in partial update, key columns and some value columns have been written in partial segment
+    // rewrite partial segment into full segment only need to write other value columns into full segment
+    // merge partial segment footer to avoid loss of metadata
     if (footer != nullptr) {
         for (uint32_t ordinal = 0; ordinal < footer->columns().size(); ++ordinal) {
             const auto& src_column_pb = footer->columns(ordinal);
@@ -92,8 +94,8 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             PagePointerPB* dst = _footer.mutable_short_key_index_page();
             *dst = footer->short_key_index_page();
         }
-        // in partital update, key columns have been written in partital segment
-        // set _num_rows as _num_rows in partital segment
+        // in partial update, key columns have been written in partial segment
+        // set _num_rows as _num_rows in partial segment
         _num_rows = footer->num_rows();
     }
 

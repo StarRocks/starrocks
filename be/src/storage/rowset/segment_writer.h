@@ -93,7 +93,7 @@ public:
     Status init();
 
     // Used for vertical compaction
-    // footer is used for paritial update
+    // footer is used for partial update
     Status init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer = nullptr);
 
     // |chunk| contains partial or all columns data corresponding to _column_writers.
