@@ -50,4 +50,11 @@ public class PhysicalCTEAnchorOperator extends PhysicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), cteId);
     }
+
+    @Override
+    public String toString() {
+        return "PhysicalCTEAnchorOperator{" +
+                "cteId='" + cteId + '\'' +
+                '}';
+    }
 }

@@ -367,12 +367,13 @@ public class QueryAnalyzer {
     }
 
     private Scope analyzeCTE(QueryStmt stmt, Scope scope) {
-        if (!stmt.hasWithClause()) {
-            return scope;
-        }
-
         Scope cteScope = new Scope(RelationId.anonymous(), new RelationFields());
         cteScope.setParent(scope);
+
+        if (!stmt.hasWithClause()) {
+            return cteScope;
+        }
+
         for (View withQuery : stmt.getWithClause().getViews()) {
 
             QueryRelation query = transformQueryStmt(withQuery.getQueryStmtWithParse(), cteScope);
