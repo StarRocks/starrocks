@@ -524,7 +524,7 @@ public class DecodeRewriteTest extends PlanTestBase {
     public void testCountDistinctMultiColumns() throws Exception {
         String sql = "select count(distinct S_SUPPKEY, S_COMMENT) from supplier";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:Decode\n" +
+        Assert.assertTrue(plan.contains("2:Decode\n" +
                 "  |  <dict id 10> : <string id 7>"));
         Assert.assertTrue(plan.contains(":AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(1: S_SUPPKEY IS NULL, NULL, 7))"));
