@@ -36,18 +36,18 @@ public class ClientPool {
 
     static {
         heartbeatConfig.setLifo(true);            // set Last In First Out strategy
-        heartbeatConfig.setMaxIdlePerKey(2);      // (default 8)
-        heartbeatConfig.setMinIdlePerKey(1);      // (default 0)
-        heartbeatConfig.setMaxTotalPerKey(-1);    // (default 8)
+        heartbeatConfig.setMaxIdlePerKey(2);      // (default 2)
+        heartbeatConfig.setMinIdlePerKey(1);      // (default 1)
+        heartbeatConfig.setMaxTotalPerKey(-1);    // (default -1)
         heartbeatConfig.setMaxTotal(-1);          // (default -1)
         heartbeatConfig.setMaxWaitMillis(500);    //  wait for the connection
     }
 
     static {
         backendConfig.setLifo(true);            // set Last In First Out strategy
-        backendConfig.setMaxIdlePerKey(128);      // (default 8)
-        backendConfig.setMinIdlePerKey(2);      // (default 0)
-        backendConfig.setMaxTotalPerKey(-1);    // (default 8)
+        backendConfig.setMaxIdlePerKey(128);    // (default 128)
+        backendConfig.setMinIdlePerKey(2);      // (default 2)
+        backendConfig.setMaxTotalPerKey(-1);    // (default -1)
         backendConfig.setMaxTotal(-1);          // (default -1)
         backendConfig.setMaxWaitMillis(500);    //  wait for the connection
     }
@@ -57,9 +57,9 @@ public class ClientPool {
 
     static {
         brokerPoolConfig.setLifo(true);            // set Last In First Out strategy
-        brokerPoolConfig.setMaxIdlePerKey(128);      // (default 8)
-        brokerPoolConfig.setMinIdlePerKey(2);      // (default 0)
-        brokerPoolConfig.setMaxTotalPerKey(-1);    // (default 8)
+        brokerPoolConfig.setMaxIdlePerKey(128);    // (default 128)
+        brokerPoolConfig.setMinIdlePerKey(2);      // (default 2)
+        brokerPoolConfig.setMaxTotalPerKey(-1);    // (default -1)
         brokerPoolConfig.setMaxTotal(-1);          // (default -1)
         brokerPoolConfig.setMaxWaitMillis(500);    //  wait for the connection
     }
