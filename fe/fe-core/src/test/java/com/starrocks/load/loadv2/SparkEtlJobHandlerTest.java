@@ -315,7 +315,7 @@ public class SparkEtlJobHandlerTest {
         handler.getEtlJobStatus(handle, appId, loadJobId, etlOutputPath, resource, brokerDesc);
     }
 
-    @Test
+    @Test(expected = LoadException.class)
     public void testGetEtlJobStatusFailed(@Mocked Util util, @Mocked CommandResult commandResult,
                                           @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                           @Mocked SparkLoadAppHandle handle)
@@ -355,9 +355,8 @@ public class SparkEtlJobHandlerTest {
         BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
         SparkEtlJobHandler handler = new SparkEtlJobHandler();
 
-        // yarn finished and spark failed
-        EtlStatus status = handler.getEtlJobStatus(null, appId, loadJobId, etlOutputPath, resource, brokerDesc);
-        Assert.assertEquals(TEtlState.CANCELLED, status.getState());
+        // yarn application status failed
+        handler.getEtlJobStatus(null, appId, loadJobId, etlOutputPath, resource, brokerDesc);
     }
 
     @Test
