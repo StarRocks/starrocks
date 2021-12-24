@@ -2382,12 +2382,24 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             rssid_to_rowsets.insert(rowset);
         }
     }
+    if (with_default) {
+        for (auto& column : *columns) {
+            column->append_default();
+        }
+    }
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         auto iter = rssid_to_rowsets.upper_bound(rssid);
         --iter;
         const auto& rowset = iter->second.get();
-        CHECK_LE(rowset->rowset_meta()->get_rowset_seg_id(), rssid);
-        CHECK_LT(rssid, rowset->rowset_meta()->get_rowset_seg_id() + rowset->num_segments());
+        if (!(rowset->rowset_meta()->get_rowset_seg_id() <= rssid &&
+              rssid < rowset->rowset_meta()->get_rowset_seg_id() + rowset->num_segments())) {
+            string msg = Substitute("illegal rssid: $0, should in [$1, $2)", rssid,
+                                    rowset->rowset_meta()->get_rowset_seg_id(),
+                                    rowset->rowset_meta()->get_rowset_seg_id() + rowset->num_segments());
+            LOG(ERROR) << msg;
+            _set_error();
+            return Status::InternalError(msg);
+        }
         std::string seg_path =
                 BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
         auto segment_res =
@@ -2418,9 +2430,6 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         }
         int i = 0;
         for (const auto column_id : column_ids) {
-            if (with_default) {
-                (*columns)[i]->append_default();
-            }
             auto* col_iter = seg_iter->get_column_iterator(column_id);
             col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get());
             ++i;
