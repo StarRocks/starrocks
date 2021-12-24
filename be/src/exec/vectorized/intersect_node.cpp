@@ -11,6 +11,7 @@
 #include "exec/pipeline/set/intersect_output_source_operator.h"
 #include "exec/pipeline/set/intersect_probe_sink_operator.h"
 #include "exprs/expr.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -94,7 +95,7 @@ Status IntersectNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(child(0)->get_next(state, &chunk, &eos));
     if (!eos) {
         ScopedTimer<MonotonicStopWatch> build_timer(_build_set_timer);
-        RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
+        TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
         while (true) {
             RETURN_IF_ERROR(state->check_mem_limit("IntersectNode"));
             RETURN_IF_CANCELLED(state);
@@ -108,7 +109,7 @@ Status IntersectNode::open(RuntimeState* state) {
             if (chunk->num_rows() == 0) {
                 continue;
             }
-            RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
+            TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
         }
     }
 
