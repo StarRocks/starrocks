@@ -7,8 +7,6 @@
 #include <vector>
 
 #include "common/statusor.h"
-#include "gen_cpp/segment.pb.h"
-#include "storage/fs/block_manager.h"
 
 namespace starrocks {
 

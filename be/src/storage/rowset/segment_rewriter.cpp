@@ -2,7 +2,9 @@
 
 #include "segment_rewriter.h"
 
+#include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
+#include "storage/fs/block_manager.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -17,15 +19,21 @@ SegmentRewriter::SegmentRewriter() {}
 SegmentRewriter::~SegmentRewriter() {}
 
 Status parse_segment_footer(std::unique_ptr<fs::ReadableBlock>* rblock, SegmentFooterPB* footer,
-                            size_t* footer_length) {
+                            uint64_t* segment_data_size) {
     std::string buff;
     raw::stl_string_resize_uninitialized(&buff, 12);
 
     uint64_t file_size;
     RETURN_IF_ERROR((*rblock)->size(&file_size));
+
+    if (file_size < 12) {
+        return Status::Corruption(
+                strings::Substitute("Bad segment file $0: file size $1 < 12", (*rblock)->path(), file_size));
+    }
+
     RETURN_IF_ERROR((*rblock)->read(file_size - buff.size(), buff));
 
-    *footer_length = UNALIGNED_LOAD32(buff.data() + buff.size() - 12);
+    const uint32_t footer_length = UNALIGNED_LOAD32(buff.data() + buff.size() - 12);
     const uint32_t checksum = UNALIGNED_LOAD32(buff.data() + buff.size() - 8);
     const uint32_t magic_number = UNALIGNED_LOAD32(buff.data() + buff.size() - 4);
 
@@ -34,12 +42,12 @@ Status parse_segment_footer(std::unique_ptr<fs::ReadableBlock>* rblock, SegmentF
                 strings::Substitute("Bad segment file $0: magic number not match", (*rblock)->path()));
     }
 
-    if (file_size < 12 + *footer_length) {
+    if (file_size < 12 + footer_length) {
         return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < $2", (*rblock)->path(),
-                                                      file_size, 12 + *footer_length));
+                                                      file_size, 12 + footer_length));
     }
 
-    raw::stl_string_resize_uninitialized(&buff, *footer_length);
+    raw::stl_string_resize_uninitialized(&buff, footer_length);
     RETURN_IF_ERROR((*rblock)->read(file_size - buff.size() - 12, buff));
     uint32_t actual_checksum = crc32c::Value(buff.data(), buff.size());
     if (actual_checksum != checksum) {
@@ -53,6 +61,7 @@ Status parse_segment_footer(std::unique_ptr<fs::ReadableBlock>* rblock, SegmentF
                 strings::Substitute("Bad segment file $0: failed to parse footer", (*rblock)->path()));
     }
 
+    *segment_data_size = file_size - footer_length - 12;
     return Status::OK();
 }
 
@@ -67,21 +76,13 @@ Status SegmentRewriter::rewrite(const std::string& src, const std::string& dest,
     std::unique_ptr<fs::ReadableBlock> rblock;
     RETURN_IF_ERROR(block_mgr->open_block(src, &rblock));
 
-    uint64_t file_size;
-    RETURN_IF_ERROR(rblock->size(&file_size));
-
-    if (file_size < 12) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < 12", src, file_size));
-    }
-
     SegmentFooterPB footer;
-    size_t footer_length = 0;
-    RETURN_IF_ERROR(parse_segment_footer(&rblock, &footer, &footer_length));
+    uint64_t remaining = 0;
+    RETURN_IF_ERROR(parse_segment_footer(&rblock, &footer, &remaining));
 
     std::string read_buffer;
     raw::stl_string_resize_uninitialized(&read_buffer, 4096);
     uint64_t offset = 0;
-    uint64_t remaining = file_size - footer_length - 12;
     while (remaining > 0) {
         if (remaining < 4096) {
             raw::stl_string_resize_uninitialized(&read_buffer, remaining);
