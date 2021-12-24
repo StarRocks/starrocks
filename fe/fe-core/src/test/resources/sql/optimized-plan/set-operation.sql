@@ -246,3 +246,45 @@ UNION
     SCAN (columns[1: v1] predicate[null])
     SCAN (columns[5: v4] predicate[null])
 [end]
+
+[sql]
+select 1 from t0 union all select 2 from t0 union select 2 from t0 union select 3 from t0;
+[result]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[18: expr]] having [null]
+    EXCHANGE SHUFFLE[18]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[18: expr]] having [null]
+            UNION
+                UNION
+                    SCAN (columns[1: v1] predicate[null])
+                    SCAN (columns[5: v1] predicate[null])
+                SCAN (columns[10: v1] predicate[null])
+                SCAN (columns[14: v1] predicate[null])
+[end]
+
+[sql]
+select 1 from t0 union all select 2 from t0 union all select 2 from t0 union select 3 from t0;
+[result]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[18: expr]] having [null]
+    EXCHANGE SHUFFLE[18]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[18: expr]] having [null]
+            UNION
+                UNION
+                    SCAN (columns[1: v1] predicate[null])
+                    SCAN (columns[5: v1] predicate[null])
+                    SCAN (columns[9: v1] predicate[null])
+                SCAN (columns[14: v1] predicate[null])
+[end]
+
+[sql]
+select 1 from t0 union select 2 from t0 union all select 2 from t0 union all select 3 from t0;
+[result]
+UNION
+    AGGREGATE ([GLOBAL] aggregate [{}] group by [[9: expr]] having [null]
+        EXCHANGE SHUFFLE[9]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[9: expr]] having [null]
+                UNION
+                    SCAN (columns[1: v1] predicate[null])
+                    SCAN (columns[5: v1] predicate[null])
+    SCAN (columns[10: v1] predicate[null])
+    SCAN (columns[14: v1] predicate[null])
+[end]
