@@ -1,6 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/execution_queue.h>
+DIAGNOSTIC_POP
 
 #include "common/config.h"
 #include "util/threadpool.h"
