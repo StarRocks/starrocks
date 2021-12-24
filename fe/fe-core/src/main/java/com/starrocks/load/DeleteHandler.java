@@ -778,7 +778,20 @@ public class DeleteHandler implements Writable {
     }
 
     public static DeleteHandler read(DataInput in) throws IOException {
-        String json = Text.readString(in);
+        String json;
+        try {
+            json = Text.readString(in);
+
+            // In older versions of fe, the information in the deleteHandler is not cleaned up,
+            // and if there are many delete statements, it will cause an int overflow
+            // and report an IllegalArgumentException.
+            //
+            // dbToDeleteInfos is only used to record history delete info,
+            // discarding it doesn't make much of a difference
+        } catch (IllegalArgumentException e) {
+            LOG.warn("read delete handler json string failed, ignore", e);
+            return new DeleteHandler();
+        }
         return GsonUtils.GSON.fromJson(json, DeleteHandler.class);
     }
 

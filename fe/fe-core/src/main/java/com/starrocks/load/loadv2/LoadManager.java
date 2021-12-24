@@ -65,7 +65,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 /**
- * The broker and mini load jobs(v2) are included in this class.
+ * The broker and spark load jobs are included in this class.
  * <p>
  * The lock sequence:
  * Database.lock
