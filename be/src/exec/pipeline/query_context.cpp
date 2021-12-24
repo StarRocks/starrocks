@@ -29,6 +29,12 @@ void QueryContext::cancel(const Status& status) {
     _fragment_mgr->cancel(status);
 }
 
+void QueryContext::prepare_pass_through_chunk_buffer() {
+    if (_exec_env != nullptr) {
+        _exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+    }
+}
+
 QueryContextManager::QueryContextManager() = default;
 QueryContextManager::~QueryContextManager() = default;
 QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {

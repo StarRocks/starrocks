@@ -59,12 +59,11 @@ private:
     std::unordered_map<int, PassThroughSenderChannel*> _sender_id_to_channel;
 };
 
-PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id) : _mutex(), _query_id(query_id) {
-    VLOG_FILE << "PassThroughChunkBuffer::create. query_id = " << _query_id;
-}
+PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id)
+        : _mutex(), _query_id(query_id), _ref_count(1) {}
 
 PassThroughChunkBuffer::~PassThroughChunkBuffer() {
-    VLOG_FILE << "PassThroughChunkBuffer::destroy. query_id = " << _query_id;
+    DCHECK(_ref_count == 0);
     for (auto& it : _key_to_channel) {
         delete it.second;
     }
@@ -94,6 +93,46 @@ void PassThroughContext::append_chunk(int sender_id, const vectorized::Chunk* ch
 void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
     PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);
     sender_channel->pull_chunks(chunks, bytes);
+}
+
+void PassThroughChunkBufferManager::open(const TUniqueId& query_id) {
+    VLOG_FILE << "PassThroughChunkBufferManager::open, query_id = " << query_id;
+    {
+        std::unique_lock _l(_mutex);
+        auto it = _query_id_to_buffer.find(query_id);
+        if (it == _query_id_to_buffer.end()) {
+            PassThroughChunkBuffer* buffer = new PassThroughChunkBuffer(query_id);
+            _query_id_to_buffer.emplace(std::make_pair(query_id, buffer));
+        } else {
+            it->second->ref();
+        }
+    }
+}
+
+void PassThroughChunkBufferManager::close(const TUniqueId& query_id) {
+    VLOG_FILE << "PassThroughChunkBufferManager::close, query_id = " << query_id;
+    {
+        std::unique_lock _l(_mutex);
+        auto it = _query_id_to_buffer.find(query_id);
+        if (it != _query_id_to_buffer.end()) {
+            int rc = it->second->unref();
+            if (rc == 0) {
+                delete it->second;
+                _query_id_to_buffer.erase(it);
+            }
+        }
+    }
+}
+
+PassThroughChunkBuffer* PassThroughChunkBufferManager::get(const TUniqueId& query_id) {
+    {
+        std::unique_lock _l(_mutex);
+        auto it = _query_id_to_buffer.find(query_id);
+        if (it == _query_id_to_buffer.end()) {
+            return nullptr;
+        }
+        return it->second;
+    }
 }
 
 } // namespace starrocks
