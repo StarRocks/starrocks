@@ -42,6 +42,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
     private final boolean isSplit;
+    // flg for this aggregate operator could use streaming pre-aggregation
+    private boolean useStreamingPreAgg = true;
 
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
@@ -90,6 +92,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public boolean isSplit() {
         return isSplit;
+    }
+
+    public void setUseStreamingPreAgg(boolean useStreamingPreAgg) {
+        this.useStreamingPreAgg = useStreamingPreAgg;
+    }
+
+    public boolean isUseStreamingPreAgg() {
+        return this.useStreamingPreAgg;
     }
 
     @Override
