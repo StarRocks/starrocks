@@ -71,13 +71,30 @@ Status SegmentWriter::init() {
     return init(all_column_indexes, true);
 }
 
-Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key) {
+Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
     DCHECK(_column_writers.empty());
     DCHECK(_column_indexes.empty());
 
     if (_opts.storage_format_version != 1 && _opts.storage_format_version != 2) {
         auto v = _opts.storage_format_version;
         return Status::InvalidArgument(strings::Substitute("Invalid storage_format_version $0", v));
+    }
+
+    // use for partital update
+    // merge partital segment footer
+    if (footer != nullptr) {
+        for (uint32_t ordinal = 0; ordinal < footer->columns().size(); ++ordinal) {
+            const auto& src_column_pb = footer->columns(ordinal);
+            ColumnMetaPB* dst_column_pb = _footer.add_columns();
+            *dst_column_pb = src_column_pb;
+        }
+        if (footer->has_short_key_index_page()) {
+            PagePointerPB* dst = _footer.mutable_short_key_index_page();
+            *dst = footer->short_key_index_page();
+        }
+        // in partital update, key columns have been written in partital segment
+        // set _num_rows as _num_rows in partital segment
+        _num_rows = footer->num_rows();
     }
 
     _column_indexes.insert(_column_indexes.end(), column_indexes.begin(), column_indexes.end());
