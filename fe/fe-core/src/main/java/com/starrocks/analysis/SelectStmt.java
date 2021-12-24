@@ -1233,18 +1233,18 @@ public class SelectStmt extends QueryStmt {
             final String functionName = inputExpr.getFnName().getFunction();
             if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
                 final List<Expr> countInputExpr = Lists.newArrayList(inputExpr.getChild(0).clone(null));
-                replaceExpr = new FunctionCallExpr("MULTI_DISTINCT_COUNT",
+                replaceExpr = new FunctionCallExpr("multi_distinct_count",
                         new FunctionParams(inputExpr.isDistinct(), countInputExpr));
             } else if (functionName.equalsIgnoreCase("SUM")) {
                 final List<Expr> sumInputExprs = Lists.newArrayList(inputExpr.getChild(0).clone(null));
-                replaceExpr = new FunctionCallExpr("MULTI_DISTINCT_SUM",
+                replaceExpr = new FunctionCallExpr("multi_distinct_sum",
                         new FunctionParams(inputExpr.isDistinct(), sumInputExprs));
             } else if (functionName.equalsIgnoreCase("AVG")) {
                 final List<Expr> sumInputExprs = Lists.newArrayList(inputExpr.getChild(0).clone(null));
                 final List<Expr> countInputExpr = Lists.newArrayList(inputExpr.getChild(0).clone(null));
-                final FunctionCallExpr sumExpr = new FunctionCallExpr("MULTI_DISTINCT_SUM",
+                final FunctionCallExpr sumExpr = new FunctionCallExpr("multi_distinct_sum",
                         new FunctionParams(inputExpr.isDistinct(), sumInputExprs));
-                final FunctionCallExpr countExpr = new FunctionCallExpr("MULTI_DISTINCT_COUNT",
+                final FunctionCallExpr countExpr = new FunctionCallExpr("multi_distinct_count",
                         new FunctionParams(inputExpr.isDistinct(), countInputExpr));
                 replaceExpr = new ArithmeticExpr(ArithmeticExpr.Operator.DIVIDE, sumExpr, countExpr);
             } else {

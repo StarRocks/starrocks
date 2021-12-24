@@ -1072,14 +1072,14 @@ public class PlanFragmentBuilder {
                 FunctionCallExpr replaceExpr = null;
                 final String functionName = functionCallExpr.getFnName().getFunction();
                 if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
-                    replaceExpr = new FunctionCallExpr("MULTI_DISTINCT_COUNT", functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction("MULTI_DISTINCT_COUNT",
+                    replaceExpr = new FunctionCallExpr("multi_distinct_count", functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction("multi_distinct_count",
                             new Type[] {functionCallExpr.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);
                 } else if (functionName.equalsIgnoreCase("SUM")) {
-                    replaceExpr = new FunctionCallExpr("MULTI_DISTINCT_SUM", functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction("MULTI_DISTINCT_SUM",
+                    replaceExpr = new FunctionCallExpr("multi_distinct_sum", functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction("multi_distinct_sum",
                             new Type[] {functionCallExpr.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);

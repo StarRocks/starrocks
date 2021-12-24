@@ -110,13 +110,12 @@ public class Projection {
     }
 
     public void fillDisableDictOptimizeColumns(ColumnRefSet columnRefSet) {
-        for (ScalarOperator operator : columnRefMap.values()) {
-            fillDisableDictOptimizeColumns(operator, columnRefSet);
-        }
-
-        for (ScalarOperator operator : commonSubOperatorMap.values()) {
-            fillDisableDictOptimizeColumns(operator, columnRefSet);
-        }
+        columnRefMap.forEach((k, v) -> {
+            if (columnRefSet.contains(k.getId())) {
+                columnRefSet.union(v.getUsedColumns());
+            }
+            fillDisableDictOptimizeColumns(v, columnRefSet);
+        });
     }
 
     public boolean hasUnsupportedDictOperator(Set<Integer> stringColumnIds) {

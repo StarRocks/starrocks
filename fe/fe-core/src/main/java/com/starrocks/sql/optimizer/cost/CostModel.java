@@ -170,8 +170,8 @@ public class CostModel {
         }
 
         public boolean isDistinctAggFun(CallOperator aggOperator, PhysicalHashAggregateOperator node) {
-            if (aggOperator.getFnName().equalsIgnoreCase("MULTI_DISTINCT_COUNT") ||
-                    aggOperator.getFnName().equalsIgnoreCase("MULTI_DISTINCT_SUM")) {
+            if (aggOperator.getFnName().equalsIgnoreCase("multi_distinct_count") ||
+                    aggOperator.getFnName().equalsIgnoreCase("multi_distinct_sum")) {
                 return true;
             }
             // only one stage agg node has not rewrite distinct function here

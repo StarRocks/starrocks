@@ -52,7 +52,7 @@ public class PreAggregateTurnOnRule {
     private static class PreAggregateVisitor extends OptExpressionVisitor<Void, PreAggregationContext> {
         private static final List<String> AGGREGATE_ONLY_KEY = ImmutableList.<String>builder()
                 .add("NDV")
-                .add("MULTI_DISTINCT_COUNT")
+                .add("multi_distinct_count")
                 .add("APPROX_COUNT_DISTINCT")
                 .add(FunctionSet.BITMAP_UNION_INT.toUpperCase()).build();
 
