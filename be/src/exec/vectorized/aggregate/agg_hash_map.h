@@ -288,7 +288,7 @@ struct AggHashMapWithOneStringKey {
             auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
-                THROW_BAD_ALLOC_IF_NULL(pos);
+                assert(pos != nullptr);
                 strings::memcpy_inlined(pos, key.data, key.size);
                 Slice pk{pos, key.size};
                 AggDataPtr pv = allocate_func();
@@ -357,7 +357,7 @@ struct AggHashMapWithOneNullableStringKey {
                     auto key = data_column->get_slice(i);
                     auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                         uint8_t* pos = pool->allocate(key.size);
-                        THROW_BAD_ALLOC_IF_NULL(pos);
+                        assert(pos != nullptr);
                         strings::memcpy_inlined(pos, key.data, key.size);
                         Slice pk{pos, key.size};
                         AggDataPtr pv = allocate_func();
@@ -427,7 +427,7 @@ struct AggHashMapWithOneNullableStringKey {
         auto key = data_column->get_slice(row);
         auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = pool->allocate(key.size);
-            THROW_BAD_ALLOC_IF_NULL(pos);
+            assert(pos != nullptr);
             strings::memcpy_inlined(pos, key.data, key.size);
             Slice pk{pos, key.size};
             AggDataPtr pv = allocate_func();
@@ -469,7 +469,7 @@ struct AggHashMapWithSerializedKey {
     AggHashMapWithSerializedKey()
             : mem_pool(std::make_unique<MemPool>()),
               buffer(mem_pool->allocate(max_one_row_size * config::vector_chunk_size)) {
-        THROW_BAD_ALLOC_IF_NULL(buffer);
+        assert(buffer != nullptr);
     }
 
     template <typename Func>
@@ -484,7 +484,7 @@ struct AggHashMapWithSerializedKey {
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
             buffer = mem_pool->allocate(max_one_row_size * config::vector_chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            THROW_BAD_ALLOC_IF_NULL(buffer);
+            assert(buffer != nullptr);
         }
 
         for (const auto& key_column : key_columns) {
@@ -496,7 +496,7 @@ struct AggHashMapWithSerializedKey {
             auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
-                THROW_BAD_ALLOC_IF_NULL(pos);
+                assert(pos != nullptr);
                 strings::memcpy_inlined(pos, key.data, key.size);
                 Slice pk{pos, key.size};
                 AggDataPtr pv = allocate_func();
@@ -519,7 +519,7 @@ struct AggHashMapWithSerializedKey {
             max_one_row_size = cur_max_one_row_size;
             mem_pool->clear();
             buffer = mem_pool->allocate(max_one_row_size * config::vector_chunk_size);
-            THROW_BAD_ALLOC_IF_NULL(buffer);
+            assert(buffer != nullptr);
         }
 
         for (const auto& key_column : key_columns) {
