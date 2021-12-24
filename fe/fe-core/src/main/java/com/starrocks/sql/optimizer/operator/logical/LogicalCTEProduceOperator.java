@@ -64,4 +64,11 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), cteId);
     }
+
+    @Override
+    public String toString() {
+        return "LogicalCTEProduceOperator{" +
+                "cteId='" + cteId + '\'' +
+                '}';
+    }
 }
