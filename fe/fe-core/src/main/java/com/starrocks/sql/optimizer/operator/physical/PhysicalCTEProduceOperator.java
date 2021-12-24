@@ -50,4 +50,11 @@ public class PhysicalCTEProduceOperator extends PhysicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), cteId);
     }
+
+    @Override
+    public String toString() {
+        return "PhysicalCTEProduceOperator{" +
+                "cteId='" + cteId + '\'' +
+                '}';
+    }
 }
