@@ -2933,19 +2933,6 @@ public:
         return 1;
     }
 
-    template <class K = key_type>
-    size_type erase_with_hash(const key_arg<K>& key, size_t hashval) {
-        Inner& inner = sets_[subidx(hashval)];
-        auto& set = inner.set_;
-        typename Lockable::UpgradeLock m(inner);
-        auto it = set.find(key, hashval);
-        if (it == set.end()) return 0;
-
-        typename Lockable::UpgradeToUnique unique(m);
-        set._erase(it);
-        return 1;
-    }
-
     // --------------------------------------------------------------------
     iterator erase(const_iterator cit) { return erase(cit.iter_); }
 
