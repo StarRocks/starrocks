@@ -2310,7 +2310,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "   union all\n"
                 + "   (select * from db1.tbl6 where k1='b' and k4=5)\n"
                 + "   order by 3 limit 3)";
-        starRocksAssert.query(sql2).explainContains("UNION", 5);
+        starRocksAssert.query(sql2).explainContains("UNION", 6);
 
         // intersect
         String sql3 = "select * from\n"

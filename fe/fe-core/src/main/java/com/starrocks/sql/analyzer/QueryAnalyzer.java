@@ -339,7 +339,8 @@ public class QueryAnalyzer {
         for (int i = 1; i < relations.size(); ++i) {
             SetOperationStmt.SetOperand operation = stmt.getOperands().get(i);
             if (operation.getOperation().equals(SetOperationStmt.Operation.UNION)) {
-                if (setOpRelation instanceof UnionRelation) {
+                if (setOpRelation instanceof UnionRelation && ((UnionRelation) setOpRelation).getQualifier()
+                        .equals(SetQualifier.convert(operation.getQualifier()))) {
                     ((UnionRelation) setOpRelation).addRelation(relations.get(i));
                 } else {
                     setOpRelation = new UnionRelation(Arrays.asList(setOpRelation, relations.get(i)),
@@ -969,7 +970,7 @@ public class QueryAnalyzer {
 
                     List<List<Expr>> groupingSets =
                             Sets.powerSet(IntStream.range(0, rewriteOriGrouping.size())
-                                    .boxed().collect(Collectors.toSet())).stream()
+                                            .boxed().collect(Collectors.toSet())).stream()
                                     .map(l -> l.stream().map(rewriteOriGrouping::get).collect(Collectors.toList()))
                                     .collect(Collectors.toList());
 
