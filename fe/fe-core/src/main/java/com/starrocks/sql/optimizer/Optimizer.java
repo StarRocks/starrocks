@@ -109,6 +109,11 @@ public class Optimizer {
     }
 
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
+        // Derive cte consume statistics, join order depend on cost model
+        context.getTaskScheduler().pushTask(new DeriveStatsTask(
+                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
 
         // Join reorder

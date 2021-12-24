@@ -63,4 +63,11 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), cteId);
     }
+
+    @Override
+    public String toString() {
+        return "LogicalCTEAnchorOperator{" +
+                "cteId='" + cteId + '\'' +
+                '}';
+    }
 }
