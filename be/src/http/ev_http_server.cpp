@@ -39,6 +39,7 @@
 #include "http/http_request.h"
 #include "service/brpc.h"
 #include "util/debug_util.h"
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -121,6 +122,7 @@ Status EvHttpServer::start() {
             event_base_dispatch(base.get());
         };
         _workers.emplace_back(worker);
+        Thread::set_thread_name(_workers.back(), "ev_http_server");
         _workers[i].detach();
     }
     return Status::OK();

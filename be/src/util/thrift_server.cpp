@@ -38,6 +38,8 @@
 #include <thread>
 #include <utility>
 
+#include "util/thread.h"
+
 namespace starrocks {
 
 // Helper class that starts a server in a separate thread, and handles
@@ -102,6 +104,7 @@ Status ThriftServer::ThriftServerEventProcessor::start_and_wait_for_server() {
 
     _thrift_server->_server_thread =
             std::make_unique<std::thread>(&ThriftServer::ThriftServerEventProcessor::supervise, this);
+    Thread::set_thread_name(_thrift_server->_server_thread.get()->native_handle(), "thrift_server");
 
     // Loop protects against spurious wakeup. Locks provide necessary fences to ensure
     // visibility.

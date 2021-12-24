@@ -62,6 +62,7 @@
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
+#include "util/thread.h"
 #include "util/time.h"
 #include "util/trace.h"
 
@@ -127,6 +128,7 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
                 // TODO(lingbin): why not exit progress, to force OP to change the conf
             }
         });
+        Thread::set_thread_name(threads.back(), "load_data_dir");
     }
     for (auto& thread : threads) {
         thread.join();
@@ -198,6 +200,7 @@ Status StorageEngine::_init_store_map() {
                 LOG(WARNING) << "Store load failed, status=" << st.to_string() << ", path=" << store->path();
             }
         });
+        Thread::set_thread_name(threads.back(), "init_store_path");
     }
     for (auto& thread : threads) {
         thread.join();

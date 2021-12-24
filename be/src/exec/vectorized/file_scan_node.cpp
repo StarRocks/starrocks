@@ -19,6 +19,7 @@
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
+#include "util/thread.h"
 
 namespace starrocks::vectorized {
 
@@ -86,6 +87,7 @@ Status FileScanNode::start_scanners() {
 
         _num_running_scanners = 1;
         _scanner_threads.emplace_back(&FileScanNode::scanner_worker, this, 0, _scan_ranges.size());
+        Thread::set_thread_name(_scanner_threads.back(), "file_scanner");
     }
     return Status::OK();
 }

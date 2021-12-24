@@ -143,7 +143,7 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
 }
 
 ExecStateReporter::ExecStateReporter() {
-    auto status = ThreadPoolBuilder("exec_state_reporter_thread")
+    auto status = ThreadPoolBuilder("ex_state_report") // exec state reporter
                           .set_min_threads(1)
                           .set_max_threads(2)
                           .set_max_queue_size(1000)

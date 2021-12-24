@@ -15,6 +15,7 @@
 #include "runtime/current_thread.h"
 #include "util/defer_op.h"
 #include "util/spinlock.h"
+#include "util/thread.h"
 
 namespace starrocks::vectorized {
 EsHttpScanNode::EsHttpScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -239,6 +240,7 @@ Status EsHttpScanNode::_start_scan_thread(RuntimeState* state) {
     for (int i = 0; i < _scan_ranges.size(); i++) {
         _scanner_threads.emplace_back(&EsHttpScanNode::_scanner_scan, this, std::move(scanners[i]),
                                       std::ref(_scanners_status[i]));
+        Thread::set_thread_name(_scanner_threads.back(), "es_http_scan");
     }
     return Status::OK();
 }
