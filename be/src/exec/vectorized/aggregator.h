@@ -472,14 +472,16 @@ private:
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     template <typename HashMapWithKey>
-    void _release_agg_memory(HashMapWithKey& hash_map_with_key) {
-        auto it = hash_map_with_key.hash_map.begin();
-        auto end = hash_map_with_key.hash_map.end();
-        while (it != end) {
-            for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->destroy(it->second + _agg_states_offsets[i]);
+    void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
+        if (hash_map_with_key != nullptr) {
+            auto it = hash_map_with_key.hash_map.begin();
+            auto end = hash_map_with_key.hash_map.end();
+            while (it != end) {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->destroy(it->second + _agg_states_offsets[i]);
+                }
+                ++it;
             }
-            ++it;
         }
     }
 };
