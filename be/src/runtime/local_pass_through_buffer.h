@@ -30,10 +30,7 @@ public:
     PassThroughChunkBuffer(const TUniqueId& query_id);
     ~PassThroughChunkBuffer();
     PassThroughChannel* get_or_create_channel(const Key& key);
-    int ref() {
-        _ref_count += 1;
-        return _ref_count;
-    }
+    int ref() { return ++_ref_count; }
     int unref() {
         _ref_count -= 1;
         return _ref_count;
@@ -64,8 +61,12 @@ private:
 
 class PassThroughChunkBufferManager {
 public:
-    void open(const TUniqueId& query_id);
-    void close(const TUniqueId& query_id);
+    // Called when fragment instance is about to open/close
+    // We don't care open/close by which fragment instance,
+    // just to want to make sure that fragment instances in a query can
+    // share the same `PassThroughChunkBuffer*` struct
+    void open_fragment_instance(const TUniqueId& query_id);
+    void close_fragment_instance(const TUniqueId& query_id);
     PassThroughChunkBuffer* get(const TUniqueId& query_id);
 
 private:

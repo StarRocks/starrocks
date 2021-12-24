@@ -18,7 +18,6 @@ QueryContext::~QueryContext() {
         if (_is_runtime_filter_coordinator) {
             _exec_env->runtime_filter_worker()->close_query(_query_id);
         }
-        _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
     }
 }
 FragmentContextManager* QueryContext::fragment_mgr() {
@@ -27,12 +26,6 @@ FragmentContextManager* QueryContext::fragment_mgr() {
 
 void QueryContext::cancel(const Status& status) {
     _fragment_mgr->cancel(status);
-}
-
-void QueryContext::prepare_pass_through_chunk_buffer() {
-    if (_exec_env != nullptr) {
-        _exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
-    }
 }
 
 QueryContextManager::QueryContextManager() = default;

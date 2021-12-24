@@ -116,6 +116,9 @@ public:
 
     RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
 
+    void prepare_pass_through_chunk_buffer();
+    void destroy_pass_through_chunk_buffer();
+
 private:
     // Id of this query
     TUniqueId _query_id;

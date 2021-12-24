@@ -226,11 +226,11 @@ void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
 }
 
 void DataStreamMgr::prepare_pass_through_chunk_buffer(const TUniqueId& query_id) {
-    _pass_through_chunk_buffer_manager.open(query_id);
+    _pass_through_chunk_buffer_manager.open_fragment_instance(query_id);
 }
 
 void DataStreamMgr::destroy_pass_through_chunk_buffer(const TUniqueId& query_id) {
-    _pass_through_chunk_buffer_manager.close(query_id);
+    _pass_through_chunk_buffer_manager.close_fragment_instance(query_id);
 }
 
 PassThroughChunkBuffer* DataStreamMgr::get_pass_through_chunk_buffer(const TUniqueId& query_id) {

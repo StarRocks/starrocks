@@ -13,7 +13,7 @@ public:
     void append_chunk(const vectorized::Chunk* chunk, size_t chunk_size) {
         auto clone = chunk->clone_unique();
         {
-            std::unique_lock l(_mutex);
+            std::unique_lock lock(_mutex);
             _buffer.emplace_back(std::move(clone));
             _bytes.push_back(chunk_size);
         }
@@ -21,7 +21,7 @@ public:
 
     void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
         {
-            std::unique_lock l(_mutex);
+            std::unique_lock lock(_mutex);
             chunks->swap(_buffer);
             bytes->swap(_bytes);
         }
@@ -37,7 +37,7 @@ private:
 class PassThroughChannel {
 public:
     PassThroughSenderChannel* get_or_create_sender_channel(int sender_id) {
-        std::unique_lock l(_mutex);
+        std::unique_lock lock(_mutex);
         auto it = _sender_id_to_channel.find(sender_id);
         if (it == _sender_id_to_channel.end()) {
             auto* channel = new PassThroughSenderChannel();
@@ -71,7 +71,7 @@ PassThroughChunkBuffer::~PassThroughChunkBuffer() {
 }
 
 PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key) {
-    std::unique_lock l(_mutex);
+    std::unique_lock lock(_mutex);
     auto it = _key_to_channel.find(key);
     if (it == _key_to_channel.end()) {
         auto* channel = new PassThroughChannel();
@@ -95,10 +95,10 @@ void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks
     sender_channel->pull_chunks(chunks, bytes);
 }
 
-void PassThroughChunkBufferManager::open(const TUniqueId& query_id) {
-    VLOG_FILE << "PassThroughChunkBufferManager::open, query_id = " << query_id;
+void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& query_id) {
+    VLOG_FILE << "PassThroughChunkBufferManager::open_fragment_instance, query_id = " << query_id;
     {
-        std::unique_lock _l(_mutex);
+        std::unique_lock lock(_mutex);
         auto it = _query_id_to_buffer.find(query_id);
         if (it == _query_id_to_buffer.end()) {
             PassThroughChunkBuffer* buffer = new PassThroughChunkBuffer(query_id);
@@ -109,10 +109,10 @@ void PassThroughChunkBufferManager::open(const TUniqueId& query_id) {
     }
 }
 
-void PassThroughChunkBufferManager::close(const TUniqueId& query_id) {
-    VLOG_FILE << "PassThroughChunkBufferManager::close, query_id = " << query_id;
+void PassThroughChunkBufferManager::close_fragment_instance(const TUniqueId& query_id) {
+    VLOG_FILE << "PassThroughChunkBufferManager::close_fragment_instance, query_id = " << query_id;
     {
-        std::unique_lock _l(_mutex);
+        std::unique_lock lock(_mutex);
         auto it = _query_id_to_buffer.find(query_id);
         if (it != _query_id_to_buffer.end()) {
             int rc = it->second->unref();
@@ -126,7 +126,7 @@ void PassThroughChunkBufferManager::close(const TUniqueId& query_id) {
 
 PassThroughChunkBuffer* PassThroughChunkBufferManager::get(const TUniqueId& query_id) {
     {
-        std::unique_lock _l(_mutex);
+        std::unique_lock lock(_mutex);
         auto it = _query_id_to_buffer.find(query_id);
         if (it == _query_id_to_buffer.end()) {
             return nullptr;

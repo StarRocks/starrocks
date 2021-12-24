@@ -59,8 +59,6 @@ public:
 
     void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
 
-    void prepare_pass_through_chunk_buffer();
-
 private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
