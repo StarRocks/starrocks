@@ -67,8 +67,8 @@ public class SparkEtlJobTest {
         List<EtlIndex> indexes = Lists.newArrayList(index1, index2);
         // partition info
         List<EtlPartition> partitions = Lists.newArrayList();
-        partitions.add(new EtlPartition(partition1Id, Lists.newArrayList(0), Lists.newArrayList(100), false, 2));
-        partitions.add(new EtlPartition(partition2Id, Lists.newArrayList(100), Lists.newArrayList(), true, 3));
+        partitions.add(new EtlPartition(partition1Id, Lists.newArrayList(0), Lists.newArrayList(100), false, false, 2));
+        partitions.add(new EtlPartition(partition2Id, Lists.newArrayList(100), Lists.newArrayList(), false, true, 3));
         EtlPartitionInfo partitionInfo =
                 new EtlPartitionInfo("RANGE", Lists.newArrayList("k1"), Lists.newArrayList("k2"), partitions);
         EtlTable table = new EtlTable(indexes, partitionInfo);

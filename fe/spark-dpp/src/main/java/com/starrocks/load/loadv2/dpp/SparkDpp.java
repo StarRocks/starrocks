@@ -864,12 +864,19 @@ public final class SparkDpp implements java.io.Serializable {
         List<StarRocksRangePartitioner.PartitionRangeKey> partitionRangeKeys = new ArrayList<>();
         for (EtlJobConfig.EtlPartition partition : partitionInfo.partitions) {
             StarRocksRangePartitioner.PartitionRangeKey partitionRangeKey = new StarRocksRangePartitioner.PartitionRangeKey();
-            List<Object> startKeyColumns = new ArrayList<>();
-            for (int i = 0; i < partition.startKeys.size(); i++) {
-                Object value = partition.startKeys.get(i);
-                startKeyColumns.add(convertPartitionKey(value, partitionKeySchema.get(i)));
+
+            if (!partition.isMinPartition) {
+                partitionRangeKey.isMinPartition = false;
+                List<Object> startKeyColumns = new ArrayList<>();
+                for (int i = 0; i < partition.startKeys.size(); i++) {
+                    Object value = partition.startKeys.get(i);
+                    startKeyColumns.add(convertPartitionKey(value, partitionKeySchema.get(i)));
+                }
+                partitionRangeKey.startKeys = new DppColumns(startKeyColumns);
+            } else {
+                partitionRangeKey.isMinPartition = true;
             }
-            partitionRangeKey.startKeys = new DppColumns(startKeyColumns);
+
             if (!partition.isMaxPartition) {
                 partitionRangeKey.isMaxPartition = false;
                 List<Object> endKeyColumns = new ArrayList<>();
@@ -881,6 +888,7 @@ public final class SparkDpp implements java.io.Serializable {
             } else {
                 partitionRangeKey.isMaxPartition = true;
             }
+
             partitionRangeKeys.add(partitionRangeKey);
         }
         return partitionRangeKeys;
