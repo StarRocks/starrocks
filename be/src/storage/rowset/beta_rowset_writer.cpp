@@ -337,7 +337,8 @@ OLAPStatus HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chun
     return OLAP_SUCCESS;
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::de(const vectorized::Chunk& upserts, const vectorized::Column& deletes) {
+OLAPStatus HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
+                                                                const vectorized::Column& deletes) {
     if (!deletes.empty()) {
         auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
         std::unique_ptr<fs::WritableBlock> wblock;
