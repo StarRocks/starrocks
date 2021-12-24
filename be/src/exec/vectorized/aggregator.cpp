@@ -3,6 +3,7 @@
 #include "aggregator.h"
 
 #include "exprs/anyval_util.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -205,9 +206,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     // For SQL: select distinct id from table or select id from from table group by id;
     // we don't need to allocate memory for agg states.
     if (_is_only_group_by_columns) {
-        _init_agg_hash_variant(_hash_set_variant);
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
     } else {
-        _init_agg_hash_variant(_hash_map_variant);
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
     }
 
     return Status::OK();

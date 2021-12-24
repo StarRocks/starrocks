@@ -338,4 +338,11 @@ inline std::ostream& operator<<(std::ostream& os, const Status& st) {
         }                             \
     } while (0)
 
+#define THROW_BAD_ALLOC_IF_NULL(ptr)    \
+    do {                                \
+        if (UNLIKELY(ptr == nullptr)) { \
+            throw std::bad_alloc();     \
+        }                               \
+    } while (0)
+
 #define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
