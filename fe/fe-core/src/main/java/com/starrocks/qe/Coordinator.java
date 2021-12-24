@@ -456,13 +456,20 @@ public class Coordinator {
             // execute all instances from up to bottom
             int backendId = 0;
             int profileFragmentId = 0;
+
+            // Disable pipeline engine for `INSERT INTO`.
+            // TODO: remove this when load supports pipeline engine.
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            boolean isEnablePipelineEngine =
+                    sessionVariable.isEnablePipelineEngine() && (fragments.get(0).getSink() instanceof ResultSink);
+
             for (PlanFragment fragment : fragments) {
                 FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
                 // set up exec states
                 int instanceNum = params.instanceExecParams.size();
                 Preconditions.checkState(instanceNum > 0);
-                List<TExecPlanFragmentParams> tParams = params.toThrift(backendId);
+                List<TExecPlanFragmentParams> tParams = params.toThrift(backendId, isEnablePipelineEngine);
                 List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                 boolean needCheckBackendState = false;
@@ -838,7 +845,7 @@ public class Coordinator {
             if (params.fragment instanceof MultiCastPlanFragment) {
                 continue;
             }
-            
+
             PlanFragment destFragment = params.fragment.getDestFragment();
 
             if (destFragment == null) {
@@ -1832,7 +1839,7 @@ public class Coordinator {
             this.fragment = fragment;
         }
 
-        List<TExecPlanFragmentParams> toThrift(int backendNum) {
+        List<TExecPlanFragmentParams> toThrift(int backendNum, boolean isEnablePipelineEngine) {
             // add instance number in file name prefix when export job
             DataSink sink = fragment.getSink();
             ExportSink exportSink = null;
@@ -1892,10 +1899,12 @@ public class Coordinator {
                 // For broker load, the ConnectContext.get() is null
                 if (ConnectContext.get() != null) {
                     SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-                    if (sessionVariable.isEnablePipelineEngine()) {
+
+                    if (isEnablePipelineEngine) {
                         params.setIs_pipeline(
                                 fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
                     }
+
                     if (sessionVariable.isEnableExchangePassThrough()) {
                         params.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
                     }
