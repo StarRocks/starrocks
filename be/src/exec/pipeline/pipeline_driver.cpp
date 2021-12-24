@@ -324,8 +324,9 @@ void PipelineDriver::_update_overhead_timer() {
     profile->get_children(&children);
     for (auto* child_profile : children) {
         auto* total_timer = child_profile->get_counter("OperatorTotalTime");
-        if (total_timer != nullptr) continue;
-        overhead_time -= total_timer->value();
+        if (total_timer != nullptr) {
+            overhead_time -= total_timer->value();
+        }
     }
 
     COUNTER_UPDATE(_overhead_timer, overhead_time);
