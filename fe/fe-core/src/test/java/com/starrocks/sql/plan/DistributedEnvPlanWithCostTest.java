@@ -8,6 +8,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.planner.AggregationNode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -82,11 +83,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select count(distinct P_BRAND) from part group by P_PARTKEY;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("1:AGGREGATE (update serialize)\n"
-                + "  |  STREAMING\n"
                 + "  |  group by: 1: P_PARTKEY, 4: P_BRAND"));
-        Assert.assertTrue(planFragment.contains("2:AGGREGATE (merge serialize)\n"
-                + "  |  group by: 1: P_PARTKEY, 4: P_BRAND"));
-        Assert.assertTrue(planFragment.contains("3:AGGREGATE (update finalize)\n"
+        Assert.assertTrue(planFragment.contains("2:AGGREGATE (update finalize)\n"
                 + "  |  output: count(4: P_BRAND)"));
     }
 
@@ -95,11 +93,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select count(distinct P_NAME) from part group by P_PARTKEY;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("1:AGGREGATE (update serialize)\n"
-                + "  |  STREAMING\n"
                 + "  |  group by: 1: P_PARTKEY, 2: P_NAME"));
-        Assert.assertTrue(planFragment.contains("  2:AGGREGATE (merge serialize)\n"
-                + "  |  group by: 1: P_PARTKEY, 2: P_NAME"));
-        Assert.assertTrue(planFragment.contains("  3:AGGREGATE (update finalize)\n"
+        Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
                 + "  |  output: count(2: P_NAME)"));
     }
 
@@ -975,5 +970,49 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("cardinality: 3000000"));
         Assert.assertTrue(plan.contains(" * L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
+    }
+
+    @Test
+    public void testPruneAggNode() throws Exception {
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(3);
+        String sql = "select count(distinct C_NAME) from customer group by C_CUSTKEY;";
+        String plan = getFragmentPlan(sql);
+
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: C_NAME)\n" +
+                "  |  group by: 1: C_CUSTKEY\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  group by: 1: C_CUSTKEY, 2: C_NAME"));
+
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(4);
+        sql = "select count(distinct C_CUSTKEY) from customer;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 2:AGGREGATE (update serialize)\n" +
+                "  |  output: count(1: C_CUSTKEY)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  group by: 1: C_CUSTKEY"));
+
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(0);
+
+        sql = "select count(distinct C_CUSTKEY, C_NAME) from customer;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 2:AGGREGATE (update serialize)\n" +
+                "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  group by: 1: C_CUSTKEY, 2: C_NAME"));
+
+        sql = "select count(distinct C_CUSTKEY, C_NAME) from customer group by C_CUSTKEY;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
+                "  |  group by: 1: C_CUSTKEY\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  group by: 1: C_CUSTKEY, 2: C_NAME"));
     }
 }
