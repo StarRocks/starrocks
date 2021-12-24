@@ -2372,9 +2372,9 @@ void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets) {
     _cur_total_dels = ndel;
 }
 
-Status TabletUpdates::_get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
-                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                         vector<std::unique_ptr<vectorized::Column>>* columns) {
+Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
+                                        std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                                        vector<std::unique_ptr<vectorized::Column>>* columns) {
     std::map<uint32_t, RowsetSharedPtr> rssid_to_rowsets;
     {
         std::lock_guard<std::mutex> l(_rowsets_lock);
@@ -2386,9 +2386,13 @@ Status TabletUpdates::_get_column_values(std::vector<uint32_t>& column_ids, bool
         auto iter = rssid_to_rowsets.upper_bound(rssid);
         --iter;
         const auto& rowset = iter->second.get();
-        std::string seg_path = BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid);
-        auto segment_res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(),
-                                         fs::fs_util::block_manager(), seg_path, rssid, &rowset->schema());
+        CHECK_LE(rowset->rowset_meta()->get_rowset_seg_id(), rssid);
+        CHECK_LT(rssid, rowset->rowset_meta()->get_rowset_seg_id() + rowset->num_segments());
+        std::string seg_path =
+                BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
+        auto segment_res =
+                Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs::fs_util::block_manager(), seg_path,
+                              rssid - iter->first, &rowset->schema());
         if (!segment_res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment_res.status();
             return segment_res.status();

@@ -232,8 +232,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         // group rowids by rssid, and for each group sort by rowid
         plan_read_by_rssid(rowids, &num_default, &rowids_by_rssid, &idxes);
         // get column values by rowid, also get default values if needed
-        RETURN_IF_ERROR(tablet->updates()->_get_column_values(read_column_ids, num_default > 0, rowids_by_rssid,
-                                                              &read_columns));
+        RETURN_IF_ERROR(
+                tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid, &read_columns));
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); i++) {
             write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0, idxes.size());
         }

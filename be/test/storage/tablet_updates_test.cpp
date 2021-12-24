@@ -1477,4 +1477,36 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
     EXPECT_EQ(keys0.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 }
 
+TEST_F(TabletUpdatesTest, get_column_values) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::vector<uint32_t> read_column_ids = {1, 2};
+    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid{{0, std::vector<uint32_t>{1, 2}}};
+    std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
+    const auto& tablet_schema = _tablet->tablet_schema();
+    for (auto i = 0; i < read_column_ids.size(); i++) {
+        const auto read_column_id = read_column_ids[i];
+        auto tablet_column = tablet_schema.column(read_column_id);
+        auto column =
+                vectorized::ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        read_columns[i] = column->clone_empty();
+    }
+    _tablet->updates()->get_column_values(read_column_ids, false, rowids_by_rssid, &read_columns);
+    ASSERT_EQ("[2, 3]", read_columns[0]->debug_string());
+    ASSERT_EQ("[3, 4]", read_columns[1]->debug_string());
+    for (const auto& read_column : read_columns) {
+        read_column->reset_column();
+    }
+    _tablet->updates()->get_column_values(read_column_ids, true, rowids_by_rssid, &read_columns);
+    ASSERT_EQ("[0, 2, 3]", read_columns[0]->debug_string());
+    ASSERT_EQ("[0, 3, 4]", read_columns[1]->debug_string());
+}
+
 } // namespace starrocks
