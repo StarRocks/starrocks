@@ -38,7 +38,6 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
-import org.apache.commons.lang.SerializationUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -227,12 +226,12 @@ public class VariableMgr {
     }
 
     public static SessionVariable newSessionVariable() {
-        wlock.lock();
         try {
-            return (SessionVariable) SerializationUtils.clone(defaultSessionVariable);
-        } finally {
-            wlock.unlock();
+            return (SessionVariable) defaultSessionVariable.clone();
+        } catch (CloneNotSupportedException e) {
+            LOG.warn(e);
         }
+        return null;
     }
 
     // Check if this setVar can be set correctly
