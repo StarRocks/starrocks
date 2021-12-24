@@ -462,10 +462,17 @@ public class GlobalTransactionMgr implements Writable {
      * expired: txn is in VISIBLE or ABORTED, and is expired.
      * timeout: txn is in PREPARE, but timeout
      */
-    public void removeExpiredAndTimeoutTxns() {
+    public void abortTimeoutTxns() {
         long currentMillis = System.currentTimeMillis();
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            dbTransactionMgr.removeExpiredAndTimeoutTxns(currentMillis);
+            dbTransactionMgr.abortTimeoutTxns(currentMillis);
+        }
+    }
+
+    public void removeExpiredTxns() {
+        long currentMillis = System.currentTimeMillis();
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            dbTransactionMgr.removeExpiredTxns(currentMillis);
         }
     }
 
