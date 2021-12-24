@@ -335,11 +335,11 @@ public class QueryAnalyzer {
             outputExpressions.add(s);
         }
         Scope outputScope = new Scope(RelationId.of(setOpRelation), new RelationFields(fields));
-
         for (int i = 1; i < relations.size(); ++i) {
             SetOperationStmt.SetOperand operation = stmt.getOperands().get(i);
             if (operation.getOperation().equals(SetOperationStmt.Operation.UNION)) {
-                if (setOpRelation instanceof UnionRelation) {
+                if (setOpRelation instanceof UnionRelation && ((UnionRelation) setOpRelation).getQualifier()
+                        .equals(SetQualifier.convert(operation.getQualifier()))) {
                     ((UnionRelation) setOpRelation).addRelation(relations.get(i));
                 } else {
                     setOpRelation = new UnionRelation(Arrays.asList(setOpRelation, relations.get(i)),
