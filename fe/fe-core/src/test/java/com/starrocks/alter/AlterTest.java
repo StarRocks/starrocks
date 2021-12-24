@@ -144,8 +144,7 @@ public class AlterTest {
 
         }
 
-        File file = new File(runningDir);
-        file.delete();
+        UtFrameUtils.cleanStarRocksFeDir(runningDir);
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
