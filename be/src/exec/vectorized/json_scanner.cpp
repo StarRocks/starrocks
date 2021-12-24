@@ -223,7 +223,7 @@ Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<s
             const char* cstr = path.get_c_str();
 
             JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths);
-            path_vecs->push_back(parsed_paths);
+            path_vecs->emplace_back(std::move(parsed_paths));
         }
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
