@@ -56,6 +56,7 @@
 #include "util/monotime.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -210,6 +211,7 @@ void TaskWorkerPool::_remove_task_info(const TTaskType::type task_type, int64_t 
 void TaskWorkerPool::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func) {
     std::thread worker_thread(callback_func, this);
     _worker_threads.emplace_back(std::move(worker_thread));
+    Thread::set_thread_name(_worker_threads.back(), "task_worker");
 }
 
 void TaskWorkerPool::_finish_task(const TFinishTaskRequest& finish_task_request) {

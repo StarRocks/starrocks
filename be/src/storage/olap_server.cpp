@@ -33,6 +33,7 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/compaction.h"
+#include "util/thread.h"
 #include "util/time.h"
 
 using std::string;
@@ -55,17 +56,21 @@ volatile uint32_t g_schema_change_active_threads = 0;
 
 Status StorageEngine::start_bg_threads() {
     _update_cache_expire_thread = std::thread([this] { _update_cache_expire_thread_callback(nullptr); });
+    Thread::set_thread_name(_update_cache_expire_thread, "cache_expire");
     LOG(INFO) << "update cache expire thread started";
 
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
+    Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
     LOG(INFO) << "unused rowset monitor thread started";
 
     // start thread for monitoring the snapshot and trash folder
     _garbage_sweeper_thread = std::thread([this] { _garbage_sweeper_thread_callback(nullptr); });
+    Thread::set_thread_name(_garbage_sweeper_thread, "garbage_sweeper");
     LOG(INFO) << "garbage sweeper thread started";
 
     // start thread for monitoring the tablet with io error
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
+    Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
     LOG(INFO) << "disk stat monitor thread started";
 
     // convert store map to vector
@@ -95,6 +100,7 @@ Status StorageEngine::start_bg_threads() {
         _base_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
             _base_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
         });
+        Thread::set_thread_name(_base_compaction_threads.back(), "base_compact");
     }
     LOG(INFO) << "base compaction threads started. number: " << base_compaction_num_threads;
 
@@ -103,6 +109,7 @@ Status StorageEngine::start_bg_threads() {
         _cumulative_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
             _cumulative_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
         });
+        Thread::set_thread_name(_cumulative_compaction_threads.back(), "cumulat_compact");
     }
     LOG(INFO) << "cumulative compaction threads started. number: " << cumulative_compaction_num_threads;
 
@@ -114,25 +121,29 @@ Status StorageEngine::start_bg_threads() {
         _update_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
             _update_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
         });
+        Thread::set_thread_name(_update_compaction_threads.back(), "update_compact");
     }
     LOG(INFO) << "update compaction threads started. number: " << update_compaction_num_threads;
 
     // tablet checkpoint thread
     for (auto data_dir : data_dirs) {
         _tablet_checkpoint_threads.emplace_back([this, data_dir] { _tablet_checkpoint_callback((void*)data_dir); });
+        Thread::set_thread_name(_tablet_checkpoint_threads.back(), "tablet_check_pt");
     }
     LOG(INFO) << "tablet checkpoint thread started";
 
     // fd cache clean thread
     _fd_cache_clean_thread = std::thread([this] { _fd_cache_clean_callback(nullptr); });
+    Thread::set_thread_name(_fd_cache_clean_thread, "fd_cache_clean");
     LOG(INFO) << "fd cache clean thread started";
 
     // path scan and gc thread
     if (config::path_gc_check) {
         for (auto data_dir : get_stores()) {
             _path_scan_threads.emplace_back([this, data_dir] { _path_scan_thread_callback((void*)data_dir); });
-
             _path_gc_threads.emplace_back([this, data_dir] { _path_gc_thread_callback((void*)data_dir); });
+            Thread::set_thread_name(_path_scan_threads.back(), "path_scan");
+            Thread::set_thread_name(_path_gc_threads.back(), "path_gc");
         }
         LOG(INFO) << "path scan/gc threads started. number:" << get_stores().size();
     }
