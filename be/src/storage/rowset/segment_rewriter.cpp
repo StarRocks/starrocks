@@ -2,6 +2,7 @@
 
 #include "segment_rewriter.h"
 
+#include "env/env.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "storage/fs/block_manager.h"
@@ -25,6 +26,7 @@ Status SegmentRewriter::rewrite(const std::string& src, const std::string& dest,
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
     std::unique_ptr<fs::WritableBlock> wblock;
     fs::CreateBlockOptions wblock_opts({dest});
+    wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
     RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
 
     std::unique_ptr<fs::ReadableBlock> rblock;
