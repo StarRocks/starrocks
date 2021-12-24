@@ -126,6 +126,7 @@ public class PublishVersionDaemon extends MasterDaemon {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
                         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
                     }
+                    // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearPublishVersionTasks();
                 }
             }
