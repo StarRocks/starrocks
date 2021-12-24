@@ -191,7 +191,7 @@ struct AggHashSetOfOneStringKey {
             hash_set.lazy_emplace(key, [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
-                assert(pos != nullptr);
+                THROW_BAD_ALLOC_IF_NULL(pos);
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
             });
@@ -287,7 +287,7 @@ struct AggHashSetOfOneNullableStringKey {
 
         hash_set.lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = pool->allocate(key.size);
-            assert(pos != nullptr);
+            THROW_BAD_ALLOC_IF_NULL(pos);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
         });
@@ -322,7 +322,7 @@ struct AggHashSetOfSerializedKey {
     AggHashSetOfSerializedKey()
             : _mem_pool(std::make_unique<MemPool>()),
               _buffer(_mem_pool->allocate(max_one_row_size * config::vector_chunk_size)) {
-        assert(_buffer != nullptr);
+        THROW_BAD_ALLOC_IF_NULL(_buffer);
     }
 
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
@@ -336,7 +336,7 @@ struct AggHashSetOfSerializedKey {
             // from accessing out-of-bound memory.
             _buffer =
                     _mem_pool->allocate(max_one_row_size * config::vector_chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            assert(_buffer != nullptr);
+            THROW_BAD_ALLOC_IF_NULL(_buffer);
         }
 
         for (const auto& key_column : key_columns) {
@@ -350,7 +350,7 @@ struct AggHashSetOfSerializedKey {
             hash_set.lazy_emplace(key, [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
-                assert(pos != nullptr);
+                THROW_BAD_ALLOC_IF_NULL(pos);
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
             });
@@ -368,7 +368,7 @@ struct AggHashSetOfSerializedKey {
             max_one_row_size = cur_max_one_row_size;
             _mem_pool->clear();
             _buffer = _mem_pool->allocate(max_one_row_size * config::vector_chunk_size);
-            assert(_buffer != nullptr);
+            THROW_BAD_ALLOC_IF_NULL(_buffer);
         }
 
         for (const auto& key_column : key_columns) {
@@ -436,7 +436,7 @@ struct AggHashSetOfSerializedKeyFixedSize {
     AggHashSetOfSerializedKeyFixedSize()
             : _mem_pool(std::make_unique<MemPool>()),
               buffer(_mem_pool->allocate(max_fixed_size * config::vector_chunk_size)) {
-        assert(buffer != nullptr);
+        THROW_BAD_ALLOC_IF_NULL(buffer);
         memset(buffer, 0x0, max_fixed_size * config::vector_chunk_size);
     }
 
