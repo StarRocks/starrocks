@@ -103,7 +103,12 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
     return operators_source_with_local_shuffle;
 }
 
-OpFactories PipelineBuilderContext::gather_pipelines_to_one(std::vector<OpFactories>& pred_operators_list) {
+OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(std::vector<OpFactories>& pred_operators_list) {
+    // If there is only one pred pipeline, we needn't local passthrough anymore.
+    if (pred_operators_list.size() == 1) {
+        return pred_operators_list[0];
+    }
+
     // Approximately, each pred driver can output config::vector_chunk_size rows at the same time.
     size_t max_row_count = 0;
     for (const auto& pred_ops : pred_operators_list) {

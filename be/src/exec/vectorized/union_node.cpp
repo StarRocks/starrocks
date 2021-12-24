@@ -387,7 +387,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
-    return context->gather_pipelines_to_one(operators_list);
+    return context->maybe_gather_pipelines_to_one(operators_list);
 }
 
 } // namespace starrocks::vectorized
