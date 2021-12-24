@@ -32,13 +32,15 @@ import java.util.Map;
 public class ValuesTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
+    Map<String, ExpressionMapping> cteContex;
 
     private final BitSet subqueriesIndex = new BitSet();
     private final List<ColumnRefOperator> outputColumns = Lists.newArrayList();
 
-    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
+    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, Map<String, ExpressionMapping> cteContex) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
+        this.cteContex = cteContex;
     }
 
     public LogicalPlan plan(ValuesRelation node) {
@@ -132,7 +134,7 @@ public class ValuesTransformer {
             }
 
             Expr output = node.getOutputExpr().get(i);
-            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, output);
+            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, output, cteContex);
             ColumnRefOperator columnRef = SqlToScalarOperatorTranslator
                     .findOrCreateColumnRefForExpr(node.getOutputExpr().get(i), subOpt.getExpressionMapping(),
                             projections, columnRefFactory);
