@@ -40,6 +40,7 @@ import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import sun.tools.tree.Context;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,6 +143,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.outputPartition = DataPartition.UNPARTITIONED;
         this.transferQueryStatisticsWithEveryBatch = false;
         setParallelExecNumIfExists();
+        setPipelineDopIfPipelineEngineEnabled();
         setFragmentInPlanTree(planRoot);
     }
 
@@ -169,7 +171,15 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     public void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+            int pipelineDop = ConnectContext.get().getSessionVariable().getPipelineDop();
+            int instanceNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+            int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+
+            if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+                parallelExecNum = pipelineDop > 0 ? instanceNum : degreeOfParallelism;
+            } else {
+                parallelExecNum = instanceNum;
+            }
         }
     }
 
@@ -190,6 +200,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     public void setParallelExecNum(int parallelExecNum) {
         this.parallelExecNum = parallelExecNum;
+    }
+
+    public void setPipelineDopIfPipelineEngineEnabled() {
+        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            return;
+        }
+        int dop = ConnectContext.get().getSessionVariable().getPipelineDop();
+        this.pipelineDop = dop > 0 ? dop : 1;
     }
 
     public void setPipelineDop(int dop) {

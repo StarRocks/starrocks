@@ -115,10 +115,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_BROADCAST_BUILD_BYTES_SUP_LIMIT = "pipeline_broadcast_build_bytes_sup_limit";
-
-    public static final String PIPELINE_BROADCAST_PROBE_BYTES_INF_LIMIT = "pipeline_broadcast_probe_bytes_inf_limit";
-
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
     // hash join right table push down
@@ -312,12 +308,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
-
-    @VariableMgr.VarAttr(name = PIPELINE_BROADCAST_BUILD_BYTES_SUP_LIMIT)
-    private long pipelineBroadcastBuildBytesSupLimit = 67108864;
-
-    @VariableMgr.VarAttr(name = PIPELINE_BROADCAST_PROBE_BYTES_INF_LIMIT)
-    private long pipelineBroadCastProbeBytesInfLimit = 67108864;
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
     private String pipelineProfileMode = "brief";
@@ -546,11 +536,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableColocateJoin;
     }
 
+    public int getParallelExecInstanceNum() {
+        return parallelExecInstanceNum;
+    }
+
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop;
     // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
     // in case of pipeline_dop <= 0 and avgNumCores >=2; return avgNumCores/2;
-    public int getParallelExecInstanceNum() {
+    public int getDegreeOfParallelism() {
         if (enablePipelineEngine) {
             if (pipelineDop > 0) {
                 return pipelineDop;
@@ -710,20 +704,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine;
     }
 
+    public boolean isPipelineDopAdaptionEnabled() {
+        return enablePipelineEngine && pipelineDop <= 0;
+    }
+
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
         this.enablePipelineEngine = enablePipelineEngine;
     }
 
     public int getPipelineDop() {
         return this.pipelineDop;
-    }
-
-    public long getPipelineBroadCastBuildBytesSupLimit() {
-        return this.pipelineBroadcastBuildBytesSupLimit;
-    }
-
-    public long getPipelineBroadCastProbeBytesInfLimit() {
-        return this.pipelineBroadCastProbeBytesInfLimit;
     }
 
     public boolean isEnableReplicationJoin() {

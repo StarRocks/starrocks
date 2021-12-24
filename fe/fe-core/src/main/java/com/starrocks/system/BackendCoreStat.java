@@ -2,8 +2,6 @@
 
 package com.starrocks.system;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -24,16 +22,16 @@ public class BackendCoreStat {
         }
 
         cachedAvgNumOfHardwareCores.compareAndSet(snapshotAvg, 0);
-        List<Integer> numCoresList = Collections.emptyList();
-        numCoresList.addAll(numOfHardwareCoresPerBe.values());
-        if (numCoresList.size() == 0) {
+        Integer[] numCoresArray = new Integer[0];
+        numCoresArray = numOfHardwareCoresPerBe.values().toArray(numCoresArray);
+        if (numCoresArray.length == 0) {
             return -1;
         }
         int sum = 0;
-        for (Integer v : numCoresList) {
+        for (Integer v : numCoresArray) {
             sum += v;
         }
-        int newAvg = sum / numCoresList.size();
+        int newAvg = sum / numCoresArray.length;
         snapshotAvg = 0;
         // Update the cached value if numOfHardwareCoresPerBe is changed(cachedAvgNumOfHardwareCores = -1)
         cachedAvgNumOfHardwareCores.compareAndSet(snapshotAvg, newAvg);

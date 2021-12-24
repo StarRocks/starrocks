@@ -224,7 +224,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // shuffling large left-hand table data
         int parallelExecInstance = Math.max(1,
                 Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
-                        ConnectContext.get().getSessionVariable().getParallelExecInstanceNum()));
+                        ConnectContext.get().getSessionVariable().getDegreeOfParallelism()));
         int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
