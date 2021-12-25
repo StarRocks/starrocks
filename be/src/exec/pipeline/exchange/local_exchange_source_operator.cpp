@@ -99,7 +99,7 @@ vectorized::ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeSta
         DCHECK(!_partition_chunk_queue.empty());
 
         while (!_partition_chunk_queue.empty() &&
-               rows_num + _partition_chunk_queue.front().size <= config::vector_chunk_size) {
+               rows_num + _partition_chunk_queue.front().size <= state->batch_size()) {
             rows_num += _partition_chunk_queue.front().size;
             selected_partition_chunks.emplace_back(std::move(_partition_chunk_queue.front()));
             _partition_chunk_queue.pop();

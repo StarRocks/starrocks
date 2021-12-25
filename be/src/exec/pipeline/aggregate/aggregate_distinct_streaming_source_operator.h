@@ -29,7 +29,7 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    void _output_chunk_from_hash_set(vectorized::ChunkPtr* chunk);
+    void _output_chunk_from_hash_set(vectorized::ChunkPtr* chunk, RuntimeState* state);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateDistinctStreamingSinkOperator. It is
