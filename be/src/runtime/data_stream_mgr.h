@@ -92,7 +92,7 @@ public:
 
     void prepare_pass_through_chunk_buffer(const TUniqueId& query_id);
     void destroy_pass_through_chunk_buffer(const TUniqueId& query_id);
-    PassThroughChunkBufferPtr get_pass_through_chunk_buffer(const TUniqueId& query_id);
+    PassThroughChunkBuffer* get_pass_through_chunk_buffer(const TUniqueId& query_id);
 
 private:
     friend class DataStreamRecvr;
@@ -140,9 +140,7 @@ private:
 
     inline uint32_t get_hash_value(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
-    // query_id <-> PassThroughChunkBufferPtr
-    std::mutex _pass_through_chunk_lock;
-    std::unordered_map<TUniqueId, PassThroughChunkBufferPtr> _pass_through_chunk_buffer_manager{};
+    PassThroughChunkBufferManager _pass_through_chunk_buffer_manager;
 };
 
 } // namespace starrocks
