@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/set/intersect_context.h"
 
+#include "runtime/current_thread.h"
+
 namespace starrocks::pipeline {
 
 Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
@@ -27,7 +29,8 @@ Status IntersectContext::close(RuntimeState* state) {
 
 Status IntersectContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
                                             const std::vector<ExprContext*>& dst_exprs) {
-    return _hash_set->build_set(state, chunk, dst_exprs, _build_pool.get());
+    TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, dst_exprs, _build_pool.get()));
+    return Status::OK();
 }
 
 Status IntersectContext::refine_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
