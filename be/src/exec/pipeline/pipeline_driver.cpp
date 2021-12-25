@@ -311,6 +311,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     // last finished driver notify FE the fragment's completion again and
     // unregister the FragmentContext.
     if (_fragment_ctx->count_down_drivers()) {
+        _fragment_ctx->destroy_pass_through_chunk_buffer();
         auto status = _fragment_ctx->final_status();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
         _query_ctx->count_down_fragments();

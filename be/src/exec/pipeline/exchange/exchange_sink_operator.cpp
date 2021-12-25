@@ -41,7 +41,7 @@ public:
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
             PlanNodeId dest_node_id, size_t channel_id, bool enable_exchange_pass_through,
-            const PassThroughChunkBufferPtr& pass_through_chunk_buffer)
+            PassThroughChunkBuffer* pass_through_chunk_buffer)
             : _parent(parent),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
@@ -270,7 +270,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
           _fragment_ctx(fragment_ctx) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
     RuntimeState* state = fragment_ctx->runtime_state();
-    auto pass_through_chunk_buffer = state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
+    PassThroughChunkBuffer* pass_through_chunk_buffer =
+            state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
 
     // fragment_instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
     std::optional<std::shared_ptr<Channel>> pseudo_channel;
