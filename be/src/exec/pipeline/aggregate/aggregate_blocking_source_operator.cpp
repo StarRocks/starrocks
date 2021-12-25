@@ -27,7 +27,7 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
 
-    int32_t chunk_size = config::vector_chunk_size;
+    int32_t chunk_size = state->batch_size();
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
 
     if (_aggregator->is_none_group_by_exprs()) {
