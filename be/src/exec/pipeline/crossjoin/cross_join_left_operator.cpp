@@ -10,7 +10,7 @@
 
 namespace starrocks::pipeline {
 
-void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk) {
+void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk, RuntimeState* state) {
     vectorized::ChunkPtr new_chunk = std::make_shared<vectorized::Chunk>();
 
     // init columns for the new chunk from _probe_chunk and _curr_build_chunk
@@ -41,7 +41,7 @@ void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk) {
     }
 
     *chunk = std::move(new_chunk);
-    (*chunk)->reserve(config::vector_chunk_size);
+    (*chunk)->reserve(state->batch_size());
 }
 
 void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_probe(vectorized::ChunkPtr& chunk, size_t row_count,
@@ -225,7 +225,7 @@ void CrossJoinLeftOperator::_copy_build_rows_with_index_base_build(vectorized::C
     }
 }
 
-void CrossJoinLeftOperator::_select_build_chunk(const int32_t unprocessed_build_index) {
+void CrossJoinLeftOperator::_select_build_chunk(const int32_t unprocessed_build_index, RuntimeState* state) {
     const int32 num_build_chunks = _cross_join_context->num_build_chunks();
 
     // Find the first build chunk which contains data from unprocessed_build_index.
@@ -241,7 +241,7 @@ void CrossJoinLeftOperator::_select_build_chunk(const int32_t unprocessed_build_
         DCHECK(_curr_build_chunk != nullptr && _curr_build_chunk->num_rows() > 0);
 
         _curr_total_build_rows = _curr_build_chunk->num_rows();
-        _curr_build_rows_threshold = (_curr_total_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
+        _curr_build_rows_threshold = (_curr_total_build_rows / state->batch_size()) * state->batch_size();
         _curr_build_rows_remainder = _curr_total_build_rows - _curr_build_rows_threshold;
 
         _within_threshold_build_rows_index = 0;
@@ -258,11 +258,11 @@ void CrossJoinLeftOperator::_select_build_chunk(const int32_t unprocessed_build_
 StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* state) {
     vectorized::ChunkPtr chunk = nullptr;
     // we need a valid probe chunk to initialize the new chunk.
-    _init_chunk(&chunk);
+    _init_chunk(&chunk, state);
 
     for (;;) {
         // need row_count to fill in chunk.
-        size_t row_count = config::vector_chunk_size - chunk->num_rows();
+        size_t row_count = state->batch_size() - chunk->num_rows();
 
         // means we have scan all chunks of right tables.
         // we should scan all remain rows of right table.
@@ -291,7 +291,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 
                 // _probe_chunk is done with _build_chunk.
                 if (_beyond_threshold_build_rows_index >= _curr_total_build_rows) {
-                    _select_build_chunk(_curr_build_index + 1);
+                    _select_build_chunk(_curr_build_index + 1, state);
                 }
             } else {
                 // if remain rows of right is bigger than left, we should scan right based on left.
@@ -310,7 +310,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 
                 // _probe_chunk is done with _build_chunk.
                 if (_probe_rows_index >= probe_chunk_size) {
-                    _select_build_chunk(_curr_build_index + 1);
+                    _select_build_chunk(_curr_build_index + 1, state);
                 }
             }
         } else if (_within_threshold_build_rows_index < _curr_build_rows_threshold) {
@@ -336,7 +336,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
                 } else {
                     // if right table is all about chunks, means _probe_chunk is done.
                     if (_curr_build_rows_threshold == _curr_total_build_rows) {
-                        _select_build_chunk(_curr_build_index + 1);
+                        _select_build_chunk(_curr_build_index + 1, state);
                         has_build_chunk = !_is_curr_probe_chunk_finished();
                     } else {
                         _beyond_threshold_build_rows_index = _curr_build_rows_threshold;
@@ -357,7 +357,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 
         // When the chunk is full or the current probe chunk is finished
         // crossing join with build chunks, we can output this chunk.
-        if (chunk->num_rows() >= config::vector_chunk_size || _is_curr_probe_chunk_finished()) {
+        if (chunk->num_rows() >= state->batch_size() || _is_curr_probe_chunk_finished()) {
             eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get());
             break;
         }
@@ -369,7 +369,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 Status CrossJoinLeftOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     _probe_chunk = chunk;
 
-    _select_build_chunk(0);
+    _select_build_chunk(0, state);
 
     return Status::OK();
 }
