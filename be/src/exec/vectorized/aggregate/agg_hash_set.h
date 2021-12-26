@@ -50,6 +50,18 @@ using SliceAggTwoLevelHashSet =
         phmap::parallel_flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>,
                                       phmap::priv::Allocator<Slice>, 4>;
 
+#define ERASE_AND_THROW_BAD_ALLOC_IF_NULL(hash_set, pv, key) \
+    if (UNLIKELY(pv == nullptr)) {                           \
+        hash_set.erase(key);                                 \
+        throw std::bad_alloc();                              \
+    }
+
+#define ERASE_AND_THROW_BAD_ALLOC_IF_NULL_WITH_HASH(hash_set, pv, key, hash) \
+    if (UNLIKELY(pv == nullptr)) {                                           \
+        hash_set.erase_with_hash(key, hash);                                 \
+        throw std::bad_alloc();                                              \
+    }
+
 // ==============================================================
 // handle one number hash key
 template <PrimitiveType primitive_type, typename HashSet>
@@ -189,7 +201,7 @@ struct AggHashSetOfOneStringKey {
             hash_set.lazy_emplace(key, [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
-                THROW_BAD_ALLOC_IF_NULL(pos);
+                ERASE_AND_THROW_BAD_ALLOC_IF_NULL(hash_set, pos, key);
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
             });
@@ -285,7 +297,7 @@ struct AggHashSetOfOneNullableStringKey {
 
         hash_set.lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = pool->allocate(key.size);
-            THROW_BAD_ALLOC_IF_NULL(pos);
+            ERASE_AND_THROW_BAD_ALLOC_IF_NULL(hash_set, pos, key);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
         });
@@ -348,7 +360,7 @@ struct AggHashSetOfSerializedKey {
             hash_set.lazy_emplace(key, [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
-                THROW_BAD_ALLOC_IF_NULL(pos);
+                ERASE_AND_THROW_BAD_ALLOC_IF_NULL(hash_set, pos, key);
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
             });

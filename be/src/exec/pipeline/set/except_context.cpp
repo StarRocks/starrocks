@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/set/except_context.h"
 
+#include "runtime/current_thread.h"
+
 namespace starrocks::pipeline {
 
 Status ExceptContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
@@ -26,7 +28,8 @@ Status ExceptContext::close(RuntimeState* state) {
 
 Status ExceptContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
                                          const std::vector<ExprContext*>& dst_exprs) {
-    return _hash_set->build_set(state, chunk, dst_exprs, _build_pool.get());
+    TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, dst_exprs, _build_pool.get()));
+    return Status::OK();
 }
 
 Status ExceptContext::erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,

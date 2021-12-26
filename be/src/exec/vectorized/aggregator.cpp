@@ -195,6 +195,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        THROW_BAD_ALLOC_IF_NULL(_single_agg_state);
         for (int i = 0; i < _agg_functions.size(); i++) {
             _agg_functions[i]->create(_single_agg_state + _agg_states_offsets[i]);
         }
@@ -233,7 +234,7 @@ Status Aggregator::close(RuntimeState* state) {
             }
 #define HASH_MAP_METHOD(NAME)                                                  \
     else if (_hash_map_variant.type == vectorized::HashMapVariant::Type::NAME) \
-            _release_agg_memory<decltype(_hash_map_variant.NAME)::element_type>(*_hash_map_variant.NAME);
+            _release_agg_memory<decltype(_hash_map_variant.NAME)::element_type>(_hash_map_variant.NAME.get());
             APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
         }
