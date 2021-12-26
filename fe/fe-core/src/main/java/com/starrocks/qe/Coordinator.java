@@ -459,9 +459,9 @@ public class Coordinator {
 
             // Disable pipeline engine for `INSERT INTO`.
             // TODO: remove this when load supports pipeline engine.
-            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-            boolean isEnablePipelineEngine =
-                    sessionVariable.isEnablePipelineEngine() && (fragments.get(0).getSink() instanceof ResultSink);
+            boolean isEnablePipelineEngine = ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
+                    (fragments.get(0).getSink() instanceof ResultSink);
 
             for (PlanFragment fragment : fragments) {
                 FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
