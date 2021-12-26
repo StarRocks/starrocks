@@ -214,7 +214,7 @@ Status ORCScanner::_open_next_orc_reader() {
         Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
                                               CompressionTypePB::NO_COMPRESSION, &file);
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to create random-access files: " << st.to_string();
+            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
             return st;
         }
         const std::string& file_name = file->file_name();
@@ -224,7 +224,7 @@ Status ORCScanner::_open_next_orc_reader() {
         _orc_adapter->set_current_file_name(file_name);
         st = _orc_adapter->init(std::move(inStream));
         if (st.is_end_of_file()) {
-            LOG(WARNING) << "Failed to init orc adapter. file_name: " << file_name << ", st: " << st.to_string();
+            LOG(WARNING) << "Failed to init orc adapter. file_name: " << file_name << ", status: " << st.to_string();
             continue;
         }
         return st;

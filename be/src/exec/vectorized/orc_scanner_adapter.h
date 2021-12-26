@@ -89,9 +89,9 @@ public:
     void set_runtime_state(RuntimeState* state) { _state = state; }
     RuntimeState* runtime_state() { return _state; }
     void set_current_slot(SlotDescriptor* slot) { _current_slot = slot; }
-    const SlotDescriptor* get_current_slot() const { return _current_slot; }
+    SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
-    void report_error_message(const std::string& reason, const std::string& raw_data);
+    void report_error_message(const std::string& error_msg);
     int get_column_id_by_name(const std::string& name) const;
 
 private:

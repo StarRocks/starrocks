@@ -120,7 +120,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
             const TBrokerRangeDesc& range_desc = _scan_range.ranges[_curr_file_index];
             Status st = create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &file);
             if (!st.ok()) {
-                LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
+                LOG(WARNING) << "Failed to create sequential files. status: " << st.to_string();
                 return st;
             }
 
@@ -187,16 +187,17 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         _curr_reader->split_record(record, &fields);
 
         if (fields.size() != _num_fields_in_csv) {
-            std::stringstream error_msg;
-            error_msg << "column count mismatch, expect=" << _num_fields_in_csv << " real=" << fields.size();
             if (_counter->num_rows_filtered++ < 50) {
-                _report_error(record.to_string(), error_msg.str());
+                std::stringstream error_msg;
+                error_msg << "Value count does not match column count."
+                          << "Expect " << fields.size() << " but got" << _num_fields_in_csv;
+                _report_error("", error_msg.str());
             }
             continue;
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < 50) {
-                _report_error(record.to_string(), "Invalid UTF-8 data");
+                _report_error(record.to_string(), "Invalid UTF-8 row");
             }
             continue;
         }
@@ -204,15 +205,19 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
-            if (_src_slot_descriptors[j] == nullptr) {
+            auto slot = _src_slot_descriptors[j];
+            if (slot == nullptr) {
                 continue;
             }
             const Slice& field = fields[j];
-            options.type_desc = &(_src_slot_descriptors[j]->type());
+            options.type_desc = &(slot->type());
             if (!_converters[k]->read_string(_column_raw_ptrs[k], field, options)) {
                 chunk->set_num_rows(num_rows);
                 if (_counter->num_rows_filtered++ < 50) {
-                    _report_error(record.to_string(), "invalid value '" + field.to_string() + "'");
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << field.to_string() << "' is out of range."
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _report_error("", error_msg.str());
                 }
                 has_error = true;
                 break;
