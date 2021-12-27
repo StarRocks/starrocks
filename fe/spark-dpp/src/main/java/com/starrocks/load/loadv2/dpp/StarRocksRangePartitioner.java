@@ -65,12 +65,15 @@ public class StarRocksRangePartitioner extends Partitioner {
     }
 
     public static class PartitionRangeKey implements Serializable {
+        public boolean isMinPartition;
         public boolean isMaxPartition;
         public DppColumns startKeys;
         public DppColumns endKeys;
 
         public boolean isRowContained(DppColumns row) {
-            if (isMaxPartition) {
+            if (isMinPartition) {
+                return endKeys.compareTo(row) > 0;
+            } else if (isMaxPartition) {
                 return startKeys.compareTo(row) <= 0;
             } else {
                 return startKeys.compareTo(row) <= 0 && endKeys.compareTo(row) > 0;
@@ -79,7 +82,8 @@ public class StarRocksRangePartitioner extends Partitioner {
 
         public String toString() {
             return "PartitionRangeKey{" +
-                    "isMaxPartition=" + isMaxPartition +
+                    "isMinPartition=" + isMinPartition +
+                    ", isMaxPartition=" + isMaxPartition +
                     ", startKeys=" + startKeys +
                     ", endKeys=" + endKeys +
                     '}';
