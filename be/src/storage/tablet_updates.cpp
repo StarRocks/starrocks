@@ -706,7 +706,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             Substitute("$0_$1", tablet_id, rowset->rowset_id().to_string()));
     state_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& state = state_entry->value();
-    st = state.load(_tablet.tablet_id(), rowset.get());
+    st = state.load(&_tablet, rowset.get());
     manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
     if (!st.ok()) {
         LOG(ERROR) << "_apply_rowset_commit error: load rowset update state failed: " << st << " " << debug_string();

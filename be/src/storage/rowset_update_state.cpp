@@ -9,7 +9,6 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/tablet.h"
-#include "storage/tablet_updates.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
@@ -23,18 +22,16 @@ RowsetUpdateState::RowsetUpdateState() = default;
 
 RowsetUpdateState::~RowsetUpdateState() = default;
 
-Status RowsetUpdateState::load(int64_t tablet_id, Rowset* rowset) {
+Status RowsetUpdateState::load(Tablet* tablet, Rowset* rowset) {
     if (UNLIKELY(!_status.ok())) {
         return _status;
     }
-    std::call_once(_load_once_flag, [&] {
-        _tablet_id = tablet_id;
-        _status = _do_load(rowset);
-    });
+    std::call_once(_load_once_flag, [&] { _status = _do_load(tablet, rowset); });
     return _status;
 }
 
-Status RowsetUpdateState::_do_load(Rowset* rowset) {
+Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
+    _tablet_id = tablet->tablet_id();
     auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
@@ -106,6 +103,11 @@ Status RowsetUpdateState::_do_load(Rowset* rowset) {
     for (const auto& one_delete : deletes()) {
         _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
     }
+    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    if (!rowset_meta_pb.has_txn_meta()) {
+        return Status::OK();
+    }
+    // TODO: prepare partial update states
     return Status::OK();
 }
 
