@@ -394,11 +394,9 @@ public:
 
 private:
     Status _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
-    void _probe_tuple_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
     Status _probe_null_output(ChunkPtr* chunk, size_t count);
 
     Status _build_output(ChunkPtr* chunk);
-    void _build_tuple_output(ChunkPtr* chunk);
     Status _build_default_output(ChunkPtr* chunk, size_t count);
 
     void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);

@@ -27,19 +27,6 @@ void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk, RuntimeStat
         new_chunk->append_column(std::move(new_col), slot->id());
     }
 
-    for (int tuple_id : _output_probe_tuple_ids) {
-        if (_probe_chunk->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr dest_col = vectorized::BooleanColumn::create();
-            new_chunk->append_tuple_column(dest_col, tuple_id);
-        }
-    }
-    for (int tuple_id : _output_build_tuple_ids) {
-        if (_curr_build_chunk->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr dest_col = vectorized::BooleanColumn::create();
-            new_chunk->append_tuple_column(dest_col, tuple_id);
-        }
-    }
-
     *chunk = std::move(new_chunk);
     (*chunk)->reserve(state->batch_size());
 }
@@ -59,31 +46,6 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_probe(vectorized::
         vectorized::ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_probe(dest_col, src_col, build_index, row_count);
     }
-
-    for (int tuple_id : _output_probe_tuple_ids) {
-        if (_probe_chunk->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr& src_col = _probe_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(src_col)->get_data();
-            vectorized::ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(dest_col)->get_data();
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[probe_index]);
-            }
-        }
-    }
-
-    for (int tuple_id : _output_build_tuple_ids) {
-        if (_curr_build_chunk->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr& src_col = _curr_build_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(src_col)->get_data();
-            vectorized::ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(dest_col)->get_data();
-
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[build_index + i]);
-            }
-        }
-    }
 }
 
 void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_build(vectorized::ChunkPtr& chunk, size_t row_count,
@@ -101,31 +63,6 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_build(vectorized::
         DCHECK(_curr_build_chunk != nullptr);
         vectorized::ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
-    }
-
-    for (int tuple_id : _output_probe_tuple_ids) {
-        if (_probe_chunk->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr& src_col = _probe_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(src_col)->get_data();
-            vectorized::ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(dest_col)->get_data();
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[probe_index + i]);
-            }
-        }
-    }
-
-    for (int tuple_id : _output_build_tuple_ids) {
-        if (_curr_build_chunk->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr& src_col = _curr_build_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(src_col)->get_data();
-            vectorized::ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(dest_col)->get_data();
-
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[build_index]);
-            }
-        }
     }
 }
 

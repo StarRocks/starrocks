@@ -14,27 +14,17 @@ namespace starrocks::vectorized {
 
 Chunk::Chunk() {
     _slot_id_to_index.reserve(4);
-    _tuple_id_to_index.reserve(1);
 }
 
 Chunk::Chunk(Columns columns, SchemaPtr schema) : _columns(std::move(columns)), _schema(std::move(schema)) {
     // bucket size cannot be 0.
     _cid_to_index.reserve(std::max<size_t>(1, columns.size() * 2));
     _slot_id_to_index.reserve(std::max<size_t>(1, _columns.size() * 2));
-    _tuple_id_to_index.reserve(1);
     rebuild_cid_index();
     check_or_die();
 }
 
-// TODO: FlatMap don't support std::move
 Chunk::Chunk(Columns columns, const SlotHashMap& slot_map) : _columns(std::move(columns)), _slot_id_to_index(slot_map) {
-    // when use _slot_id_to_index, we don't need to rebuild_cid_index
-    _tuple_id_to_index.reserve(1);
-}
-
-// TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, const SlotHashMap& slot_map, const TupleHashMap& tuple_map)
-        : _columns(std::move(columns)), _slot_id_to_index(slot_map), _tuple_id_to_index(tuple_map) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
 }
 
@@ -50,7 +40,6 @@ void Chunk::swap_chunk(Chunk& other) {
     _schema.swap(other._schema);
     _cid_to_index.swap(other._cid_to_index);
     _slot_id_to_index.swap(other._slot_id_to_index);
-    _tuple_id_to_index.swap(other._tuple_id_to_index);
     std::swap(_delete_state, other._delete_state);
 }
 
@@ -89,12 +78,6 @@ void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
     _columns.emplace(_columns.begin() + idx, std::move(column));
     _schema->insert(idx, field);
     rebuild_cid_index();
-    check_or_die();
-}
-
-void Chunk::append_tuple_column(const ColumnPtr& column, TupleId tuple_id) {
-    _tuple_id_to_index[tuple_id] = _columns.size();
-    _columns.emplace_back(column);
     check_or_die();
 }
 
@@ -159,13 +142,6 @@ size_t Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
         chunk->mutable_slot_id_map()->Add(kv.second);
     }
 
-    chunk->clear_tuple_id_map();
-    chunk->mutable_tuple_id_map()->Reserve(static_cast<int>(_tuple_id_to_index.size()) * 2);
-    for (const auto& kv : _tuple_id_to_index) {
-        chunk->mutable_tuple_id_map()->Add(kv.first);
-        chunk->mutable_tuple_id_map()->Add(kv.second);
-    }
-
     chunk->clear_is_nulls();
     chunk->mutable_is_nulls()->Reserve(_columns.size());
     for (const auto& column : _columns) {
@@ -178,7 +154,7 @@ size_t Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
         chunk->mutable_is_consts()->Add(column->is_constant());
     }
 
-    DCHECK_EQ(_columns.size(), _tuple_id_to_index.size() + _slot_id_to_index.size());
+    DCHECK_EQ(_columns.size(), _slot_id_to_index.size());
 
     size_t size = serialize_size();
     chunk->mutable_data()->resize(size);
@@ -189,8 +165,7 @@ size_t Chunk::serialize_with_meta(starrocks::ChunkPB* chunk) const {
 
 Status Chunk::deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta, size_t serialized_size) {
     _slot_id_to_index = meta.slot_id_to_index;
-    _tuple_id_to_index = meta.tuple_id_to_index;
-    _columns.resize(_slot_id_to_index.size() + _tuple_id_to_index.size());
+    _columns.resize(_slot_id_to_index.size());
 
     const uint8_t* head = src;
     uint32_t version = decode_fixed32_le(src);
@@ -270,21 +245,8 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_schema(size_t size) const {
     return std::make_unique<Chunk>(columns, _schema);
 }
 
-std::unique_ptr<Chunk> Chunk::clone_empty_with_tuple() const {
-    return clone_empty_with_tuple(num_rows());
-}
-
-std::unique_ptr<Chunk> Chunk::clone_empty_with_tuple(size_t size) const {
-    Columns columns(_columns.size());
-    for (size_t i = 0; i < _columns.size(); ++i) {
-        columns[i] = _columns[i]->clone_empty();
-        columns[i]->reserve(size);
-    }
-    return std::make_unique<Chunk>(columns, _slot_id_to_index, _tuple_id_to_index);
-}
-
 std::unique_ptr<Chunk> Chunk::clone_unique() const {
-    std::unique_ptr<Chunk> chunk = clone_empty_with_tuple(0);
+    std::unique_ptr<Chunk> chunk = clone_empty_with_slot(0);
     for (size_t idx = 0; idx < _columns.size(); idx++) {
         ColumnPtr column = _columns[idx]->clone_shared();
         chunk->_columns[idx] = std::move(column);
@@ -375,7 +337,6 @@ void Chunk::check_or_die() {
         CHECK(_schema == nullptr || _schema->fields().empty());
         CHECK(_cid_to_index.empty());
         CHECK(_slot_id_to_index.empty());
-        CHECK(_tuple_id_to_index.empty());
     } else {
         for (const ColumnPtr& c : _columns) {
             CHECK_EQ(num_rows(), c->size());

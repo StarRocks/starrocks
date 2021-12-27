@@ -304,7 +304,7 @@ Status DataStreamSender::Channel::add_rows_selective(vectorized::Chunk* chunk, c
                                                      uint32_t size) {
     // TODO(kks): find a way to remove this if condition
     if (UNLIKELY(_chunk == nullptr)) {
-        _chunk = chunk->clone_empty_with_tuple();
+        _chunk = chunk->clone_empty_with_slot();
     }
 
     if (_chunk->num_rows() + size > config::vector_chunk_size) {
