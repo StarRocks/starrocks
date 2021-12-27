@@ -228,12 +228,12 @@ public class SplitAggregateRule extends TransformationRule {
     private CallOperator rewriteDistinctAggFn(CallOperator fnCall) {
         final String functionName = fnCall.getFnName();
         if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
-            return new CallOperator("MULTI_DISTINCT_COUNT", fnCall.getType(), fnCall.getChildren(),
-                    Expr.getBuiltinFunction("MULTI_DISTINCT_COUNT", new Type[] {fnCall.getChild(0).getType()},
+            return new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fnCall.getType(), fnCall.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
         } else if (functionName.equalsIgnoreCase("SUM")) {
-            return new CallOperator("MULTI_DISTINCT_SUM", fnCall.getType(), fnCall.getChildren(),
-                    Expr.getBuiltinFunction("MULTI_DISTINCT_SUM", new Type[] {fnCall.getChild(0).getType()},
+            return new CallOperator(FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
         }
         return null;

@@ -385,22 +385,22 @@ public class FunctionSet {
 
             // count in multi distinct
             if (t.isChar() || t.isVarchar()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_count", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
             } else if (t.isBoolean() || t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint() || t.isDouble()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_count", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
             } else if (t.isDate() || t.isDatetime()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_count", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
             } else if (t.isDecimalV2() || t.isDecimalV3()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_count", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
@@ -408,17 +408,17 @@ public class FunctionSet {
 
             // sum in multi distinct
             if (t.isBoolean() || t.isTinyint() || t.isSmallint() || t.isInt() || t.isFloat()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_sum", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_SUM, Lists.newArrayList(t),
                         MULTI_DISTINCT_SUM_RETURN_TYPE.get(t),
                         Type.VARCHAR,
                         false, true, true));
             } else if (t.isBigint() || t.isLargeint() || t.isDouble()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_sum", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_SUM, Lists.newArrayList(t),
                         t,
                         Type.VARCHAR,
                         false, true, true));
             } else if (t.isDecimalV2() || t.isDecimalV3()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_sum", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_SUM, Lists.newArrayList(t),
                         MULTI_DISTINCT_SUM_RETURN_TYPE.get(t),
                         Type.VARCHAR,
                         false, true, true));

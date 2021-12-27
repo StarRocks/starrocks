@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
@@ -445,22 +446,41 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
                         List<ScalarOperator> newArguments = Collections.singletonList(dictColumn);
                         Type[] newTypes = newArguments.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-                        Function newFunction = Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
-                                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                        Type newReturnType = oldCall.getType();
+                        String fnName = kv.getValue().getFnName();
+                        AggregateFunction newFunction =
+                                (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
+                                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                        Type newReturnType = null;
 
                         ColumnRefOperator outputColumn = kv.getKey();
 
-                        // Add decode node to aggregate function that returns a string
-                        if (oldCall.getType().isVarchar()) {
-                            newReturnType = ID_TYPE;
-                            ColumnRefOperator outputStringColumn = kv.getKey();
-                            // now we only support max/min for dict columns
-                            // so we use input dict column
-                            newStringToDicts.put(outputStringColumn.getId(), dictColumnId);
+                        // For the top aggregation node, the return value is the return type. For the rest of
+                        // aggregation nodes, the return value is the intermediate result.
+                        // if intermediate type was null, it may be using one-stage aggregation
+                        // so return type was it real return type
+                        if (aggOperator.getType().isGlobal()) {
+                            newReturnType = newFunction.getReturnType();
+                        } else {
+                            newReturnType = newFunction.getIntermediateType() == null ?
+                                    newFunction.getReturnType() : newFunction.getIntermediateType();
+                        }
 
+                        // Add decode node to aggregate function that returns a string
+                        if (fnName.equals(FunctionSet.MAX) || fnName.equals(FunctionSet.MIN)) {
+                            ColumnRefOperator outputStringColumn = kv.getKey();
+                            final ColumnRefOperator newDictColumn = context.columnRefFactory.create(
+                                    dictColumn.getName(), ID_TYPE, dictColumn.isNullable());
                             newAggMap.remove(outputStringColumn);
-                            outputColumn = dictColumn;
+                            newStringToDicts.put(outputStringColumn.getId(), newDictColumn.getId());
+
+                            for (Pair<Integer, ColumnDict> globalDict : context.globalDicts) {
+                                if (globalDict.first.equals(dictColumnId)) {
+                                    context.globalDicts.add(new Pair<>(newDictColumn.getId(), globalDict.second));
+                                    break;
+                                }
+                            }
+
+                            outputColumn = newDictColumn;
                         }
 
                         CallOperator newCall = new CallOperator(oldCall.getFnName(), newReturnType,
