@@ -44,12 +44,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     } else {
         max_scan_key_num = config::doris_max_scan_key_num;
     }
-    cm.parse_conjuncts(true, max_scan_key_num);
-
-    // 4. Build olap scanner range
+    RETURN_IF_ERROR(cm.parse_conjuncts(true, max_scan_key_num, _enable_column_expr_predicate));
     RETURN_IF_ERROR(_build_scan_range(_runtime_state));
-
-    // 5. Init olap reader
     RETURN_IF_ERROR(_init_olap_reader(_runtime_state));
     return Status::OK();
 }

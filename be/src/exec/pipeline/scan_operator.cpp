@@ -48,6 +48,9 @@ bool ScanOperator::has_output() const {
         return false;
     }
 
+    // _chunk_source init at pull_chunk()
+    // so the the initialization of the first chunk_source needs
+    // to be driven by has_output() returning true
     if (!_chunk_source) {
         return true;
     }
@@ -158,11 +161,20 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state) {
     } else {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
+        bool enable_column_expr_predicate = false;
+        if (_olap_scan_node.__isset.enable_column_expr_predicate) {
+            enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
+        }
         _chunk_source = std::make_shared<OlapChunkSource>(
-                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, runtime_in_filters(),
-                runtime_bloom_filters(), _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation,
-                &_unused_output_columns, _runtime_profile.get(), _limit);
-        _chunk_source->prepare(state);
+                std::move(morsel), _olap_scan_node.tuple_id, _limit, enable_column_expr_predicate, _conjunct_ctxs,
+                runtime_in_filters(), runtime_bloom_filters(), _olap_scan_node.key_column_name,
+                _olap_scan_node.is_preaggregation, &_unused_output_columns, _runtime_profile.get());
+        auto status = _chunk_source->prepare(state);
+        if (!status.ok()) {
+            _chunk_source = nullptr;
+            _is_finished = true;
+            return status;
+        }
         RETURN_IF_ERROR(_trigger_next_scan(state));
     }
     return Status::OK();
