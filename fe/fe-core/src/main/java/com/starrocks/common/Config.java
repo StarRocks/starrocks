@@ -1154,6 +1154,24 @@ public class Config extends ConfigBase {
     public static String auth_token = "";
 
     /**
+     * If set to true and the jar that use to authentication is loaded in fe, kerberos authentication is supported.
+     */
+    @ConfField(mutable = true)
+    public static boolean authentication_kerberos_enabled = false;
+
+    /**
+     * Service principal name. like "starrocks-fe/hostname@STARROCKS.COM"
+     */
+    @ConfField(mutable = true)
+    public static String authentication_kerberos_service_principal = "";
+
+    /**
+     * Service principal key file path exported from kdc. like "$HOME/path/to/starrocks-fe.keytab"
+     */
+    @ConfField(mutable = true)
+    public static String authentication_kerberos_service_key_tab = "";
+
+    /**
      * In some cases, some tablets may have all replicas damaged or lost.
      * At this time, the data has been lost, and the damaged tablets
      * will cause the entire query to fail, and the remaining healthy tablets cannot be queried.

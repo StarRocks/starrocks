@@ -22,9 +22,25 @@
 package com.starrocks.mysql;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.common.Config;
+import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.mysql.privilege.Password;
+import com.starrocks.system.SystemInfoService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.File;
+import java.lang.reflect.Method;
+import java.net.URL;
+import java.net.URLClassLoader;
+
+import static com.starrocks.mysql.privilege.Auth.KRB5_AUTH_JAR_PATH;
 
 // MySQL protocol handshake packet.
 public class MysqlHandshakePacket extends MysqlPacket {
+    private static final Logger LOG = LogManager.getLogger(MysqlHandshakePacket.class);
+
     private static final int SCRAMBLE_LENGTH = 20;
     // Version of handshake packet, since MySQL 3.21.0, Handshake of protocol 10 is used
     private static final int PROTOCOL_VERSION = 10;
@@ -38,6 +54,8 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private static final int STATUS_FLAGS = 0;
     private static final String NATIVE_AUTH_PLUGIN_NAME = "mysql_native_password";
     private static final String CLEAR_PASSWORD_PLUGIN_NAME = "mysql_clear_password";
+    public static final String AUTHENTICATION_KERBEROS_CLIENT = "authentication_kerberos_client";
+
     private static final ImmutableMap<String, Boolean> supportedPlugins = new ImmutableMap.Builder<String, Boolean>()
             .put(NATIVE_AUTH_PLUGIN_NAME, true)
             .put(CLEAR_PASSWORD_PLUGIN_NAME, true)
@@ -103,5 +121,29 @@ public class MysqlHandshakePacket extends MysqlPacket {
         serializer.writeNulTerminateString(NATIVE_AUTH_PLUGIN_NAME);
         serializer.writeBytes(authPluginData);
         serializer.writeInt1(0);
+    }
+
+    // If user use kerberos for authentication, fe need to resend the handshake request.
+    public void buildKrb5AuthRequest(MysqlSerializer serializer, String remoteIp, String user) throws Exception {
+        String fullUserName = SystemInfoService.DEFAULT_CLUSTER + ":" + user;
+        Password password = Catalog.getCurrentCatalog().getAuth().getUserPrivTable()
+                .getPasswordByApproximate(fullUserName, remoteIp);
+        if (password == null) {
+            String msg = String.format("Can not find password with [user: %s, remoteIp: %s].", user, remoteIp);
+            LOG.error(msg);
+            throw new Exception(msg);
+        }
+
+        String userRealm = password.getUserForAuthPlugin();
+        File jarFile = new File(KRB5_AUTH_JAR_PATH);
+        ClassLoader loader = URLClassLoader.newInstance(
+                new URL[] { jarFile.toURL() },
+                getClass().getClassLoader()
+        );
+
+        Class<?> authClazz = Class.forName(Auth.KRB5_AUTH_CLASS_NAME, true, loader);
+        Method method = authClazz.getMethod("buildKrb5HandshakeRequest", String.class, String.class);
+        byte[] packet = (byte[]) method.invoke(null, Config.authentication_kerberos_service_principal, userRealm);
+        serializer.writeBytes(packet);
     }
 }

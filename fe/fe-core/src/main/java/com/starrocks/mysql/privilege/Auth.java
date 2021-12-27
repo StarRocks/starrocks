@@ -26,6 +26,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.StarRocksFE;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.CreateClusterStmt;
 import com.starrocks.analysis.CreateRoleStmt;
@@ -59,6 +60,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +74,9 @@ public class Auth implements Writable {
     // each starrocks system has only one root user.
     public static final String ROOT_USER = "root";
     public static final String ADMIN_USER = "admin";
+
+    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.auth.KerberosAuthentication";
+    public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
 
     private UserPrivTable userPrivTable = new UserPrivTable();
     private DbPrivTable dbPrivTable = new DbPrivTable();
@@ -251,7 +256,6 @@ public class Auth implements Writable {
         //     }
         //     return true;
         // }
-
         readLock();
         try {
             return userPrivTable.checkPassword(remoteUser, remoteHost, remotePasswd, randomString, currentUser);
@@ -1394,6 +1398,16 @@ public class Auth implements Writable {
         Auth auth = new Auth();
         auth.readFields(in);
         return auth;
+    }
+
+    public static boolean isSupportKerberosAuth() {
+        if (!Config.authentication_kerberos_enabled ||
+                Config.authentication_kerberos_service_key_tab.isEmpty() ||
+                Config.authentication_kerberos_service_principal.isEmpty()) {
+            return false;
+        }
+
+        return new File(KRB5_AUTH_JAR_PATH).exists();
     }
 
     @Override

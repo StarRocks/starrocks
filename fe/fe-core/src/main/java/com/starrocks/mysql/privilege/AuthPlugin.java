@@ -3,6 +3,7 @@
 package com.starrocks.mysql.privilege;
 
 public enum AuthPlugin {
+    MYSQL_NATIVE_PASSWORD,
     AUTHENTICATION_LDAP_SIMPLE,
-    MYSQL_NATIVE_PASSWORD
+    AUTHENTICATION_KERBEROS
 }

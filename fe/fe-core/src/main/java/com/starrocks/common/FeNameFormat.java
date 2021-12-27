@@ -33,6 +33,7 @@ public class FeNameFormat {
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
     private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,64}$";
+    private static final String MYSQL_USER_NAME_REGEX = "^[a-zA-Z][a-zA-Z0-9_]{1,63}/?[.a-zA-Z0-9_-]{0,63}$";
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
@@ -92,7 +93,7 @@ public class FeNameFormat {
     }
 
     public static void checkUserName(String userName) throws AnalysisException {
-        if (Strings.isNullOrEmpty(userName) || !userName.matches(COMMON_NAME_REGEX)) {
+        if (Strings.isNullOrEmpty(userName) || !userName.matches(MYSQL_USER_NAME_REGEX) || userName.length() > 64) {
             throw new AnalysisException("invalid user name: " + userName);
         }
     }

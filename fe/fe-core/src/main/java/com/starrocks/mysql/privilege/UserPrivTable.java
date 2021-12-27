@@ -71,6 +71,26 @@ public class UserPrivTable extends PrivTable {
         return null;
     }
 
+    public Password getPasswordByApproximate(String remoteUser, String remoteHost) {
+        for (PrivEntry entry : entries) {
+            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) entry;
+
+            // check host
+            if (!globalPrivEntry.isAnyHost() && !globalPrivEntry.getHostPattern().match(remoteHost)) {
+                continue;
+            }
+
+            // check user
+            if (!globalPrivEntry.isAnyUser() && !globalPrivEntry.getUserPattern().match(remoteUser)) {
+                continue;
+            }
+
+            return globalPrivEntry.getPassword();
+        }
+
+        return null;
+    }
+
     /*
      * Check if user@host has specified privilege
      */

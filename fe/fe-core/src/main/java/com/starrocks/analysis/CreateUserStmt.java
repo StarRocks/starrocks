@@ -24,11 +24,13 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.Auth.PrivLevel;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -161,6 +163,12 @@ public class CreateUserStmt extends DdlStmt {
                     }
                 } else {
                     scramblePassword = new byte[0];
+                }
+            } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equals(authPlugin) && Auth.isSupportKerberosAuth()) {
+                if (userForAuthPlugin != null) {
+                    userForAuthPlugin = this.authString;
+                } else {
+                    userForAuthPlugin = Config.authentication_kerberos_service_principal.split("@")[1];
                 }
             } else {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, authPlugin);
