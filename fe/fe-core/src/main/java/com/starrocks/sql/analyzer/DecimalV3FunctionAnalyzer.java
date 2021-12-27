@@ -32,7 +32,7 @@ public class DecimalV3FunctionAnalyzer {
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
                     .add(FunctionSet.COUNT)
-                    .add("sum").add("sum_distinct").add("multi_distinct_sum").add("avg").add("variance")
+                    .add("sum").add("sum_distinct").add(FunctionSet.MULTI_DISTINCT_SUM).add("avg").add("variance")
                     .add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
                     .add("stddev").add("stddev_pop").add("stddev_samp").build();
 

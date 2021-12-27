@@ -580,7 +580,7 @@ public class FunctionCallExpr extends Expr {
 
     private static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add("sum").add("sum_distinct").add("multi_distinct_sum").add("avg").add("variance")
+                    .add("sum").add("sum_distinct").add(FunctionSet.MULTI_DISTINCT_SUM).add("avg").add("variance")
                     .add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
                     .add("stddev").add("stddev_pop").add("std").add("stddev_samp").build();
 
@@ -734,7 +734,7 @@ public class FunctionCallExpr extends Expr {
                 throw new AnalysisException("Stddev/variance function do not support Date/Datetime type");
             }
 
-            if (functionName.equalsIgnoreCase("multi_distinct_sum") && argTypes[0].isDateType()) {
+            if (functionName.equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_SUM) && argTypes[0].isDateType()) {
                 throw new AnalysisException("Sum in multi distinct functions do not support Date/Datetime type");
             }
 
