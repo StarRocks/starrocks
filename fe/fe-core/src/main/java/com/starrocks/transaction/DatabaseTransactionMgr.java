@@ -1134,7 +1134,6 @@ public class DatabaseTransactionMgr {
                 if (transactionState.isExpired(currentMillis)) {
                     finalStatusTransactionStateDeque.pop();
                     clearTransactionState(transactionState);
-                    editLog.logDeleteTransactionState(transactionState);
                     LOG.info("transaction [" + transactionState.getTransactionId() +
                             "] is expired, remove it from transaction manager");
                 } else {
@@ -1451,8 +1450,7 @@ public class DatabaseTransactionMgr {
         return timeoutTxns;
     }
 
-    public void removeExpiredAndTimeoutTxns(long currentMillis) {
-        removeExpiredTxns(currentMillis);
+    public void abortTimeoutTxns(long currentMillis) {
         List<Long> timeoutTxns = getTimeoutTxns(currentMillis);
         // abort timeout txns
         for (Long txnId : timeoutTxns) {
