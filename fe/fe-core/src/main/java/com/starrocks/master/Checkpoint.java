@@ -108,6 +108,8 @@ public class Checkpoint extends MasterDaemon {
                 return;
             }
 
+            catalog.clearExpiredJobs();
+
             catalog.saveImage();
             replayedJournalId = catalog.getReplayedJournalId();
             if (MetricRepo.isInit) {
