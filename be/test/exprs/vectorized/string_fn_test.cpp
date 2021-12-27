@@ -336,7 +336,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substringNullTest) {
     pos->append(5);
     len->append(2);
 
-    ColumnBuilder<TYPE_VARCHAR> b;
+    ColumnBuilder<TYPE_VARCHAR> b(config::vector_chunk_size);
 
     for (int j = 0; j < 20; ++j) {
         b.append("test" + std::to_string(j), j % 2 == 0);

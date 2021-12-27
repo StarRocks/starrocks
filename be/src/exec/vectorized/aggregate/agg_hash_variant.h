@@ -362,12 +362,12 @@ struct HashMapVariant {
     std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed2>> phase2_slice_fx8;
     std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed2>> phase2_slice_fx16;
 
-    void init(Type type_) {
+    void init(RuntimeState* state, Type type_) {
         type = type_;
         switch (type_) {
 #define M(NAME)                                                  \
     case Type::NAME:                                             \
-        NAME = std::make_unique<decltype(NAME)::element_type>(); \
+        NAME = std::make_unique<decltype(NAME)::element_type>(state->batch_size()); \
         break;
             APPLY_FOR_VARIANT_ALL(M)
 #undef M
@@ -636,12 +636,12 @@ struct HashSetVariant {
     std::unique_ptr<SerializedKeyAggHashSetFixedSize8<PhmapSeed2>> phase2_slice_fx8;
     std::unique_ptr<SerializedKeyAggHashSetFixedSize16<PhmapSeed2>> phase2_slice_fx16;
 
-    void init(Type type_) {
+    void init(RuntimeState* state, Type type_) {
         type = type_;
         switch (type_) {
 #define M(NAME)                                                  \
     case Type::NAME:                                             \
-        NAME = std::make_unique<decltype(NAME)::element_type>(); \
+        NAME = std::make_unique<decltype(NAME)::element_type>(state->batch_size()); \
         break;
             APPLY_FOR_VARIANT_ALL(M)
 #undef M

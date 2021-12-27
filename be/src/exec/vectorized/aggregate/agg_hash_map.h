@@ -97,6 +97,8 @@ struct AggHashMapWithOneNumberKey {
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
+    AggHashMapWithOneNumberKey(int32_t batch_size) {}
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -157,6 +159,8 @@ struct AggHashMapWithOneNullableNumberKey {
     HashMap hash_map;
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
+
+    AggHashMapWithOneNullableNumberKey(int32_t batch_size) {}
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -288,6 +292,8 @@ struct AggHashMapWithOneStringKey {
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
 
+    AggHashMapWithOneStringKey(int32_t batch_size) {}
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -349,6 +355,8 @@ struct AggHashMapWithOneNullableStringKey {
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
+
+    AggHashMapWithOneNullableStringKey(int32_t batch_size) {}
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -488,16 +496,17 @@ struct AggHashMapWithSerializedKey {
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
 
-    AggHashMapWithSerializedKey()
+    AggHashMapWithSerializedKey(int32_t batch_size)
             : mem_pool(std::make_unique<MemPool>()),
-              buffer(mem_pool->allocate(max_one_row_size * config::vector_chunk_size)) {
+              buffer(mem_pool->allocate(max_one_row_size * batch_size)),
+              _batch_size(batch_size) {
         THROW_BAD_ALLOC_IF_NULL(buffer);
     }
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
-        slice_sizes.assign(config::vector_chunk_size, 0);
+        slice_sizes.assign(_batch_size, 0);
 
         uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
@@ -505,7 +514,7 @@ struct AggHashMapWithSerializedKey {
             mem_pool->clear();
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
-            buffer = mem_pool->allocate(max_one_row_size * config::vector_chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            buffer = mem_pool->allocate(max_one_row_size * _batch_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
             THROW_BAD_ALLOC_IF_NULL(buffer);
         }
 
@@ -535,13 +544,13 @@ struct AggHashMapWithSerializedKey {
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
-        slice_sizes.assign(config::vector_chunk_size, 0);
+        slice_sizes.assign(_batch_size, 0);
 
         uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
             max_one_row_size = cur_max_one_row_size;
             mem_pool->clear();
-            buffer = mem_pool->allocate(max_one_row_size * config::vector_chunk_size);
+            buffer = mem_pool->allocate(max_one_row_size * _batch_size);
             THROW_BAD_ALLOC_IF_NULL(buffer);
         }
 
@@ -597,6 +606,8 @@ struct AggHashMapWithSerializedKey {
     std::unique_ptr<MemPool> mem_pool;
     uint8_t* buffer;
     ResultVector results;
+
+    int32_t _batch_size;
 };
 
 template <typename HashMap>
@@ -617,10 +628,11 @@ struct AggHashMapWithSerializedKeyFixedSize {
 
     std::vector<CacheEntry> caches;
 
-    AggHashMapWithSerializedKeyFixedSize() : mem_pool(std::make_unique<MemPool>()) {
-        caches.reserve(config::vector_chunk_size);
+    AggHashMapWithSerializedKeyFixedSize(int32_t batch_size) : mem_pool(std::make_unique<MemPool>()),
+        _batch_size(batch_size) {
+        caches.reserve(batch_size);
         uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
-        memset(buffer, 0x0, max_fixed_size * config::vector_chunk_size);
+        memset(buffer, 0x0, max_fixed_size * batch_size);
     }
 
     template <typename Func>
@@ -737,6 +749,8 @@ struct AggHashMapWithSerializedKeyFixedSize {
     std::unique_ptr<MemPool> mem_pool;
     ResultVector results;
     std::vector<Slice> tmp_slices;
+
+    int32_t _batch_size;
 };
 
 } // namespace starrocks::vectorized

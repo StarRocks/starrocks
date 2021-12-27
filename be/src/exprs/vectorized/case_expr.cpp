@@ -136,7 +136,7 @@ private:
         ColumnViewer<WhenType> case_viewer(case_column);
         then_viewers.emplace_back(else_column);
 
-        ColumnBuilder<ResultType> builder(this->type().precision, this->type().scale);
+        ColumnBuilder<ResultType> builder(context->batch_size(), this->type().precision, this->type().scale);
         size_t size = when_columns[0]->size();
         builder.reserve(size);
 
@@ -247,7 +247,7 @@ private:
         then_columns.emplace_back(else_column);
         then_viewers.emplace_back(else_column);
 
-        ColumnBuilder<ResultType> builder(this->type().precision, this->type().scale);
+        ColumnBuilder<ResultType> builder(context->batch_size(), this->type().precision, this->type().scale);
         size_t size = when_columns[0]->size();
         builder.reserve(size);
 

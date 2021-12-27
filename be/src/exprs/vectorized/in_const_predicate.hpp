@@ -204,8 +204,8 @@ public:
     // null_in_set: true means null is a value of _hash_set.
     // equal_null: true means that 'null' in column and 'null' in set is equal.
     template <bool null_in_set, bool equal_null, bool use_array>
-    ColumnPtr eval_on_chunk(const ColumnPtr& lhs) {
-        ColumnBuilder<TYPE_BOOLEAN> builder;
+    ColumnPtr eval_on_chunk(ExprContext* context, const ColumnPtr& lhs) {
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->batch_size());
         ColumnViewer<Type> viewer(lhs);
 
         uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column())->get_data().data();
@@ -251,22 +251,22 @@ public:
         if (_null_in_set) {
             if (_eq_null) {
                 if (!use_array) {
-                    return this->template eval_on_chunk<true, true, false>(lhs);
+                    return this->template eval_on_chunk<true, true, false>(context, lhs);
                 } else {
-                    return this->template eval_on_chunk<true, true, true>(lhs);
+                    return this->template eval_on_chunk<true, true, true>(context, lhs);
                 }
             } else {
                 if (!use_array) {
-                    return this->template eval_on_chunk<true, false, false>(lhs);
+                    return this->template eval_on_chunk<true, false, false>(context, lhs);
                 } else {
-                    return this->template eval_on_chunk<true, false, true>(lhs);
+                    return this->template eval_on_chunk<true, false, true>(context, lhs);
                 }
             }
         } else if (lhs->is_nullable()) {
             if (!use_array) {
-                return this->template eval_on_chunk<false, false, false>(lhs);
+                return this->template eval_on_chunk<false, false, false>(context, lhs);
             } else {
-                return this->template eval_on_chunk<false, false, true>(lhs);
+                return this->template eval_on_chunk<false, false, true>(context, lhs);
             }
         } else {
             if (!use_array) {

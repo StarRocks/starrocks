@@ -81,7 +81,7 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
 }
 
 ColumnPtr PushBrokerReader::_build_object_column(const ColumnPtr& column) {
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(config::vector_chunk_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -107,7 +107,7 @@ ColumnPtr PushBrokerReader::_build_object_column(const ColumnPtr& column) {
 }
 
 ColumnPtr PushBrokerReader::_build_hll_column(const ColumnPtr& column) {
-    ColumnBuilder<TYPE_HLL> builder;
+    ColumnBuilder<TYPE_HLL> builder(config::vector_chunk_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {

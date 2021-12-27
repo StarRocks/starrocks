@@ -22,7 +22,7 @@ ColumnPtr UtilityFunctions::current_version(FunctionContext* context, const Colu
 }
 
 ColumnPtr UtilityFunctions::sleep(FunctionContext* context, const Columns& columns) {
-    ColumnBuilder<TYPE_BOOLEAN> result;
+    ColumnBuilder<TYPE_BOOLEAN> result(context->batch_size());
     ColumnViewer<TYPE_INT> data_column(columns[0]);
 
     auto size = columns[0]->size();
@@ -50,10 +50,10 @@ ColumnPtr UtilityFunctions::last_query_id(FunctionContext* context, const Column
     }
 }
 
-ColumnPtr UtilityFunctions::uuid(FunctionContext*, const Columns& columns) {
+ColumnPtr UtilityFunctions::uuid(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
 
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(context->batch_size());
     result.reserve(num_rows);
     for (int i = 0; i < num_rows; ++i) {
         result.append(generate_uuid_string());

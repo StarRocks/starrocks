@@ -20,7 +20,7 @@ struct StConstructState {
 
 ColumnPtr GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const Columns& columns, GeoShapeType shape_type) {
     ColumnViewer<TYPE_VARCHAR> wkt_viewer(columns[0]);
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(ctx->batch_size());
 
     auto size = columns[0]->size();
 
@@ -114,7 +114,7 @@ ColumnPtr GeoFunctions::st_circle(FunctionContext* context, const Columns& colum
     ColumnViewer<TYPE_DOUBLE> lng_viewer(columns[0]);
     ColumnViewer<TYPE_DOUBLE> lat_viewer(columns[1]);
     ColumnViewer<TYPE_DOUBLE> radius_viewer(columns[2]);
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(context->batch_size());
 
     auto size = columns[0]->size();
     StConstructState* state = (StConstructState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
@@ -155,7 +155,7 @@ ColumnPtr GeoFunctions::st_circle(FunctionContext* context, const Columns& colum
 ColumnPtr GeoFunctions::st_point(FunctionContext* context, const Columns& columns) {
     auto x_column = ColumnViewer<TYPE_DOUBLE>(columns[0]);
     auto y_column = ColumnViewer<TYPE_DOUBLE>(columns[1]);
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(context->batch_size());
 
     auto size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -183,7 +183,7 @@ ColumnPtr GeoFunctions::st_point(FunctionContext* context, const Columns& column
 
 ColumnPtr GeoFunctions::st_x(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> encode(columns[0]);
-    ColumnBuilder<TYPE_DOUBLE> result;
+    ColumnBuilder<TYPE_DOUBLE> result(context->batch_size());
 
     auto size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -208,7 +208,7 @@ ColumnPtr GeoFunctions::st_x(FunctionContext* context, const Columns& columns) {
 
 ColumnPtr GeoFunctions::st_y(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> encode(columns[0]);
-    ColumnBuilder<TYPE_DOUBLE> result;
+    ColumnBuilder<TYPE_DOUBLE> result(context->batch_size());
 
     auto size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -236,7 +236,7 @@ ColumnPtr GeoFunctions::st_distance_sphere(FunctionContext* context, const Colum
     ColumnViewer<TYPE_DOUBLE> x_lat(columns[1]);
     ColumnViewer<TYPE_DOUBLE> y_lng(columns[2]);
     ColumnViewer<TYPE_DOUBLE> y_lat(columns[3]);
-    ColumnBuilder<TYPE_DOUBLE> result;
+    ColumnBuilder<TYPE_DOUBLE> result(context->batch_size());
 
     auto size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -264,7 +264,7 @@ ColumnPtr GeoFunctions::st_distance_sphere(FunctionContext* context, const Colum
 
 ColumnPtr GeoFunctions::st_as_wkt(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> shape_viewer(columns[0]);
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(context->batch_size());
 
     auto size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -338,7 +338,7 @@ Status GeoFunctions::st_contains_prepare(FunctionContext* ctx, FunctionContext::
 ColumnPtr GeoFunctions::st_contains(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> lhs_viewer(columns[0]);
     ColumnViewer<TYPE_VARCHAR> rhs_viewer(columns[1]);
-    ColumnBuilder<TYPE_BOOLEAN> result;
+    ColumnBuilder<TYPE_BOOLEAN> result(context->batch_size());
 
     const StContainsState* state =
             reinterpret_cast<StContainsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));

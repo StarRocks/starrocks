@@ -147,7 +147,7 @@ void HeapChunkSorter::get_next(ChunkPtr* chunk, bool* eos) {
         return;
     }
     *eos = false;
-    size_t count = std::min(size_t(config::vector_chunk_size), _merged_segment.chunk->num_rows() - _next_output_row);
+    size_t count = std::min(size_t(_state->batch_size()), _merged_segment.chunk->num_rows() - _next_output_row);
     chunk->reset(_merged_segment.chunk->clone_empty(count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
     _next_output_row += count;
@@ -158,7 +158,7 @@ bool HeapChunkSorter::pull_chunk(ChunkPtr* chunk) {
         *chunk = nullptr;
         return true;
     }
-    size_t count = std::min(size_t(config::vector_chunk_size), _merged_segment.chunk->num_rows() - _next_output_row);
+    size_t count = std::min(size_t(_state->batch_size()), _merged_segment.chunk->num_rows() - _next_output_row);
     chunk->reset(_merged_segment.chunk->clone_empty(count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
     _next_output_row += count;

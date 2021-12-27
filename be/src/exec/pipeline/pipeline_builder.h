@@ -21,11 +21,11 @@ public:
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipe_id(), operators));
     }
 
-    OpFactories maybe_interpolate_local_broadcast_exchange(OpFactories& pred_operators, int num_receivers);
+    OpFactories maybe_interpolate_local_broadcast_exchange(RuntimeState* state, OpFactories& pred_operators, int num_receivers);
 
     // Input the output chunks from the drivers of pred operators into ONE driver of the post operators.
-    OpFactories maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators);
-    OpFactories maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators, int num_receivers);
+    OpFactories maybe_interpolate_local_passthrough_exchange(RuntimeState* state, OpFactories& pred_operators);
+    OpFactories maybe_interpolate_local_passthrough_exchange(RuntimeState* state, OpFactories& pred_operators, int num_receivers);
 
     // Input the output chunks from multiple drivers of pred operators into DOP drivers of the post operators,
     // by partitioning each row output chunk to DOP partitions according to the key,
@@ -33,7 +33,7 @@ public:
     // It is used to parallelize complex operators. For example, the build Hash Table (HT) operator can partition
     // the input chunks to build multiple partition HTs, and the probe HT operator can also partition the input chunks
     // and probe on multiple partition HTs in parallel.
-    OpFactories maybe_interpolate_local_shuffle_exchange(OpFactories& pred_operators,
+    OpFactories maybe_interpolate_local_shuffle_exchange(RuntimeState* state, OpFactories& pred_operators,
                                                          const std::vector<ExprContext*>& partition_expr_ctxs);
 
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
@@ -41,7 +41,7 @@ public:
     // Append a LocalExchangeSinkOperator to the tail of each pipeline.
     // Create a new pipeline with a LocalExchangeSourceOperator.
     // These local exchange sink operators and the source operator share a passthrough exchanger.
-    OpFactories maybe_gather_pipelines_to_one(std::vector<OpFactories>& pred_operators_list);
+    OpFactories maybe_gather_pipelines_to_one(RuntimeState* state, std::vector<OpFactories>& pred_operators_list);
 
     uint32_t next_pipe_id() { return _next_pipeline_id++; }
 
@@ -72,6 +72,7 @@ public:
     Pipelines build(const FragmentContext& fragment, ExecNode* exec_node);
 
 private:
+    void set_state_for_opFactories(pipeline::OpFactories& opFactories, RuntimeState* state);
     PipelineBuilderContext& _context;
 };
 } // namespace pipeline

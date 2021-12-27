@@ -9,7 +9,7 @@
 namespace starrocks::vectorized {
 
 ColumnPtr ESFunctions::match(FunctionContext* context, const Columns& columns) {
-    ColumnBuilder<TYPE_BOOLEAN> result;
+    ColumnBuilder<TYPE_BOOLEAN> result(context->batch_size());
     auto size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
         result.append(true);

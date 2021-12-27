@@ -25,9 +25,9 @@ using SortContextPtr = std::shared_ptr<SortContext>;
 using SortContexts = std::vector<SortContextPtr>;
 class SortContext final : public ContextWithDependency {
 public:
-    explicit SortContext(int64_t limit, const int32_t num_right_sinkers, const std::vector<bool>& is_asc_order,
+    explicit SortContext(RuntimeState* state, int64_t limit, const int32_t num_right_sinkers, const std::vector<bool>& is_asc_order,
                          const std::vector<bool>& is_null_first)
-            : _limit(limit), _num_partition_sinkers(num_right_sinkers), _comparer(limit, is_asc_order, is_null_first) {
+            : _state(state), _limit(limit), _num_partition_sinkers(num_right_sinkers), _comparer(limit, is_asc_order, is_null_first) {
         _chunks_sorter_partions.reserve(num_right_sinkers);
         _data_segment_heaps.reserve(num_right_sinkers);
     }
@@ -79,7 +79,7 @@ public:
     template <class UpdateFunc>
     ChunkPtr pull_chunk(UpdateFunc&& get_and_update_min_entry_func) {
         // Get appropriate size
-        uint32_t needed_rows = std::min((uint64_t)config::vector_chunk_size, _require_rows - _next_output_row);
+        uint32_t needed_rows = std::min((uint64_t)_state->batch_size(), _require_rows - _next_output_row);
 
         uint32_t rows_number = 0;
         if (rows_number >= needed_rows) {
@@ -137,6 +137,7 @@ public:
     }
 
 private:
+    RuntimeState* _state;
     const int64_t _limit;
     // size of all chunks from all partitions.
     std::atomic<int64_t> _total_rows = 0;
@@ -240,12 +241,13 @@ class SortContextFactory;
 using SortContextFactoryPtr = std::shared_ptr<SortContextFactory>;
 class SortContextFactory {
 public:
-    SortContextFactory(bool is_merging, int64_t limit, int32_t num_right_sinkers,
+    SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,
                        const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
 
     SortContextPtr create(int32_t idx);
 
 private:
+    RuntimeState* _state;
     // _is_merging is true means to merge multiple output streams of PartitionSortSinkOperators into a common
     // LocalMergeSortSourceOperator that will produce a total order output stream.
     // _is_merging is false means to pipe each output stream of PartitionSortSinkOperators to an independent

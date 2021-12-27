@@ -39,7 +39,7 @@ ColumnPtr PercentileFunctions::percentile_empty(FunctionContext* context, const 
 ColumnPtr PercentileFunctions::percentile_approx_raw(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_PERCENTILE> viewer1(columns[0]);
     ColumnViewer<TYPE_DOUBLE> viewer2(columns[1]);
-    ColumnBuilder<TYPE_DOUBLE> builder;
+    ColumnBuilder<TYPE_DOUBLE> builder(context->batch_size());
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
         double result = viewer1.value(row)->quantile(viewer2.value(row));

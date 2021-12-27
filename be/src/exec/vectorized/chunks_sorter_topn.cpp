@@ -11,10 +11,10 @@
 
 namespace starrocks::vectorized {
 
-ChunksSorterTopn::ChunksSorterTopn(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
+ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                                    const std::vector<bool>* is_null_first, size_t offset, size_t limit,
                                    size_t size_of_chunk_batch)
-        : ChunksSorter(sort_exprs, is_asc, is_null_first, size_of_chunk_batch),
+        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, size_of_chunk_batch),
           _offset(offset),
           _limit(limit),
           _init_merged_segment(false) {
@@ -31,7 +31,7 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     if (chunk_number <= 0) {
         raw_chunks.push_back(chunk);
         chunk_number++;
-    } else if (raw_chunks[chunk_number - 1]->num_rows() + chunk->num_rows() > config::vector_chunk_size) {
+    } else if (raw_chunks[chunk_number - 1]->num_rows() + chunk->num_rows() > _state->batch_size()) {
         raw_chunks.push_back(chunk);
         chunk_number++;
     } else {
@@ -84,7 +84,7 @@ void ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
         return;
     }
     *eos = false;
-    size_t count = std::min(size_t(config::vector_chunk_size), _merged_segment.chunk->num_rows() - _next_output_row);
+    size_t count = std::min(size_t(_state->batch_size()), _merged_segment.chunk->num_rows() - _next_output_row);
     chunk->reset(_merged_segment.chunk->clone_empty(count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
     _next_output_row += count;
@@ -113,7 +113,7 @@ bool ChunksSorterTopn::pull_chunk(ChunkPtr* chunk) {
         *chunk = nullptr;
         return true;
     }
-    size_t count = std::min(size_t(config::vector_chunk_size), _merged_segment.chunk->num_rows() - _next_output_row);
+    size_t count = std::min(size_t(_state->batch_size()), _merged_segment.chunk->num_rows() - _next_output_row);
     chunk->reset(_merged_segment.chunk->clone_empty(count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
     _next_output_row += count;

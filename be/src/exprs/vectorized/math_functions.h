@@ -378,7 +378,7 @@ public:
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         const auto& type = context->get_return_type();
-        ColumnBuilder<Type> result(type.precision, type.scale);
+        ColumnBuilder<Type> result(context->batch_size(), type.precision, type.scale);
 
         std::vector<ColumnViewer<Type>> list;
         list.reserve(columns.size());
@@ -419,7 +419,7 @@ public:
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         const auto& type = context->get_return_type();
-        ColumnBuilder<Type> result(type.precision, type.scale);
+        ColumnBuilder<Type> result(context->batch_size(), type.precision, type.scale);
 
         std::vector<ColumnViewer<Type>> list;
         list.reserve(columns.size());

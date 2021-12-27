@@ -34,7 +34,7 @@ using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
 class OrcScannerAdapter {
 public:
     // src slot descriptors should exactly matches columns in row readers.
-    explicit OrcScannerAdapter(const std::vector<SlotDescriptor*>& src_slot_descriptors);
+    explicit OrcScannerAdapter(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors);
     ~OrcScannerAdapter();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
@@ -87,6 +87,7 @@ public:
                                       const std::vector<std::string>* hive_column_names, const orc::Type& root_type);
 
     void set_runtime_state(RuntimeState* state) { _state = state; }
+    RuntimeState* runtime_state() { return _state; }
     void set_current_slot(SlotDescriptor* slot) { _current_slot = slot; }
     const SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }

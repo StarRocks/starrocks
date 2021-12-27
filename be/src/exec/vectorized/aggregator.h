@@ -343,8 +343,8 @@ public:
         // If there is null key, output it last
         if constexpr (HashMapWithKey::has_single_null_key) {
             if (_is_ht_eos && hash_map_with_key.null_key_data != nullptr) {
-                // The output chunk size couldn't larger than config::vector_chunk_size
-                if (read_index < config::vector_chunk_size) {
+                // The output chunk size couldn't larger than _state->batch_size()
+                if (read_index < _state->batch_size()) {
                     // For multi group by key, we don't need to special handle null key
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());
@@ -418,8 +418,8 @@ public:
         // IF there is null key, output it last
         if constexpr (HashSetWithKey::has_single_null_key) {
             if (_is_ht_eos && hash_set.has_null_key) {
-                // The output chunk size couldn't larger than config::vector_chunk_size
-                if (read_index < config::vector_chunk_size) {
+                // The output chunk size couldn't larger than _state->batch_size()
+                if (read_index < _state->batch_size()) {
                     // For multi group by key, we don't need to special handle null key
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());

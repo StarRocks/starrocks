@@ -277,7 +277,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CODEGEN_LEVEL)
     private int codegenLevel = 0;
 
-    @VariableMgr.VarAttr(name = BATCH_SIZE)
+    @VariableMgr.VarAttr(name = BATCH_SIZE, alias = "chunk_size")
     private int batchSize = 4096;
 
     @VariableMgr.VarAttr(name = DISABLE_STREAMING_PREAGGREGATIONS)

@@ -641,10 +641,10 @@ void DataStreamRecvr::SenderQueue::close() {
     }
 }
 
-Status DataStreamRecvr::create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+Status DataStreamRecvr::create_merger(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(_keep_order);
+    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(state, _keep_order);
     vectorized::ChunkSuppliers chunk_suppliers;
     for (SenderQueue* q : _sender_queues) {
         // we use chunk_supplier in non-pipeline.
@@ -670,10 +670,11 @@ Status DataStreamRecvr::create_merger(const SortExecExprs* exprs, const std::vec
     return Status::OK();
 }
 
-Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs,
+                                                   const std::vector<bool>* is_asc,
                                                    const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(_keep_order);
+    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(state, _keep_order);
     vectorized::ChunkSuppliers chunk_suppliers;
     for (SenderQueue* q : _sender_queues) {
         // we willn't use chunk_supplier in pipeline.

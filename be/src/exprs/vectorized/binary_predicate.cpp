@@ -60,7 +60,7 @@ public:
         ColumnViewer<Type> v2(r);
         Columns list = {l, r};
 
-        ColumnBuilder<TYPE_BOOLEAN> builder;
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->batch_size());
 
         size_t size = list[0]->size();
         for (int row = 0; row < size; ++row) {

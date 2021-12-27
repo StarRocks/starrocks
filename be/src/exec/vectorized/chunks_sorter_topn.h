@@ -20,7 +20,7 @@ public:
      * @param limit          Number of top rows after those skipped to extract. Zero means no limit.
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
-    ChunksSorterTopn(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
+    ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                      const std::vector<bool>* is_null_first, size_t offset = 0, size_t limit = 0,
                      size_t size_of_chunk_batch = 1000);
     ~ChunksSorterTopn() override;

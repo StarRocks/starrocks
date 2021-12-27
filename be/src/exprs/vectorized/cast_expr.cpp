@@ -20,24 +20,24 @@
 namespace starrocks::vectorized {
 
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_fn(ColumnPtr& column);
+ColumnPtr cast_fn(ExprContext* context, ColumnPtr& column);
 
 // All cast implements
 #define SELF_CAST(FROM_TYPE)                                      \
     template <>                                                   \
-    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE>(ColumnPtr & column) { \
+    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE>(ExprContext* context, ColumnPtr & column) { \
         return column->clone();                                   \
     }
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                    \
     template <>                                                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ColumnPtr & column) {                                          \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext* context, ColumnPtr & column) {                                          \
         return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
     }
 
 #define UNARY_FN_CAST_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                           \
     template <>                                                                                                       \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ColumnPtr & column) {                                                       \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext* context, ColumnPtr & column) {                                                       \
         if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                           \
                       std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                        \
             return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
@@ -48,15 +48,15 @@ ColumnPtr cast_fn(ColumnPtr& column);
 
 #define UNARY_FN_CAST_TIME_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                \
     template <>                                                                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ColumnPtr & column) {                                                 \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext* context, ColumnPtr & column) {                                                 \
         return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
                 column);                                                                                        \
     }
 
 #define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)   \
     template <>                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ColumnPtr & column) { \
-        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE>(column);      \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext* context, ColumnPtr & column) { \
+        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE>(context, column);      \
     }
 
 DEFINE_UNARY_FN_WITH_IMPL(TimeCheck, value) {
@@ -94,8 +94,8 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_BOOLEAN, TimestampToBoolean);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BOOLEAN, ImplicitToBoolean);
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_BOOLEAN> builder;
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<TYPE_BOOLEAN> builder(context->batch_size());
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     StringParser::ParseResult result;
@@ -135,8 +135,8 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
 }
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_HLL> builder;
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<TYPE_HLL> builder(context->batch_size());
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -179,8 +179,8 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToNumber, value) {
 }
 
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
-    ColumnBuilder<ToType> builder;
+ColumnPtr cast_int_from_string_fn(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<ToType> builder(context->batch_size());
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     StringParser::ParseResult result;
@@ -203,8 +203,8 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
 }
 
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
-    ColumnBuilder<ToType> builder;
+ColumnPtr cast_float_from_string_fn(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<ToType> builder(context->batch_size());
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     StringParser::ParseResult result;
@@ -374,8 +374,8 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_DECIMALV2, DateToDecimal);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_DECIMALV2, TimestampToDecimal);
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DECIMALV2> builder;
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DECIMALV2> builder(context->batch_size());
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -406,8 +406,8 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
 
 // date
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_to_date_fn(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATE> builder;
+ColumnPtr cast_to_date_fn(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DATE> builder(context->batch_size());
     ColumnViewer<FromType> viewer(column);
 
     for (int row = 0; row < viewer.size(); ++row) {
@@ -445,8 +445,8 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_DATE, TimestampToDate);
 // Time to date need rewrite CastExpr
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATE> builder;
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DATE> builder(context->batch_size());
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -476,8 +476,8 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ColumnPtr& column) {
 
 // datetime(timestamp)
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATETIME> builder;
+ColumnPtr cast_to_timestamp_fn(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DATETIME> builder(context->batch_size());
     ColumnViewer<FromType> viewer(column);
 
     for (int row = 0; row < viewer.size(); ++row) {
@@ -515,8 +515,8 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_DATETIME, DateToTimestmap);
 // Time to datetime need rewrite CastExpr
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATETIME> builder;
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DATETIME> builder(context->batch_size());
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -577,8 +577,8 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_TIME, DateToTime);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_TIME, DatetimeToTime);
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_TIME> builder;
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ExprContext* context, ColumnPtr& column) {
+    ColumnBuilder<TYPE_TIME> builder(context->batch_size());
 
     auto size = column->size();
     ColumnViewer<TYPE_VARCHAR> viewer_time(column);
@@ -674,7 +674,7 @@ public:
             return VectorizedUnaryFunction<DecimalFrom<true>>::evaluate<FromType, ToType>(column, to_type.precision,
                                                                                           to_type.scale);
         } else {
-            return cast_fn<FromType, ToType>(column);
+            return cast_fn<FromType, ToType>(context, column);
         }
     };
     std::string debug_string() const override {
@@ -866,7 +866,7 @@ private:
         }
 
         // type.length > 0
-        ColumnBuilder<TYPE_VARCHAR> builder;
+        ColumnBuilder<TYPE_VARCHAR> builder(context->batch_size());
         ColumnViewer<FloatType> viewer(column);
 
         char value[MAX_DOUBLE_STR_LENGTH];
@@ -899,7 +899,7 @@ private:
             return column;
         }
 
-        ColumnBuilder<TYPE_VARCHAR> builder;
+        ColumnBuilder<TYPE_VARCHAR> builder(context->batch_size());
         ColumnViewer<TYPE_VARCHAR> viewer(column);
 
         for (int row = 0; row < viewer.size(); ++row) {
@@ -917,7 +917,7 @@ private:
     }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
-        ColumnBuilder<TYPE_VARCHAR> builder;
+        ColumnBuilder<TYPE_VARCHAR> builder(context->batch_size());
         ColumnViewer<TYPE_TIME> viewer(column);
 
         for (int row = 0; row < viewer.size(); ++row) {

@@ -9,6 +9,7 @@
 #include "exprs/vectorized/builtin_functions.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/user_function_cache.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
@@ -57,6 +58,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     RETURN_IF_ERROR(Expr::open(state, context, scope));
 
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
+    fn_ctx->set_batch_size(state->batch_size());
 
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         std::vector<ColumnPtr> const_columns;

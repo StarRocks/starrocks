@@ -83,7 +83,7 @@ Status ExchangeNode::open(RuntimeState* state) {
     if (_use_vectorized) {
         if (_is_merging) {
             RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-            RETURN_IF_ERROR(_stream_recvr->create_merger(&_sort_exec_exprs, &_is_asc_order, &_nulls_first));
+            RETURN_IF_ERROR(_stream_recvr->create_merger(state, &_sort_exec_exprs, &_is_asc_order, &_nulls_first));
         }
         return Status::OK();
     }
@@ -196,7 +196,7 @@ Status ExchangeNode::get_next_merging(RuntimeState* state, ChunkPtr* chunk, bool
             _num_rows_skipped = _offset;
             _num_rows_returned += size;
             COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-            // the first Chunk will have a size less than config::vector_chunk_size.
+            // the first Chunk will have a size less than batch_size.
             return Status::OK();
         }
 

@@ -210,7 +210,7 @@ void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
 #define HASH_MAP_METHOD(NAME)                                                                                     \
     else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                                  \
             _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, config::vector_chunk_size, chunk);
+                    *_aggregator->hash_set_variant().NAME, runtime_state()->batch_size(), chunk);
     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {

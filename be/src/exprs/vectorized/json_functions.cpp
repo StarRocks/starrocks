@@ -173,7 +173,7 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
 
     simdjson::ondemand::parser parser;
 
-    ColumnBuilder<primitive_type> result;
+    ColumnBuilder<primitive_type> result(context->batch_size());
     auto size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
         if (json_viewer.is_null(row) || path_viewer.is_null(row)) {

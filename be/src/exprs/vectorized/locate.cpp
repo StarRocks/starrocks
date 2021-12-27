@@ -144,12 +144,12 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
 
 // locate for needle is not constant
 // haystack may be variable vector or constant
-ColumnPtr haystack_vector_and_needle_vector(const ColumnPtr& haystack_ptr, const ColumnPtr& needle_ptr,
+ColumnPtr haystack_vector_and_needle_vector(FunctionContext* context, const ColumnPtr& haystack_ptr, const ColumnPtr& needle_ptr,
                                             const ColumnPtr& start_pos_ptr) {
     ColumnViewer<TYPE_VARCHAR> haystack_viewer(haystack_ptr);
     ColumnViewer<TYPE_VARCHAR> needle_viewer(needle_ptr);
     ColumnViewer<TYPE_INT> start_pos_viewer(start_pos_ptr);
-    ColumnBuilder<TYPE_INT> builder;
+    ColumnBuilder<TYPE_INT> builder(context->batch_size());
 
     size_t size = haystack_ptr->size();
 
@@ -209,7 +209,7 @@ ColumnPtr StringFunctions::instr(FunctionContext* context, const Columns& column
     if (!haystack->is_constant() && needle->is_constant()) {
         return haystack_vector_and_needle_const(haystack, needle, start_pos);
     } else {
-        return haystack_vector_and_needle_vector(haystack, needle, start_pos);
+        return haystack_vector_and_needle_vector(context, haystack, needle, start_pos);
     }
 }
 
@@ -223,7 +223,7 @@ ColumnPtr StringFunctions::locate(FunctionContext* context, const Columns& colum
     if (!haystack->is_constant() && needle->is_constant()) {
         return haystack_vector_and_needle_const(haystack, needle, start_pos);
     } else {
-        return haystack_vector_and_needle_vector(haystack, needle, start_pos);
+        return haystack_vector_and_needle_vector(context, haystack, needle, start_pos);
     }
 }
 
@@ -237,7 +237,7 @@ ColumnPtr StringFunctions::locate_pos(FunctionContext* context, const Columns& c
     if (!haystack->is_constant() && needle->is_constant()) {
         return haystack_vector_and_needle_const(haystack, needle, start_pos);
     } else {
-        return haystack_vector_and_needle_vector(haystack, needle, start_pos);
+        return haystack_vector_and_needle_vector(context, haystack, needle, start_pos);
     }
 }
 

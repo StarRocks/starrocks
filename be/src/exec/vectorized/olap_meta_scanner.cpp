@@ -32,7 +32,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     _reader_params.tablet = _tablet;
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;
-    _reader_params.chunk_size = config::vector_chunk_size;
+    _reader_params.chunk_size = _runtime_state->batch_size();
     _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 

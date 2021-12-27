@@ -322,7 +322,7 @@ Status MysqlScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
             return Status::OK();
         }
 
-        if (row_num >= config::vector_chunk_size) {
+        if (row_num >= runtime_state()->batch_size()) {
             return Status::OK();
         }
 

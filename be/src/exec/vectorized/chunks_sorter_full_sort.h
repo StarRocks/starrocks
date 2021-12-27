@@ -18,7 +18,7 @@ public:
      * @param is_null_first  NULL values should at the head or tail.
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
-    ChunksSorterFullSort(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
+    ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                          const std::vector<bool>* is_null_first, size_t size_of_chunk_batch);
     ~ChunksSorterFullSort() override;
 

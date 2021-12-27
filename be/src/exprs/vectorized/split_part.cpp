@@ -31,7 +31,7 @@ ColumnPtr StringFunctions::split_part(FunctionContext* context, const starrocks:
     ColumnViewer delimiter_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     ColumnViewer part_number_viewer = ColumnViewer<TYPE_INT>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> res;
+    ColumnBuilder<TYPE_VARCHAR> res(context->batch_size());
     size_t size = columns[0]->size();
     for (int i = 0; i < size; ++i) {
         if (haystack_viewer.is_null(i) || delimiter_viewer.is_null(i) || part_number_viewer.is_null(i)) {

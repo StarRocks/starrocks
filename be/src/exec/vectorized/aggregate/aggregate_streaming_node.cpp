@@ -238,7 +238,7 @@ void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
 #define HASH_MAP_METHOD(NAME)                                                                                     \
     else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                                  \
             _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, config::vector_chunk_size, chunk);
+                    *_aggregator->hash_map_variant().NAME, runtime_state()->batch_size(), chunk);
     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {

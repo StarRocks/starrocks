@@ -84,9 +84,9 @@ public:
     // Create a SortedRunMerger instance to merge rows from multiple sender according to the
     // specified row comparator. Fetches the first batches from the individual sender
     // queues. The exprs used in less_than must have already been prepared and opened.
-    Status create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+    Status create_merger(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                          const std::vector<bool>* is_null_first);
-    Status create_merger_for_pipeline(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+    Status create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first);
 
     // Fill output_batch with the next batch of rows obtained by merging the per-sender

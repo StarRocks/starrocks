@@ -14,12 +14,12 @@ namespace starrocks::vectorized {
 Status SerializedJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* table_items,
                                         HashTableProbeState* probe_state) {
     table_items->build_slice.resize(table_items->row_count + 1);
-    probe_state->buckets.resize(config::vector_chunk_size);
-    probe_state->is_nulls.resize(config::vector_chunk_size);
+    probe_state->buckets.resize(state->batch_size());
+    probe_state->is_nulls.resize(state->batch_size());
     return Status::OK();
 }
 
-Status SerializedJoinBuildFunc::construct_hash_table(JoinHashTableItems* table_items,
+Status SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
                                                      HashTableProbeState* probe_state) {
     uint32_t row_count = table_items->row_count;
 
@@ -50,22 +50,22 @@ Status SerializedJoinBuildFunc::construct_hash_table(JoinHashTableItems* table_i
     RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join build failed"));
 
     // serialize and build hash table
-    uint32_t quo = row_count / config::vector_chunk_size;
-    uint32_t rem = row_count % config::vector_chunk_size;
+    uint32_t quo = row_count / state->batch_size();
+    uint32_t rem = row_count % state->batch_size();
 
     if (!null_columns.empty()) {
         for (size_t i = 0; i < quo; i++) {
             _build_nullable_columns(table_items, probe_state, data_columns, null_columns,
-                                    1 + config::vector_chunk_size * i, config::vector_chunk_size, &ptr);
+                                    1 + state->batch_size() * i, state->batch_size(), &ptr);
         }
         _build_nullable_columns(table_items, probe_state, data_columns, null_columns,
-                                1 + config::vector_chunk_size * quo, rem, &ptr);
+                                1 + state->batch_size() * quo, rem, &ptr);
     } else {
         for (size_t i = 0; i < quo; i++) {
-            _build_columns(table_items, probe_state, data_columns, 1 + config::vector_chunk_size * i,
-                           config::vector_chunk_size, &ptr);
+            _build_columns(table_items, probe_state, data_columns, 1 + state->batch_size() * i,
+                           state->batch_size(), &ptr);
         }
-        _build_columns(table_items, probe_state, data_columns, 1 + config::vector_chunk_size * quo, rem, &ptr);
+        _build_columns(table_items, probe_state, data_columns, 1 + state->batch_size() * quo, rem, &ptr);
     }
 
     return Status::OK();
@@ -279,7 +279,7 @@ Status JoinHashTable::build(RuntimeState* state) {
         _probe_state->build_match_index[0] = 1;
     }
 
-    JoinHashMapHelper::prepare_map_index(_probe_state.get());
+    JoinHashMapHelper::prepare_map_index(_probe_state.get(), state->batch_size());
 
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
@@ -298,13 +298,13 @@ Status JoinHashTable::build(RuntimeState* state) {
     return Status::OK();
 }
 
-Status JoinHashTable::probe(const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos) {
+Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
 #define M(NAME)                                                                \
     case JoinHashMapType::NAME:                                                \
-        RETURN_IF_ERROR(_##NAME->probe(key_columns, probe_chunk, chunk, eos)); \
+        RETURN_IF_ERROR(_##NAME->probe(state, key_columns, probe_chunk, chunk, eos)); \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)
 #undef M
@@ -314,13 +314,13 @@ Status JoinHashTable::probe(const Columns& key_columns, ChunkPtr* probe_chunk, C
     return Status::OK();
 }
 
-Status JoinHashTable::probe_remain(ChunkPtr* chunk, bool* eos) {
+Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
 #define M(NAME)                                             \
     case JoinHashMapType::NAME:                             \
-        RETURN_IF_ERROR(_##NAME->probe_remain(chunk, eos)); \
+        RETURN_IF_ERROR(_##NAME->probe_remain(state, chunk, eos)); \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)
 #undef M

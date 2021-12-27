@@ -240,7 +240,7 @@ Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_id
         _cur_chunk = chunk->clone_empty_with_slot();
     }
 
-    if (_cur_chunk->num_rows() >= config::vector_chunk_size) {
+    if (_cur_chunk->num_rows() >= _runtime_state->batch_size()) {
         {
             SCOPED_RAW_TIMER(&_queue_push_lock_ns);
             std::lock_guard<std::mutex> l(_pending_batches_lock);

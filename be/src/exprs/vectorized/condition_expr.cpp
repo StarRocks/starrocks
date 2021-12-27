@@ -76,7 +76,7 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        ColumnBuilder<Type> result(this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(context->batch_size(), this->type().precision, this->type().scale);
 
         ColumnViewer<Type> lhs_viewer(lhs);
         ColumnViewer<Type> rhs_viewer(rhs);
@@ -112,7 +112,7 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        ColumnBuilder<Type> result(this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(context->batch_size(), this->type().precision, this->type().scale);
 
         ColumnViewer<Type> lhs_viewer(lhs);
         ColumnViewer<Type> rhs_viewer(rhs);
@@ -160,7 +160,7 @@ public:
         }
 
         Columns list = {bhs, lhs, rhs};
-        ColumnBuilder<Type> result(this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(context->batch_size(), this->type().precision, this->type().scale);
 
         auto bhs_nulls = ColumnHelper::count_nulls(bhs);
         auto lhs_nulls = ColumnHelper::count_nulls(lhs);
@@ -253,7 +253,7 @@ public:
         }
 
         // choose not null
-        ColumnBuilder<Type> builder(this->type().precision, this->type().scale);
+        ColumnBuilder<Type> builder(context->batch_size(), this->type().precision, this->type().scale);
         int size = columns[0]->size();
         int col_size = viewers.size();
 

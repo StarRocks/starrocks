@@ -65,7 +65,7 @@ class PartitionExchanger final : public LocalExchanger {
                     const std::vector<ExprContext*>& partition_expr_ctxs)
                 : _source(source), _is_shuffle(is_shuffle), _partition_expr_ctxs(partition_expr_ctxs) {
             _partitions_columns.resize(partition_expr_ctxs.size());
-            _hash_values.reserve(config::vector_chunk_size);
+            _hash_values.reserve(source->runtime_state()->batch_size());
         }
 
         // Divide chunk into shuffle partitions.

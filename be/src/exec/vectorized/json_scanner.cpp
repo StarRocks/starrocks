@@ -35,7 +35,7 @@ JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _next_range(0),
-          _max_chunk_size(config::vector_chunk_size),
+          _max_chunk_size(state->batch_size()),
           _cur_file_reader(nullptr),
           _cur_file_eof(true) {}
 

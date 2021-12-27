@@ -6,15 +6,15 @@
 
 namespace starrocks::pipeline {
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(OpFactories& pred_operators,
+OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(RuntimeState* state, OpFactories& pred_operators,
                                                                                int num_receivers) {
     if (num_receivers == 1) {
-        return maybe_interpolate_local_passthrough_exchange(pred_operators);
+        return maybe_interpolate_local_passthrough_exchange(state, pred_operators);
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
     auto mem_mgr =
-            std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size * num_receivers * num_receivers);
+            std::make_shared<LocalExchangeMemoryManager>(state->batch_size() * num_receivers * num_receivers);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto local_exchange = std::make_shared<BroadcastExchanger>(mem_mgr, local_exchange_source.get());
@@ -33,11 +33,11 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(O
     return operators_source_with_local_exchange;
 }
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators) {
-    return maybe_interpolate_local_passthrough_exchange(pred_operators, 1);
+OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state, OpFactories& pred_operators) {
+    return maybe_interpolate_local_passthrough_exchange(state, pred_operators, 1);
 }
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators,
+OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state, OpFactories& pred_operators,
                                                                                  int num_receivers) {
     // predecessor pipeline has multiple drivers that will produce multiple output streams, but sort operator is
     // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
@@ -50,7 +50,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
     int buffer_size = std::max(num_receivers, static_cast<int>(source_operator->degree_of_parallelism()));
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size * buffer_size);
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(state->batch_size() * buffer_size);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
@@ -69,7 +69,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
     return operators_source_with_local_exchange;
 }
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
+OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(RuntimeState* state, 
         OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
 
@@ -83,7 +83,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
 
     // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(shuffle_partitions_num * config::vector_chunk_size);
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(shuffle_partitions_num * state->batch_size());
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto local_shuffle = std::make_shared<PartitionExchanger>(
@@ -103,17 +103,17 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
     return operators_source_with_local_shuffle;
 }
 
-OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(std::vector<OpFactories>& pred_operators_list) {
+OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* state, std::vector<OpFactories>& pred_operators_list) {
     // If there is only one pred pipeline, we needn't local passthrough anymore.
     if (pred_operators_list.size() == 1) {
         return pred_operators_list[0];
     }
 
-    // Approximately, each pred driver can output config::vector_chunk_size rows at the same time.
+    // Approximately, each pred driver can output state->batch_size() rows at the same time.
     size_t max_row_count = 0;
     for (const auto& pred_ops : pred_operators_list) {
         auto* source_operator = down_cast<SourceOperatorFactory*>(pred_ops[0].get());
-        max_row_count += source_operator->degree_of_parallelism() * config::vector_chunk_size;
+        max_row_count += source_operator->degree_of_parallelism() * state->batch_size();
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
@@ -138,8 +138,15 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(std::vector<Op
     return operators_source_with_local_exchange;
 }
 
+void PipelineBuilder::set_state_for_opFactories(pipeline::OpFactories& opFactories, RuntimeState* state) {
+    for (auto op: opFactories) {
+        op->set_runtime_state(state);
+    }
+}
+
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {
     pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
+    set_state_for_opFactories(operators, fragment.runtime_state());
     _context.add_pipeline(operators);
     _context.get_pipelines().back()->set_root();
     return _context.get_pipelines();

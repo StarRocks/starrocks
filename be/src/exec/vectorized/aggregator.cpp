@@ -61,7 +61,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     }
     VLOG_ROW << "has_nullable_key " << _has_nullable_key;
 
-    _tmp_agg_states.resize(config::vector_chunk_size);
+    _tmp_agg_states.resize(_state->batch_size());
 
     size_t agg_size = _tnode.agg_node.aggregate_functions.size();
     _agg_fn_ctxs.resize(agg_size);
@@ -473,7 +473,7 @@ void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* 
 
 #define CONVERT_TO_TWO_LEVEL(DST, SRC)                                                             \
     if (_hash_map_variant.type == vectorized::HashMapVariant::Type::SRC) {                         \
-        _hash_map_variant.DST = std::make_unique<decltype(_hash_map_variant.DST)::element_type>(); \
+        _hash_map_variant.DST = std::make_unique<decltype(_hash_map_variant.DST)::element_type>(_state->batch_size()); \
         _hash_map_variant.DST->hash_map.reserve(_hash_map_variant.SRC->hash_map.capacity());       \
         _hash_map_variant.DST->hash_map.insert(_hash_map_variant.SRC->hash_map.begin(),            \
                                                _hash_map_variant.SRC->hash_map.end());             \
@@ -501,13 +501,13 @@ vectorized::Columns Aggregator::_create_agg_result_columns() {
             // we need to create a not-nullable column.
             agg_result_columns[i] = vectorized::ColumnHelper::create_column(
                     _agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child & _agg_fn_types[i].is_nullable);
-            agg_result_columns[i]->reserve(config::vector_chunk_size);
+            agg_result_columns[i]->reserve(_state->batch_size());
         }
     } else {
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
             agg_result_columns[i] = vectorized::ColumnHelper::create_column(_agg_fn_types[i].serde_type,
                                                                             _agg_fn_types[i].has_nullable_child);
-            agg_result_columns[i]->reserve(config::vector_chunk_size);
+            agg_result_columns[i]->reserve(_state->batch_size());
         }
     }
     return agg_result_columns;
@@ -518,7 +518,7 @@ vectorized::Columns Aggregator::_create_group_by_columns() {
     for (size_t i = 0; i < _group_by_types.size(); ++i) {
         group_by_columns[i] =
                 vectorized::ColumnHelper::create_column(_group_by_types[i].result_type, _group_by_types[i].is_nullable);
-        group_by_columns[i]->reserve(config::vector_chunk_size);
+        group_by_columns[i]->reserve(_state->batch_size());
     }
     return group_by_columns;
 }
@@ -761,7 +761,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     }
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
-    hash_variant.init(type);
+    hash_variant.init(_state, type);
 
 #define SET_FIXED_SLICE_HASH_MAP_FIELD(TYPE)                  \
     if (type == HashVariantType::Type::TYPE) {                \

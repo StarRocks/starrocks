@@ -17,19 +17,19 @@ public:
     using NullColumnPtr = NullColumn::Ptr;
     using DatumType = RunTimeCppType<Type>;
 
-    ColumnBuilder() {
+    ColumnBuilder(int32_t batch_size) {
         static_assert(!pt_is_decimal<Type>, "Not support Decimal32/64/128 types");
         _has_null = false;
         _column = RunTimeColumnType<Type>::create();
         _null_column = NullColumn::create();
-        reserve(config::vector_chunk_size);
+        reserve(batch_size);
     }
 
-    ColumnBuilder(int precision, int scale) {
+    ColumnBuilder(int32_t batch_size, int precision, int scale) {
         _has_null = false;
         _column = RunTimeColumnType<Type>::create();
         _null_column = NullColumn::create();
-        reserve(config::vector_chunk_size);
+        reserve(batch_size);
 
         if constexpr (pt_is_decimal<Type>) {
             static constexpr auto max_precision = decimal_precision_limit<DatumType>;

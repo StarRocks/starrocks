@@ -313,7 +313,7 @@ Status HashJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         }
     }
 
-    DCHECK_LE((*chunk)->num_rows(), config::vector_chunk_size);
+    DCHECK_LE((*chunk)->num_rows(), runtime_state()->batch_size());
     _num_rows_returned += (*chunk)->num_rows();
     _output_chunk_count++;
     if (reached_limit()) {
@@ -353,8 +353,8 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         num_partitions = context->degree_of_parallelism();
 
-        rhs_operators = context->maybe_interpolate_local_broadcast_exchange(rhs_operators, num_partitions);
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(lhs_operators, num_partitions);
+        rhs_operators = context->maybe_interpolate_local_broadcast_exchange(runtime_state(), rhs_operators, num_partitions);
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators, num_partitions);
     } else {
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple
@@ -363,15 +363,15 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
             num_partitions = 1;
 
-            rhs_operators = context->maybe_interpolate_local_passthrough_exchange(rhs_operators);
-            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(lhs_operators);
+            rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
+            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators);
         } else {
             num_partitions = context->degree_of_parallelism();
 
             // both HashJoin{Build, Probe}Operator are parallelized, so add LocalExchangeOperator
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-            rhs_operators = context->maybe_interpolate_local_shuffle_exchange(rhs_operators, _build_expr_ctxs);
-            lhs_operators = context->maybe_interpolate_local_shuffle_exchange(lhs_operators, _probe_expr_ctxs);
+            rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators, _build_expr_ctxs);
+            lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators, _probe_expr_ctxs);
         }
     }
 
@@ -509,8 +509,8 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                         } else {
                             if (_cur_left_input_chunk->num_rows() <= 0) {
                                 continue;
-                            } else if (_cur_left_input_chunk->num_rows() >= config::vector_chunk_size / 2) {
-                                // the probe chunk size of read from right child >= config::vector_chunk_size, direct return
+                            } else if (_cur_left_input_chunk->num_rows() >= runtime_state()->batch_size() / 2) {
+                                // the probe chunk size of read from right child >= runtime_state()->batch_size(), direct return
                                 _probing_chunk = std::move(_cur_left_input_chunk);
                             } else if (_pre_left_input_chunk == nullptr) {
                                 // the probe chunk size is small, reserve for merge next probe chunk
@@ -518,8 +518,8 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                                 continue;
                             } else {
                                 if (_cur_left_input_chunk->num_rows() + _pre_left_input_chunk->num_rows() >
-                                    config::vector_chunk_size) {
-                                    // the two chunk size > config::vector_chunk_size, return the first reserved chunk
+                                    runtime_state()->batch_size()) {
+                                    // the two chunk size > runtime_state()->batch_size(), return the first reserved chunk
                                     _probing_chunk = std::move(_pre_left_input_chunk);
                                     _pre_left_input_chunk = std::move(_cur_left_input_chunk);
                                 } else {
@@ -568,7 +568,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             }
         }
 
-        RETURN_IF_ERROR(_ht.probe(_key_columns, &_probing_chunk, chunk, &_ht_has_remain));
+        RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             _probing_chunk = nullptr;
         }
@@ -606,7 +606,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     ScopedTimer<MonotonicStopWatch> probe_timer(_probe_timer);
 
     while (!_build_eos) {
-        RETURN_IF_ERROR(_ht.probe_remain(chunk, &_right_table_has_remain));
+        RETURN_IF_ERROR(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain));
 
         eval_join_runtime_filters(chunk);
 

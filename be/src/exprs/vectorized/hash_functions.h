@@ -26,7 +26,7 @@ inline ColumnPtr HashFunctions::murmur_hash3_32(FunctionContext* context,
         viewers.emplace_back(column);
     }
 
-    ColumnBuilder<TYPE_INT> builder;
+    ColumnBuilder<TYPE_INT> builder(context->batch_size());
 
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {

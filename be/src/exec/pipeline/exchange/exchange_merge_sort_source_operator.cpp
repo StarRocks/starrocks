@@ -16,7 +16,7 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
             config::exchg_node_buffer_size_bytes, _runtime_profile, true, nullptr, true, true);
-    _stream_recvr->create_merger_for_pipeline(_sort_exec_exprs, &_is_asc_order, &_nulls_first);
+    _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
     return Status::OK();
 }
 
@@ -99,7 +99,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             _num_rows_input = _offset;
             _num_rows_returned += rewind_size;
 
-            // the first Chunk will have a size less than config::vector_chunk_size.
+            // the first Chunk will have a size less than state->batch_size().
             return Status::OK();
         }
 

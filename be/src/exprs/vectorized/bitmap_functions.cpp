@@ -16,7 +16,7 @@ namespace starrocks::vectorized {
 
 ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(context->batch_size());
 
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -52,7 +52,7 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
 
 ColumnPtr BitmapFunctions::bitmap_hash(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(context->batch_size());
 
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -73,7 +73,7 @@ ColumnPtr BitmapFunctions::bitmap_hash(FunctionContext* context, const starrocks
 
 ColumnPtr BitmapFunctions::bitmap_count(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
-    ColumnBuilder<TYPE_BIGINT> builder;
+    ColumnBuilder<TYPE_BIGINT> builder(context->batch_size());
 
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -95,7 +95,7 @@ ColumnPtr BitmapFunctions::bitmap_or(FunctionContext* context, const starrocks::
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_OBJECT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(context->batch_size());
 
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -120,7 +120,7 @@ ColumnPtr BitmapFunctions::bitmap_and(FunctionContext* context, const starrocks:
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_OBJECT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(context->batch_size());
 
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -152,7 +152,7 @@ ColumnPtr BitmapFunctions::bitmap_from_string(FunctionContext* context, const Co
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(context->batch_size());
 
     std::vector<uint64_t> bits;
 
@@ -207,7 +207,7 @@ ColumnPtr BitmapFunctions::bitmap_andnot(FunctionContext* context, const starroc
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_OBJECT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(context->batch_size());
 
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -232,7 +232,7 @@ ColumnPtr BitmapFunctions::bitmap_xor(FunctionContext* context, const starrocks:
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_OBJECT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(context->batch_size());
 
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
@@ -257,7 +257,7 @@ ColumnPtr BitmapFunctions::bitmap_remove(FunctionContext* context, const starroc
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_BIGINT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(context->batch_size());
 
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {

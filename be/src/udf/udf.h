@@ -249,6 +249,14 @@ public:
 
     ~FunctionContext();
 
+    void set_batch_size(int32_t batch_size) {
+        this->_batch_size = batch_size;
+    }
+
+    int32_t batch_size() {
+        return _batch_size;
+    }
+    
 private:
     friend class starrocks::FunctionContextImpl;
     FunctionContext();
@@ -258,6 +266,8 @@ private:
     FunctionContext& operator=(const FunctionContext& other);
 
     starrocks::FunctionContextImpl* _impl; // Owned by this object.
+
+    int32_t _batch_size;
 };
 
 //----------------------------------------------------------------------------

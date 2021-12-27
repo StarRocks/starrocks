@@ -82,7 +82,7 @@ public:
         }
 
         ColumnViewer<Type> find_viewer(find);
-        ColumnBuilder<TYPE_BOOLEAN> builder;
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->batch_size());
 
         size_t size = columns[0]->size();
         for (int row = 0; row < size; ++row) {

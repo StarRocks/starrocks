@@ -401,11 +401,11 @@ private:
         StringFunctionsState() : regex(), options() {}
     };
 
-    static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns);
+    static ColumnPtr regexp_extract_const(FunctionContext* context, re2::RE2* const_re, const Columns& columns);
     static ColumnPtr regexp_extract_general(FunctionContext* context, re2::RE2::Options* options,
                                             const Columns& columns);
 
-    static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns);
+    static ColumnPtr regexp_replace_const(FunctionContext* context, re2::RE2* const_re, const Columns& columns);
     static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Options* options,
                                             const Columns& columns);
 
@@ -475,7 +475,7 @@ ColumnPtr StringFunctions::money_format_decimal(FunctionContext* context,
     const auto& type = context->get_arg_type(0);
     int scale = type->scale;
 
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(context->batch_size());
     auto num_rows = columns[0]->size();
     if (scale > 2) {
         // scale down

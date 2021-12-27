@@ -85,7 +85,7 @@ Status IntersectNode::open(RuntimeState* state) {
 
     // initial build hash table used for record hitting.
     _hash_set = std::make_unique<IntersectHashSerializeSet>();
-    RETURN_IF_ERROR(_hash_set->init());
+    RETURN_IF_ERROR(_hash_set->init(state));
 
     ChunkPtr chunk = nullptr;
     RETURN_IF_ERROR(child(0)->open(state));
@@ -161,8 +161,8 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
     }
 
     int32_t read_index = 0;
-    _remained_keys.resize(config::vector_chunk_size);
-    while (_hash_set_iterator != _hash_set->end() && read_index < config::vector_chunk_size) {
+    _remained_keys.resize(runtime_state()->batch_size());
+    while (_hash_set_iterator != _hash_set->end() && read_index < runtime_state()->batch_size()) {
         if (_hash_set_iterator->hit_times == _intersect_times) {
             _remained_keys[read_index] = _hash_set_iterator->slice;
             ++read_index;
@@ -176,7 +176,7 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
         for (size_t i = 0; i < _types.size(); ++i) {
             result_columns[i] = // default NullableColumn
                     ColumnHelper::create_column(_types[i].result_type, _types[i].is_nullable);
-            result_columns[i]->reserve(config::vector_chunk_size);
+            result_columns[i]->reserve(runtime_state()->batch_size());
         }
 
         {
@@ -199,7 +199,7 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
         *eos = true;
     }
 
-    DCHECK_LE(result_chunk->num_rows(), config::vector_chunk_size);
+    DCHECK_LE(result_chunk->num_rows(), runtime_state()->batch_size());
     *chunk = std::move(result_chunk);
 
     DCHECK_CHUNK(*chunk);
@@ -236,7 +236,7 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
 
     // Use the first child to build the hast table by IntersectBuildSinkOperator.
     pipeline::OpFactories operators_with_intersect_build_sink = child(0)->decompose_to_pipeline(context);
-    operators_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(
+    operators_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), 
             operators_with_intersect_build_sink, _child_expr_lists[0]);
     operators_with_intersect_build_sink.emplace_back(std::make_shared<pipeline::IntersectBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[0]));
@@ -248,7 +248,7 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
     // Use the rest children to erase keys from the hast table by IntersectProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
         pipeline::OpFactories operators_with_intersect_probe_sink = child(i)->decompose_to_pipeline(context);
-        operators_with_intersect_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
+        operators_with_intersect_probe_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), 
                 operators_with_intersect_probe_sink, _child_expr_lists[i]);
         operators_with_intersect_probe_sink.emplace_back(std::make_shared<pipeline::IntersectProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[i], i - 1));

@@ -43,7 +43,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
         if (chunk->is_empty()) {
             continue;
         }
-        DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
+        DCHECK_LE(chunk->num_rows(), runtime_state()->batch_size());
 
         _aggregator->evaluate_exprs(chunk.get());
 
@@ -102,7 +102,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = config::vector_chunk_size;
+    int32_t chunk_size = runtime_state()->batch_size();
 
     if (false) {
     }
@@ -154,7 +154,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     auto* source_op = operators_with_sink[0].get();
     if (typeid(*source_op) != typeid(pipeline::ScanOperatorFactory)) {
         operators_with_sink =
-                context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, partition_expr_ctxs);
+                context->maybe_interpolate_local_shuffle_exchange(runtime_state(), operators_with_sink, partition_expr_ctxs);
     }
 
     operators_with_sink.push_back(std::move(sink_operator));
