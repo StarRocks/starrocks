@@ -16,8 +16,6 @@ namespace vectorized {
 class Column;
 } // namespace vectorized
 
-namespace segment_v2 {
-
 class SegmentRewriter {
 public:
     SegmentRewriter();
@@ -30,5 +28,4 @@ public:
                           size_t segment_id);
 };
 
-} // namespace segment_v2
 } // namespace starrocks

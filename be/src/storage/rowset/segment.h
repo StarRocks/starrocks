@@ -80,8 +80,8 @@ public:
                                                    const TabletSchema* tablet_schema,
                                                    size_t* footer_length_hint = nullptr);
 
-    static Status parse_segment_footer(std::unique_ptr<fs::ReadableBlock>* rblock, SegmentFooterPB* footer,
-                                       size_t* footer_length_hint, uint64_t* segment_data_size);
+    static Status parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
+                                       uint64_t* segment_data_size);
 
     Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
             const TabletSchema* tablet_schema);

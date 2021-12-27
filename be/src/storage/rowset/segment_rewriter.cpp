@@ -14,7 +14,6 @@
 #include "util/slice.h"
 
 namespace starrocks {
-namespace segment_v2 {
 
 SegmentRewriter::SegmentRewriter() {}
 
@@ -34,7 +33,7 @@ Status SegmentRewriter::rewrite(const std::string& src, const std::string& dest,
 
     SegmentFooterPB footer;
     uint64_t remaining = 0;
-    RETURN_IF_ERROR(Segment::parse_segment_footer(&rblock, &footer, nullptr, &remaining));
+    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, nullptr, &remaining));
 
     std::string read_buffer;
     raw::stl_string_resize_uninitialized(&read_buffer, 4096);
@@ -71,7 +70,5 @@ Status SegmentRewriter::rewrite(const std::string& src, const std::string& dest,
 
     return Status::OK();
 }
-
-} // namespace segment_v2
 
 } // namespace starrocks

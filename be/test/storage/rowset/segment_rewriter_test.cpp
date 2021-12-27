@@ -135,8 +135,8 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
 
-    ASSERT_OK(segment_v2::SegmentRewriter::rewrite(file_name, dst_file_name, tablet_schema, read_column_ids,
-                                                   write_columns, partial_segment->id()));
+    ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, tablet_schema, read_column_ids, write_columns,
+                                       partial_segment->id()));
 
     auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, dst_file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
