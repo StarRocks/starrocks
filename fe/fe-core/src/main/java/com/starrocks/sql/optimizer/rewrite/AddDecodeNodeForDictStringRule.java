@@ -452,6 +452,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
                         ColumnRefOperator outputColumn = kv.getKey();
 
+                        // For the top aggregation node, the return value is the return type. For the rest of
+                        // aggregation nodes, the return value is the intermediate result.
+                        // if intermediate type was null, it may be using one-stage aggregation
+                        // so return type was it real return type
                         if (aggOperator.getType().isGlobal()) {
                             newReturnType = newFunction.getReturnType();
                         } else {

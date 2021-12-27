@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
@@ -170,8 +171,8 @@ public class CostModel {
         }
 
         public boolean isDistinctAggFun(CallOperator aggOperator, PhysicalHashAggregateOperator node) {
-            if (aggOperator.getFnName().equalsIgnoreCase("multi_distinct_count") ||
-                    aggOperator.getFnName().equalsIgnoreCase("multi_distinct_sum")) {
+            if (aggOperator.getFnName().equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_COUNT) ||
+                    aggOperator.getFnName().equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_SUM)) {
                 return true;
             }
             // only one stage agg node has not rewrite distinct function here
