@@ -34,6 +34,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.IOException;
@@ -58,6 +59,8 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String FINALIZE_KEY = "finalize_fn";
     public static final String GET_VALUE_KEY = "get_value_fn";
     public static final String REMOVE_KEY = "remove_fn";
+    public static final String LANGUAGE_KEY = "lang";
+
 
     private final FunctionName functionName;
     private final boolean isAggregate;
@@ -195,7 +198,7 @@ public class CreateFunctionStmt extends DdlStmt {
         String closeFnSymbol = properties.get(CLOSE_SYMBOL_KEY);
         function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
-                returnType.getType(), argsDef.isVariadic(),
+                returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.HIVE,
                 objectFile, symbol, prepareFnSymbol, closeFnSymbol);
         function.setChecksum(checksum);
     }
