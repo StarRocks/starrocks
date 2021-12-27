@@ -49,6 +49,7 @@
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
+#include "util/thread.h"
 #include "util/threadpool.h"
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
@@ -150,8 +151,6 @@ private:
     std::string _group;
 
     int _timeout_second;
-
-    std::unique_ptr<std::thread> _exec_thread;
 };
 
 FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, int backend_num,
@@ -336,13 +335,14 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
 FragmentMgr::FragmentMgr(ExecEnv* exec_env)
         : _exec_env(exec_env), _stop(false), _cancel_thread([this] { cancel_worker(); }) {
+    Thread::set_thread_name(_cancel_thread, "frag_mgr_cancel");
     REGISTER_GAUGE_STARROCKS_METRIC(plan_fragment_count, [this]() {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();
     });
     // TODO(zc): we need a better thread-pool
     // now one user can use all the thread pool, others have no resource.
-    ThreadPoolBuilder("FragmentMgrThreadPool")
+    ThreadPoolBuilder("fragment_mgr")
             .set_min_threads(config::fragment_pool_thread_num_min)
             .set_max_threads(config::fragment_pool_thread_num_max)
             .set_max_queue_size(config::fragment_pool_queue_size)

@@ -183,9 +183,9 @@ public class TransactionState implements Writable {
     private List<Long> tableIdList;
     private long transactionId;
     private String label;
-    // requsetId is used to judge whether a begin request is a internal retry request.
+    // requestId is used to judge whether a begin request is a internal retry request.
     // no need to persist it.
-    private TUniqueId requsetId;
+    private TUniqueId requestId;
     private Map<Long, TableCommitInfo> idToTableCommitInfos;
     // coordinator is show who begin this txn (FE, or one of BE, etc...)
     private TxnCoordinator txnCoordinator;
@@ -244,14 +244,14 @@ public class TransactionState implements Writable {
         this.latch = new CountDownLatch(1);
     }
 
-    public TransactionState(long dbId, List<Long> tableIdList, long transactionId, String label, TUniqueId requsetId,
+    public TransactionState(long dbId, List<Long> tableIdList, long transactionId, String label, TUniqueId requestId,
                             LoadJobSourceType sourceType, TxnCoordinator txnCoordinator, long callbackId,
                             long timeoutMs) {
         this.dbId = dbId;
         this.tableIdList = (tableIdList == null ? Lists.newArrayList() : tableIdList);
         this.transactionId = transactionId;
         this.label = label;
-        this.requsetId = requsetId;
+        this.requestId = requestId;
         this.idToTableCommitInfos = Maps.newHashMap();
         this.txnCoordinator = txnCoordinator;
         this.transactionStatus = TransactionStatus.PREPARE;
@@ -298,8 +298,8 @@ public class TransactionState implements Writable {
         return this.hasSendTask;
     }
 
-    public TUniqueId getRequsetId() {
-        return requsetId;
+    public TUniqueId getRequestId() {
+        return requestId;
     }
 
     public long getTransactionId() {
@@ -562,6 +562,10 @@ public class TransactionState implements Writable {
 
     public Map<Long, PublishVersionTask> getPublishVersionTasks() {
         return publishVersionTasks;
+    }
+
+    public void clearPublishVersionTasks() {
+        publishVersionTasks.clear();
     }
 
     @Override

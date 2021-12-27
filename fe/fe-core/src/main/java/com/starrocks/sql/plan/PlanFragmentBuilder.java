@@ -936,7 +936,7 @@ public class PlanFragmentBuilder {
                 aggregationNode =
                         new AggregationNode(context.getPlanCtx().getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
-                aggregationNode.setIsPreagg(context.getPlanCtx());
+                aggregationNode.setIsPreagg(node.isUseStreamingPreAgg());
                 aggregationNode.setIntermediateTuple();
 
                 if (!partitionExpressions.isEmpty()) {
@@ -1023,7 +1023,7 @@ public class PlanFragmentBuilder {
                 aggregationNode =
                         new AggregationNode(context.getPlanCtx().getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
-                aggregationNode.setIsPreagg(context.getPlanCtx());
+                aggregationNode.setIsPreagg(node.isUseStreamingPreAgg());
                 aggregationNode.setIntermediateTuple();
             } else {
                 throw unsupportedException("Not support aggregate type : " + node.getType());
@@ -1072,14 +1072,14 @@ public class PlanFragmentBuilder {
                 FunctionCallExpr replaceExpr = null;
                 final String functionName = functionCallExpr.getFnName().getFunction();
                 if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
-                    replaceExpr = new FunctionCallExpr("MULTI_DISTINCT_COUNT", functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction("MULTI_DISTINCT_COUNT",
+                    replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_COUNT, functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,
                             new Type[] {functionCallExpr.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);
                 } else if (functionName.equalsIgnoreCase("SUM")) {
-                    replaceExpr = new FunctionCallExpr("MULTI_DISTINCT_SUM", functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction("MULTI_DISTINCT_SUM",
+                    replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_SUM, functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
                             new Type[] {functionCallExpr.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);

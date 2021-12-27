@@ -178,6 +178,11 @@ public:
         }
     }
 
+    // Make the node store the slot mappings from input slot to output slot of ancestor nodes (include itself).
+    // It is used for pipeline to rewrite runtime in filters.
+    virtual void push_down_tuple_slot_mappings(RuntimeState* state,
+                                               const std::vector<TupleSlotMapping>& parent_mappings);
+
     // recursive helper method for generating a string for Debug_string().
     // implementations should call debug_string(int, std::stringstream) on their children.
     // Input parameters:
@@ -260,6 +265,10 @@ protected:
     RuntimeProfile::Counter* _memory_used_counter;
 
     bool _use_vectorized;
+
+    // Mappings from input slot to output slot of ancestor nodes (include itself).
+    // It is used for pipeline to rewrite runtime in filters.
+    std::vector<TupleSlotMapping> _tuple_slot_mappings;
 
     ExecNode* child(int i) { return _children[i]; }
 

@@ -58,8 +58,8 @@ public:
 
     bool empty() { return _hash_set->empty(); }
 
-    Status build_set(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
-                     MemPool* pool);
+    void build_set(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
+                   MemPool* pool);
 
     Status refine_intersect_row(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
                                 int hit_times);

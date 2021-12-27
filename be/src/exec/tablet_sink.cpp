@@ -40,6 +40,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/monotime.h"
+#include "util/thread.h"
 #include "util/uid_util.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
@@ -612,6 +613,7 @@ Status OlapTableSink::open(RuntimeState* state) {
     }
 
     _sender_thread = std::thread(&OlapTableSink::_send_chunk_process, this);
+    Thread::set_thread_name(_sender_thread, "olap_table_send");
     return Status::OK();
 }
 

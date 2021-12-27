@@ -327,7 +327,7 @@ public class Catalog {
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
 
     private MasterDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
-    private MasterDaemon txnCleaner; // To clean aborted or timeout txns
+    private MasterDaemon txnTimeoutChecker; // To abort timeout txns
     private Daemon replayer;
     private Daemon timePrinter;
     private Daemon listener;
@@ -749,12 +749,10 @@ public class Catalog {
         while (true) {
             try {
                 if (!lock.tryLock(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
-                    if (LOG.isDebugEnabled()) {
-                        // to see which thread held this lock for long time.
-                        Thread owner = lock.getOwner();
-                        if (owner != null) {
-                            LOG.debug("catalog lock is held by: {}", Util.dumpThread(owner, 10));
-                        }
+                    // to see which thread held this lock for long time.
+                    Thread owner = lock.getOwner();
+                    if (owner != null) {
+                        LOG.warn("catalog lock is held by: {}", Util.dumpThread(owner, 10));
                     }
 
                     if (mustLock) {
@@ -853,8 +851,8 @@ public class Catalog {
         // 4. create load and export job label cleaner thread
         createLabelCleaner();
 
-        // 5. create txn cleaner thread
-        createTxnCleaner();
+        // 5. create txn timeout checker thread
+        createTxnTimeoutChecker();
 
         // 6. start state listener thread
         createStateListener();
@@ -1308,8 +1306,8 @@ public class Catalog {
         ColocateTableBalancer.getInstance().start();
         // Publish Version Daemon
         publishVersionDaemon.start();
-        // Start txn cleaner
-        txnCleaner.start();
+        // Start txn timeout checker
+        txnTimeoutChecker.start();
         // Alter
         getAlterInstance().start();
         // Consistency checker
@@ -2232,18 +2230,16 @@ public class Catalog {
         labelCleaner = new MasterDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
-                loadManager.removeOldLoadJob();
-                exportMgr.removeOldExportJobs();
-                deleteHandler.removeOldDeleteInfo();
+                clearExpiredJobs();
             }
         };
     }
 
-    public void createTxnCleaner() {
-        txnCleaner = new MasterDaemon("txnCleaner", Config.transaction_clean_interval_second) {
+    public void createTxnTimeoutChecker() {
+        txnTimeoutChecker = new MasterDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
             @Override
             protected void runAfterCatalogReady() {
-                globalTransactionMgr.removeExpiredAndTimeoutTxns();
+                globalTransactionMgr.abortTimeoutTxns();
             }
         };
     }
@@ -2616,7 +2612,7 @@ public class Catalog {
         LOG.info("createDb dbName = " + fullDbName + ", id = " + id);
     }
 
-    // For replay edit log, need't lock metadata
+    // For replay edit log, needn't lock metadata
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
         fullNameToDb.put(db.getFullName(), db);
@@ -7486,5 +7482,11 @@ public class Catalog {
         this.imageJournalId = imageJournalId;
     }
 
+    public void clearExpiredJobs() {
+        loadManager.removeOldLoadJob();
+        exportMgr.removeOldExportJobs();
+        deleteHandler.removeOldDeleteInfo();
+        globalTransactionMgr.removeExpiredTxns();
+        routineLoadManager.cleanOldRoutineLoadJobs();
+    }
 }
-

@@ -123,6 +123,14 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
     }
 }
 
+void ExecNode::push_down_tuple_slot_mappings(RuntimeState* state,
+                                             const std::vector<TupleSlotMapping>& parent_mappings) {
+    _tuple_slot_mappings = parent_mappings;
+    for (auto& child : _children) {
+        child->push_down_tuple_slot_mappings(state, _tuple_slot_mappings);
+    }
+}
+
 void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector) {
     if (collector->empty()) return;
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
@@ -169,7 +177,7 @@ void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::P
                                                 const RcRfProbeCollectorPtr& rc_rf_probe_collector) {
     op->init_runtime_filter(context->fragment_context()->runtime_filter_hub(), this->get_tuple_ids(),
                             this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector,
-                            std::move(_filter_null_value_columns));
+                            std::move(_filter_null_value_columns), std::move(_tuple_slot_mappings));
 }
 
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {

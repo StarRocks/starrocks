@@ -124,10 +124,7 @@ void ThreadMgr::set_thread_name(const std::string& name, int64_t tid) {
     if (tid == getpid()) {
         return;
     }
-    int err = prctl(PR_SET_NAME, name.c_str());
-    if (err < 0 && errno != EPERM) {
-        LOG(ERROR) << "set_thread_name";
-    }
+    Thread::set_thread_name(pthread_self(), name);
 }
 
 void ThreadMgr::add_thread(const pthread_t& pthread_id, const std::string& name, const std::string& category,
@@ -217,6 +214,17 @@ int64_t Thread::current_thread_id() {
     return syscall(SYS_gettid);
 }
 
+void Thread::set_thread_name(pthread_t t, const std::string name) {
+    int ret = pthread_setname_np(t, name.data());
+    if (ret) {
+        LOG(WARNING) << "failed to set thread name: " << name;
+    }
+}
+
+void Thread::set_thread_name(std::thread& t, const std::string name) {
+    Thread::set_thread_name(t.native_handle(), name);
+}
+
 int64_t Thread::wait_for_tid() const {
     int loop_count = 0;
     while (true) {
@@ -293,9 +301,8 @@ void* Thread::supervise_thread(void* arg) {
     // WaitForTid().
     Release_Store(&t->_tid, system_tid);
 
-    std::string name = strings::Substitute("$0-$1", t->name(), system_tid);
-    thread_manager->set_thread_name(name, t->_tid);
-    thread_manager->add_thread(pthread_self(), name, t->category(), t->_tid);
+    thread_manager->set_thread_name(t->_name, t->_tid);
+    thread_manager->add_thread(pthread_self(), t->_name, t->category(), t->_tid);
 
     // FinishThread() is guaranteed to run (even if functor_ throws an
     // exception) because pthread_cleanup_push() creates a scoped object

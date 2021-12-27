@@ -326,7 +326,8 @@ public class QueryAnalyzer {
             }
 
             if (setOperand.getOperation().equals(SetOperationStmt.Operation.UNION)) {
-                if (setOpRelation instanceof UnionRelation) {
+                if (setOpRelation instanceof UnionRelation && ((UnionRelation) setOpRelation).getQualifier()
+                        .equals(SetQualifier.convert(setOperand.getQualifier()))) {
                     ((UnionRelation) setOpRelation).addRelation(relation);
                 } else {
                     setOpRelation = new UnionRelation(Arrays.asList(setOpRelation, relation),
@@ -366,12 +367,13 @@ public class QueryAnalyzer {
     }
 
     private Scope analyzeCTE(QueryStmt stmt, Scope scope) {
-        if (!stmt.hasWithClause()) {
-            return scope;
-        }
-
         Scope cteScope = new Scope(RelationId.anonymous(), new RelationFields());
         cteScope.setParent(scope);
+
+        if (!stmt.hasWithClause()) {
+            return cteScope;
+        }
+
         for (View withQuery : stmt.getWithClause().getViews()) {
 
             QueryRelation query = transformQueryStmt(withQuery.getQueryStmtWithParse(), cteScope);
@@ -985,7 +987,7 @@ public class QueryAnalyzer {
 
                     List<List<Expr>> groupingSets =
                             Sets.powerSet(IntStream.range(0, rewriteOriGrouping.size())
-                                    .boxed().collect(Collectors.toSet())).stream()
+                                            .boxed().collect(Collectors.toSet())).stream()
                                     .map(l -> l.stream().map(rewriteOriGrouping::get).collect(Collectors.toList()))
                                     .collect(Collectors.toList());
 

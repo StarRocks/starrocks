@@ -2247,7 +2247,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "   union all\n"
                 + "   (select * from db1.tbl6 where k1='b' and k4=5)\n"
                 + "   order by 3 limit 3)";
-        starRocksAssert.query(sql2).explainContains("UNION", 5);
+        starRocksAssert.query(sql2).explainContains("UNION", 6);
 
         // intersect
         String sql3 = "select * from\n"
@@ -3692,9 +3692,9 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testMultiCountDistinctType() throws Exception {
         String sql = "select count(distinct t1a,t1b) from test_all_type";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
                 "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]"));
-        Assert.assertTrue(plan.contains("5:AGGREGATE (merge finalize)\n" +
+        Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)\n" +
                 "  |  aggregate: count[([11: count, BIGINT, false]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]"));
     }
 
@@ -3702,10 +3702,10 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testMultiCountDistinctAggPhase() throws Exception {
         String sql = "select count(distinct t1a,t1b), avg(t1c) from test_all_type";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false], avg[([12: avg, DOUBLE, true]); args: INT; result: VARCHAR; args nullable: true; result nullable: true]"));
-        Assert.assertTrue(plan.contains("2:AGGREGATE (merge serialize)\n" +
-                "  |  aggregate: avg[([12: avg, VARCHAR, true]); args: INT; result: DOUBLE; args nullable: true; result nullable: true]\n" +
+        Assert.assertTrue(plan.contains(" 2:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false], avg[([12: avg, VARCHAR, true]); args: INT; result: VARCHAR; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains(" 1:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARCHAR; args nullable: true; result nullable: true]\n" +
                 "  |  group by: [1: t1a, VARCHAR, true], [2: t1b, SMALLINT, true]"));
     }
 

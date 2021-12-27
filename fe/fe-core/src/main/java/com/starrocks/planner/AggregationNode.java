@@ -96,8 +96,8 @@ public class AggregationNode extends PlanNode {
      * Sets this node as a preaggregation. Only valid to call this if it is not marked
      * as a preaggregation
      */
-    public void setIsPreagg(PlannerContext ctx_) {
-        useStreamingPreagg = aggInfo.getGroupingExprs().size() > 0;
+    public void setIsPreagg(boolean canUseStreamingPreAgg) {
+        useStreamingPreagg = canUseStreamingPreAgg && aggInfo.getGroupingExprs().size() > 0;
     }
 
     /**
@@ -352,6 +352,7 @@ public class AggregationNode extends PlanNode {
 
     @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!canPushDownRuntimeFilter()) return false;
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
             if (probeExpr instanceof SlotRef) {
                 for (Expr gexpr : aggInfo.getGroupingExprs()) {

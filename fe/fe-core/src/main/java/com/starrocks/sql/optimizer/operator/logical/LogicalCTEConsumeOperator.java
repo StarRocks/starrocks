@@ -88,7 +88,6 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), cteId, cteOutputColumnRefMap);
     }
 
-
     public static class Builder
             extends LogicalOperator.Builder<LogicalCTEConsumeOperator, LogicalCTEConsumeOperator.Builder> {
         private String cteId;
@@ -113,5 +112,14 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
         super(OperatorType.LOGICAL_CTE_CONSUME, builder.getLimit(), builder.getPredicate(), builder.getProjection());
         this.cteId = builder.cteId;
         this.cteOutputColumnRefMap = builder.cteOutputColumnRefMap;
+    }
+
+    @Override
+    public String toString() {
+        return "LogicalCTEConsumeOperator{" +
+                "cteId='" + cteId + '\'' +
+                ", limit=" + limit +
+                ", predicate=" + predicate +
+                '}';
     }
 }

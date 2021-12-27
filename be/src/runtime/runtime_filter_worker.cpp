@@ -14,6 +14,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/ref_count_closure.h"
+#include "util/thread.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -369,7 +370,9 @@ public:
 
 static_assert(std::is_move_assignable<RuntimeFilterWorkerEvent>::value);
 
-RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env) : _exec_env(env), _thread([this] { execute(); }) {}
+RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env) : _exec_env(env), _thread([this] { execute(); }) {
+    Thread::set_thread_name(_thread, "runtime_filter");
+}
 
 RuntimeFilterWorker::~RuntimeFilterWorker() {
     _queue.shutdown();

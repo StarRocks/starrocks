@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
+import com.starrocks.sql.optimizer.rewrite.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
@@ -108,6 +109,11 @@ public class Optimizer {
     }
 
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
+        // Derive cte consume statistics, join order depend on cost model
+        context.getTaskScheduler().pushTask(new DeriveStatsTask(
+                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
 
         // Join reorder
@@ -140,6 +146,7 @@ public class Optimizer {
 
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
+        result = new PruneAggregateNodeRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);

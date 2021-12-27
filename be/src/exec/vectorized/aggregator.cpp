@@ -3,6 +3,7 @@
 #include "aggregator.h"
 
 #include "exprs/anyval_util.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -198,6 +199,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        THROW_BAD_ALLOC_IF_NULL(_single_agg_state);
         for (int i = 0; i < _agg_functions.size(); i++) {
             _agg_functions[i]->create(_single_agg_state + _agg_states_offsets[i]);
         }
@@ -209,9 +211,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     // For SQL: select distinct id from table or select id from from table group by id;
     // we don't need to allocate memory for agg states.
     if (_is_only_group_by_columns) {
-        _init_agg_hash_variant(_hash_set_variant);
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
     } else {
-        _init_agg_hash_variant(_hash_map_variant);
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
     }
 
     return Status::OK();
@@ -242,7 +244,7 @@ Status Aggregator::close(RuntimeState* state) {
             }
 #define HASH_MAP_METHOD(NAME)                                                  \
     else if (_hash_map_variant.type == vectorized::HashMapVariant::Type::NAME) \
-            _release_agg_memory<decltype(_hash_map_variant.NAME)::element_type>(*_hash_map_variant.NAME);
+            _release_agg_memory<decltype(_hash_map_variant.NAME)::element_type>(_hash_map_variant.NAME.get());
             APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
         }
