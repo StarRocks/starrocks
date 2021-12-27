@@ -78,7 +78,7 @@ public class MetricCalculator extends TimerTask {
 
         lastTs = currentTs;
 
-        // max tabet compaction score of all backends
+        // max tablet compaction score of all backends
         long maxCompactionScore = 0;
         List<Metric> compactionScoreMetrics = MetricRepo.getMetricsByName(MetricRepo.TABLET_MAX_COMPACTION_SCORE);
         for (Metric metric : compactionScoreMetrics) {

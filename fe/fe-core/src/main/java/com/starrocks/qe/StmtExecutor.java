@@ -935,6 +935,9 @@ public class StmtExecutor {
     }
 
     private void addRunningQueryDetail() {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
         String sql;
         if (parsedStmt.needAuditEncryption()) {
             sql = parsedStmt.toSql();

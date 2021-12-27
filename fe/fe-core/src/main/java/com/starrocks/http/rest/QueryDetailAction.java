@@ -51,7 +51,7 @@ public class QueryDetailAction extends RestBaseAction {
             sendResult(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
         }
-        long eventTime = Long.valueOf(eventTimeStr.trim());
+        long eventTime = Long.parseLong(eventTimeStr.trim());
         List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(eventTime);
         Gson gson = new Gson();
         String jsonString = gson.toJson(queryDetails);
