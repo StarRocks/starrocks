@@ -60,12 +60,12 @@ public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule
                 return projection;
             }
 
-            boolean hasRewrite = false;
+            boolean hasRewritten = false;
             for (ScalarOperator operator : columnRefMap.values()) {
                 ScalarOperator rewriteOperator =
                         ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(operator, commonSubOperators);
                 if (!rewriteOperator.equals(operator)) {
-                    hasRewrite = true;
+                    hasRewritten = true;
                     break;
                 }
             }
@@ -75,7 +75,7 @@ public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule
              * 2. Put the common sub operators to projection, we need to compute
              * common sub operators firstly in BE
              */
-            if (hasRewrite) {
+            if (hasRewritten) {
                 Map<ColumnRefOperator, ScalarOperator> newMap =
                         Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : columnRefMap.entrySet()) {
@@ -84,6 +84,7 @@ public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule
 
                     if (rewriteOperator.isColumnRef() && newMap.containsValue(rewriteOperator)) {
                         // must avoid multi columnRef: columnRef
+                        // @TODO: remove it if BE support COW column
                         newMap.put(kv.getKey(), kv.getValue());
                     } else {
                         newMap.put(kv.getKey(), rewriteOperator);
