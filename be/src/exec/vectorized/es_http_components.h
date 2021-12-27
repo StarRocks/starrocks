@@ -24,7 +24,7 @@ public:
     ~ScrollParser() = default;
 
     Status parse(const std::string& scroll_result, bool exactly_once = false);
-    Status fill_chunk(ChunkPtr* chunk, bool* line_eos);
+    Status fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line_eos);
 
     const std::string& get_scroll_id() { return _scroll_id; }
     int get_size() { return _size; }

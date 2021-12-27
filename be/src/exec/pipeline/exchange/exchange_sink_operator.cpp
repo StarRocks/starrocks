@@ -168,7 +168,7 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
         _chunk = chunk->clone_empty_with_tuple();
     }
 
-    if (_chunk->num_rows() + size > state->batch_size()) {
+    if (_chunk->num_rows() + size > state->chunk_size()) {
         RETURN_IF_ERROR(send_one_chunk(_chunk.get(), false));
         // we only clear column data, because we need to reuse column schema
         _chunk->set_num_rows(0);
@@ -351,7 +351,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
         RETURN_IF_ERROR(_channel->init(state));
     }
 
-    _row_indexes.resize(state->batch_size());
+    _row_indexes.resize(state->chunk_size());
 
     return Status::OK();
 }

@@ -20,7 +20,7 @@ NullColumnPtr ColumnHelper::one_size_null_column = NullColumn::create(1, 1);
 NullColumnPtr ColumnHelper::s_all_not_null_column = nullptr;
 
 void ColumnHelper::init_static_variable() {
-    ColumnHelper::s_all_not_null_column = NullColumn::create(config::vector_chunk_size, 0);
+    ColumnHelper::s_all_not_null_column = NullColumn::create(config::chunk_size_all_not_null_column, 0);
 }
 
 Column::Filter& ColumnHelper::merge_nullable_filter(Column* column) {

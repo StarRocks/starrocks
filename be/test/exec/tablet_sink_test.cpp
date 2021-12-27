@@ -292,7 +292,7 @@ public:
 TEST_F(OlapTableSinkTest, init_fail1) {
     TUniqueId fragment_id;
     TQueryOptions query_options;
-    query_options.batch_size = 1;
+    query_options.chunk_size = 1;
     RuntimeState state(fragment_id, query_options, TQueryGlobals(), _env);
     state.init_mem_trackers(TUniqueId());
 
@@ -302,7 +302,7 @@ TEST_F(OlapTableSinkTest, init_fail1) {
 
     // crate desc_tabl
     DescriptorTbl* desc_tbl = nullptr;
-    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
+    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     ASSERT_TRUE(st.ok());
     state._desc_tbl = desc_tbl;
 
@@ -350,7 +350,7 @@ TEST_F(OlapTableSinkTest, init_fail1) {
 TEST_F(OlapTableSinkTest, init_fail3) {
     TUniqueId fragment_id;
     TQueryOptions query_options;
-    query_options.batch_size = 1;
+    query_options.chunk_size = 1;
     RuntimeState state(fragment_id, query_options, TQueryGlobals(), _env);
     state.init_mem_trackers(TUniqueId());
 
@@ -360,7 +360,7 @@ TEST_F(OlapTableSinkTest, init_fail3) {
 
     // crate desc_tabl
     DescriptorTbl* desc_tbl = nullptr;
-    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
+    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     ASSERT_TRUE(st.ok());
     state._desc_tbl = desc_tbl;
 
@@ -409,7 +409,7 @@ TEST_F(OlapTableSinkTest, init_fail3) {
 TEST_F(OlapTableSinkTest, init_fail4) {
     TUniqueId fragment_id;
     TQueryOptions query_options;
-    query_options.batch_size = 1;
+    query_options.chunk_size = 1;
     RuntimeState state(fragment_id, query_options, TQueryGlobals(), _env);
     state.init_mem_trackers(TUniqueId());
 
@@ -419,7 +419,7 @@ TEST_F(OlapTableSinkTest, init_fail4) {
 
     // crate desc_tabl
     DescriptorTbl* desc_tbl = nullptr;
-    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
+    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     ASSERT_TRUE(st.ok());
     state._desc_tbl = desc_tbl;
 

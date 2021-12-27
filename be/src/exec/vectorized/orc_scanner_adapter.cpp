@@ -973,9 +973,9 @@ const FillColumnFunction& find_fill_func(PrimitiveType type, bool nullable) {
     return nullable ? FunctionsMap::instance()->get_nullable_func(type) : FunctionsMap::instance()->get_func(type);
 }
 
-OrcScannerAdapter::OrcScannerAdapter(const std::vector<SlotDescriptor*>& src_slot_descriptors)
+OrcScannerAdapter::OrcScannerAdapter(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors)
         : _src_slot_descriptors(src_slot_descriptors),
-          _read_chunk_size(config::vector_chunk_size),
+          _read_chunk_size(state->chunk_size()),
           _tzinfo(cctz::utc_time_zone()),
           _tzoffset_in_seconds(0),
           _drop_nanoseconds_in_datetime(false),

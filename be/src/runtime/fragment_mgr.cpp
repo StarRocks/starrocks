@@ -602,7 +602,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     ObjectPool obj_pool;
-    st = DescriptorTbl::create(&obj_pool, t_query_plan_info.desc_tbl, &desc_tbl);
+    st = DescriptorTbl::create(&obj_pool, t_query_plan_info.desc_tbl, &desc_tbl, params.batch_size);
     if (!st.ok()) {
         LOG(WARNING) << "open context error: extract DescriptorTbl failure";
         std::stringstream msg;
@@ -675,7 +675,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     exec_fragment_params.__set_params(fragment_exec_params);
     // batch_size for one RowBatch
     TQueryOptions query_options;
-    query_options.batch_size = params.batch_size;
+    query_options.chunk_size = params.batch_size;
     query_options.query_timeout = params.query_timeout;
     query_options.mem_limit = params.mem_limit;
     query_options.query_type = TQueryType::EXTERNAL;

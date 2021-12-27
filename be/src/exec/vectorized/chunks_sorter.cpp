@@ -14,9 +14,10 @@
 
 namespace starrocks::vectorized {
 
-ChunksSorter::ChunksSorter(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                           const std::vector<bool>* is_null_first, size_t size_of_chunk_batch)
-        : _sort_exprs(sort_exprs), _size_of_chunk_batch(size_of_chunk_batch) {
+ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
+                           size_t size_of_chunk_batch)
+        : _state(state), _sort_exprs(sort_exprs), _size_of_chunk_batch(size_of_chunk_batch) {
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
     DCHECK(is_null_first != nullptr);

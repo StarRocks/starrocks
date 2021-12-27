@@ -90,7 +90,7 @@ struct TQueryOptions {
   1: optional bool abort_on_error = 0
   2: optional i32 max_errors = 0
   3: optional bool disable_codegen = 1
-  4: optional i32 batch_size = 0
+  4: optional i32 chunk_size = 0
   5: optional i32 num_nodes = NUM_NODES_ALL
   6: optional i64 max_scan_range_length = 0
   7: optional i32 num_scanner_threads = 0

@@ -161,8 +161,8 @@ Status HdfsScanNode::_start_scan_thread(RuntimeState* state) {
     // init chunk pool
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / config::vector_chunk_size;
-    _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % config::vector_chunk_size != 0);
+    _chunks_per_scanner = config::doris_scanner_row_num / runtime_state()->chunk_size();
+    _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % runtime_state()->chunk_size() != 0);
     int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
@@ -418,7 +418,7 @@ void HdfsScanNode::_fill_chunk_pool(int count) {
     std::lock_guard<std::mutex> l(_mtx);
 
     for (int i = 0; i < count; i++) {
-        auto chunk = ChunkHelper::new_chunk(*_tuple_desc, config::vector_chunk_size);
+        auto chunk = ChunkHelper::new_chunk(*_tuple_desc, runtime_state()->chunk_size());
         _chunk_pool.push(std::move(chunk));
     }
 }

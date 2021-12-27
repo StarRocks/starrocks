@@ -143,10 +143,10 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
     // Improve for select * from table limit x, x is small
-    if (_limit != -1 && _limit < config::vector_chunk_size) {
+    if (_limit != -1 && _limit < _runtime_state->chunk_size()) {
         _params.chunk_size = _limit;
     } else {
-        _params.chunk_size = config::vector_chunk_size;
+        _params.chunk_size = _runtime_state->chunk_size();
     }
 
     PredicateParser parser(_tablet->tablet_schema());
@@ -294,15 +294,15 @@ StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
     return chunk;
 }
 
-Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
+Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) {
     if (!_status.ok()) {
         return _status;
     }
     using namespace vectorized;
 
-    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+    for (size_t i = 0; i < chunk_size && !can_finish; ++i) {
         ChunkUniquePtr chunk(
-                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
+                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
         if (!_status.ok()) {
             // end of file is normal case, need process chunk

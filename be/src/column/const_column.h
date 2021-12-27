@@ -135,14 +135,14 @@ public:
         return pos + _data->serialize_size(0);
     }
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) override {
-        _size += batch_size;
+    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override {
+        _size += chunk_size;
         if (_data->empty()) {
             _data->deserialize_and_append((uint8_t*)srcs[0].data);
         }
         uint32_t serialize_size = _data->serialize_size(0);
         // Note: we must update the pos
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             srcs[0].data = srcs[0].data + serialize_size;
         }
     }

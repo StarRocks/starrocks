@@ -91,7 +91,7 @@ void ArrowWorkFlowTest::init() {
 
 void ArrowWorkFlowTest::init_runtime_state() {
     TQueryOptions query_options;
-    query_options.batch_size = 1024;
+    query_options.chunk_size = 1024;
     TUniqueId query_id;
     query_id.lo = 10;
     query_id.hi = 100;
@@ -243,7 +243,7 @@ void ArrowWorkFlowTest::init_desc_tbl() {
     t_tuple_desc.__isset.tableId = true;
     _t_desc_table.tupleDescriptors.push_back(t_tuple_desc);
 
-    DescriptorTbl::create(&_obj_pool, _t_desc_table, &_desc_tbl);
+    DescriptorTbl::create(&_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size);
 
     std::vector<TTupleId> row_tids;
     row_tids.push_back(0);

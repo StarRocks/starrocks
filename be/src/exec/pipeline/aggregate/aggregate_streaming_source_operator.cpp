@@ -92,7 +92,7 @@ void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::C
 #define HASH_MAP_METHOD(NAME)                                                                                     \
     else if (_aggregator->hash_map_variant().type == vectorized::HashMapVariant::Type::NAME)                      \
             _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, state->batch_size(), chunk);
+                    *_aggregator->hash_map_variant().NAME, state->chunk_size(), chunk);
     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {

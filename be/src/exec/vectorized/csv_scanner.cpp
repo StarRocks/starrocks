@@ -177,7 +177,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
 
     ChunkPtr chunk;
-    const int chunk_capacity = config::vector_chunk_size;
+    const int chunk_capacity = _state->chunk_size();
     auto src_chunk = _create_chunk(_src_slot_descriptors);
     src_chunk->reserve(chunk_capacity);
 
@@ -225,7 +225,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
 }
 
 Status CSVScanner::_parse_csv(Chunk* chunk) {
-    const int capacity = config::vector_chunk_size;
+    const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
     CSVReader::Record record;

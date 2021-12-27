@@ -572,6 +572,10 @@ CONF_Bool(ignore_rowset_stale_unconsistent_delete, "false");
 // The chunk size for vector query engine
 CONF_Int32(vector_chunk_size, "4096");
 
+// The chunk size for all_not_null_column,
+// It's only used in ColumnHelper::s_all_not_null_column
+CONF_Int32(chunk_size_all_not_null_column, "16384");
+
 // valid range: [0-1000].
 // `0` will disable late materialization.
 // `1000` will enable late materialization always.

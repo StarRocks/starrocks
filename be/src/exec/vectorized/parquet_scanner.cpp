@@ -24,7 +24,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
           _next_file(0),
           _curr_file_reader(nullptr),
           _scanner_eof(false),
-          _max_chunk_size(config::vector_chunk_size ? config::vector_chunk_size : 4096),
+          _max_chunk_size(state->chunk_size() ? state->chunk_size() : 4096),
           _batch_start_idx(0),
           _chunk_start_idx(0) {
     _chunk_filter.reserve(_max_chunk_size);

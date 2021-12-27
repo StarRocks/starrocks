@@ -96,7 +96,7 @@ Status TabletScanner::close(RuntimeState* state) {
     _predicate_free_pool.clear();
     Expr::close(_conjunct_ctxs, state);
     // Reduce the memory usage if the the average string size is greater than 512.
-    release_large_columns<BinaryColumn>(config::vector_chunk_size * 512);
+    release_large_columns<BinaryColumn>(state->chunk_size() * 512);
     _is_closed = true;
     return Status::OK();
 }
@@ -129,10 +129,10 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = !config::disable_storage_page_cache;
     // Improve for select * from table limit x, x is small
-    if (_parent->_limit != -1 && _parent->_limit < config::vector_chunk_size) {
+    if (_parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
         _params.chunk_size = _parent->_limit;
     } else {
-        _params.chunk_size = config::vector_chunk_size;
+        _params.chunk_size = runtime_state()->chunk_size();
     }
 
     PredicateParser parser(_tablet->tablet_schema());

@@ -115,7 +115,7 @@ void MemoryScratchSinkTest::init() {
 
 void MemoryScratchSinkTest::init_runtime_state() {
     TQueryOptions query_options;
-    query_options.batch_size = 1024;
+    query_options.chunk_size = 1024;
     TUniqueId query_id;
     query_id.lo = 10;
     query_id.hi = 100;
@@ -173,7 +173,7 @@ void MemoryScratchSinkTest::init_desc_tbl() {
     t_tuple_desc.__isset.tableId = true;
     _t_desc_table.tupleDescriptors.push_back(t_tuple_desc);
 
-    DescriptorTbl::create(&_obj_pool, _t_desc_table, &_desc_tbl);
+    DescriptorTbl::create(&_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size);
 
     std::vector<TTupleId> row_tids;
     row_tids.push_back(0);
@@ -232,7 +232,7 @@ TEST_F(MemoryScratchSinkTest, work_flow_normal) {
     ASSERT_TRUE(status.ok());
 
     std::unique_ptr<MemTracker> mem_tracker(new MemTracker(-1));
-    RowBatch row_batch(scan_node._row_descriptor, _state->batch_size(), mem_tracker.get());
+    RowBatch row_batch(scan_node._row_descriptor, _state->chunk_size(), mem_tracker.get());
     bool eos = false;
 
     while (!eos) {

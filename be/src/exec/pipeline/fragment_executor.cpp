@@ -108,7 +108,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->set_batch_size(config::vector_chunk_size);
+    runtime_state->set_chunk_size(query_options.chunk_size);
     runtime_state->init_mem_trackers(query_id);
     runtime_state->set_be_number(backend_num);
 
@@ -123,7 +123,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();
     DescriptorTbl* desc_tbl = nullptr;
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl));
+    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
     runtime_state->set_desc_tbl(desc_tbl);
     // Set up plan
     ExecNode* plan = nullptr;
