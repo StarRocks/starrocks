@@ -213,8 +213,8 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "count(*) from supplier group by a,b) as t ";
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
-        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(16: upper), multi_distinct_count(15: lower)"));
+        Assert.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
+                "  |  output: multi_distinct_count(12: count), multi_distinct_count(13: count)"));
 
         sql = "select count(distinct S_ADDRESS), count(distinct S_COMMENT) from supplier;";
         plan = getFragmentPlan(sql);
@@ -504,6 +504,9 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <dict id 17> : <string id 3>"));
         Assert.assertTrue(plan.contains("INNER JOIN (BROADCAST)"));
 
+        sql = "select part_v2.p_partkey from lineitem join part_v2 on L_COMMENT = hex(P_NAME);";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test
@@ -577,6 +580,41 @@ public class DecodeRewriteTest extends PlanTestBase {
         sql = "select count(t.a) from(select S_ADDRESS <=> 'kks' as a from supplier) as t";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("[3: S_ADDRESS, VARCHAR, false] <=> 'kks'"));
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select count(distinct S_ADDRESS), count(distinct S_NAME) as a from supplier_nullable";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("multi_distinct_count[([9: count, VARCHAR, false]);"));
+        Assert.assertTrue(plan.contains("multi_distinct_count[([11: S_ADDRESS, INT, true]);"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testMultiMaxMin() throws Exception {
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select count(distinct S_ADDRESS), max(S_ADDRESS), count(distinct S_SUPPKEY) as a from supplier_nullable";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: multi_distinct_count[([12: S_ADDRESS, INT, true]);"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]);"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select min(distinct S_ADDRESS), max(S_ADDRESS) from supplier_nullable";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update serialize)\n" +
+                "  |  output: max(11: S_ADDRESS), min(11: S_ADDRESS)"));
+        Assert.assertTrue(plan.contains("  3:AGGREGATE (merge finalize)\n" +
+                "  |  output: min(12: S_ADDRESS), max(13: S_ADDRESS)"));
+        Assert.assertTrue(plan.contains("  4:Decode\n" +
+                "  |  <dict id 14> : <string id 9>\n" +
+                "  |  <dict id 15> : <string id 10>"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+
     }
 
     @Test
@@ -675,8 +713,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "      ) \n" +
                 "  ) t;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("8:HASH JOIN"));
-        Assert.assertTrue(plan.contains("7:Decode"));
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test
