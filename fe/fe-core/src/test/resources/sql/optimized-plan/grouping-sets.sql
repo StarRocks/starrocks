@@ -81,9 +81,9 @@ AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count), 6: sum=
 [sql]
 select count(distinct v1), avg(v2) from t0
 [result]
-AGGREGATE ([GLOBAL] aggregate [{4: count=MULTI_DISTINCT_COUNT(4: count), 5: avg=avg(5: avg)}] group by [[]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count), 5: avg=avg(5: avg)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{4: count=MULTI_DISTINCT_COUNT(1: v1), 5: avg=avg(2: v2)}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{4: count=multi_distinct_count(1: v1), 5: avg=avg(2: v2)}] group by [[]] having [null]
             SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
 
