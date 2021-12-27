@@ -69,6 +69,37 @@ public:
         return writer->build();
     }
 
+    RowsetSharedPtr create_rowsets(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                   std::size_t max_rows_per_segment) {
+        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_type = BETA_ROWSET;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = &tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+        for (std::size_t written_rows = 0; written_rows < keys.size(); written_rows += max_rows_per_segment) {
+            auto chunk = vectorized::ChunkHelper::new_chunk(schema, max_rows_per_segment);
+            auto& cols = chunk->columns();
+            for (size_t i = 0; i < max_rows_per_segment; i++) {
+                cols[0]->append_datum(vectorized::Datum(keys[written_rows + i]));
+                cols[1]->append_datum(vectorized::Datum((int16_t)(keys[written_rows + i] % 100 + 1)));
+                cols[2]->append_datum(vectorized::Datum((int32_t)(keys[written_rows + i] % 1000 + 2)));
+            }
+            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
+        }
+        return writer->build();
+    }
+
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
@@ -1485,10 +1516,10 @@ TEST_F(TabletUpdatesTest, get_column_values) {
     for (int i = 0; i < N; i++) {
         keys.push_back(i);
     }
-    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
-    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::size_t max_rows_per_segment = 1000;
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowsets(_tablet, keys, max_rows_per_segment)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowsets(_tablet, keys, max_rows_per_segment)).ok());
     std::vector<uint32_t> read_column_ids = {1, 2};
-    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid{{0, std::vector<uint32_t>{1, 2}}};
     std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
     const auto& tablet_schema = _tablet->tablet_schema();
     for (auto i = 0; i < read_column_ids.size(); i++) {
@@ -1498,15 +1529,40 @@ TEST_F(TabletUpdatesTest, get_column_values) {
                 vectorized::ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         read_columns[i] = column->clone_empty();
     }
+    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+    int num_segments = N / max_rows_per_segment;
+    for (auto i = 0; i < num_segments; i++) {
+        const int num_rowids = rand() % max_rows_per_segment;
+        std::vector<uint32_t> rowids;
+        for (auto i = 0; i < num_rowids; i++) {
+            rowids.push_back(rand() % max_rows_per_segment);
+        }
+        std::sort(rowids.begin(), rowids.end());
+        rowids_by_rssid.emplace(i, rowids);
+    }
     _tablet->updates()->get_column_values(read_column_ids, false, rowids_by_rssid, &read_columns);
-    ASSERT_EQ("[2, 3]", read_columns[0]->debug_string());
-    ASSERT_EQ("[3, 4]", read_columns[1]->debug_string());
+    auto values_str_generator = [&rowids_by_rssid](const int modulus, const int base) {
+        std::stringstream ss;
+        ss << "[";
+        for (const auto& [rssid, rowids] : rowids_by_rssid) {
+            for (const auto rowid : rowids) {
+                ss << rowid % modulus + base << ", ";
+            }
+        }
+        std::string values_str = ss.str();
+        values_str.pop_back();
+        values_str.pop_back();
+        values_str.append("]");
+        return values_str;
+    };
+    ASSERT_EQ(values_str_generator(100, 1), read_columns[0]->debug_string());
+    ASSERT_EQ(values_str_generator(1000, 2), read_columns[1]->debug_string());
     for (const auto& read_column : read_columns) {
         read_column->reset_column();
     }
     _tablet->updates()->get_column_values(read_column_ids, true, rowids_by_rssid, &read_columns);
-    ASSERT_EQ("[0, 2, 3]", read_columns[0]->debug_string());
-    ASSERT_EQ("[0, 3, 4]", read_columns[1]->debug_string());
+    ASSERT_EQ(std::string("[0, ") + values_str_generator(100, 1).substr(1), read_columns[0]->debug_string());
+    ASSERT_EQ(std::string("[0, ") + values_str_generator(1000, 2).substr(1), read_columns[1]->debug_string());
 }
 
 } // namespace starrocks

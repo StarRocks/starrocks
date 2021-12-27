@@ -2431,7 +2431,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         int i = 0;
         for (const auto column_id : column_ids) {
             auto* col_iter = seg_iter->get_column_iterator(column_id);
-            col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get());
+            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
             ++i;
         }
     }

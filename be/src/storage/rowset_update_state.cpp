@@ -205,7 +205,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
     vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
     vector<std::unique_ptr<vectorized::Column>> write_columns(read_column_ids.size());
-    for (auto i = 0; read_column_ids.size(); i++) {
+    for (auto i = 0; i < read_column_ids.size(); i++) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tschema.column(read_column_id);
         auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
