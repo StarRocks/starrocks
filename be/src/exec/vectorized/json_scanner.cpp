@@ -419,7 +419,7 @@ Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
 
     std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
     for (int32_t n = 0; n < rows_to_read; n++) {
-        auto st = _parser->get_current(&row);
+        auto st = parser->get_current(&row);
         if (!st.ok()) {
             if (st.is_end_of_file()) {
                 _empty_parser = true;
@@ -452,7 +452,7 @@ Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
             continue;
         }
 
-        st = _parser->advance();
+        st = parser->advance();
         if (!st.ok()) {
             if (st.is_end_of_file()) {
                 _empty_parser = true;
