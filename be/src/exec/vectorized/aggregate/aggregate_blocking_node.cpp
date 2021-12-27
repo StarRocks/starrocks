@@ -175,11 +175,12 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
             if (typeid(*source_op) != typeid(pipeline::ScanOperatorFactory)) {
                 std::vector<ExprContext*> group_by_expr_ctxs;
                 Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-                operators_with_sink =
-                        context->maybe_interpolate_local_shuffle_exchange(runtime_state(), operators_with_sink, group_by_expr_ctxs);
+                operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(
+                        runtime_state(), operators_with_sink, group_by_expr_ctxs);
             }
         } else {
-            operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
+            operators_with_sink =
+                    context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
         }
     }
     // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value

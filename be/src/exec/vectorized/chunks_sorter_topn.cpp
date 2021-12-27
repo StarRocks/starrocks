@@ -11,9 +11,9 @@
 
 namespace starrocks::vectorized {
 
-ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                                   const std::vector<bool>* is_null_first, size_t offset, size_t limit,
-                                   size_t size_of_chunk_batch)
+ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                                   const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
+                                   size_t offset, size_t limit, size_t size_of_chunk_batch)
         : ChunksSorter(state, sort_exprs, is_asc, is_null_first, size_of_chunk_batch),
           _offset(offset),
           _limit(limit),

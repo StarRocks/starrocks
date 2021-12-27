@@ -153,8 +153,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // the bucket key of this table, so we needn't local shuffle for this case.
     auto* source_op = operators_with_sink[0].get();
     if (typeid(*source_op) != typeid(pipeline::ScanOperatorFactory)) {
-        operators_with_sink =
-                context->maybe_interpolate_local_shuffle_exchange(runtime_state(), operators_with_sink, partition_expr_ctxs);
+        operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), operators_with_sink,
+                                                                                partition_expr_ctxs);
     }
 
     operators_with_sink.push_back(std::move(sink_operator));

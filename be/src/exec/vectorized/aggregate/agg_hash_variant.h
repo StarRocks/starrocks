@@ -365,8 +365,8 @@ struct HashMapVariant {
     void init(RuntimeState* state, Type type_) {
         type = type_;
         switch (type_) {
-#define M(NAME)                                                  \
-    case Type::NAME:                                             \
+#define M(NAME)                                                                     \
+    case Type::NAME:                                                                \
         NAME = std::make_unique<decltype(NAME)::element_type>(state->batch_size()); \
         break;
             APPLY_FOR_VARIANT_ALL(M)
@@ -639,8 +639,8 @@ struct HashSetVariant {
     void init(RuntimeState* state, Type type_) {
         type = type_;
         switch (type_) {
-#define M(NAME)                                                  \
-    case Type::NAME:                                             \
+#define M(NAME)                                                                     \
+    case Type::NAME:                                                                \
         NAME = std::make_unique<decltype(NAME)::element_type>(state->batch_size()); \
         break;
             APPLY_FOR_VARIANT_ALL(M)

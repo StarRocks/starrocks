@@ -55,15 +55,15 @@ Status SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHa
 
     if (!null_columns.empty()) {
         for (size_t i = 0; i < quo; i++) {
-            _build_nullable_columns(table_items, probe_state, data_columns, null_columns,
-                                    1 + state->batch_size() * i, state->batch_size(), &ptr);
+            _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->batch_size() * i,
+                                    state->batch_size(), &ptr);
         }
-        _build_nullable_columns(table_items, probe_state, data_columns, null_columns,
-                                1 + state->batch_size() * quo, rem, &ptr);
+        _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->batch_size() * quo,
+                                rem, &ptr);
     } else {
         for (size_t i = 0; i < quo; i++) {
-            _build_columns(table_items, probe_state, data_columns, 1 + state->batch_size() * i,
-                           state->batch_size(), &ptr);
+            _build_columns(table_items, probe_state, data_columns, 1 + state->batch_size() * i, state->batch_size(),
+                           &ptr);
         }
         _build_columns(table_items, probe_state, data_columns, 1 + state->batch_size() * quo, rem, &ptr);
     }
@@ -298,12 +298,13 @@ Status JoinHashTable::build(RuntimeState* state) {
     return Status::OK();
 }
 
-Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos) {
+Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
+                            bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
-#define M(NAME)                                                                \
-    case JoinHashMapType::NAME:                                                \
+#define M(NAME)                                                                       \
+    case JoinHashMapType::NAME:                                                       \
         RETURN_IF_ERROR(_##NAME->probe(state, key_columns, probe_chunk, chunk, eos)); \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)
@@ -318,8 +319,8 @@ Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* e
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
-#define M(NAME)                                             \
-    case JoinHashMapType::NAME:                             \
+#define M(NAME)                                                    \
+    case JoinHashMapType::NAME:                                    \
         RETURN_IF_ERROR(_##NAME->probe_remain(state, chunk, eos)); \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)

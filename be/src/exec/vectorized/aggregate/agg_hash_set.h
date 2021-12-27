@@ -8,9 +8,9 @@
 #include "column/type_traits.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
@@ -354,8 +354,7 @@ struct AggHashSetOfSerializedKey {
             _mem_pool->clear();
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
-            _buffer =
-                    _mem_pool->allocate(max_one_row_size * _batch_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            _buffer = _mem_pool->allocate(max_one_row_size * _batch_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
             THROW_BAD_ALLOC_IF_NULL(_buffer);
         }
 
@@ -555,7 +554,7 @@ struct AggHashSetOfSerializedKeyFixedSize {
     uint8_t* buffer;
     ResultVector results;
     std::vector<Slice> tmp_slices;
-    
+
     int32_t _batch_size;
 };
 

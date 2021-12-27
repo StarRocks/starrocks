@@ -93,7 +93,7 @@ ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema)
 
 template <typename T>
 struct ColumnDeleter {
-    ColumnDeleter(size_t batch_size): _batch_size(batch_size) {}
+    ColumnDeleter(size_t batch_size) : _batch_size(batch_size) {}
     void operator()(Column* ptr) const { return_column<T>(down_cast<T*>(ptr), _batch_size); }
     size_t _batch_size;
 };
@@ -123,7 +123,8 @@ inline std::shared_ptr<DecimalColumnType<T>> get_decimal_column_ptr(int precisio
 template <bool force>
 ColumnPtr column_from_pool(const Field& field, size_t batch_size) {
     auto Nullable = [&](ColumnPtr c) -> ColumnPtr {
-        return field.is_nullable() ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>(batch_size)) : c;
+        return field.is_nullable() ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>(batch_size))
+                                   : c;
     };
 
     auto precision = field.type()->precision();
@@ -202,8 +203,8 @@ Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schema, size_t ba
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const vectorized::FieldPtr& f = schema.field(i);
-        auto column =
-                (force && !config::disable_column_pool) ? column_from_pool<true>(*f, batch_size) : column_from_pool<false>(*f, batch_size);
+        auto column = (force && !config::disable_column_pool) ? column_from_pool<true>(*f, batch_size)
+                                                              : column_from_pool<false>(*f, batch_size);
         column->reserve(batch_size);
         columns.emplace_back(std::move(column));
     }

@@ -20,7 +20,8 @@ SortContextPtr SortContextFactory::create(int32_t idx) {
 
     DCHECK_LE(actual_idx, _sort_contexts.size());
     if (!_sort_contexts[actual_idx]) {
-        _sort_contexts[actual_idx] = std::make_shared<SortContext>(_state, _limit, num_sinkers, _is_asc_order, _is_null_first);
+        _sort_contexts[actual_idx] =
+                std::make_shared<SortContext>(_state, _limit, num_sinkers, _is_asc_order, _is_null_first);
     }
     return _sort_contexts[actual_idx];
 }

@@ -25,9 +25,12 @@ using SortContextPtr = std::shared_ptr<SortContext>;
 using SortContexts = std::vector<SortContextPtr>;
 class SortContext final : public ContextWithDependency {
 public:
-    explicit SortContext(RuntimeState* state, int64_t limit, const int32_t num_right_sinkers, const std::vector<bool>& is_asc_order,
-                         const std::vector<bool>& is_null_first)
-            : _state(state), _limit(limit), _num_partition_sinkers(num_right_sinkers), _comparer(limit, is_asc_order, is_null_first) {
+    explicit SortContext(RuntimeState* state, int64_t limit, const int32_t num_right_sinkers,
+                         const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
+            : _state(state),
+              _limit(limit),
+              _num_partition_sinkers(num_right_sinkers),
+              _comparer(limit, is_asc_order, is_null_first) {
         _chunks_sorter_partions.reserve(num_right_sinkers);
         _data_segment_heaps.reserve(num_right_sinkers);
     }

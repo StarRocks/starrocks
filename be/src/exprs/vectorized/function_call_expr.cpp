@@ -8,8 +8,8 @@
 #include "exprs/anyval_util.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/user_function_cache.h"
 #include "runtime/runtime_state.h"
+#include "runtime/user_function_cache.h"
 
 namespace starrocks::vectorized {
 

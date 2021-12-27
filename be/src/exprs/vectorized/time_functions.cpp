@@ -1382,7 +1382,8 @@ bool standard_format_one_row(const TimestampValue& timestamp_value, char* buf, c
 }
 
 template <PrimitiveType Type>
-ColumnPtr standard_format(int32_t batch_size, const std::string& fmt, int len, const starrocks::vectorized::Columns& columns) {
+ColumnPtr standard_format(int32_t batch_size, const std::string& fmt, int len,
+                          const starrocks::vectorized::Columns& columns) {
     ColumnBuilder<TYPE_VARCHAR> result(batch_size);
     auto ts_viewer = ColumnViewer<Type>(columns[0]);
 

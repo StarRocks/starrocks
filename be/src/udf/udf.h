@@ -249,14 +249,10 @@ public:
 
     ~FunctionContext();
 
-    void set_batch_size(int32_t batch_size) {
-        this->_batch_size = batch_size;
-    }
+    void set_batch_size(int32_t batch_size) { this->_batch_size = batch_size; }
 
-    int32_t batch_size() {
-        return _batch_size;
-    }
-    
+    int32_t batch_size() { return _batch_size; }
+
 private:
     friend class starrocks::FunctionContextImpl;
     FunctionContext();

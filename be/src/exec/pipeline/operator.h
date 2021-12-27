@@ -223,14 +223,10 @@ public:
     }
     const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
 
-    void set_runtime_state(RuntimeState* state) {
-        this->_state = state;
-    }
+    void set_runtime_state(RuntimeState* state) { this->_state = state; }
 
-    RuntimeState* runtime_state() {
-        return _state;
-    }
-    
+    RuntimeState* runtime_state() { return _state; }
+
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state) {
         auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);

@@ -6,7 +6,8 @@
 
 namespace starrocks::vectorized {
 
-SortedChunksMerger::SortedChunksMerger(RuntimeState* state, bool is_pipeline) : _state(state), _is_pipeline(is_pipeline) {}
+SortedChunksMerger::SortedChunksMerger(RuntimeState* state, bool is_pipeline)
+        : _state(state), _is_pipeline(is_pipeline) {}
 
 SortedChunksMerger::~SortedChunksMerger() = default;
 

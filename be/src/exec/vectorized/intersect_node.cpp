@@ -236,8 +236,8 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
 
     // Use the first child to build the hast table by IntersectBuildSinkOperator.
     pipeline::OpFactories operators_with_intersect_build_sink = child(0)->decompose_to_pipeline(context);
-    operators_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), 
-            operators_with_intersect_build_sink, _child_expr_lists[0]);
+    operators_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(
+            runtime_state(), operators_with_intersect_build_sink, _child_expr_lists[0]);
     operators_with_intersect_build_sink.emplace_back(std::make_shared<pipeline::IntersectBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[0]));
     // Initialize OperatorFactory's fields involving runtime filters.
@@ -248,8 +248,8 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
     // Use the rest children to erase keys from the hast table by IntersectProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
         pipeline::OpFactories operators_with_intersect_probe_sink = child(i)->decompose_to_pipeline(context);
-        operators_with_intersect_probe_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), 
-                operators_with_intersect_probe_sink, _child_expr_lists[i]);
+        operators_with_intersect_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
+                runtime_state(), operators_with_intersect_probe_sink, _child_expr_lists[i]);
         operators_with_intersect_probe_sink.emplace_back(std::make_shared<pipeline::IntersectProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.

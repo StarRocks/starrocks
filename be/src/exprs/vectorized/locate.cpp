@@ -144,8 +144,8 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
 
 // locate for needle is not constant
 // haystack may be variable vector or constant
-ColumnPtr haystack_vector_and_needle_vector(FunctionContext* context, const ColumnPtr& haystack_ptr, const ColumnPtr& needle_ptr,
-                                            const ColumnPtr& start_pos_ptr) {
+ColumnPtr haystack_vector_and_needle_vector(FunctionContext* context, const ColumnPtr& haystack_ptr,
+                                            const ColumnPtr& needle_ptr, const ColumnPtr& start_pos_ptr) {
     ColumnViewer<TYPE_VARCHAR> haystack_viewer(haystack_ptr);
     ColumnViewer<TYPE_VARCHAR> needle_viewer(needle_ptr);
     ColumnViewer<TYPE_INT> start_pos_viewer(start_pos_ptr);

@@ -23,21 +23,21 @@ template <PrimitiveType FromType, PrimitiveType ToType>
 ColumnPtr cast_fn(ExprContext* context, ColumnPtr& column);
 
 // All cast implements
-#define SELF_CAST(FROM_TYPE)                                      \
-    template <>                                                   \
-    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE>(ExprContext* context, ColumnPtr & column) { \
-        return column->clone();                                   \
+#define SELF_CAST(FROM_TYPE)                                                             \
+    template <>                                                                          \
+    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE>(ExprContext * context, ColumnPtr & column) { \
+        return column->clone();                                                          \
     }
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                    \
     template <>                                                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext* context, ColumnPtr & column) {                                          \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext * context, ColumnPtr & column) {                   \
         return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
     }
 
 #define UNARY_FN_CAST_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                           \
     template <>                                                                                                       \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext* context, ColumnPtr & column) {                                                       \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext * context, ColumnPtr & column) {                                \
         if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                           \
                       std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                        \
             return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
@@ -48,15 +48,15 @@ ColumnPtr cast_fn(ExprContext* context, ColumnPtr& column);
 
 #define UNARY_FN_CAST_TIME_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                \
     template <>                                                                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext* context, ColumnPtr & column) {                                                 \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext * context, ColumnPtr & column) {                          \
         return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
                 column);                                                                                        \
     }
 
-#define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)   \
-    template <>                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext* context, ColumnPtr & column) { \
-        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE>(context, column);      \
+#define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)                          \
+    template <>                                                                        \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext * context, ColumnPtr & column) { \
+        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE>(context, column);                    \
     }
 
 DEFINE_UNARY_FN_WITH_IMPL(TimeCheck, value) {

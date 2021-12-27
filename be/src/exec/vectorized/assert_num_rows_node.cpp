@@ -135,8 +135,8 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
     using namespace pipeline;
 
     OpFactories operator_before_assert_num_rows_source = _children[0]->decompose_to_pipeline(context);
-    operator_before_assert_num_rows_source =
-            context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operator_before_assert_num_rows_source);
+    operator_before_assert_num_rows_source = context->maybe_interpolate_local_passthrough_exchange(
+            runtime_state(), operator_before_assert_num_rows_source);
 
     auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
             context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));

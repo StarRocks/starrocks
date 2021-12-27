@@ -6,15 +6,15 @@
 
 namespace starrocks::pipeline {
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(RuntimeState* state, OpFactories& pred_operators,
+OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(RuntimeState* state,
+                                                                               OpFactories& pred_operators,
                                                                                int num_receivers) {
     if (num_receivers == 1) {
         return maybe_interpolate_local_passthrough_exchange(state, pred_operators);
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr =
-            std::make_shared<LocalExchangeMemoryManager>(state->batch_size() * num_receivers * num_receivers);
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(state->batch_size() * num_receivers * num_receivers);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto local_exchange = std::make_shared<BroadcastExchanger>(mem_mgr, local_exchange_source.get());
@@ -33,11 +33,13 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(R
     return operators_source_with_local_exchange;
 }
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state, OpFactories& pred_operators) {
+OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state,
+                                                                                 OpFactories& pred_operators) {
     return maybe_interpolate_local_passthrough_exchange(state, pred_operators, 1);
 }
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state, OpFactories& pred_operators,
+OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state,
+                                                                                 OpFactories& pred_operators,
                                                                                  int num_receivers) {
     // predecessor pipeline has multiple drivers that will produce multiple output streams, but sort operator is
     // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
@@ -69,8 +71,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
     return operators_source_with_local_exchange;
 }
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(RuntimeState* state, 
-        OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs) {
+OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
+        RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
 
     // If DOP is one, we needn't partition input chunks.
@@ -103,7 +105,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(Run
     return operators_source_with_local_shuffle;
 }
 
-OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* state, std::vector<OpFactories>& pred_operators_list) {
+OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* state,
+                                                                  std::vector<OpFactories>& pred_operators_list) {
     // If there is only one pred pipeline, we needn't local passthrough anymore.
     if (pred_operators_list.size() == 1) {
         return pred_operators_list[0];
@@ -139,7 +142,7 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
 }
 
 void PipelineBuilder::set_state_for_opFactories(pipeline::OpFactories& opFactories, RuntimeState* state) {
-    for (auto op: opFactories) {
+    for (auto op : opFactories) {
         op->set_runtime_state(state);
     }
 }

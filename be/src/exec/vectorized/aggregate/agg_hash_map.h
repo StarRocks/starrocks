@@ -628,8 +628,8 @@ struct AggHashMapWithSerializedKeyFixedSize {
 
     std::vector<CacheEntry> caches;
 
-    AggHashMapWithSerializedKeyFixedSize(int32_t batch_size) : mem_pool(std::make_unique<MemPool>()),
-        _batch_size(batch_size) {
+    AggHashMapWithSerializedKeyFixedSize(int32_t batch_size)
+            : mem_pool(std::make_unique<MemPool>()), _batch_size(batch_size) {
         caches.reserve(batch_size);
         uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
         memset(buffer, 0x0, max_fixed_size * batch_size);

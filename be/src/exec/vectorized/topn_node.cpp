@@ -146,19 +146,19 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         // HeapChunkSorter has higher performance when sorting fewer elements,
         // after testing we think 1024 is a good threshold
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
-            _chunks_sorter =
-                    std::make_unique<HeapChunkSorter>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
-                                                      &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+            _chunks_sorter = std::make_unique<HeapChunkSorter>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                               &_is_asc_order, &_is_null_first, _offset, _limit,
+                                                               SIZE_OF_CHUNK_FOR_TOPN);
         } else {
-            _chunks_sorter =
-                    std::make_unique<ChunksSorterTopn>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
-                                                       &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+            _chunks_sorter = std::make_unique<ChunksSorterTopn>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                                &_is_asc_order, &_is_null_first, _offset, _limit,
+                                                                SIZE_OF_CHUNK_FOR_TOPN);
         }
 
     } else {
         _chunks_sorter =
-                std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
-                                                       &_is_null_first, SIZE_OF_CHUNK_FOR_FULL_SORT);
+                std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                       &_is_asc_order, &_is_null_first, SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
 
     bool eos = false;
@@ -191,14 +191,14 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 
     if (!is_merging) {
         // prepend local shuffle to PartitionSortSinkOperator
-        operators_sink_with_sort =
-                context->maybe_interpolate_local_shuffle_exchange(runtime_state(), operators_sink_with_sort, _analytic_partition_exprs);
+        operators_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
+                runtime_state(), operators_sink_with_sort, _analytic_partition_exprs);
     }
 
     auto degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
-    auto sort_context_factory = std::make_shared<SortContextFactory>(runtime_state(), is_merging, _limit, degree_of_parallelism,
-                                                                     _is_asc_order, _is_null_first);
+    auto sort_context_factory = std::make_shared<SortContextFactory>(
+            runtime_state(), is_merging, _limit, degree_of_parallelism, _is_asc_order, _is_null_first);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));

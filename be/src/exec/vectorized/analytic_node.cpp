@@ -350,7 +350,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose
 
     // analytic's dop must be 1 if with no partition clause
     if (_tnode.analytic_node.partition_exprs.empty()) {
-        operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
+        operators_with_sink =
+                context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
     }
     auto degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
