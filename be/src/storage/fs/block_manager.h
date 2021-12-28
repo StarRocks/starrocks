@@ -28,11 +28,11 @@
 #include <vector>
 
 #include "common/status.h"
+#include "env/env.h"
 
 namespace starrocks {
 
 class BlockId;
-class Env;
 class MemTracker;
 class Slice;
 
@@ -176,6 +176,8 @@ public:
 struct CreateBlockOptions {
     // const std::string tablet_id;
     const std::string path;
+    // create mode
+    Env::OpenMode mode = Env::MUST_CREATE;
 };
 
 // Block manager creation options.
