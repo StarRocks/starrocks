@@ -1006,7 +1006,7 @@ void PrimaryIndex::erase(const vectorized::Column& key_col, DeletesMap* deletes)
     _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
 }
 
-void PrimaryIndex::get(const vectorized::Column& key_col, std::vector<uint64_t>* rowids) {
+void PrimaryIndex::get(const vectorized::Column& key_col, std::vector<uint64_t>* rowids) const {
     DCHECK(_status.ok() && _pkey_to_rssid_rowid);
     _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
 }

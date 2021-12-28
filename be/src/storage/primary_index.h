@@ -72,7 +72,7 @@ public:
     // [not thread-safe]
     void erase(const vectorized::Column& pks, DeletesMap* deletes);
 
-    void get(const vectorized::Column& pks, std::vector<uint64_t>* rowids);
+    void get(const vectorized::Column& pks, std::vector<uint64_t>* rowids) const;
 
     // [not thread-safe]
     std::size_t memory_usage() const;

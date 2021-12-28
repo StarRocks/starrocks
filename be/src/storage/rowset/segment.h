@@ -58,7 +58,6 @@ class BitmapIndexIterator;
 class ColumnReader;
 class ColumnIterator;
 class Segment;
-class SegmentIterator;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
 using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 
