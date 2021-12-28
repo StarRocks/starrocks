@@ -21,6 +21,7 @@
 
 package com.starrocks.journal.bdbje;
 
+import com.google.common.net.HostAndPort;
 import com.sleepycat.je.DatabaseConfig;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.DatabaseNotFoundException;
@@ -162,14 +163,16 @@ public class BDBEnvironment {
                 // get replicationGroupAdmin object.
                 Set<InetSocketAddress> adminNodes = new HashSet<InetSocketAddress>();
                 // 1. add helper node
-                InetSocketAddress helper = new InetSocketAddress(helperHostPort.split(":")[0],
-                        Integer.parseInt(helperHostPort.split(":")[1]));
+                HostAndPort helperAddress = HostAndPort.fromString(helperHostPort);
+                InetSocketAddress helper = new InetSocketAddress(helperAddress.getHost(),
+                        helperAddress.getPort());
                 adminNodes.add(helper);
                 LOG.info("add helper[{}] as ReplicationGroupAdmin", helperHostPort);
                 // 2. add self if is electable
                 if (!selfNodeHostPort.equals(helperHostPort) && Catalog.getCurrentCatalog().isElectable()) {
-                    InetSocketAddress self = new InetSocketAddress(selfNodeHostPort.split(":")[0],
-                            Integer.parseInt(selfNodeHostPort.split(":")[1]));
+                    HostAndPort selfNodeAddress = HostAndPort.fromString(selfNodeHostPort);
+                    InetSocketAddress self = new InetSocketAddress(selfNodeAddress.getHost(),
+                            selfNodeAddress.getPort());
                     adminNodes.add(self);
                     LOG.info("add self[{}] as ReplicationGroupAdmin", selfNodeHostPort);
                 }
