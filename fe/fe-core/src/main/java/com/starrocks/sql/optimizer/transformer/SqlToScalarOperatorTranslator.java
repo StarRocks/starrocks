@@ -77,6 +77,10 @@ public final class SqlToScalarOperatorTranslator {
         ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression, expressionMapping);
         if (expressionMapping.hasExpression(expression) || scalarOperator.isColumnRef()) {
             columnRef = (ColumnRefOperator) scalarOperator;
+        } else if (scalarOperator.isVariable() && projections.containsValue(scalarOperator)) {
+            columnRef = projections.entrySet().stream().filter(e -> scalarOperator.equals(e.getValue())).findAny().map(
+                    Map.Entry::getKey).orElse(null);
+            Preconditions.checkNotNull(columnRef);
         } else {
             columnRef = columnRefFactory.create(expression, expression.getType(), expression.isNullable());
         }

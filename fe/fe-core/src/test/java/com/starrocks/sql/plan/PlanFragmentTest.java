@@ -5219,4 +5219,12 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v1 = 1: v1"));
     }
+
+    @Test
+    public void testProjectReuse() throws Exception {
+        String sql = "select nullif(v1, v1) + (0) as a , nullif(v1, v1) + (1 - 1) as b from t0;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("<slot 4> : nullif(1: v1, 1: v1) + 0"));
+        Assert.assertTrue(plan.contains(" OUTPUT EXPRS:4: expr | 4: expr"));
+    }
 }
