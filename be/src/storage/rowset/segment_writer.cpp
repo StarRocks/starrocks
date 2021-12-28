@@ -71,13 +71,29 @@ Status SegmentWriter::init() {
     return init(all_column_indexes, true);
 }
 
-Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key) {
+Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
     DCHECK(_column_writers.empty());
     DCHECK(_column_indexes.empty());
 
     if (_opts.storage_format_version != 1 && _opts.storage_format_version != 2) {
         auto v = _opts.storage_format_version;
         return Status::InvalidArgument(strings::Substitute("Invalid storage_format_version $0", v));
+    }
+
+    // merge partial segment footer
+    // in partial update, key columns and some value columns have been written in partial segment
+    // rewrite partial segment into full segment only need to write other value columns into full segment
+    // merge partial segment footer to avoid loss of metadata
+    if (footer != nullptr) {
+        for (uint32_t ordinal = 0; ordinal < footer->columns().size(); ++ordinal) {
+            *_footer.add_columns() = footer->columns(ordinal);
+        }
+        if (footer->has_short_key_index_page()) {
+            *_footer.mutable_short_key_index_page() = footer->short_key_index_page();
+        }
+        // in partial update, key columns have been written in partial segment
+        // set _num_rows as _num_rows in partial segment
+        _num_rows = footer->num_rows();
     }
 
     _column_indexes.insert(_column_indexes.end(), column_indexes.begin(), column_indexes.end());
