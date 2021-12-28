@@ -195,7 +195,7 @@ public:
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
         ColumnPtr lhs = _children[0]->evaluate(context, ptr);
-        if (ColumnHelper::count_nulls(lhs) == lhs->size()) {
+        if (!_eq_null && ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
         }
 
