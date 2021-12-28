@@ -96,8 +96,10 @@ public class Replica implements Writable {
 
     private long pathHash = -1;
 
-    // bad means this Replica is unrecoverable and we will delete it
+    // If bad and isForceSetBad are both true, it means this Replica is unrecoverable and we will delete it
+    // if bad is true and isForceSetBad is false, it means this replica can be recover by be.
     private boolean bad = false;
+    private boolean isForceSetBad = false;
 
     /*
      * If set to true, with means this replica need to be repaired. explicitly.
@@ -220,6 +222,14 @@ public class Replica implements Writable {
         }
         this.bad = bad;
         return true;
+    }
+
+    public void isForceSetBad(boolean isForceSetBad) {
+        this.isForceSetBad = isForceSetBad;
+    }
+
+    public boolean isForceSetBad() {
+        return this.isForceSetBad;
     }
 
     public boolean needFurtherRepair() {

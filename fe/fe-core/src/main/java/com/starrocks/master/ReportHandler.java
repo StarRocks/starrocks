@@ -454,8 +454,11 @@ public class ReportHandler extends Daemon {
                             continue;
                         }
 
-                        if (metaVersion < backendVersion
-                                || (metaVersion == backendVersion && replica.isBad())) {
+                        // 1. replica is not force set bad
+                        // 2. metaVersion < backendVersion or (metaVersion == backendVersion && replica.isBad())
+                        if (!replica.isForceSetBad() &&
+                                ((metaVersion < backendVersion) ||
+                                        (metaVersion == backendVersion && replica.isBad()))) {
 
                             // This is just a optimization for the old compatibility
                             // The init version in FE is (1-0), in BE is (2-0)
@@ -477,6 +480,7 @@ public class ReportHandler extends Daemon {
                             if (replica.getLastFailedVersion() < 0 && !isInitVersion) {
                                 // last failed version < 0 means this replica becomes health after sync,
                                 // so we write an edit log to sync this operation
+                                replica.setBad(false);
                                 ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tableId,
                                         partitionId, indexId, tabletId, backendId, replica.getId(),
                                         replica.getVersion(), schemaHash,
