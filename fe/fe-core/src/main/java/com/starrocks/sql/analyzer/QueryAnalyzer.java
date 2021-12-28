@@ -486,7 +486,7 @@ public class QueryAnalyzer {
                     @Override
                     public List<String> visitCTE(CTERelation node, Void context) {
                         if (item.getTblName() == null ||
-                            StringUtils.equals(item.getTblName().getTbl(), node.getName())) {
+                                StringUtils.equals(item.getTblName().getTbl(), node.getName())) {
                             return node.getCteQuery().getColumnOutputNames();
                         }
                         return Collections.emptyList();
