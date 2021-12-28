@@ -5221,6 +5221,19 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testTopNOffsetError() throws Exception {
+        long limit = connectContext.getSessionVariable().getSqlSelectLimit();
+        connectContext.getSessionVariable().setSqlSelectLimit(200);
+        String sql = "select * from (select * from t0 order by v1 limit 5) as a left join t1 on a.v1 = t1.v4";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 5"));
+        connectContext.getSessionVariable().setSqlSelectLimit(limit);
+    }
+  
+    @Test
     public void testProjectReuse() throws Exception {
         String sql = "select nullif(v1, v1) + (0) as a , nullif(v1, v1) + (1 - 1) as b from t0;";
         String plan = getFragmentPlan(sql);
