@@ -6,6 +6,7 @@
 #include <ctime>
 #include <memory>
 
+#include "column/datum.h"
 #include "common/status.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -17,6 +18,7 @@
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/rowset_writer.h"
@@ -29,6 +31,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/types.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -36,6 +39,7 @@
 #include "storage/vectorized/compaction.h"
 #include "storage/vectorized/rowset_merger.h"
 #include "storage/vectorized/schema_change.h"
+#include "storage/wrapper_field.h"
 #include "util/defer_op.h"
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
@@ -2383,8 +2387,20 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         }
     }
     if (with_default) {
-        for (auto& column : *columns) {
-            column->append_default();
+        for (auto i = 0; i < column_ids.size(); ++i) {
+            const TabletColumn& tablet_column = _tablet.tablet_schema().column(column_ids[i]);
+            if (tablet_column.has_default_value()) {
+                const TypeInfoPtr& type_info = get_type_info(tablet_column);
+                std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
+                        std::make_unique<DefaultValueColumnIterator>(
+                                tablet_column.has_default_value(), tablet_column.default_value(),
+                                tablet_column.is_nullable(), type_info, tablet_column.length(), 1);
+                ColumnIteratorOptions iter_opts;
+                RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+                default_value_iter->fetch_values_by_rowid(nullptr, 1, (*columns)[i].get());
+            } else {
+                (*columns)[i]->append_default();
+            }
         }
     }
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
@@ -2393,46 +2409,36 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         const auto& rowset = iter->second.get();
         if (!(rowset->rowset_meta()->get_rowset_seg_id() <= rssid &&
               rssid < rowset->rowset_meta()->get_rowset_seg_id() + rowset->num_segments())) {
-            string msg = Substitute("illegal rssid: $0, should in [$1, $2)", rssid,
-                                    rowset->rowset_meta()->get_rowset_seg_id(),
-                                    rowset->rowset_meta()->get_rowset_seg_id() + rowset->num_segments());
+            std::string msg = Substitute("illegal rssid: $0, should in [$1, $2)", rssid,
+                                         rowset->rowset_meta()->get_rowset_seg_id(),
+                                         rowset->rowset_meta()->get_rowset_seg_id() + rowset->num_segments());
             LOG(ERROR) << msg;
             _set_error();
             return Status::InternalError(msg);
         }
         std::string seg_path =
                 BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        auto segment_res =
-                Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs::fs_util::block_manager(), seg_path,
-                              rssid - iter->first, &rowset->schema());
-        if (!segment_res.ok()) {
-            LOG(WARNING) << "Fail to open " << seg_path << ": " << segment_res.status();
-            return segment_res.status();
+        auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs::fs_util::block_manager(),
+                                     seg_path, rssid - iter->first, &rowset->schema());
+        if (!segment.ok()) {
+            LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
+            return segment.status();
         }
-        if ((*segment_res)->num_rows() == 0) {
+        if ((*segment)->num_rows() == 0) {
             continue;
         }
-        vectorized::SegmentReadOptions seg_options;
-        seg_options.block_mgr = fs::fs_util::block_manager();
-        OlapReaderStatistics stats;
-        seg_options.stats = &stats;
-        vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(rowset->schema());
-        auto iter_res = (*segment_res)->new_iterator(schema, seg_options);
-        if (iter_res.status().is_end_of_file()) {
-            continue;
-        }
-        if (!iter_res.ok()) {
-            return iter_res.status();
-        }
-        auto* seg_iter = down_cast<vectorized::SegmentIterator*>(iter_res.value().get());
-        if (seg_iter == nullptr) {
-            continue;
-        }
-        int i = 0;
-        for (const auto column_id : column_ids) {
-            auto* col_iter = seg_iter->get_column_iterator(column_id);
+        for (auto i = 0; i < column_ids.size(); ++i) {
+            ColumnIterator* col_iter = nullptr;
+            RETURN_IF_ERROR((*segment)->new_column_iterator(column_ids[i], &col_iter));
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            std::unique_ptr<fs::ReadableBlock> rblock;
+            RETURN_IF_ERROR(fs::fs_util::block_manager()->open_block((*segment)->file_name(), &rblock));
+            iter_opts.rblock = rblock.get();
+            RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
-            ++i;
+            delete col_iter;
         }
     }
     return Status::OK();
