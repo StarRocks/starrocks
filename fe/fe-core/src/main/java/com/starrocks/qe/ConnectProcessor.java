@@ -199,6 +199,9 @@ public class ConnectProcessor {
     }
 
     private void addFinishedQueryDetail() {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
         QueryDetail queryDetail = ctx.getQueryDetail();
         if (queryDetail == null || !queryDetail.getQueryId().equals(DebugUtil.printId(ctx.getQueryId()))) {
             return;
