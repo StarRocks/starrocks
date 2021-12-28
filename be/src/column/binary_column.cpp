@@ -300,7 +300,7 @@ size_t BinaryColumn::filter_range(const Column::Filter& filter, size_t from, siz
         if (filter[i]) {
             DCHECK_GE(_offsets[i + 1], _offsets[i]);
             uint32_t size = _offsets[i + 1] - _offsets[i];
-            // copy date
+            // copy data
             memmove(data + _offsets[result_offset], data + _offsets[i], size);
 
             // set offsets
