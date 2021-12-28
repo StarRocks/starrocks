@@ -191,7 +191,8 @@ class PartitionInfo {
 public:
     PartitionInfo() {}
 
-    static Status from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition, int32_t batch_size);
+    static Status from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition,
+                              int32_t batch_size);
 
     Status prepare(RuntimeState* state, const RowDescriptor& row_desc);
 

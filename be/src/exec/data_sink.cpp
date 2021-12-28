@@ -102,7 +102,8 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         Status status;
         DCHECK(thrift_sink.__isset.olap_table_sink);
         LOG_IF(WARNING, !params.use_vectorized) << "Ignore option use_vectorized=false";
-        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), row_desc, output_exprs, &status, state->batch_size());
+        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), row_desc, output_exprs, &status,
+                                                             state->batch_size());
         RETURN_IF_ERROR(status);
         break;
     }

@@ -170,8 +170,8 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     return Status::OK();
 }
 
-Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
-                                          TPlanNodeId node_id, int32_t batch_size) {
+Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id,
+                                          int32_t batch_size) {
     _filter_id = desc.filter_id;
     _is_local = !desc.has_remote_targets;
     _build_plan_node_id = desc.build_plan_node_id;

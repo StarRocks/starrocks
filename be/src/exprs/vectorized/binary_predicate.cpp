@@ -43,7 +43,8 @@ public:
 template <PrimitiveType Type, typename OP>
 class VectorizedNullSafeEqPredicate final : public Predicate {
 public:
-    explicit VectorizedNullSafeEqPredicate(const TExprNode& node, int32_t batch_size) : Predicate(node), _batch_size(batch_size) {}
+    explicit VectorizedNullSafeEqPredicate(const TExprNode& node, int32_t batch_size)
+            : Predicate(node), _batch_size(batch_size) {}
     ~VectorizedNullSafeEqPredicate() override = default;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedNullSafeEqPredicate(*this)); }

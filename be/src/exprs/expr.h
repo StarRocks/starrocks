@@ -145,8 +145,8 @@ public:
     /// Creates vector of ExprContexts containing exprs from the given vector of
     /// TExprs within 'pool'.  Returns an error if any of the individual conversions caused
     /// an error, otherwise OK.
-    static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs,
-                                    std::vector<ExprContext*>* ctxs, int32_t batch_size);
+    static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
+                                    int32_t batch_size);
 
     /// Creates an expr tree for the node rooted at 'node_idx' via depth-first traversal.
     /// parameters
@@ -287,7 +287,8 @@ protected:
 
 private:
     // Create a new vectorized expr
-    static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr, int32_t batch_size);
+    static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
+                                         int32_t batch_size);
 };
 
 } // namespace starrocks

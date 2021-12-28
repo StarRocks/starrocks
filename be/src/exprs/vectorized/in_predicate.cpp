@@ -8,8 +8,8 @@
 
 namespace starrocks::vectorized {
 
-#define CASE_TYPE(TYPE, CLASS)        \
-    case TYPE: {                      \
+#define CASE_TYPE(TYPE, CLASS)                    \
+    case TYPE: {                                  \
         return new CLASS<TYPE>(node, batch_size); \
     }
 

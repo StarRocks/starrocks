@@ -192,7 +192,8 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
-Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs, int32_t batch_size) {
+Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
+                               int32_t batch_size) {
     ctxs->clear();
     for (const auto& texpr : texprs) {
         ExprContext* ctx = nullptr;

@@ -37,7 +37,10 @@ template <PrimitiveType WhenType, PrimitiveType ResultType>
 class VectorizedCaseExpr final : public Expr {
 public:
     explicit VectorizedCaseExpr(const TExprNode& node, int32_t batch_size)
-            : Expr(node), _has_case_expr(node.case_expr.has_case_expr), _has_else_expr(node.case_expr.has_else_expr), _batch_size(batch_size) {}
+            : Expr(node),
+              _has_case_expr(node.case_expr.has_case_expr),
+              _has_else_expr(node.case_expr.has_else_expr),
+              _batch_size(batch_size) {}
 
     ~VectorizedCaseExpr() override = default;
 
@@ -350,8 +353,8 @@ private:
     int32_t _batch_size;
 };
 
-#define CASE_WHEN_RESULT_TYPE(WHEN_TYPE, RESULT_TYPE)                \
-    case WHEN_TYPE: {                                                \
+#define CASE_WHEN_RESULT_TYPE(WHEN_TYPE, RESULT_TYPE)                            \
+    case WHEN_TYPE: {                                                            \
         return new VectorizedCaseExpr<WHEN_TYPE, RESULT_TYPE>(node, batch_size); \
     }
 

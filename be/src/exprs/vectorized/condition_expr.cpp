@@ -50,11 +50,11 @@ struct SelectIfOP {
     }
 };
 
-#define DEFINE_CLASS_CONSTRUCT_FN(NAME)         \
+#define DEFINE_CLASS_CONSTRUCT_FN(NAME)                                                      \
     NAME(const TExprNode& node, int32_t batch_size) : Expr(node), _batch_size(batch_size) {} \
-                                                \
-    ~NAME() {}                                  \
-                                                \
+                                                                                             \
+    ~NAME() {}                                                                               \
+                                                                                             \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new NAME(*this)); }
 
 template <PrimitiveType Type>
@@ -295,8 +295,8 @@ private:
 
 #undef DEFINE_CLASS_CONSTRUCT_FN
 
-#define CASE_TYPE(TYPE, CLASS)        \
-    case TYPE: {                      \
+#define CASE_TYPE(TYPE, CLASS)                    \
+    case TYPE: {                                  \
         return new CLASS<TYPE>(node, batch_size); \
     }
 

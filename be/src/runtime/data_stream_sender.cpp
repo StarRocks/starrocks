@@ -425,13 +425,13 @@ Status DataStreamSender::init(const TDataSink& tsink) {
     const TDataStreamSink& t_stream_sink = tsink.stream_sink;
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs, &_partition_expr_ctxs, _state->batch_size()));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
+                                                &_partition_expr_ctxs, _state->batch_size()));
     } else if (_part_type == TPartitionType::RANGE_PARTITIONED) {
         // Range partition
         // Partition Exprs
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs, &_partition_expr_ctxs, _state->batch_size()));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
+                                                &_partition_expr_ctxs, _state->batch_size()));
         // Partition infos
         int num_parts = t_stream_sink.output_partition.partition_infos.size();
         if (num_parts == 0) {
@@ -439,7 +439,8 @@ Status DataStreamSender::init(const TDataSink& tsink) {
         }
         for (int i = 0; i < num_parts; ++i) {
             PartitionInfo* info = _pool->add(new PartitionInfo());
-            RETURN_IF_ERROR(PartitionInfo::from_thrift(_pool, t_stream_sink.output_partition.partition_infos[i], info, _state->batch_size()));
+            RETURN_IF_ERROR(PartitionInfo::from_thrift(_pool, t_stream_sink.output_partition.partition_infos[i], info,
+                                                       _state->batch_size()));
             _partition_infos.push_back(info);
         }
         // partitions should be in ascending order

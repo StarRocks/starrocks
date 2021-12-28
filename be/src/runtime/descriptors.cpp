@@ -145,7 +145,8 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THdfsTable& thrift_table,
           _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
 Status HdfsPartitionDescriptor::create_part_key_exprs(ObjectPool* pool, int32_t batch_size) {
-    RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals, batch_size));
+    RETURN_IF_ERROR(
+            Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals, batch_size));
     return Status::OK();
 }
 
@@ -455,7 +456,8 @@ std::string RowDescriptor::debug_string() const {
     return ss.str();
 }
 
-Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl, int32_t batch_size) {
+Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl,
+                             int32_t batch_size) {
     *tbl = pool->add(new DescriptorTbl());
 
     // deserialize table descriptors first, they are being referenced by tuple descriptors

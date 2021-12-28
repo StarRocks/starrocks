@@ -18,7 +18,8 @@ AggregateBaseNode::~AggregateBaseNode() {
 
 Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs, state->batch_size()));
+    RETURN_IF_ERROR(
+            Expr::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs, state->batch_size()));
     return Status::OK();
 }
 Status AggregateBaseNode::prepare(RuntimeState* state) {

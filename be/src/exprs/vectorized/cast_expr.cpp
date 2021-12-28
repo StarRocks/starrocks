@@ -23,21 +23,21 @@ template <PrimitiveType FromType, PrimitiveType ToType>
 ColumnPtr cast_fn(int32_t batch_size, ColumnPtr& column);
 
 // All cast implements
-#define SELF_CAST(FROM_TYPE)                                                             \
-    template <>                                                                          \
+#define SELF_CAST(FROM_TYPE)                                                          \
+    template <>                                                                       \
     ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE>(int32_t batch_size, ColumnPtr & column) { \
-        return column->clone();                                                          \
+        return column->clone();                                                       \
     }
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                    \
     template <>                                                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) {                   \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) {                      \
         return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
     }
 
 #define UNARY_FN_CAST_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                           \
     template <>                                                                                                       \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) {                                \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) {                                   \
         if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                           \
                       std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                        \
             return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
@@ -48,15 +48,15 @@ ColumnPtr cast_fn(int32_t batch_size, ColumnPtr& column);
 
 #define UNARY_FN_CAST_TIME_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                \
     template <>                                                                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) {                          \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) {                             \
         return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
                 column);                                                                                        \
     }
 
-#define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)                          \
-    template <>                                                                        \
+#define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)                       \
+    template <>                                                                     \
     ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) { \
-        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE>(batch_size, column);                    \
+        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE>(batch_size, column);              \
     }
 
 DEFINE_UNARY_FN_WITH_IMPL(TimeCheck, value) {
@@ -648,9 +648,9 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(int32_t batch_size, ColumnPtr& column
     return builder.build(column->is_constant());
 }
 
-#define DEFINE_CAST_CONSTRUCT(CLASS)             \
+#define DEFINE_CAST_CONSTRUCT(CLASS)                                                          \
     CLASS(const TExprNode& node, int32_t batch_size) : Expr(node), _batch_size(batch_size) {} \
-    virtual ~CLASS(){};                          \
+    virtual ~CLASS(){};                                                                       \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
 
 // vectorized cast expr
@@ -940,8 +940,8 @@ private:
     int32_t _batch_size;
 };
 
-#define CASE_FROM_TYPE(FROM_TYPE, TO_TYPE)                       \
-    case FROM_TYPE: {                                            \
+#define CASE_FROM_TYPE(FROM_TYPE, TO_TYPE)                                   \
+    case FROM_TYPE: {                                                        \
         return new VectorizedCastExpr<FROM_TYPE, TO_TYPE>(node, batch_size); \
     }
 
@@ -974,8 +974,8 @@ private:
         break;                         \
     }
 
-#define CASE_TO_STRING_FROM(FROM_TYPE)                          \
-    case FROM_TYPE: {                                           \
+#define CASE_TO_STRING_FROM(FROM_TYPE)                                      \
+    case FROM_TYPE: {                                                       \
         return new VectorizedCastToStringExpr<FROM_TYPE>(node, batch_size); \
     }
 
