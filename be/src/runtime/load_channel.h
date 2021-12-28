@@ -79,7 +79,7 @@ public:
 
 private:
     friend class RefCountedThreadSafe<LoadChannel>;
-    ~LoadChannel();
+    ~LoadChannel() = default;
 
     LoadChannelMgr* _load_mgr;
     UniqueId _load_id;

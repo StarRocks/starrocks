@@ -39,8 +39,6 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, int64_t t
           _mem_tracker(std::move(mem_tracker)),
           _last_updated_time(time(nullptr)) {}
 
-LoadChannel::~LoadChannel() {}
-
 void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                        PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);

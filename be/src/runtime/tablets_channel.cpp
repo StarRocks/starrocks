@@ -148,7 +148,7 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
         }
         auto tablet_id = tablet_ids[row_indexes[from]];
         auto it = _delta_writers.find(tablet_id);
-        CHECK(it != _delta_writers.end());
+        DCHECK(it != _delta_writers.end());
         auto& delta_writer = it->second;
 
         AsyncDeltaWriterRequest req;
