@@ -241,8 +241,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
         auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
         rewrite_files.emplace_back(src_path, dest_path);
-        RETURN_IF_ERROR(segment_v2::SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(),
-                                                             read_column_ids, write_columns));
+        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
+                                                 write_columns, i));
         int64_t t_rewrite = MonotonicMillis();
         LOG(INFO) << Substitute(
                 "apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #default:$4 getrowid:$5ms #read:$6($7ms) "
