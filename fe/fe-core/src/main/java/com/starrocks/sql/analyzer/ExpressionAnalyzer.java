@@ -823,5 +823,6 @@ public class ExpressionAnalyzer {
             throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
                     ErrorType.USER_ERROR);
         }
+        return fn;
     }
 }
