@@ -44,6 +44,7 @@ import org.apache.commons.codec.binary.Hex;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -89,6 +90,7 @@ public class CreateFunctionStmt extends DdlStmt {
     private Class udfClass;
 
     private static final ImmutableMap<PrimitiveType, Class> PrimitiveTypeToJavaClassType = new ImmutableMap.Builder<PrimitiveType, Class>()
+            .put(PrimitiveType.BOOLEAN, Boolean.class)
             .put(PrimitiveType.TINYINT, Byte.class)
             .put(PrimitiveType.SMALLINT, Short.class)
             .put(PrimitiveType.INT, Integer.class)
@@ -276,6 +278,7 @@ public class CreateFunctionStmt extends DdlStmt {
 
     private void checkStarrocksJarUdfMethod(Method method) throws AnalysisException {
         String name = method.getName();
+        boolean inspected = true;
         if (PREPARE_METHOD_NAME.equals(name) || EVAL_METHOD_NAME.equals(name)) {
             Class retType = method.getReturnType();
             checkStarrocksJarUdfType(returnType.getType(), retType, "Return");
@@ -293,6 +296,13 @@ public class CreateFunctionStmt extends DdlStmt {
             }
             if (method.getParameters().length != 0) {
                 throw new AnalysisException(String.format("UDF '%s' should have zero parameter", CLOSE_METHOD_NAME));
+            }
+        } else {
+            inspected = false;
+        }
+        if (inspected) {
+            if (Modifier.isStatic(method.getModifiers())) {
+                throw new AnalysisException(String.format("UDF '%s' should be non-static method", name));
             }
         }
     }
