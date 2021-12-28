@@ -19,17 +19,17 @@ SegmentRewriter::SegmentRewriter() {}
 
 SegmentRewriter::~SegmentRewriter() {}
 
-Status SegmentRewriter::rewrite(const std::string& src, const std::string& dest, const TabletSchema& tschema,
+Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
                                 std::vector<uint32_t>& column_ids,
                                 std::vector<std::unique_ptr<vectorized::Column>>& columns, size_t segment_id) {
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
     std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({dest});
+    fs::CreateBlockOptions wblock_opts({dest_path});
     wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
     RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
 
     std::unique_ptr<fs::ReadableBlock> rblock;
-    RETURN_IF_ERROR(block_mgr->open_block(src, &rblock));
+    RETURN_IF_ERROR(block_mgr->open_block(src_path, &rblock));
 
     SegmentFooterPB footer;
     uint64_t remaining = 0;
@@ -58,9 +58,7 @@ Status SegmentRewriter::rewrite(const std::string& src, const std::string& dest,
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tschema, column_ids);
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
-        vectorized::ColumnPtr& dst_col = chunk->get_column_by_index(i);
-        vectorized::Column* src_col = columns[i].release();
-        dst_col.reset(src_col);
+        chunk->get_column_by_index(i).reset(columns[i].release());
     }
     uint64_t index_size = 0;
     uint64_t segment_file_size;

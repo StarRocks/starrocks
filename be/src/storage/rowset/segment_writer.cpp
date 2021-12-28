@@ -86,13 +86,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     // merge partial segment footer to avoid loss of metadata
     if (footer != nullptr) {
         for (uint32_t ordinal = 0; ordinal < footer->columns().size(); ++ordinal) {
-            const auto& src_column_pb = footer->columns(ordinal);
-            ColumnMetaPB* dst_column_pb = _footer.add_columns();
-            *dst_column_pb = src_column_pb;
+            *_footer.add_columns() = footer->columns(ordinal);
         }
         if (footer->has_short_key_index_page()) {
-            PagePointerPB* dst = _footer.mutable_short_key_index_page();
-            *dst = footer->short_key_index_page();
+            *_footer.mutable_short_key_index_page() = footer->short_key_index_page();
         }
         // in partial update, key columns have been written in partial segment
         // set _num_rows as _num_rows in partial segment
