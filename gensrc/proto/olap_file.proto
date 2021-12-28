@@ -67,12 +67,12 @@ message RowsetTxnMetaPB {
     repeated uint32 partial_update_column_ids = 1;
     repeated uint32 partial_update_column_unique_ids = 2;
 
-    message FooterInfo {
+    message FooterPointerPB {
         optional uint64 position = 1;
         optional uint64 size = 2;
     }
     // one for each segment
-    repeated FooterInfo partial_rowset_footers = 3;
+    repeated FooterPointerPB partial_rowset_footers = 3;
 }
 
 message RowsetMetaPB {
