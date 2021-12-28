@@ -161,7 +161,7 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl);
+    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     return tuple_desc;
@@ -296,7 +296,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     TExpr texpr;
     texpr.__set_nodes(nodes);
     ExprContext* ctx;
-    Status st = Expr::create_expr_tree(pool, texpr, &ctx);
+    Status st = Expr::create_expr_tree(pool, texpr, &ctx, config::vector_chunk_size);
     DCHECK(st.ok()) << st.get_error_msg();
     return ctx;
 }

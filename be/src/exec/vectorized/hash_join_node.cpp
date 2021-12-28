@@ -57,9 +57,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     const std::vector<TEqJoinCondition>& eq_join_conjuncts = tnode.hash_join_node.eq_join_conjuncts;
     for (const auto& eq_join_conjunct : eq_join_conjuncts) {
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &ctx));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &ctx, state->batch_size()));
         _probe_expr_ctxs.push_back(ctx);
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &ctx));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &ctx, state->batch_size()));
         _build_expr_ctxs.push_back(ctx);
 
         if (eq_join_conjunct.__isset.opcode && eq_join_conjunct.opcode == TExprOpcode::EQ_FOR_NULL) {
@@ -70,11 +70,11 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(
-            Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts, &_other_join_conjunct_ctxs));
+            Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts, &_other_join_conjunct_ctxs, state->batch_size()));
 
     for (const auto& desc : tnode.hash_join_node.build_runtime_filters) {
         auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
-        RETURN_IF_ERROR(rf_desc->init(_pool, desc));
+        RETURN_IF_ERROR(rf_desc->init(_pool, desc, state->batch_size()));
         _build_runtime_filters.emplace_back(rf_desc);
     }
     _runtime_join_filter_pushdown_limit = 1024000;

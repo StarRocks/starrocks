@@ -33,7 +33,7 @@ TEST_F(VectorizedCastExprTest, IntCastToDate) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::DATE);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 20111101);
 
@@ -60,7 +60,7 @@ TEST_F(VectorizedCastExprTest, BigIntCastToTimestamp) {
     expr_node.child_type = TPrimitiveType::BIGINT;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 20220203112345);
 
@@ -87,7 +87,7 @@ TEST_F(VectorizedCastExprTest, BigIntCastToTimestampError) {
     expr_node.child_type = TPrimitiveType::BIGINT;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 20220003112345);
 
@@ -114,7 +114,7 @@ TEST_F(VectorizedCastExprTest, dateCastToBoolean) {
     expr_node.child_type = TPrimitiveType::DATE;
     expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DATE> col1(expr_node, 10, DateValue::create(123123, 1, 1));
 
@@ -142,7 +142,7 @@ TEST_F(VectorizedCastExprTest, timestampCastToBoolean) {
     expr_node.child_type = TPrimitiveType::DATETIME;
     expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DATETIME> col1(expr_node, 10, TimestampValue::create(12, 1, 1, 25, 1, 1));
 
@@ -169,7 +169,7 @@ TEST_F(VectorizedCastExprTest, timestampCastToBoolean) {
 TEST_F(VectorizedCastExprTest, stringLiteralTrueCastToBoolean) {
     expr_node.child_type = TPrimitiveType::CHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string s = "true";
     MockVectorizedExpr<TYPE_CHAR> col1(expr_node, 10, Slice(s));
@@ -197,7 +197,7 @@ TEST_F(VectorizedCastExprTest, stringLiteralTrueCastToBoolean) {
 TEST_F(VectorizedCastExprTest, stringLiteralFalseCastToBoolean) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string s = "false";
     MockVectorizedExpr<TYPE_CHAR> col1(expr_node, 10, Slice(s));
@@ -225,7 +225,7 @@ TEST_F(VectorizedCastExprTest, stringLiteralFalseCastToBoolean) {
 TEST_F(VectorizedCastExprTest, stringLiteralIntCastToBoolean) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string s = "1";
     MockVectorizedExpr<TYPE_CHAR> col1(expr_node, 10, Slice(s));
@@ -254,7 +254,7 @@ TEST_F(VectorizedCastExprTest, intCastSelfExpr) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
 
@@ -282,7 +282,7 @@ TEST_F(VectorizedCastExprTest, intToFloatCastExpr) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::FLOAT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
 
@@ -310,7 +310,7 @@ TEST_F(VectorizedCastExprTest, intToInt8CastExpr) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
 
@@ -338,7 +338,7 @@ TEST_F(VectorizedCastExprTest, intToBigIntCastExpr) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::BIGINT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
 
@@ -366,7 +366,7 @@ TEST_F(VectorizedCastExprTest, NullableBooleanCastExpr) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
 
@@ -397,7 +397,7 @@ TEST_F(VectorizedCastExprTest, dateCastToDecimalV2) {
     expr_node.type.types[0].scalar_type.__set_precision(10);
     expr_node.type.types[0].scalar_type.__set_scale(2);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DATE> col1(expr_node, 10, DateValue::create(2000, 12, 31));
 
@@ -425,7 +425,7 @@ TEST_F(VectorizedCastExprTest, decimalV2CastToTimestamp) {
     expr_node.child_type = TPrimitiveType::DECIMALV2;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DECIMALV2> col1(expr_node, 10, DecimalV2Value("20010129123000"));
 
@@ -453,7 +453,7 @@ TEST_F(VectorizedCastExprTest, dateCastToTimestamp) {
     expr_node.child_type = TPrimitiveType::DATE;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DATE> col1(expr_node, 10, DateValue::create(2010, 10, 20));
 
@@ -482,7 +482,7 @@ TEST_F(VectorizedCastExprTest, decimalCastString) {
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
     expr_node.type.types[0].scalar_type.__set_len(10);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DECIMALV2> col1(expr_node, 10, DecimalV2Value(123, 0));
 
@@ -511,7 +511,7 @@ TEST_F(VectorizedCastExprTest, intCastString) {
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
     expr_node.type.types[0].scalar_type.__set_len(10);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 12345);
 
@@ -540,7 +540,7 @@ TEST_F(VectorizedCastExprTest, booleanCastString) {
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
     expr_node.type.types[0].scalar_type.__set_len(10);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, true);
 
@@ -569,7 +569,7 @@ TEST_F(VectorizedCastExprTest, timestmapCastString) {
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
     expr_node.type.types[0].scalar_type.__set_len(10);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DATETIME> col1(expr_node, 10, TimestampValue::create(2020, 02, 03, 1, 23, 45));
 
@@ -597,7 +597,7 @@ TEST_F(VectorizedCastExprTest, stringCastInt) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("1234");
 
@@ -627,7 +627,7 @@ TEST_F(VectorizedCastExprTest, stringCastIntError) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("123ad4");
 
@@ -657,7 +657,7 @@ TEST_F(VectorizedCastExprTest, stringCastDouble) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DOUBLE);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("1234.1234");
 
@@ -687,7 +687,7 @@ TEST_F(VectorizedCastExprTest, stringCastDoubleError) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DOUBLE);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("123ad4.123123");
 
@@ -720,7 +720,7 @@ TEST_F(VectorizedCastExprTest, stringCastDecimal) {
     expr_node.type.types[0].scalar_type.__set_precision(10);
     expr_node.type.types[0].scalar_type.__set_scale(2);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     DecimalV2Value d(1794546454654654);
     std::string p = d.to_string();
@@ -753,7 +753,7 @@ TEST_F(VectorizedCastExprTest, stringCastDecimalError) {
     expr_node.type.types[0].scalar_type.__set_precision(10);
     expr_node.type.types[0].scalar_type.__set_scale(2);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("asdfadsf");
 
@@ -784,7 +784,7 @@ TEST_F(VectorizedCastExprTest, stringCastDate) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATE);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("2023-12-02");
 
@@ -814,7 +814,7 @@ TEST_F(VectorizedCastExprTest, stringCastDate2) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATE);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("   2023-12-02    ");
 
@@ -844,7 +844,7 @@ TEST_F(VectorizedCastExprTest, stringCastDateError) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATE);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("2023-12-asdf");
 
@@ -874,7 +874,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("2022-02-03 11:23:45");
 
@@ -904,7 +904,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap2) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("    2022-02-03 11:23:45 ");
 
@@ -934,7 +934,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap3) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("2022-02-03     11:23:45");
 
@@ -964,7 +964,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap4) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("2022-02-03T11:23:45");
 
@@ -994,7 +994,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmapError) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("2022-02-03 asdfa");
 
@@ -1020,7 +1020,7 @@ TEST_F(VectorizedCastExprTest, BigIntCastToInt) {
     expr_node.child_type = TPrimitiveType::BIGINT;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, INT64_MAX);
 
@@ -1040,7 +1040,7 @@ TEST_F(VectorizedCastExprTest, BigIntCastToInt2) {
     expr_node.child_type = TPrimitiveType::BIGINT;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
 
@@ -1064,7 +1064,7 @@ TEST_F(VectorizedCastExprTest, IntCastToBigInt3) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::BIGINT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, INT_MAX);
 
@@ -1085,7 +1085,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTime) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("15:15:15");
 
@@ -1110,7 +1110,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull1) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("15:15:15:");
 
@@ -1136,7 +1136,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull2) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("15:60:15");
 
@@ -1161,7 +1161,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull3) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("15:15");
 
@@ -1186,7 +1186,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull4) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("      :60:16");
 
@@ -1211,7 +1211,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull5) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string p("15::15:15");
 
@@ -1236,7 +1236,7 @@ TEST_F(VectorizedCastExprTest, bigintToTime) {
     expr_node.child_type = TPrimitiveType::BIGINT;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockMultiVectorizedExpr<TYPE_BIGINT> col1(expr_node, 2, 32020, 346050);
     expr->_children.push_back(&col1);
@@ -1260,7 +1260,7 @@ TEST_F(VectorizedCastExprTest, dateToTime) {
     expr_node.child_type = TPrimitiveType::DATE;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DATE> col1(expr_node, 2, DateValue::create(2000, 12, 01));
     expr->_children.push_back(&col1);
@@ -1281,7 +1281,7 @@ TEST_F(VectorizedCastExprTest, datetimeToTime) {
     expr_node.child_type = TPrimitiveType::DATETIME;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
     MockVectorizedExpr<TYPE_DATETIME> col1(expr_node, 2, TimestampValue::create(2000, 12, 1, 12, 30, 00));
     expr->_children.push_back(&col1);
 
@@ -1301,7 +1301,7 @@ TEST_F(VectorizedCastExprTest, timeToInt) {
     expr_node.child_type = TPrimitiveType::TIME;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
     MockVectorizedExpr<TYPE_TIME> col1(expr_node, 2, 76862);
     expr->_children.push_back(&col1);
 
@@ -1321,7 +1321,7 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
     expr_node.child_type = TPrimitiveType::TIME;
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node, config::vector_chunk_size));
     MockVectorizedExpr<TYPE_TIME> col1(expr_node, 2, 8521);
     expr->_children.push_back(&col1);
 

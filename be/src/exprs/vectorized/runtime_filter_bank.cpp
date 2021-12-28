@@ -146,7 +146,7 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, P
     return Status::OK();
 }
 
-Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc) {
+Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc, int32_t batch_size) {
     _filter_id = desc.filter_id;
     _build_expr_order = desc.expr_order;
     _has_remote_targets = desc.has_remote_targets;
@@ -166,12 +166,12 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         _sender_finst_id = desc.sender_finst_id;
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx));
+    RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, batch_size));
     return Status::OK();
 }
 
 Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
-                                          TPlanNodeId node_id) {
+                                          TPlanNodeId node_id, int32_t batch_size) {
     _filter_id = desc.filter_id;
     _is_local = !desc.has_remote_targets;
     _build_plan_node_id = desc.build_plan_node_id;
@@ -182,7 +182,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         const auto& it = const_cast<TRuntimeFilterDescription&>(desc).plan_node_id_to_target_expr.find(node_id);
         if (it != desc.plan_node_id_to_target_expr.end()) {
             not_found = false;
-            RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx));
+            RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx, batch_size));
         }
     }
 

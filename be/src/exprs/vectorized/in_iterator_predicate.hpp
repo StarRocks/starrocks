@@ -16,11 +16,11 @@ namespace vectorized {
 template <PrimitiveType Type>
 class VectorizedInIteratorPredicate final : public Predicate {
 public:
-    VectorizedInIteratorPredicate(const TExprNode& node)
-            : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
+    VectorizedInIteratorPredicate(const TExprNode& node, int32_t batch_size)
+            : Predicate(node), _is_not_in(node.in_predicate.is_not_in), _batch_size(batch_size) {}
 
     VectorizedInIteratorPredicate(const VectorizedInIteratorPredicate& other)
-            : Predicate(other), _is_not_in(other._is_not_in) {}
+            : Predicate(other), _is_not_in(other._is_not_in), _batch_size(other._batch_size) {}
 
     ~VectorizedInIteratorPredicate() override = default;
 
@@ -82,7 +82,7 @@ public:
         }
 
         ColumnViewer<Type> find_viewer(find);
-        ColumnBuilder<TYPE_BOOLEAN> builder(context->batch_size());
+        ColumnBuilder<TYPE_BOOLEAN> builder(_batch_size);
 
         size_t size = columns[0]->size();
         for (int row = 0; row < size; ++row) {
@@ -123,6 +123,8 @@ private:
 
     bool _hit_value = true;
     bool _not_hit_value = false;
+
+    int32_t _batch_size;
 };
 } // namespace vectorized
 } // namespace starrocks

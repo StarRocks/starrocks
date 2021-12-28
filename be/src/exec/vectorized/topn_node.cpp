@@ -35,11 +35,11 @@ TopNNode::~TopNNode() {
 Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
 
-    RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool));
+    RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool, state->batch_size()));
     // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
         RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs, &_analytic_partition_exprs));
+                Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs, &_analytic_partition_exprs, state->batch_size()));
     }
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;
     _is_null_first = tnode.sort_node.sort_info.nulls_first;

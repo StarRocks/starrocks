@@ -41,7 +41,7 @@ class ExprContext;
 // This class is a sinker, which put input data to mysql table
 class MysqlTableSink : public DataSink {
 public:
-    MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs);
+    MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs, int32_t batch_size_for_expr);
 
     ~MysqlTableSink() override;
 
@@ -72,6 +72,8 @@ private:
 
     std::unique_ptr<MysqlTableWriter> _writer;
     RuntimeProfile* _profile = nullptr;
+
+    int32_t _batch_size_for_expr;
 };
 
 } // namespace starrocks

@@ -51,7 +51,7 @@ struct SelectIfOP {
 };
 
 #define DEFINE_CLASS_CONSTRUCT_FN(NAME)         \
-    NAME(const TExprNode& node) : Expr(node) {} \
+    NAME(const TExprNode& node, int32_t batch_size) : Expr(node), _batch_size(batch_size) {} \
                                                 \
     ~NAME() {}                                  \
                                                 \
@@ -76,7 +76,7 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        ColumnBuilder<Type> result(context->batch_size(), this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(_batch_size, this->type().precision, this->type().scale);
 
         ColumnViewer<Type> lhs_viewer(lhs);
         ColumnViewer<Type> rhs_viewer(rhs);
@@ -92,6 +92,9 @@ public:
 
         return result.build(ColumnHelper::is_all_const(list));
     }
+
+private:
+    int32_t _batch_size;
 };
 
 template <PrimitiveType Type>
@@ -112,7 +115,7 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        ColumnBuilder<Type> result(context->batch_size(), this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(_batch_size, this->type().precision, this->type().scale);
 
         ColumnViewer<Type> lhs_viewer(lhs);
         ColumnViewer<Type> rhs_viewer(rhs);
@@ -134,6 +137,9 @@ public:
 
         return result.build(ColumnHelper::is_all_const(list));
     }
+
+private:
+    int32_t _batch_size;
 };
 
 template <PrimitiveType Type>
@@ -160,7 +166,7 @@ public:
         }
 
         Columns list = {bhs, lhs, rhs};
-        ColumnBuilder<Type> result(context->batch_size(), this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(_batch_size, this->type().precision, this->type().scale);
 
         auto bhs_nulls = ColumnHelper::count_nulls(bhs);
         auto lhs_nulls = ColumnHelper::count_nulls(lhs);
@@ -207,6 +213,9 @@ public:
 
         return result.build(ColumnHelper::is_all_const(list));
     }
+
+private:
+    int32_t _batch_size;
 };
 
 template <PrimitiveType Type>
@@ -253,7 +262,7 @@ public:
         }
 
         // choose not null
-        ColumnBuilder<Type> builder(context->batch_size(), this->type().precision, this->type().scale);
+        ColumnBuilder<Type> builder(_batch_size, this->type().precision, this->type().scale);
         int size = columns[0]->size();
         int col_size = viewers.size();
 
@@ -279,13 +288,16 @@ public:
 
         return builder.build(ColumnHelper::is_all_const(columns));
     }
+
+private:
+    int32_t _batch_size;
 };
 
 #undef DEFINE_CLASS_CONSTRUCT_FN
 
 #define CASE_TYPE(TYPE, CLASS)        \
     case TYPE: {                      \
-        return new CLASS<TYPE>(node); \
+        return new CLASS<TYPE>(node, batch_size); \
     }
 
 #define CASE_ALL_TYPE(CLASS)           \
@@ -310,7 +322,7 @@ public:
     CASE_TYPE(TYPE_DECIMAL64, CLASS);  \
     CASE_TYPE(TYPE_DECIMAL128, CLASS);
 
-Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExprNode& node) {
+Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExprNode& node, int32_t batch_size) {
     PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedIfNullExpr);
@@ -320,7 +332,7 @@ Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExpr
     }
 }
 
-Expr* VectorizedConditionExprFactory::create_null_if_expr(const TExprNode& node) {
+Expr* VectorizedConditionExprFactory::create_null_if_expr(const TExprNode& node, int32_t batch_size) {
     PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedNullIfExpr);
@@ -330,7 +342,7 @@ Expr* VectorizedConditionExprFactory::create_null_if_expr(const TExprNode& node)
     }
 }
 
-Expr* VectorizedConditionExprFactory::create_if_expr(const TExprNode& node) {
+Expr* VectorizedConditionExprFactory::create_if_expr(const TExprNode& node, int32_t batch_size) {
     PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
 
     switch (resultType) {
@@ -341,7 +353,7 @@ Expr* VectorizedConditionExprFactory::create_if_expr(const TExprNode& node) {
     }
 }
 
-Expr* VectorizedConditionExprFactory::create_coalesce_expr(const TExprNode& node) {
+Expr* VectorizedConditionExprFactory::create_coalesce_expr(const TExprNode& node, int32_t batch_size) {
     PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedCoalesceExpr);

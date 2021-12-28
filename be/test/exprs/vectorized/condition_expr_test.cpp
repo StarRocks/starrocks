@@ -37,7 +37,7 @@ public:
 };
 
 TEST_F(VectorizedConditionExprTest, ifNullLNotNull) {
-    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
     MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -56,7 +56,7 @@ TEST_F(VectorizedConditionExprTest, ifNullLNotNull) {
 }
 
 TEST_F(VectorizedConditionExprTest, ifNullLAllNull) {
-    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
     MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -76,7 +76,7 @@ TEST_F(VectorizedConditionExprTest, ifNullLAllNull) {
 }
 
 TEST_F(VectorizedConditionExprTest, ifNull) {
-    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
     MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -99,7 +99,7 @@ TEST_F(VectorizedConditionExprTest, ifNull) {
 }
 
 TEST_F(VectorizedConditionExprTest, ifNullNull) {
-    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
     MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -185,7 +185,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
     RandomValueExpr<TYPE_BOOLEAN> select_col(expr_node, batch_size, e);
     // Test INT32
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
-    auto expr0 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+    auto expr0 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size));
     RandomValueExpr<TYPE_INT> col1(expr_node, batch_size, e);
     RandomValueExpr<TYPE_INT> col2(expr_node, batch_size, e);
 
@@ -202,7 +202,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
 
     // Test FLOAT
     expr_node.type = gen_type_desc(TPrimitiveType::FLOAT);
-    auto expr1 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+    auto expr1 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size));
     RandomValueExpr<TYPE_FLOAT> col3(expr_node, batch_size, e);
     RandomValueExpr<TYPE_FLOAT> col4(expr_node, batch_size, e);
     expr1->_children.push_back(&select_col);
@@ -218,7 +218,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
 
     // Test INT8
     expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
-    auto expr2 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+    auto expr2 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size));
     RandomValueExpr<TYPE_TINYINT> col5(expr_node, batch_size, e);
     RandomValueExpr<TYPE_TINYINT> col6(expr_node, batch_size, e);
     expr2->_children.push_back(&select_col);
@@ -233,7 +233,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
     }
 
     // Test INT8 var const
-    auto expr3 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+    auto expr3 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size));
     RandomValueExpr<TYPE_TINYINT> col7(expr_node, batch_size, e);
     MockConstVectorizedExpr<TYPE_TINYINT> col8(expr_node, 123);
     auto copyed_data = select_col.get_data();
@@ -248,7 +248,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
         ASSERT_EQ(result, res_col3->get_data()[i]);
     }
     // Test INT8 const var
-    auto expr4 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+    auto expr4 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size));
     MockConstVectorizedExpr<TYPE_TINYINT> col9(expr_node, 123);
     RandomValueExpr<TYPE_TINYINT> col10(expr_node, batch_size, e);
     copyed_data = select_col.get_data();
@@ -267,7 +267,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
     // Test Nullable(INT8) var const
     {
         expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
-        auto if_expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+        auto if_expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size));
         RandomValueExpr<TYPE_TINYINT> v_col(expr_node, batch_size, e);
         MakeNullableExpr<TYPE_TINYINT> col_x(expr_node, batch_size, &v_col);
         MockConstVectorizedExpr<TYPE_TINYINT> col_y(expr_node, 123);
@@ -292,7 +292,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
     // Test Nullable(Selector) const const
     {
         expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
-        auto if_expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+        auto if_expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size));
         MakeNullableExpr<TYPE_TINYINT> nullable_selector(expr_node, batch_size, &select_col);
         MockConstVectorizedExpr<TYPE_TINYINT> col_x(expr_node, 123);
         MockConstVectorizedExpr<TYPE_TINYINT> col_y(expr_node, 4);

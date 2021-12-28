@@ -49,8 +49,8 @@ class VectorizedInConstPredicate final : public Predicate {
 public:
     using ValueType = typename RunTimeTypeTraits<Type>::CppType;
 
-    VectorizedInConstPredicate(const TExprNode& node)
-            : Predicate(node), _is_not_in(node.in_predicate.is_not_in), _is_prepare(false), _null_in_set(false) {}
+    VectorizedInConstPredicate(const TExprNode& node, int32_t batch_size)
+            : Predicate(node), _is_not_in(node.in_predicate.is_not_in), _is_prepare(false), _null_in_set(false), _batch_size(batch_size) {}
 
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other),
@@ -59,7 +59,8 @@ public:
               _null_in_set(other._null_in_set),
               _is_join_runtime_filter(other._is_join_runtime_filter),
               _eq_null(other._eq_null),
-              _array_size(other._array_size) {}
+              _array_size(other._array_size),
+              _batch_size(other._batch_size) {}
 
     ~VectorizedInConstPredicate() override = default;
 
@@ -205,7 +206,7 @@ public:
     // equal_null: true means that 'null' in column and 'null' in set is equal.
     template <bool null_in_set, bool equal_null, bool use_array>
     ColumnPtr eval_on_chunk(ExprContext* context, const ColumnPtr& lhs) {
-        ColumnBuilder<TYPE_BOOLEAN> builder(context->batch_size());
+        ColumnBuilder<TYPE_BOOLEAN> builder(_batch_size);
         ColumnViewer<Type> viewer(lhs);
 
         uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column())->get_data().data();
@@ -350,6 +351,8 @@ private:
     in_const_pred_detail::PHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free
     std::vector<ColumnPtr> _string_values;
+
+    int32_t _batch_size;
 };
 
 class VectorizedInConstPredicateBuilder {

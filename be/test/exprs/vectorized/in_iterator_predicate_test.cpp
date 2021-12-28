@@ -35,7 +35,7 @@ TEST_F(VectorizedInIteratorPredicateTest, sliceInTrue) {
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
     expr_node.in_predicate.is_not_in = false;
 
-    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string v1("test1");
     std::string v2("test2");
@@ -85,7 +85,7 @@ TEST_F(VectorizedInIteratorPredicateTest, dateInFalse) {
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
     expr_node.in_predicate.is_not_in = false;
 
-    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DATETIME> col1(expr_node, 10, TimestampValue::create(2020, 6, 8, 12, 20, 30));
     MockVectorizedExpr<TYPE_DATETIME> col2(expr_node, 10, TimestampValue::create(2020, 6, 8, 13, 20, 30));
@@ -121,7 +121,7 @@ TEST_F(VectorizedInIteratorPredicateTest, intNotInTrue) {
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
     expr_node.in_predicate.is_not_in = true;
 
-    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 0);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 1);
@@ -157,7 +157,7 @@ TEST_F(VectorizedInIteratorPredicateTest, nullSliceIn) {
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
     expr_node.in_predicate.is_not_in = false;
 
-    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string v1("test1");
     std::string v2("test2");
@@ -199,7 +199,7 @@ TEST_F(VectorizedInIteratorPredicateTest, sliceNotInNull) {
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
     expr_node.in_predicate.is_not_in = true;
 
-    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string v1("test1");
     std::string v2("test2");
@@ -242,7 +242,7 @@ TEST_F(VectorizedInIteratorPredicateTest, intNullInTrue) {
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
     expr_node.in_predicate.is_not_in = false;
 
-    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 0);
     MockNullVectorizedExpr<TYPE_INT> col2(expr_node, 10, 1);

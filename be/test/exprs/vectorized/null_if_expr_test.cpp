@@ -28,7 +28,7 @@ public:
 };
 
 TEST_F(VectorizedNullIfExprTest, nullIfEquals) {
-    auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
+    auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node, config::vector_chunk_size);
     std::unique_ptr<Expr> expr_ptr(expr);
 
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -48,7 +48,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfEquals) {
 }
 
 TEST_F(VectorizedNullIfExprTest, nullIfAllFalse) {
-    auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
+    auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node, config::vector_chunk_size);
     std::unique_ptr<Expr> expr_ptr(expr);
 
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -69,7 +69,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfAllFalse) {
 }
 
 TEST_F(VectorizedNullIfExprTest, nullIfLeftAllNull) {
-    auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
+    auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node, config::vector_chunk_size);
     std::unique_ptr<Expr> expr_ptr(expr);
 
     MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -88,7 +88,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftAllNull) {
 }
 
 TEST_F(VectorizedNullIfExprTest, nullIfLeftNullRightNull) {
-    auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
+    auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node, config::vector_chunk_size);
     std::unique_ptr<Expr> expr_ptr(expr);
 
     MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);

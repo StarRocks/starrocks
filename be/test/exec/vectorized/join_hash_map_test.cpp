@@ -663,7 +663,7 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_row_desc(const std::share
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0, 1};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable, nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(object_pool.get(), table_desc_builder->desc_tbl(), &tbl);
+    DescriptorTbl::create(object_pool.get(), table_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
@@ -674,7 +674,7 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_probe_desc(const std::sha
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(object_pool.get(), probe_desc_builder->desc_tbl(), &tbl);
+    DescriptorTbl::create(object_pool.get(), probe_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
@@ -685,7 +685,7 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_build_desc(const std::sha
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{1};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(object_pool.get(), build_desc_builder->desc_tbl(), &tbl);
+    DescriptorTbl::create(object_pool.get(), build_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }

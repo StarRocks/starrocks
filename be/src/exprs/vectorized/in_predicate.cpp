@@ -10,7 +10,7 @@ namespace starrocks::vectorized {
 
 #define CASE_TYPE(TYPE, CLASS)        \
     case TYPE: {                      \
-        return new CLASS<TYPE>(node); \
+        return new CLASS<TYPE>(node, batch_size); \
     }
 
 #define SWITCH_ALL_TYPE(CLASS)                                                             \
@@ -37,7 +37,7 @@ namespace starrocks::vectorized {
         return nullptr;                                                                    \
     }
 
-Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
+Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node, int32_t batch_size) {
     // children type
     PrimitiveType child_type = thrift_to_type(node.child_type);
 

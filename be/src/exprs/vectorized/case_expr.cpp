@@ -36,8 +36,8 @@ namespace starrocks::vectorized {
 template <PrimitiveType WhenType, PrimitiveType ResultType>
 class VectorizedCaseExpr final : public Expr {
 public:
-    explicit VectorizedCaseExpr(const TExprNode& node)
-            : Expr(node), _has_case_expr(node.case_expr.has_case_expr), _has_else_expr(node.case_expr.has_else_expr) {}
+    explicit VectorizedCaseExpr(const TExprNode& node, int32_t batch_size)
+            : Expr(node), _has_case_expr(node.case_expr.has_case_expr), _has_else_expr(node.case_expr.has_else_expr), _batch_size(batch_size) {}
 
     ~VectorizedCaseExpr() override = default;
 
@@ -136,7 +136,7 @@ private:
         ColumnViewer<WhenType> case_viewer(case_column);
         then_viewers.emplace_back(else_column);
 
-        ColumnBuilder<ResultType> builder(context->batch_size(), this->type().precision, this->type().scale);
+        ColumnBuilder<ResultType> builder(_batch_size, this->type().precision, this->type().scale);
         size_t size = when_columns[0]->size();
         builder.reserve(size);
 
@@ -247,7 +247,7 @@ private:
         then_columns.emplace_back(else_column);
         then_viewers.emplace_back(else_column);
 
-        ColumnBuilder<ResultType> builder(context->batch_size(), this->type().precision, this->type().scale);
+        ColumnBuilder<ResultType> builder(_batch_size, this->type().precision, this->type().scale);
         size_t size = when_columns[0]->size();
         builder.reserve(size);
 
@@ -346,11 +346,13 @@ private:
 private:
     const bool _has_case_expr;
     const bool _has_else_expr;
+
+    int32_t _batch_size;
 };
 
 #define CASE_WHEN_RESULT_TYPE(WHEN_TYPE, RESULT_TYPE)                \
     case WHEN_TYPE: {                                                \
-        return new VectorizedCaseExpr<WHEN_TYPE, RESULT_TYPE>(node); \
+        return new VectorizedCaseExpr<WHEN_TYPE, RESULT_TYPE>(node, batch_size); \
     }
 
 #define SWITCH_ALL_WHEN_TYPE(RESULT_TYPE)                                                 \
@@ -383,7 +385,7 @@ private:
         SWITCH_ALL_WHEN_TYPE(RESULT_TYPE); \
     }
 
-Expr* VectorizedCaseExprFactory::from_thrift(const starrocks::TExprNode& node) {
+Expr* VectorizedCaseExprFactory::from_thrift(const starrocks::TExprNode& node, int32_t batch_size) {
     PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
     PrimitiveType whenType = thrift_to_type(node.child_type);
 

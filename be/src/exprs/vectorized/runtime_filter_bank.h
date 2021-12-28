@@ -49,7 +49,7 @@ public:
 class RuntimeFilterBuildDescriptor {
 public:
     RuntimeFilterBuildDescriptor() = default;
-    Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc);
+    Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, int32_t batch_size);
     int32_t filter_id() const { return _filter_id; }
     ExprContext* build_expr_ctx() { return _build_expr_ctx; }
     PrimitiveType build_expr_type() const { return _build_expr_ctx->root()->type().type; }
@@ -83,7 +83,7 @@ private:
 class RuntimeFilterProbeDescriptor {
 public:
     RuntimeFilterProbeDescriptor() = default;
-    Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id);
+    Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id, int32_t batch_size);
     Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p);
     Status open(RuntimeState* state);
     void close(RuntimeState* state);

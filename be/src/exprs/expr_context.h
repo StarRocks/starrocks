@@ -133,8 +133,6 @@ public:
 
     ColumnPtr evaluate(Expr* expr, vectorized::Chunk* chunk);
 
-    RuntimeState* runtime_state() { return _state; }
-
     int32_t batch_size();
 
 private:
@@ -157,9 +155,6 @@ private:
 
     /// Pool backing fn_contexts_. Counts against the runtime state's UDF mem tracker.
     std::unique_ptr<MemPool> _pool;
-
-    /// runtime state
-    RuntimeState* _state;
 
     /// The expr tree this context is for.
     Expr* _root;

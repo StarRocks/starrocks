@@ -53,7 +53,6 @@ Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc) 
     DCHECK(_pool.get() == nullptr);
     _prepared = true;
     _pool = std::make_unique<MemPool>();
-    _state = state;
     return _root->prepare(state, row_desc, this);
 }
 
@@ -198,10 +197,6 @@ ColumnPtr ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
         ptr->resize(chunk->num_rows());
     }
     return ptr;
-}
-
-int32_t ExprContext::batch_size() {
-    return _state->batch_size();
 }
 
 } // namespace starrocks

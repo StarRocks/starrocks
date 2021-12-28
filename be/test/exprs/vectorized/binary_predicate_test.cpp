@@ -29,7 +29,7 @@ public:
 
 TEST_F(VectorizedBinaryPredicateTest, eqExpr) {
     expr_node.opcode = TExprOpcode::EQ;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 0);
@@ -55,7 +55,7 @@ TEST_F(VectorizedBinaryPredicateTest, eqExpr) {
 
 TEST_F(VectorizedBinaryPredicateTest, neExpr) {
     expr_node.opcode = TExprOpcode::NE;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 0);
@@ -81,7 +81,7 @@ TEST_F(VectorizedBinaryPredicateTest, neExpr) {
 
 TEST_F(VectorizedBinaryPredicateTest, geExpr) {
     expr_node.opcode = TExprOpcode::GE;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 0);
@@ -108,7 +108,7 @@ TEST_F(VectorizedBinaryPredicateTest, geExpr) {
 TEST_F(VectorizedBinaryPredicateTest, nullLtExpr) {
     expr_node.opcode = TExprOpcode::LT;
     expr_node.child_type = TPrimitiveType::BOOLEAN;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
     MockNullVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
@@ -169,7 +169,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullLtExpr) {
 TEST_F(VectorizedBinaryPredicateTest, mergeNullLtExpr) {
     expr_node.opcode = TExprOpcode::LT;
     expr_node.child_type = TPrimitiveType::BOOLEAN;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 0);
     MockNullVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
@@ -228,7 +228,7 @@ TEST_F(VectorizedBinaryPredicateTest, mergeNullLtExpr) {
 
 TEST_F(VectorizedBinaryPredicateTest, eqForNullExpr) {
     expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 1);
@@ -256,7 +256,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullEqForNullExpr) {
     expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
     expr_node.child_type = TPrimitiveType::BOOLEAN;
 
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 0);
     MockNullVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
@@ -317,7 +317,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullAndNotNullEqForNullExpr) {
     expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
     expr_node.child_type = TPrimitiveType::BOOLEAN;
 
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
@@ -363,7 +363,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullAndNotNullEqForNullExpr) {
 
 TEST_F(VectorizedBinaryPredicateTest, diffNullEqForNullExpr) {
     expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockNullVectorizedExpr<TYPE_INT> col2(expr_node, 10, 1);
@@ -432,7 +432,7 @@ public:
 
 TEST_F(VectorizedBinaryPredicateStringTest, eqExpr) {
     expr_node.opcode = TExprOpcode::EQ;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
     const int size = 10;
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, size, "dorisDB");
     MockVectorizedExpr<TYPE_VARCHAR> col2(expr_node, size, "dorisDB");
@@ -452,7 +452,7 @@ TEST_F(VectorizedBinaryPredicateStringTest, eqExpr) {
 
 TEST_F(VectorizedBinaryPredicateStringTest, neExpr) {
     expr_node.opcode = TExprOpcode::NE;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
     const int size = 10;
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, size, "dorisDB");
     MockVectorizedExpr<TYPE_VARCHAR> col2(expr_node, size, "DorisDB");
@@ -472,7 +472,7 @@ TEST_F(VectorizedBinaryPredicateStringTest, neExpr) {
 
 TEST_F(VectorizedBinaryPredicateStringTest, gtExpr) {
     expr_node.opcode = TExprOpcode::GT;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
     const int size = 10;
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, size, "bbbbb");
     MockVectorizedExpr<TYPE_VARCHAR> col2(expr_node, size, "aaaaa");
@@ -492,7 +492,7 @@ TEST_F(VectorizedBinaryPredicateStringTest, gtExpr) {
 
 TEST_F(VectorizedBinaryPredicateStringTest, ltExpr) {
     expr_node.opcode = TExprOpcode::LT;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
     const int size = 10;
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, size, "aaaaa");
     MockVectorizedExpr<TYPE_VARCHAR> col2(expr_node, size, "bbbbb");
@@ -512,7 +512,7 @@ TEST_F(VectorizedBinaryPredicateStringTest, ltExpr) {
 
 TEST_F(VectorizedBinaryPredicateStringTest, nullEqExpr) {
     expr_node.opcode = TExprOpcode::EQ;
-    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node, config::vector_chunk_size));
     const int size = 10;
     MockNullVectorizedExpr<TYPE_VARCHAR> col1(expr_node, size, "");
     MockNullVectorizedExpr<TYPE_VARCHAR> col2(expr_node, size, "");

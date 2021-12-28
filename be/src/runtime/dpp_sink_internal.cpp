@@ -137,7 +137,7 @@ Status PartRange::from_thrift(ObjectPool* pool, const TPartitionRange& t_part_ra
     return Status::OK();
 }
 
-Status PartitionInfo::from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition) {
+Status PartitionInfo::from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition, int32_t batch_size) {
     partition->_id = t_partition.partition_id;
     RETURN_IF_ERROR(PartRange::from_thrift(pool, t_partition.range, &partition->_range));
     if (t_partition.__isset.distributed_exprs) {
@@ -146,7 +146,7 @@ Status PartitionInfo::from_thrift(ObjectPool* pool, const TRangePartition& t_par
             return Status::InternalError("Distributed bucket is 0.");
         }
         RETURN_IF_ERROR(
-                Expr::create_expr_trees(pool, t_partition.distributed_exprs, &partition->_distributed_expr_ctxs));
+                Expr::create_expr_trees(pool, t_partition.distributed_exprs, &partition->_distributed_expr_ctxs, batch_size));
     }
     return Status::OK();
 }

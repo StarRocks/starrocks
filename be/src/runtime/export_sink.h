@@ -45,7 +45,7 @@ class FileBuilder;
 // This class is a sinker, which put export data to external storage by broker.
 class ExportSink : public DataSink {
 public:
-    ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs);
+    ExportSink(RuntimeState* state, ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs);
 
     ~ExportSink() override = default;
 

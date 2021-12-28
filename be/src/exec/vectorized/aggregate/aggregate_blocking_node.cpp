@@ -174,7 +174,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
             auto* source_op = operators_with_sink[0].get();
             if (typeid(*source_op) != typeid(pipeline::ScanOperatorFactory)) {
                 std::vector<ExprContext*> group_by_expr_ctxs;
-                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state()->batch_size());
                 operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(
                         runtime_state(), operators_with_sink, group_by_expr_ctxs);
             }

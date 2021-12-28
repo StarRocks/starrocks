@@ -32,12 +32,12 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (tnode.hdfs_scan_node.__isset.min_max_conjuncts) {
         RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs));
+                Expr::create_expr_trees(_pool, tnode.hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs, state->batch_size()));
     }
 
     if (tnode.hdfs_scan_node.__isset.partition_conjuncts) {
         RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs));
+                Expr::create_expr_trees(_pool, tnode.hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs, state->batch_size()));
         _has_partition_conjuncts = true;
     }
 

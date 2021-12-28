@@ -38,8 +38,8 @@
 
 namespace starrocks {
 
-ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
-        : _state(nullptr),
+ExportSink::ExportSink(RuntimeState* state, ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
+        : _state(state),
           _pool(pool),
           _row_desc(row_desc),
           _t_output_expr(t_exprs),
@@ -53,7 +53,7 @@ Status ExportSink::init(const TDataSink& t_sink) {
     _t_export_sink = t_sink.export_sink;
 
     // From the thrift expressions create the real exprs.
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, _state->batch_size()));
     return Status::OK();
 }
 

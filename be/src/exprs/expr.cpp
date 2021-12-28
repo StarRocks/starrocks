@@ -172,7 +172,7 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
 
 Expr::~Expr() = default;
 
-Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx) {
+Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, int32_t batch_size) {
     // input is empty
     if (texpr.nodes.empty()) {
         *ctx = nullptr;
@@ -180,7 +180,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
     int node_idx = 0;
     Expr* e = nullptr;
-    Status status = create_tree_from_thrift(pool, texpr.nodes, nullptr, &node_idx, &e, ctx);
+    Status status = create_tree_from_thrift(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, batch_size);
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
         status = Status::InternalError("Expression tree only partially reconstructed. Not all thrift nodes were used.");
     }
@@ -192,25 +192,25 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
-Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs) {
+Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs, int32_t batch_size) {
     ctxs->clear();
     for (const auto& texpr : texprs) {
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx));
+        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx, batch_size));
         ctxs->push_back(ctx);
     }
     return Status::OK();
 }
 
 Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent, int* node_idx,
-                                     Expr** root_expr, ExprContext** ctx) {
+                                     Expr** root_expr, ExprContext** ctx, int32_t batch_size) {
     // propagate error case
     if (*node_idx >= nodes.size()) {
         return Status::InternalError("Failed to reconstruct expression tree from thrift.");
     }
     int num_children = nodes[*node_idx].num_children;
     Expr* expr = nullptr;
-    RETURN_IF_ERROR(create_vectorized_expr(pool, nodes[*node_idx], &expr));
+    RETURN_IF_ERROR(create_vectorized_expr(pool, nodes[*node_idx], &expr, batch_size));
     DCHECK(expr != nullptr);
     if (parent != nullptr) {
         parent->add_child(expr);
@@ -222,7 +222,7 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
     }
     for (int i = 0; i < num_children; i++) {
         *node_idx += 1;
-        RETURN_IF_ERROR(create_tree_from_thrift(pool, nodes, expr, node_idx, nullptr, nullptr));
+        RETURN_IF_ERROR(create_tree_from_thrift(pool, nodes, expr, node_idx, nullptr, nullptr, batch_size));
         // we are expecting a child, but have used all nodes
         // this means we have been given a bad tree and must fail
         if (*node_idx >= nodes.size()) {
@@ -233,7 +233,7 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
 }
 
 Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks::TExprNode& texpr_node,
-                                    starrocks::Expr** expr) {
+                                    starrocks::Expr** expr, int32_t batch_size) {
     switch (texpr_node.node_type) {
     case TExprNodeType::BOOL_LITERAL:
     case TExprNodeType::INT_LITERAL:
@@ -251,7 +251,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     }
     case TExprNodeType::BINARY_PRED: {
-        *expr = pool->add(vectorized::VectorizedBinaryPredicateFactory::from_thrift(texpr_node));
+        *expr = pool->add(vectorized::VectorizedBinaryPredicateFactory::from_thrift(texpr_node, batch_size));
         break;
     }
     case TExprNodeType::ARITHMETIC_EXPR: {
@@ -265,7 +265,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     }
     case TExprNodeType::CAST_EXPR: {
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
-            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(texpr_node));
+            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(texpr_node, batch_size));
             break;
         } else {
             // @TODO: will call FunctionExpr, implement later
@@ -275,13 +275,13 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
     case TExprNodeType::FUNCTION_CALL: {
         if (texpr_node.fn.name.function_name == "if") {
-            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_if_expr(texpr_node));
+            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_if_expr(texpr_node, batch_size));
         } else if (texpr_node.fn.name.function_name == "nullif") {
-            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_null_if_expr(texpr_node));
+            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_null_if_expr(texpr_node, batch_size));
         } else if (texpr_node.fn.name.function_name == "ifnull") {
-            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_if_null_expr(texpr_node));
+            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_if_null_expr(texpr_node, batch_size));
         } else if (texpr_node.fn.name.function_name == "coalesce") {
-            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_coalesce_expr(texpr_node));
+            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_coalesce_expr(texpr_node, batch_size));
         } else if (texpr_node.fn.name.function_name == "is_null_pred" ||
                    texpr_node.fn.name.function_name == "is_not_null_pred") {
             *expr = pool->add(vectorized::VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
@@ -291,7 +291,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     }
     case TExprNodeType::IN_PRED: {
-        *expr = pool->add(vectorized::VectorizedInPredicateFactory::from_thrift(texpr_node));
+        *expr = pool->add(vectorized::VectorizedInPredicateFactory::from_thrift(texpr_node, batch_size));
         break;
     }
     case TExprNodeType::SLOT_REF: {
@@ -306,7 +306,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
             return Status::InternalError("Case expression not set in thrift node");
         }
 
-        *expr = pool->add(vectorized::VectorizedCaseExprFactory::from_thrift(texpr_node));
+        *expr = pool->add(vectorized::VectorizedCaseExprFactory::from_thrift(texpr_node, batch_size));
         break;
     }
     case TExprNodeType::ARRAY_EXPR:

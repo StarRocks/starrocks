@@ -28,7 +28,7 @@ public:
 };
 
 TEST_F(VectorizedCoalesceExprTest, coalesceAllNotNull) {
-    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
     MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -48,7 +48,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceAllNotNull) {
 }
 
 TEST_F(VectorizedCoalesceExprTest, coalesceAllNull) {
-    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
     MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -65,7 +65,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceAllNull) {
 }
 
 TEST_F(VectorizedCoalesceExprTest, coalesceNull) {
-    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
     MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -89,7 +89,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceNull) {
 }
 
 TEST_F(VectorizedCoalesceExprTest, coalesceSameNull) {
-    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
     MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);

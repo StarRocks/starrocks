@@ -28,7 +28,7 @@ public:
 };
 
 TEST_F(VectorizedIfExprTest, ifConstTrue) {
-    auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
+    auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size);
     std::unique_ptr<Expr> expr_ptr(expr);
 
     MockConstVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, true);
@@ -50,7 +50,7 @@ TEST_F(VectorizedIfExprTest, ifConstTrue) {
 }
 
 TEST_F(VectorizedIfExprTest, ifAllFalse) {
-    auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
+    auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size);
     std::unique_ptr<Expr> expr_ptr(expr);
 
     MockVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, false);
@@ -72,7 +72,7 @@ TEST_F(VectorizedIfExprTest, ifAllFalse) {
 }
 
 TEST_F(VectorizedIfExprTest, ifNull) {
-    auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
+    auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node, config::vector_chunk_size);
     std::unique_ptr<Expr> expr_ptr(expr);
 
     MockMultiVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, true, false);

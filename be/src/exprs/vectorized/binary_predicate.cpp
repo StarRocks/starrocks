@@ -43,7 +43,7 @@ public:
 template <PrimitiveType Type, typename OP>
 class VectorizedNullSafeEqPredicate final : public Predicate {
 public:
-    explicit VectorizedNullSafeEqPredicate(const TExprNode& node) : Predicate(node) {}
+    explicit VectorizedNullSafeEqPredicate(const TExprNode& node, int32_t batch_size) : Predicate(node), _batch_size(batch_size) {}
     ~VectorizedNullSafeEqPredicate() override = default;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedNullSafeEqPredicate(*this)); }
@@ -60,7 +60,7 @@ public:
         ColumnViewer<Type> v2(r);
         Columns list = {l, r};
 
-        ColumnBuilder<TYPE_BOOLEAN> builder(context->batch_size());
+        ColumnBuilder<TYPE_BOOLEAN> builder(_batch_size);
 
         size_t size = list[0]->size();
         for (int row = 0; row < size; ++row) {
@@ -81,10 +81,13 @@ public:
 
         return builder.build(ColumnHelper::is_all_const(list));
     }
+
+private:
+    int32_t _batch_size;
 };
 
 template <PrimitiveType data_type>
-static Expr* create_binary_predicate(const TExprNode& node) {
+static Expr* create_binary_predicate(const TExprNode& node, int32_t batch_size) {
     switch (node.opcode) {
     case TExprOpcode::EQ:
         return new VectorizedBinaryPredicate<data_type, BinaryPredEq>(node);
@@ -99,19 +102,19 @@ static Expr* create_binary_predicate(const TExprNode& node) {
     case TExprOpcode::GE:
         return new VectorizedBinaryPredicate<data_type, BinaryPredGe>(node);
     case TExprOpcode::EQ_FOR_NULL:
-        return new VectorizedNullSafeEqPredicate<data_type, BinaryPredEq>(node);
+        return new VectorizedNullSafeEqPredicate<data_type, BinaryPredEq>(node, batch_size);
     default:
         break;
     }
     return nullptr;
 }
 
-Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
+Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node, int32_t batch_size) {
     PrimitiveType type = thrift_to_type(node.child_type);
 
 #define CASE_SWITCH_OP(TYPE) \
     case TYPE:               \
-        return create_binary_predicate<TYPE>(node)
+        return create_binary_predicate<TYPE>(node, batch_size)
 
     switch (type) {
         CASE_SWITCH_OP(TYPE_BOOLEAN);

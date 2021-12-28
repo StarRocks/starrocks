@@ -81,7 +81,7 @@ ColumnPtr cast(ColumnPtr from_column, TypeDescriptor const& from_type, TypeDescr
     cast_node.node_type = TExprNodeType::CAST_EXPR;
     to_type.to_thrift(&cast_node.type);
     cast_node.child_type = to_thrift(FromType);
-    auto cast_expr = std::unique_ptr<Expr>(VectorizedCastExprFactory::from_thrift(cast_node));
+    auto cast_expr = std::unique_ptr<Expr>(VectorizedCastExprFactory::from_thrift(cast_node, config::vector_chunk_size));
     cast_expr->add_child(&from_expr);
     return cast_expr->evaluate(nullptr, nullptr);
 }

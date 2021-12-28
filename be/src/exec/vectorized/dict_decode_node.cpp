@@ -27,7 +27,7 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (const auto& [slot_id, texpr] : tnode.decode_node.string_functions) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, texpr, &context));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, texpr, &context, state->batch_size()));
         _string_functions[slot_id] = std::make_pair(context, DictOptimizeContext{});
         _expr_ctxs.push_back(context);
     }

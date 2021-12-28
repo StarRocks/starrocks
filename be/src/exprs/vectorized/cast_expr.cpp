@@ -20,24 +20,24 @@
 namespace starrocks::vectorized {
 
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_fn(ExprContext* context, ColumnPtr& column);
+ColumnPtr cast_fn(int32_t batch_size, ColumnPtr& column);
 
 // All cast implements
 #define SELF_CAST(FROM_TYPE)                                                             \
     template <>                                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE>(ExprContext * context, ColumnPtr & column) { \
+    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE>(int32_t batch_size, ColumnPtr & column) { \
         return column->clone();                                                          \
     }
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                    \
     template <>                                                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext * context, ColumnPtr & column) {                   \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) {                   \
         return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
     }
 
 #define UNARY_FN_CAST_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                           \
     template <>                                                                                                       \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext * context, ColumnPtr & column) {                                \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) {                                \
         if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                           \
                       std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                        \
             return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
@@ -48,15 +48,15 @@ ColumnPtr cast_fn(ExprContext* context, ColumnPtr& column);
 
 #define UNARY_FN_CAST_TIME_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                \
     template <>                                                                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext * context, ColumnPtr & column) {                          \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) {                          \
         return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
                 column);                                                                                        \
     }
 
 #define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)                          \
     template <>                                                                        \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ExprContext * context, ColumnPtr & column) { \
-        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE>(context, column);                    \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(int32_t batch_size, ColumnPtr & column) { \
+        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE>(batch_size, column);                    \
     }
 
 DEFINE_UNARY_FN_WITH_IMPL(TimeCheck, value) {
@@ -94,8 +94,8 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_BOOLEAN, TimestampToBoolean);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BOOLEAN, ImplicitToBoolean);
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<TYPE_BOOLEAN> builder(context->batch_size());
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<TYPE_BOOLEAN> builder(batch_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     StringParser::ParseResult result;
@@ -135,8 +135,8 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ExprContext* context, ColumnPtr& c
 }
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<TYPE_HLL> builder(context->batch_size());
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<TYPE_HLL> builder(batch_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -179,8 +179,8 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToNumber, value) {
 }
 
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_int_from_string_fn(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<ToType> builder(context->batch_size());
+ColumnPtr cast_int_from_string_fn(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<ToType> builder(batch_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     StringParser::ParseResult result;
@@ -203,8 +203,8 @@ ColumnPtr cast_int_from_string_fn(ExprContext* context, ColumnPtr& column) {
 }
 
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_float_from_string_fn(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<ToType> builder(context->batch_size());
+ColumnPtr cast_float_from_string_fn(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<ToType> builder(batch_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     StringParser::ParseResult result;
@@ -374,8 +374,8 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_DECIMALV2, DateToDecimal);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_DECIMALV2, TimestampToDecimal);
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<TYPE_DECIMALV2> builder(context->batch_size());
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DECIMALV2> builder(batch_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -406,8 +406,8 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ExprContext* context, ColumnPtr&
 
 // date
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_to_date_fn(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATE> builder(context->batch_size());
+ColumnPtr cast_to_date_fn(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DATE> builder(batch_size);
     ColumnViewer<FromType> viewer(column);
 
     for (int row = 0; row < viewer.size(); ++row) {
@@ -445,8 +445,8 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_DATE, TimestampToDate);
 // Time to date need rewrite CastExpr
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATE> builder(context->batch_size());
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DATE> builder(batch_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -476,8 +476,8 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ExprContext* context, ColumnPtr& colu
 
 // datetime(timestamp)
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_to_timestamp_fn(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATETIME> builder(context->batch_size());
+ColumnPtr cast_to_timestamp_fn(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DATETIME> builder(batch_size);
     ColumnViewer<FromType> viewer(column);
 
     for (int row = 0; row < viewer.size(); ++row) {
@@ -515,8 +515,8 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_DATETIME, DateToTimestmap);
 // Time to datetime need rewrite CastExpr
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATETIME> builder(context->batch_size());
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<TYPE_DATETIME> builder(batch_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -577,8 +577,8 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_TIME, DateToTime);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_TIME, DatetimeToTime);
 
 template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ExprContext* context, ColumnPtr& column) {
-    ColumnBuilder<TYPE_TIME> builder(context->batch_size());
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(int32_t batch_size, ColumnPtr& column) {
+    ColumnBuilder<TYPE_TIME> builder(batch_size);
 
     auto size = column->size();
     ColumnViewer<TYPE_VARCHAR> viewer_time(column);
@@ -649,7 +649,7 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ExprContext* context, ColumnPtr& colu
 }
 
 #define DEFINE_CAST_CONSTRUCT(CLASS)             \
-    CLASS(const TExprNode& node) : Expr(node) {} \
+    CLASS(const TExprNode& node, int32_t batch_size) : Expr(node), _batch_size(batch_size) {} \
     virtual ~CLASS(){};                          \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
 
@@ -674,7 +674,7 @@ public:
             return VectorizedUnaryFunction<DecimalFrom<true>>::evaluate<FromType, ToType>(column, to_type.precision,
                                                                                           to_type.scale);
         } else {
-            return cast_fn<FromType, ToType>(context, column);
+            return cast_fn<FromType, ToType>(_batch_size, column);
         }
     };
     std::string debug_string() const override {
@@ -685,6 +685,9 @@ public:
             << ", expr=" << expr_debug_string << ")";
         return out.str();
     }
+
+private:
+    int32_t _batch_size;
 };
 
 DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDate, date, time) {
@@ -737,6 +740,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
                                                                                                                 \
     private:                                                                                                    \
         ColumnPtr _now;                                                                                         \
+        int32_t _batch_size;                                                                                    \
     };
 
 DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATE, timeToDate);
@@ -834,23 +838,23 @@ public:
 
         // must be: TYPE_FLOAT, TYPE_DOUBLE, TYPE_CHAR, TYPE_VARCHAR...
         if constexpr (Type == TYPE_FLOAT) {
-            return _evaluate_float<TYPE_FLOAT>(context, column);
+            return _evaluate_float<TYPE_FLOAT>(_batch_size, column);
         }
 
         if constexpr (Type == TYPE_DOUBLE) {
-            return _evaluate_float<TYPE_DOUBLE>(context, column);
+            return _evaluate_float<TYPE_DOUBLE>(_batch_size, column);
         }
 
         if constexpr (Type == TYPE_TIME) {
-            return _evaluate_time(context, column);
+            return _evaluate_time(_batch_size, column);
         }
 
-        return _evaluate_string(context, column);
+        return _evaluate_string(_batch_size, column);
     };
 
 private:
     template <PrimitiveType FloatType>
-    ColumnPtr _evaluate_float(ExprContext* context, const ColumnPtr& column) {
+    ColumnPtr _evaluate_float(int32_t batch_size, const ColumnPtr& column) {
         if (type().len == -1) {
             if constexpr (FloatType == TYPE_FLOAT) {
                 return VectorizedStringStrictUnaryFunction<FloatCastToString>::template evaluate<TYPE_FLOAT,
@@ -866,7 +870,7 @@ private:
         }
 
         // type.length > 0
-        ColumnBuilder<TYPE_VARCHAR> builder(context->batch_size());
+        ColumnBuilder<TYPE_VARCHAR> builder(batch_size);
         ColumnViewer<FloatType> viewer(column);
 
         char value[MAX_DOUBLE_STR_LENGTH];
@@ -894,12 +898,12 @@ private:
         return builder.build(column->is_constant());
     }
 
-    ColumnPtr _evaluate_string(ExprContext* context, const ColumnPtr& column) {
+    ColumnPtr _evaluate_string(int32_t batch_size, const ColumnPtr& column) {
         if (type().len <= 0) {
             return column;
         }
 
-        ColumnBuilder<TYPE_VARCHAR> builder(context->batch_size());
+        ColumnBuilder<TYPE_VARCHAR> builder(batch_size);
         ColumnViewer<TYPE_VARCHAR> viewer(column);
 
         for (int row = 0; row < viewer.size(); ++row) {
@@ -916,8 +920,8 @@ private:
         return builder.build(column->is_constant());
     }
 
-    ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
-        ColumnBuilder<TYPE_VARCHAR> builder(context->batch_size());
+    ColumnPtr _evaluate_time(int32_t batch_size, const ColumnPtr& column) {
+        ColumnBuilder<TYPE_VARCHAR> builder(batch_size);
         ColumnViewer<TYPE_TIME> viewer(column);
 
         for (int row = 0; row < viewer.size(); ++row) {
@@ -931,11 +935,14 @@ private:
 
         return builder.build(column->is_constant());
     }
+
+private:
+    int32_t _batch_size;
 };
 
 #define CASE_FROM_TYPE(FROM_TYPE, TO_TYPE)                       \
     case FROM_TYPE: {                                            \
-        return new VectorizedCastExpr<FROM_TYPE, TO_TYPE>(node); \
+        return new VectorizedCastExpr<FROM_TYPE, TO_TYPE>(node, batch_size); \
     }
 
 #define SWITCH_ALL_FROM_TYPE(TO_TYPE)                                             \
@@ -969,10 +976,10 @@ private:
 
 #define CASE_TO_STRING_FROM(FROM_TYPE)                          \
     case FROM_TYPE: {                                           \
-        return new VectorizedCastToStringExpr<FROM_TYPE>(node); \
+        return new VectorizedCastToStringExpr<FROM_TYPE>(node, batch_size); \
     }
 
-Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
+Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, int32_t batch_size) {
     PrimitiveType to_type = TypeDescriptor::from_thrift(node.type).type;
     PrimitiveType from_type = thrift_to_type(node.child_type);
 
@@ -1000,7 +1007,7 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
             cast.slot_ref.slot_id = 0;
             cast.slot_ref.tuple_id = 0;
 
-            Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast);
+            Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast, batch_size);
             if (cast_element_expr == nullptr) {
                 LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", array_field_type_cast_from.debug_string(),
                                                     array_field_type_cast_to.debug_string());
@@ -1029,7 +1036,7 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
     }
 
     if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
-        return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL>(node);
+        return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL>(node, batch_size);
     }
 
     if (to_type == TYPE_VARCHAR) {
@@ -1088,7 +1095,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         node.type = to.to_thrift();
         node.child_type = to_thrift(from.type);
 
-        expr = from_thrift(node);
+        expr = from_thrift(node, config::vector_chunk_size);
     } else {
         const TypeDescriptor* from_type = &from;
         const TypeDescriptor* to_type = &to;
@@ -1108,7 +1115,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         node.slot_ref.slot_id = 0;
         node.slot_ref.tuple_id = 0;
 
-        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(node);
+        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(node, config::vector_chunk_size);
         if (cast_element_expr == nullptr) {
             LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", from.debug_string(), to.debug_string());
             return nullptr;

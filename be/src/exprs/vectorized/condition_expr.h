@@ -9,13 +9,13 @@ namespace vectorized {
 
 class VectorizedConditionExprFactory {
 public:
-    static Expr* create_if_expr(const TExprNode& node);
+    static Expr* create_if_expr(const TExprNode& node, int32_t batch_size);
 
-    static Expr* create_if_null_expr(const TExprNode& node);
+    static Expr* create_if_null_expr(const TExprNode& node, int32_t batch_size);
 
-    static Expr* create_null_if_expr(const TExprNode& node);
+    static Expr* create_null_if_expr(const TExprNode& node, int32_t batch_size);
 
-    static Expr* create_coalesce_expr(const TExprNode& node);
+    static Expr* create_coalesce_expr(const TExprNode& node, int32_t batch_size);
 };
 
 } // namespace vectorized

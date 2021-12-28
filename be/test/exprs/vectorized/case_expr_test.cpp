@@ -24,7 +24,7 @@ struct VectorizedCaseExprTestBuilder {
     VectorizedCaseExprTestBuilder(bool has_else, bool has_case) {
         _has_else = has_else;
         _has_case = has_case;
-        _expr.reset(VectorizedCaseExprFactory::from_thrift(case_when_node()));
+        _expr.reset(VectorizedCaseExprFactory::from_thrift(case_when_node(), config::vector_chunk_size));
     }
 
     template <template <PrimitiveType Type> typename T, typename... Args>
@@ -108,7 +108,7 @@ TEST_F(VectorizedCaseExprTest, whenSliceCase) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = false;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string v1("test1");
     std::string v2("test2");
@@ -149,7 +149,7 @@ TEST_F(VectorizedCaseExprTest, whenDecimalCase) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = false;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string case_v1("1234567890.1234");
     std::string case_v2("1234567890.1230");
@@ -197,7 +197,7 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseAllNull) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = false;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> case1(expr_node, 10, 1);
     MockNullVectorizedExpr<TYPE_INT> when2(expr_node, 10, 2);
@@ -228,7 +228,7 @@ TEST_F(VectorizedCaseExprTest, whenTimestampCaseElse) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_DATETIME> case1(expr_node, 10, TimestampValue::create(2000, 12, 2, 12, 12, 30));
     MockVectorizedExpr<TYPE_DATETIME> when2(expr_node, 10, TimestampValue::create(2001, 12, 2, 12, 12, 30));
@@ -262,7 +262,7 @@ TEST_F(VectorizedCaseExprTest, whenNullIntCaseElse) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     std::string v1("test1");
     std::string v2("test2");
@@ -310,7 +310,7 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseNullElse) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> case1(expr_node, 10, 1);
     MockNullVectorizedExpr<TYPE_INT> when2(expr_node, 10, 2);
@@ -398,7 +398,7 @@ TEST_F(VectorizedCaseExprTest, whenConstantAndElseVariable) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockConstVectorizedExpr<TYPE_INT> case1(expr_node, 1);
     MockConstVectorizedExpr<TYPE_INT> when2(expr_node, 2);
@@ -428,7 +428,7 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseAllNullElse) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_INT> case1(expr_node, 10, 1);
     MockNullVectorizedExpr<TYPE_INT> when2(expr_node, 10, 2);
@@ -465,7 +465,7 @@ TEST_F(VectorizedCaseExprTest, NoCaseReturnInt) {
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = false;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockVectorizedExpr<TYPE_BOOLEAN> when2(expr_node, 10, true);
     MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
@@ -495,7 +495,7 @@ TEST_F(VectorizedCaseExprTest, NoCaseAllNull) {
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = false;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> when2(expr_node, 10, true);
     MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
@@ -523,7 +523,7 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = true;
 
-    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node));
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, config::vector_chunk_size));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> when2(expr_node, 10, true);
     MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);

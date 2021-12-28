@@ -120,7 +120,7 @@ void FileReaderTest::_create_conjunct_ctxs_for_min_max(std::vector<ExprContext*>
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, config::vector_chunk_size);
 }
 
 void FileReaderTest::_create_conjunct_ctxs_for_filter_file(std::vector<ExprContext*>* conjunct_ctxs) {
@@ -166,7 +166,7 @@ void FileReaderTest::_create_conjunct_ctxs_for_filter_file(std::vector<ExprConte
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, config::vector_chunk_size);
 }
 
 void FileReaderTest::_create_conjunct_ctxs_for_dict_filter(std::vector<ExprContext*>* conjunct_ctxs) {
@@ -212,7 +212,7 @@ void FileReaderTest::_create_conjunct_ctxs_for_dict_filter(std::vector<ExprConte
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, config::vector_chunk_size);
 }
 
 std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
@@ -329,7 +329,7 @@ HdfsFileReaderParam* FileReaderTest::_create_file2_base_param() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl);
+    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     param->tuple_desc = tuple_desc;
@@ -398,7 +398,7 @@ HdfsFileReaderParam* FileReaderTest::_create_param_for_min_max() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl);
+    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     param->min_max_tuple_desc = tuple_desc;
@@ -450,7 +450,7 @@ HdfsFileReaderParam* FileReaderTest::_create_param_for_filter_file() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl);
+    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     param->tuple_desc = tuple_desc;

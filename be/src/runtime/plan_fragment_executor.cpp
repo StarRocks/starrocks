@@ -118,7 +118,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl));
+    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl, _runtime_state->batch_size()));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     // set up plan

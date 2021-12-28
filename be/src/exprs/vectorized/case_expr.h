@@ -9,7 +9,7 @@ namespace vectorized {
 
 class VectorizedCaseExprFactory {
 public:
-    static Expr* from_thrift(const TExprNode& node);
+    static Expr* from_thrift(const TExprNode& node, int32_t batch_size);
 };
 } // namespace vectorized
 } // namespace starrocks

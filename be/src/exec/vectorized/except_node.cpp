@@ -26,7 +26,7 @@ Status ExceptNode::init(const TPlanNode& tnode, RuntimeState* state) {
     auto& result_texpr_lists = tnode.except_node.result_expr_lists;
     for (auto& texprs : result_texpr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs, state->batch_size()));
         _child_expr_lists.push_back(ctxs);
     }
     return Status::OK();

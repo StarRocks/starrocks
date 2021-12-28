@@ -123,7 +123,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();
     DescriptorTbl* desc_tbl = nullptr;
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl));
+    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl, runtime_state->batch_size()));
     runtime_state->set_desc_tbl(desc_tbl);
     // Set up plan
     ExecNode* plan = nullptr;

@@ -60,7 +60,7 @@ void create_slot_descriptors(ObjectPool* pool, std::vector<SlotDescriptor*>* res
     }
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl);
+    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     for (int i = 0; i < size; i++) {
         res->push_back(tbl->get_slot_descriptor(i));
@@ -316,7 +316,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     TExpr texpr;
     texpr.__set_nodes(nodes);
     ExprContext* ctx;
-    Status st = Expr::create_expr_tree(pool, texpr, &ctx);
+    Status st = Expr::create_expr_tree(pool, texpr, &ctx, config::vector_chunk_size);
     DCHECK(st.ok()) << st.get_error_msg();
     return ctx;
 }
@@ -484,7 +484,7 @@ std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* sta
     b3.add_slot(b2.build());
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl);
+    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 
@@ -813,7 +813,7 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
     b3.add_slot(b2.build());
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl);
+    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 

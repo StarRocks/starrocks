@@ -87,7 +87,7 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
             return Status::InternalError("Missing data buffer sink.");
         }
         // TODO: figure out good buffer size based on size of output row
-        *sink = std::make_unique<MysqlTableSink>(state->obj_pool(), row_desc, output_exprs);
+        *sink = std::make_unique<MysqlTableSink>(state->obj_pool(), row_desc, output_exprs, state->batch_size());
         break;
     }
 
@@ -95,14 +95,14 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         if (!thrift_sink.__isset.export_sink) {
             return Status::InternalError("Missing export sink sink.");
         }
-        *sink = std::make_unique<ExportSink>(state->obj_pool(), row_desc, output_exprs);
+        *sink = std::make_unique<ExportSink>(state, state->obj_pool(), row_desc, output_exprs);
         break;
     }
     case TDataSinkType::OLAP_TABLE_SINK: {
         Status status;
         DCHECK(thrift_sink.__isset.olap_table_sink);
         LOG_IF(WARNING, !params.use_vectorized) << "Ignore option use_vectorized=false";
-        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), row_desc, output_exprs, &status);
+        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), row_desc, output_exprs, &status, state->batch_size());
         RETURN_IF_ERROR(status);
         break;
     }

@@ -441,10 +441,10 @@ bool IndexChannel::has_intolerable_failure() {
 }
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& texprs,
-                             Status* status)
+                             Status* status, int32_t batch_size)
         : _pool(pool), _input_row_desc(row_desc), _filter_bitmap(1024) {
     if (!texprs.empty()) {
-        *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
+        *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs, batch_size);
     }
 }
 

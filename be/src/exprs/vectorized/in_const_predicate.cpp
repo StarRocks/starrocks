@@ -3,6 +3,7 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 
 #include "gutil/strings/substitute.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -57,7 +58,7 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
                     strings::Substitute("Can not create in-const-predicate with array set on type $0", probe_type)); \
             return nullptr;                                                                                          \
         }                                                                                                            \
-        auto* in_pred = _pool->add(new VectorizedInConstPredicate<PrimitiveType::NAME>(node));                       \
+        auto* in_pred = _pool->add(new VectorizedInConstPredicate<PrimitiveType::NAME>(node, _state->batch_size()));                       \
         in_pred->set_null_in_set(_null_in_set);                                                                      \
         in_pred->set_array_size(_array_size);                                                                        \
         _st = in_pred->prepare(_state);                                                                              \

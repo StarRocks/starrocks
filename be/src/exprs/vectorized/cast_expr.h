@@ -14,7 +14,7 @@ namespace vectorized {
 
 class VectorizedCastExprFactory {
 public:
-    static Expr* from_thrift(const TExprNode& node);
+    static Expr* from_thrift(const TExprNode& node, int32_t batch_size);
 
     static Expr* from_type(const TypeDescriptor& from, const TypeDescriptor& to, Expr* child, ObjectPool* pool);
 };
