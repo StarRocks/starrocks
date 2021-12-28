@@ -308,15 +308,15 @@ public class CreateFunctionStmt extends DdlStmt {
     }
 
     private void checkStarrocksJarUdfClass() throws AnalysisException {
-        boolean hasEvalMethod = false;
+        int evalMethodCount = 0;
         for (Method m : udfClass.getMethods()) {
             if (EVAL_METHOD_NAME.equals(m.getName())) {
-                hasEvalMethod = true;
+                evalMethodCount += 1;
             }
             checkStarrocksJarUdfMethod(m);
         }
-        if (!hasEvalMethod) {
-            throw new AnalysisException(String.format("UDF should have '%s'", EVAL_METHOD_NAME));
+        if (evalMethodCount != 1) {
+            throw new AnalysisException(String.format("UDF should have only one '%s' method", EVAL_METHOD_NAME));
         }
     }
 
