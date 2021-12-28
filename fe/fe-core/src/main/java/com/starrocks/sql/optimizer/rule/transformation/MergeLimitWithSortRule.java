@@ -30,8 +30,9 @@ public class MergeLimitWithSortRule extends TransformationRule {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
         LogicalTopNOperator sort = (LogicalTopNOperator) input.getInputs().get(0).getOp();
 
-        OptExpression result = new OptExpression(
-                new LogicalTopNOperator(sort.getOrderByElements(), limit.getLimit(), limit.getOffset()));
+        long l = limit.hasLimit() ? limit.getLimit() : -1;
+        long of = limit.hasOffset() ? limit.getOffset() : 0;
+        OptExpression result = new OptExpression(new LogicalTopNOperator(sort.getOrderByElements(), l, of));
         result.getInputs().addAll(input.getInputs().get(0).getInputs());
         return Lists.newArrayList(result);
     }
