@@ -68,6 +68,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -484,7 +485,11 @@ public class QueryAnalyzer {
 
                     @Override
                     public List<String> visitCTE(CTERelation node, Void context) {
-                        return node.getCteQuery().getColumnOutputNames();
+                        if (item.getTblName() == null ||
+                                StringUtils.equals(item.getTblName().getTbl(), node.getName())) {
+                            return node.getCteQuery().getColumnOutputNames();
+                        }
+                        return Collections.emptyList();
                     }
                 }.visit(analyzeState.getRelation()));
 
@@ -535,8 +540,9 @@ public class QueryAnalyzer {
             }
         }
 
-        Preconditions.checkArgument(outputExpressionBuilder.build().size() == columnOutputNames.size());
-        analyzeState.setOutputExpression(outputExpressionBuilder.build());
+        List<Expr> outputExpr = outputExpressionBuilder.build();
+        Preconditions.checkArgument(outputExpr.size() == columnOutputNames.size());
+        analyzeState.setOutputExpression(outputExpr);
         analyzeState.setColumnOutputNames(columnOutputNames);
         return outputExpressionBuilder.build();
     }
@@ -751,7 +757,7 @@ public class QueryAnalyzer {
                 //                "having v1 in (select v3 from w where v2 = 2)
                 // cte used in outer query and subquery can't use same relation-id and field
                 CTERelation newCteRelation =
-                        new CTERelation(cteRelation.getCteId(), cteRelation.getName(), cteRelation.getCteQuery());
+                        new CTERelation(cteRelation.getCteId(), tableName.getTbl(), cteRelation.getCteQuery());
                 newCteRelation.setScope(
                         new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
                 return newCteRelation;
