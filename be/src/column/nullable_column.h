@@ -23,26 +23,22 @@ public:
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
     NullableColumn(ColumnPtr data_column, NullColumnPtr null_column);
 
-    // Copy constructor
     NullableColumn(const NullableColumn& rhs)
             : _data_column(rhs._data_column->clone_shared()),
               _null_column(std::static_pointer_cast<NullColumn>(rhs._null_column->clone_shared())),
               _has_null(rhs._has_null) {}
 
-    // Move constructor
     NullableColumn(NullableColumn&& rhs) noexcept
             : _data_column(std::move(rhs._data_column)),
               _null_column(std::move(rhs._null_column)),
               _has_null(rhs._has_null) {}
 
-    // Copy assignment
     NullableColumn& operator=(const NullableColumn& rhs) {
         NullableColumn tmp(rhs);
         this->swap_column(tmp);
         return *this;
     }
 
-    // Move assignment
     NullableColumn& operator=(NullableColumn&& rhs) noexcept {
         NullableColumn tmp(std::move(rhs));
         this->swap_column(tmp);

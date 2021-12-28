@@ -30,22 +30,18 @@ public:
         }
     };
 
-    // Copy constructor
     // NOTE: do *NOT* copy |_slices|
     BinaryColumn(const BinaryColumn& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
 
-    // Move constructor
     // NOTE: do *NOT* copy |_slices|
     BinaryColumn(BinaryColumn&& rhs) noexcept : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
 
-    // Copy assignment
     BinaryColumn& operator=(const BinaryColumn& rhs) {
         BinaryColumn tmp(rhs);
         this->swap_column(tmp);
         return *this;
     }
 
-    // Move assignment
     BinaryColumn& operator=(BinaryColumn&& rhs) noexcept {
         BinaryColumn tmp(std::move(rhs));
         this->swap_column(tmp);
