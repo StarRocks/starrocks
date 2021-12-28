@@ -24,6 +24,8 @@
 #include <brpc/controller.h>
 #include <fmt/format.h>
 
+#include <chrono>
+
 #include "common/closure_guard.h"
 #include "exec/tablet_info.h"
 #include "gutil/strings/substitute.h"
@@ -73,6 +75,8 @@ Status TabletsChannel::open(const PTabletWriterOpenRequest& params) {
 void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                                PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
+
+    auto t0 = std::chrono::steady_clock::now();
 
     if (UNLIKELY(!request.has_sender_id())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
@@ -192,6 +196,10 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
+
+    auto t1 = std::chrono::steady_clock::now();
+    response->set_execution_time_us(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+    response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
