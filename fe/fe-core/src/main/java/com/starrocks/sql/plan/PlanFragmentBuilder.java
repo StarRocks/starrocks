@@ -1238,8 +1238,8 @@ public class PlanFragmentBuilder {
                     context.getPlanCtx().getNextNodeId(),
                     inputFragment.getPlanRoot(),
                     sortInfo,
-                    limit != -1,
-                    limit == -1,
+                    limit != Operator.DEFAULT_LIMIT,
+                    limit == Operator.DEFAULT_LIMIT,
                     0);
             sortNode.setLimit(limit);
             sortNode.setOffset(offset);
