@@ -454,9 +454,9 @@ public class ReportHandler extends Daemon {
                             continue;
                         }
 
-                        // 1. replica is not force set bad
+                        // 1. replica is not set bad force
                         // 2. metaVersion < backendVersion or (metaVersion == backendVersion && replica.isBad())
-                        if (!replica.isForceSetBad() &&
+                        if (!replica.isSetBadForce() &&
                                 ((metaVersion < backendVersion) ||
                                         (metaVersion == backendVersion && replica.isBad()))) {
 
