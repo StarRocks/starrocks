@@ -16,7 +16,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 public class AnalyzeCTETest {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeJoin/" + UUID.randomUUID().toString() + "/";
+    private static String runningDir = "fe/mocked/AnalyzeCTE/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
