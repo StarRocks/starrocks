@@ -310,23 +310,17 @@ bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const Co
 
     // TODO(yan): use eq/ne predicates when only one item, but it's very very hard to construct ne/eq expr.
     auto used_values = Int32Column::create();
-    uint8_t sel_value = (true_count < false_count) ? 1 : 0;
     for (int i = 0; i < code_size; i++) {
-        if (selection[i] == sel_value) {
+        if (selection[i]) {
             used_values->append(code_values[i]);
         }
     }
     bool eq_null = true;
     bool null_in_set = false;
-    if (field_nullable) {
-        if (selection[code_size] == sel_value) {
-            null_in_set = true;
-        }
+    if (field_nullable && selection[code_size]) {
+        null_in_set = true;
     }
     bool is_not_in = false;
-    if (sel_value == 0) {
-        is_not_in = true;
-    }
 
     // construct in filter.
     RuntimeState* state = pred->runtime_state();
