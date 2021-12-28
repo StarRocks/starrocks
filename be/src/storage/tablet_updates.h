@@ -33,6 +33,7 @@ class RowsetReadOptions;
 class Schema;
 class TabletReader;
 class ChunkChanger;
+class SegmentIterator;
 } // namespace vectorized
 
 struct EditVersion {
@@ -171,6 +172,52 @@ public:
     //  - logs
     Status clear_meta();
 
+    // get column values by rssids and rowids, at currently applied version
+    // for example:
+    // get_column_values with
+    //    column:          {1,3}
+    //    with_default:    true
+    //    rowids_by_rssid: {4:[1,3], 6:[2,4]}
+    // will return:
+    // [
+    //   [
+    //              default_value_for_column 1,
+    //          column 1 value@rssid:4 rowid:1,
+    //          column 1 value@rssid:4 rowid:3,
+    //          column 1 value@rssid:6 rowid:2,
+    //          column 1 value@rssid:6 rowid:4,
+    //   ],
+    //   [
+    //              default_value_for_column 2,
+    //          column 2 value@rssid:4 rowid:1,
+    //          column 2 value@rssid:4 rowid:3,
+    //          column 2 value@rssid:6 rowid:2,
+    //          column 2 value@rssid:6 rowid:4,
+    //   ]
+    // ]
+    // get_column_values with
+    //    column:          {1,3}
+    //    with_default:    false
+    //    rowids_by_rssid: {4:[1,3], 6:[2,4]}
+    // will return:
+    // [
+    //   [
+    //          column 1 value@rssid:4 rowid:1,
+    //          column 1 value@rssid:4 rowid:3,
+    //          column 1 value@rssid:6 rowid:2,
+    //          column 1 value@rssid:6 rowid:4,
+    //   ],
+    //   [
+    //          column 2 value@rssid:4 rowid:1,
+    //          column 2 value@rssid:4 rowid:3,
+    //          column 2 value@rssid:6 rowid:2,
+    //          column 2 value@rssid:6 rowid:4,
+    //   ]
+    // ]
+    Status get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
+                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                             vector<std::unique_ptr<vectorized::Column>>* columns);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -274,52 +321,6 @@ private:
                                      const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
                                      vectorized::ChunkChanger* chunk_changer,
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
-
-    // get column values by rssids and rowids, at currently applied version
-    // for example:
-    // get_column_values with
-    //    column:          {1,3}
-    //    with_default:    true
-    //    rowids_by_rssid: {4:[1,3], 6:[2,4]}
-    // will return:
-    // [
-    //   [
-    //              default_value_for_column 1,
-    //          column 1 value@rssid:4 rowid:1,
-    //          column 1 value@rssid:4 rowid:3,
-    //          column 1 value@rssid:6 rowid:2,
-    //          column 1 value@rssid:6 rowid:4,
-    //   ],
-    //   [
-    //              default_value_for_column 2,
-    //          column 2 value@rssid:4 rowid:1,
-    //          column 2 value@rssid:4 rowid:3,
-    //          column 2 value@rssid:6 rowid:2,
-    //          column 2 value@rssid:6 rowid:4,
-    //   ]
-    // ]
-    // get_column_values with
-    //    column:          {1,3}
-    //    with_default:    false
-    //    rowids_by_rssid: {4:[1,3], 6:[2,4]}
-    // will return:
-    // [
-    //   [
-    //          column 1 value@rssid:4 rowid:1,
-    //          column 1 value@rssid:4 rowid:3,
-    //          column 1 value@rssid:6 rowid:2,
-    //          column 1 value@rssid:6 rowid:4,
-    //   ],
-    //   [
-    //          column 2 value@rssid:4 rowid:1,
-    //          column 2 value@rssid:4 rowid:3,
-    //          column 2 value@rssid:6 rowid:2,
-    //          column 2 value@rssid:6 rowid:4,
-    //   ]
-    // ]
-    Status _get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
-                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                              vector<std::unique_ptr<vectorized::Column>>* columns);
 
 private:
     Tablet& _tablet;
