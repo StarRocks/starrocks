@@ -214,7 +214,11 @@ public:
         for (int row = 0; row < size; ++row) {
             if (viewer.is_null(row)) {
                 if constexpr (equal_null) {
-                    builder.append(1);
+                    if constexpr (null_in_set) {
+                        builder.append(1);
+                    } else {
+                        builder.append(0);
+                    }
                 } else {
                     builder.append_null();
                 }
