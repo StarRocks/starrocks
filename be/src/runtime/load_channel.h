@@ -59,10 +59,10 @@ public:
 
     // Open a new load channel if it does not exist.
     // NOTE: This method may be called multiple times, and each time with a different |request|.
-    void open(brpc::Controller* cntl, const PTabletWriterOpenRequest* request, PTabletWriterOpenResult* response,
+    void open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request, PTabletWriterOpenResult* response,
               google::protobuf::Closure* done);
 
-    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest* request,
+    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response, google::protobuf::Closure* done);
 
     void cancel();

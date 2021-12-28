@@ -70,49 +70,49 @@ Status TabletsChannel::open(const PTabletWriterOpenRequest& params) {
     return Status::OK();
 }
 
-void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest* request,
+void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                                PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
 
-    if (UNLIKELY(!request->has_sender_id())) {
+    if (UNLIKELY(!request.has_sender_id())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs("no sender_id in PTabletWriterAddChunkRequest");
         return;
     }
-    if (UNLIKELY(request->sender_id() < 0)) {
+    if (UNLIKELY(request.sender_id() < 0)) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs("negative sender_id in PTabletWriterAddChunkRequest");
         return;
     }
-    if (UNLIKELY(request->sender_id() >= _senders.size())) {
+    if (UNLIKELY(request.sender_id() >= _senders.size())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs(
-                fmt::format("invalid sender_id {} in PTabletWriterAddChunkRequest, limit={}", request->sender_id(),
+                fmt::format("invalid sender_id {} in PTabletWriterAddChunkRequest, limit={}", request.sender_id(),
                             _senders.size()));
         return;
     }
-    if (UNLIKELY(!request->has_packet_seq())) {
+    if (UNLIKELY(!request.has_packet_seq())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs("no packet_seq in PTabletWriterAddChunkRequest");
         return;
     }
 
-    Sender& sender = _senders[request->sender_id()];
+    Sender& sender = _senders[request.sender_id()];
     std::lock_guard l(sender.lock);
 
     if (sender.next_seq < 0) {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
         response->mutable_status()->add_error_msgs("Tablet channel has been cancelled");
         return;
-    } else if (request->packet_seq() == sender.next_seq) {
+    } else if (request.packet_seq() == sender.next_seq) {
         sender.next_seq++;
-    } else if (request->packet_seq() < sender.next_seq) {
-        LOG(INFO) << "Ignore outdated request from " << cntl->remote_side() << ". seq=" << request->packet_seq()
+    } else if (request.packet_seq() < sender.next_seq) {
+        LOG(INFO) << "Ignore outdated request from " << cntl->remote_side() << ". seq=" << request.packet_seq()
                   << " expect=" << sender.next_seq << " load_id=" << _load_channel->load_id();
         response->mutable_status()->set_status_code(TStatusCode::OK);
         return;
     } else {
-        LOG(WARNING) << "Out-of-order request from " << cntl->remote_side() << ". seq=" << request->packet_seq()
+        LOG(WARNING) << "Out-of-order request from " << cntl->remote_side() << ". seq=" << request.packet_seq()
                      << " expect=" << sender.next_seq << " load_id=" << _load_channel->load_id();
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs("out-of-order request");
@@ -129,8 +129,8 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 
     auto context = std::move(res).value();
     auto channel_size = _tablet_id_to_sorted_indexes.size();
-    auto tablet_ids = request->tablet_ids().data();
-    auto tablet_ids_size = request->tablet_ids_size();
+    auto tablet_ids = request.tablet_ids().data();
+    auto tablet_ids_size = request.tablet_ids_size();
     auto channel_row_idx_start_points = context->_channel_row_idx_start_points.get();
     auto row_indexes = context->_row_indexes.get();
     auto& chunk = context->_chunk;
@@ -171,7 +171,7 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 
     // NOTE: Must close sender *AFTER* the write requests submitted, otherwise a delta writer commit request may
     // be executed ahead of the write requests submitted by other senders.
-    if (request->eos() && _close_sender(&sender, request->partition_ids().data(), request->partition_ids_size()) == 0) {
+    if (request.eos() && _close_sender(&sender, request.partition_ids().data(), request.partition_ids_size()) == 0) {
         close_channel = true;
         std::lock_guard l1(_partitions_ids_lock);
         for (auto& [_, delta_writer] : _delta_writers) {
@@ -337,21 +337,21 @@ void TabletsChannel::cancel() {
 }
 
 StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_write_context(
-        const PTabletWriterAddChunkRequest* request, PTabletWriterAddBatchResult* response,
+        const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
         google::protobuf::Closure* done) {
-    if (!request->has_chunk() && !request->eos()) {
+    if (!request.has_chunk() && !request.eos()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
 
-    auto& pchunk = request->chunk();
+    auto& pchunk = request.chunk();
     RETURN_IF_ERROR(_build_chunk_meta(pchunk));
 
     scoped_refptr<WriteContext> context(new WriteContext(response));
     vectorized::Chunk& chunk = context->_chunk;
     RETURN_IF_ERROR(chunk.deserialize((const uint8_t*)pchunk.data().data(), pchunk.data().size(), _chunk_meta,
                                       pchunk.serialized_size()));
-    if (UNLIKELY(request->tablet_ids_size() != chunk.num_rows())) {
-        return Status::InvalidArgument("request->tablet_ids_size() != chunk.num_rows()");
+    if (UNLIKELY(request.tablet_ids_size() != chunk.num_rows())) {
+        return Status::InvalidArgument("request.tablet_ids_size() != chunk.num_rows()");
     }
 
     const auto channel_size = _tablet_id_to_sorted_indexes.size();
@@ -362,8 +362,8 @@ StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_wr
     auto& channel_row_idx_start_points = context->_channel_row_idx_start_points;
 
     // compute row indexes for each channel
-    for (uint32_t i = 0; i < request->tablet_ids_size(); ++i) {
-        uint32_t channel_index = _tablet_id_to_sorted_indexes[request->tablet_ids(i)];
+    for (uint32_t i = 0; i < request.tablet_ids_size(); ++i) {
+        uint32_t channel_index = _tablet_id_to_sorted_indexes[request.tablet_ids(i)];
         channel_row_idx_start_points[channel_index]++;
     }
 
@@ -372,8 +372,8 @@ StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_wr
         channel_row_idx_start_points[i] += channel_row_idx_start_points[i - 1];
     }
 
-    auto tablet_ids = request->tablet_ids().data();
-    auto tablet_ids_size = request->tablet_ids_size();
+    auto tablet_ids = request.tablet_ids().data();
+    auto tablet_ids_size = request.tablet_ids_size();
     for (int i = tablet_ids_size - 1; i >= 0; --i) {
         const auto& tablet_id = tablet_ids[i];
         auto it = _tablet_id_to_sorted_indexes.find(tablet_id);

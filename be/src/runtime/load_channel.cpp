@@ -41,20 +41,20 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, int64_t t
 
 LoadChannel::~LoadChannel() {}
 
-void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest* request,
+void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                        PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
-    int64_t index_id = request->index_id();
+    int64_t index_id = request.index_id();
 
     Status st;
     {
         std::lock_guard<std::mutex> l(_lock);
         if (_tablets_channels.find(index_id) == _tablets_channels.end()) {
-            TabletsChannelKey key(request->id(), index_id);
+            TabletsChannelKey key(request.id(), index_id);
             scoped_refptr<TabletsChannel> channel(new TabletsChannel(this, key, _mem_tracker.get()));
-            if (st = channel->open(*request); st.ok()) {
+            if (st = channel->open(request); st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
         }
@@ -64,11 +64,11 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest* r
     response->mutable_status()->add_error_msgs(st.get_error_msg());
 }
 
-void LoadChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest* request,
+void LoadChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                             PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
-    auto channel = get_tablets_channel(request->index_id());
+    auto channel = get_tablets_channel(request.index_id());
     if (channel == nullptr) {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
         response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");

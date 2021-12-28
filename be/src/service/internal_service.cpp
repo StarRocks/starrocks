@@ -131,7 +131,7 @@ void PInternalServiceImpl<T>::tablet_writer_open(google::protobuf::RpcController
                                                  PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     VLOG_RPC << "tablet writer open, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
              << ", txn_id=" << request->txn_id();
-    _exec_env->load_channel_mgr()->open(static_cast<brpc::Controller*>(cntl_base), request, response, done);
+    _exec_env->load_channel_mgr()->open(static_cast<brpc::Controller*>(cntl_base), *request, response, done);
 }
 
 template <typename T>
@@ -163,7 +163,7 @@ void PInternalServiceImpl<T>::tablet_writer_add_chunk(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     VLOG_RPC << "tablet writer add chunk, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
              << ", sender_id=" << request->sender_id();
-    _exec_env->load_channel_mgr()->add_chunk(static_cast<brpc::Controller*>(cntl_base), request, response, done);
+    _exec_env->load_channel_mgr()->add_chunk(static_cast<brpc::Controller*>(cntl_base), *request, response, done);
 }
 
 template <typename T>
@@ -173,7 +173,7 @@ void PInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcControll
                                                    google::protobuf::Closure* done) {
     VLOG_RPC << "tablet writer cancel, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
              << ", sender_id=" << request->sender_id();
-    _exec_env->load_channel_mgr()->cancel(static_cast<brpc::Controller*>(cntl_base), request, response, done);
+    _exec_env->load_channel_mgr()->cancel(static_cast<brpc::Controller*>(cntl_base), *request, response, done);
 }
 
 template <typename T>

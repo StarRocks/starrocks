@@ -54,13 +54,13 @@ public:
 
     Status init(MemTracker* mem_tracker);
 
-    void open(brpc::Controller* cntl, const PTabletWriterOpenRequest* request, PTabletWriterOpenResult* response,
+    void open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request, PTabletWriterOpenResult* response,
               google::protobuf::Closure* done);
 
-    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest* request,
+    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response, google::protobuf::Closure* done);
 
-    void cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest* request, PTabletWriterCancelResult* response,
+    void cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request, PTabletWriterCancelResult* response,
                 google::protobuf::Closure* done);
 
     scoped_refptr<LoadChannel> remove_load_channel(const UniqueId& load_id);

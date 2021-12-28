@@ -85,7 +85,7 @@ public:
     // NOTE: This method is not retryable.
     Status open(const PTabletWriterOpenRequest& params);
 
-    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest* request,
+    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response, google::protobuf::Closure* done);
 
     void cancel();
@@ -172,7 +172,7 @@ private:
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
-    StatusOr<scoped_refptr<WriteContext>> _create_write_context(const PTabletWriterAddChunkRequest* request,
+    StatusOr<scoped_refptr<WriteContext>> _create_write_context(const PTabletWriterAddChunkRequest& request,
                                                                 PTabletWriterAddBatchResult* response,
                                                                 google::protobuf::Closure* done);
 

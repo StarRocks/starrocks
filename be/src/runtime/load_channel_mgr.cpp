@@ -72,10 +72,10 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
     return Status::OK();
 }
 
-void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest* request,
+void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
-    UniqueId load_id(request->id());
+    UniqueId load_id(request.id());
     scoped_refptr<LoadChannel> channel;
     {
         std::lock_guard<std::mutex> l(_lock);
@@ -83,10 +83,10 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
         if (it != _load_channels.end()) {
             channel = it->second;
         } else {
-            int64_t mem_limit_in_req = request->has_load_mem_limit() ? request->load_mem_limit() : -1;
+            int64_t mem_limit_in_req = request.has_load_mem_limit() ? request.load_mem_limit() : -1;
             int64_t job_max_memory = calc_job_max_load_memory(mem_limit_in_req, _mem_tracker->limit());
 
-            int64_t timeout_in_req_s = request->has_load_channel_timeout_s() ? request->load_channel_timeout_s() : -1;
+            int64_t timeout_in_req_s = request.has_load_channel_timeout_s() ? request.load_channel_timeout_s() : -1;
             int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
             auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
 
@@ -97,11 +97,11 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
     channel->open(cntl, request, response, done_guard.release());
 }
 
-void LoadChannelMgr::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest* request,
+void LoadChannelMgr::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                                PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
     VLOG(2) << "Current memory usage=" << _mem_tracker->consumption() << " limit=" << _mem_tracker->limit();
     ClosureGuard done_guard(done);
-    UniqueId load_id(request->id());
+    UniqueId load_id(request.id());
     auto channel = _find_load_channel(load_id);
     if (channel != nullptr) {
         channel->add_chunk(cntl, request, response, done_guard.release());
@@ -111,10 +111,10 @@ void LoadChannelMgr::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
     }
 }
 
-void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest* request,
+void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request,
                             PTabletWriterCancelResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
-    UniqueId load_id(request->id());
+    UniqueId load_id(request.id());
     if (auto channel = remove_load_channel(load_id); channel != nullptr) {
         channel->cancel();
     }
