@@ -1103,6 +1103,7 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalTopN(OptExpression optExpr, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
+            Preconditions.checkState(topN.getOffset() >= 0);
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getOrderSpec(), topN.getLimit(),
                         topN.getOffset(),
