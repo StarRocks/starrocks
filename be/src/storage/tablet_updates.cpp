@@ -2427,18 +2427,18 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         if ((*segment)->num_rows() == 0) {
             continue;
         }
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        std::unique_ptr<fs::ReadableBlock> rblock;
+        RETURN_IF_ERROR(fs::fs_util::block_manager()->open_block((*segment)->file_name(), &rblock));
+        iter_opts.rblock = rblock.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
-            ColumnIterator* col_iter = nullptr;
-            RETURN_IF_ERROR((*segment)->new_column_iterator(column_ids[i], &col_iter));
-            ColumnIteratorOptions iter_opts;
-            OlapReaderStatistics stats;
-            iter_opts.stats = &stats;
-            std::unique_ptr<fs::ReadableBlock> rblock;
-            RETURN_IF_ERROR(fs::fs_util::block_manager()->open_block((*segment)->file_name(), &rblock));
-            iter_opts.rblock = rblock.get();
+            ColumnIterator* col_iter_raw_ptr = nullptr;
+            RETURN_IF_ERROR((*segment)->new_column_iterator(column_ids[i], &col_iter_raw_ptr));
+            std::unique_ptr<ColumnIterator> col_iter(col_iter_raw_ptr);
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
-            delete col_iter;
         }
     }
     return Status::OK();
