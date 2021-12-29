@@ -415,7 +415,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
     @Override
     public LogicalPlan visitSubquery(SubqueryRelation node, ExpressionMapping context) {
-        LogicalPlan logicalPlan = visit(node.getQuery());
+        LogicalPlan logicalPlan = transform(node.getQuery());
         OptExprBuilder builder = new OptExprBuilder(
                 logicalPlan.getRoot().getOp(),
                 logicalPlan.getRootBuilder().getInputs(),
