@@ -176,7 +176,7 @@ ColumnPtr column_from_pool(const Field& field) {
         return Nullable(get_decimal_column_ptr<Decimal128Column, force>(precision, scale));
     case OLAP_FIELD_TYPE_ARRAY: {
         // Never allocate array element columns from column-pool, because its max size is unknown.
-        auto elements = field.get_sub_field(0).create_column();
+        auto elements = field.sub_field(0).create_column();
         auto offsets = get_column_ptr<UInt32Column, force>();
         auto array = ArrayColumn::create(std::move(elements), offsets);
         return Nullable(array);
