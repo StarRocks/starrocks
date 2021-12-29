@@ -270,7 +270,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             }
         } // end for tables
         if (!tableIdList.isEmpty()) {
-            Catalog.getCurrentCatalog().getEditLog().logMultiEraseTable(tableIdList);
+            Catalog.getCurrentCatalog().getEditLog().logEraseMultiTables(tableIdList);
             LOG.info("multi erase write log finished");
         }
     }

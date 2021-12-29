@@ -4771,7 +4771,7 @@ public class Catalog {
         Catalog.getCurrentRecycleBin().replayEraseTable(tableId);
     }
 
-    public void replayMultiEraseTable(MultiEraseTableInfo multiEraseTableInfo) throws DdlException {
+    public void replayEraseMultiTables(MultiEraseTableInfo multiEraseTableInfo) throws DdlException {
         List<Long> tableIds = multiEraseTableInfo.getTableIds();
         for (Long tableId : tableIds) {
             Catalog.getCurrentRecycleBin().replayEraseTable(tableId);

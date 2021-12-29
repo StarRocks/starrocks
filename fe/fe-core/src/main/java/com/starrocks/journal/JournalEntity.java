@@ -153,7 +153,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_MULTI_ERASE_TABLE: {
+            case OperationType.OP_ERASE_MULTI_TABLES: {
                 data = MultiEraseTableInfo.read(in);
                 isRead = true;
                 break;
