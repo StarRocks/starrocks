@@ -194,6 +194,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
@@ -4768,6 +4769,13 @@ public class Catalog {
 
     public void replayEraseTable(long tableId) throws DdlException {
         Catalog.getCurrentRecycleBin().replayEraseTable(tableId);
+    }
+
+    public void replayMultiEraseTable(MultiEraseTableInfo multiEraseTableInfo) throws DdlException {
+        List<Long> tableIds = multiEraseTableInfo.getTableIds();
+        for (Long tableId : tableIds) {
+            Catalog.getCurrentRecycleBin().replayEraseTable(tableId);
+        }
     }
 
     public void replayRecoverTable(RecoverInfo info) {

@@ -170,7 +170,7 @@ public class OperationType {
     // dynamic partition 261~265
     public static final short OP_DYNAMIC_PARTITION = 261;
 
-    // set table replicatin_num config 266
+    // set table replication_num config 266
     public static final short OP_MODIFY_REPLICATION_NUM = 266;
     // set table in memory
     public static final short OP_MODIFY_IN_MEMORY = 267;
@@ -190,6 +190,7 @@ public class OperationType {
     public static final short OP_SWAP_TABLE = 10001;
     public static final short OP_ADD_PARTITIONS = 10002;
     public static final short OP_FINISH_MULTI_DELETE = 10003;
+    public static final short OP_MULTI_ERASE_TABLE = 10004;
 
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;

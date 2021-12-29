@@ -241,6 +241,11 @@ public class EditLog {
                     catalog.replayEraseTable(Long.parseLong(tableId.toString()));
                     break;
                 }
+                case OperationType.OP_MULTI_ERASE_TABLE: {
+                    MultiEraseTableInfo multiEraseTableInfo = (MultiEraseTableInfo) journal.getData();
+                    catalog.replayMultiEraseTable(multiEraseTableInfo);
+                    break;
+                }
                 case OperationType.OP_ERASE_PARTITION: {
                     Text partitionId = (Text) journal.getData();
                     catalog.replayErasePartition(Long.parseLong(partitionId.toString()));
@@ -965,6 +970,10 @@ public class EditLog {
 
     public void logEraseTable(long tableId) {
         logEdit(OperationType.OP_ERASE_TABLE, new Text(Long.toString(tableId)));
+    }
+
+    public void logMultiEraseTable(List<Long> tableIds) {
+        logEdit(OperationType.OP_MULTI_ERASE_TABLE, new MultiEraseTableInfo(tableIds));
     }
 
     public void logRecoverTable(RecoverInfo info) {

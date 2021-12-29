@@ -249,6 +249,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     private synchronized void eraseTable(long currentTimeMs) {
         Iterator<Map.Entry<Long, RecycleTableInfo>> tableIter = idToTable.entrySet().iterator();
+        List<Long> tableIdList = Lists.newArrayList();
         while (tableIter.hasNext()) {
             Map.Entry<Long, RecycleTableInfo> entry = tableIter.next();
             RecycleTableInfo tableInfo = entry.getValue();
@@ -263,12 +264,15 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 // erase table
                 tableIter.remove();
                 idToRecycleTime.remove(tableId);
-
+                tableIdList.add(tableId);
                 // log
-                Catalog.getCurrentCatalog().getEditLog().logEraseTable(tableId);
-                LOG.info("erase table[{}-{}] finished", tableId, table.getName());
+                LOG.info("erase table[{}-{}] in memory finished", tableId, table.getName());
             }
         } // end for tables
+        if (!tableIdList.isEmpty()) {
+            Catalog.getCurrentCatalog().getEditLog().logMultiEraseTable(tableIdList);
+            LOG.info("multi erase write log finished");
+        }
     }
 
     private synchronized void eraseTableWithSameName(long dbId, String tableName) {

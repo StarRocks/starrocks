@@ -73,6 +73,7 @@ import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PrivInfo;
@@ -149,6 +150,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DROP_REPOSITORY: {
                 data = new Text();
                 ((Text) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_MULTI_ERASE_TABLE: {
+                data = MultiEraseTableInfo.read(in);
                 isRead = true;
                 break;
             }
