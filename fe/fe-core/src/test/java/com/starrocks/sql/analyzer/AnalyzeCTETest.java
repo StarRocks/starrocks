@@ -39,6 +39,18 @@ public class AnalyzeCTETest {
 
         // original table name is not allowed to access when alias-name exists
         analyzeFail("with c1 as (select * from t0) select c1.* from c1 a");
+
+        QueryRelation query = analyzeSuccess(
+                "with c1(a,b,c) as (select * from t0) select c1.* from c1");
+        Assert.assertEquals("a,b,c", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess(
+                "with c1(a,b,c) as (select * from t0) select t.* from c1 t");
+        Assert.assertEquals("a,b,c", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess(
+                "with c1(a,b,c) as (select * from t0), c2 as (select * from t1) select c2.*,t.* from c1 t,c2");
+        Assert.assertEquals("v4,v5,v6,a,b,c", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test
