@@ -105,7 +105,9 @@ public class SubqueryTransformer {
             if (relation instanceof QuerySpecification) {
                 QuerySpecification querySpecification = (QuerySpecification) relation;
                 // For in subQuery, the order by is meaningless
-                querySpecification.getOrderBy().clear();
+                if (!querySpecification.hasLimit()) {
+                    querySpecification.getOrderBy().clear();
+                }
             }
 
             return new RelationTransformer(columnRefFactory, outer).transform(relation);
