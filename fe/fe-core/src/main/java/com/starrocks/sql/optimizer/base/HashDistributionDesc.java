@@ -18,9 +18,7 @@ public class HashDistributionDesc {
         //  the result will be error
         SHUFFLE_AGG, // hash property from shuffle agg
         SHUFFLE_JOIN, // hash property from shuffle join
-        BUCKET_JOIN, // hash property from bucket join
-        // @Todo: It's a temporary solution
-        FORCE_SHUFFLE_JOIN, // hash property from shuffle join if contains expression in on clause
+        BUCKET_JOIN // hash property from bucket join
     }
 
     private final List<Integer> columns;
