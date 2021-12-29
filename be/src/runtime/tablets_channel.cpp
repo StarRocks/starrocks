@@ -128,6 +128,9 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
         res.status().to_protobuf(response->mutable_status());
         return;
     } else {
+        // Assuming that most writes will be successful, by setting the status code to OK before submitting
+        // `AsyncDeltaWriterRequest`s, there will be no lock contention most of the time in
+        // `WriteContext::update_status()`
         response->mutable_status()->set_status_code(TStatusCode::OK);
     }
 
