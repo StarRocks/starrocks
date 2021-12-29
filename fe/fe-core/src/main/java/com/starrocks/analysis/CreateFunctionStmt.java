@@ -68,7 +68,7 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String FINALIZE_KEY = "finalize_fn";
     public static final String GET_VALUE_KEY = "get_value_fn";
     public static final String REMOVE_KEY = "remove_fn";
-    public static final String OBJECT_FORMAT_KEY = "object_format";
+    public static final String TYPE_KEY = "type";
     public static final String OBJECT_FORMAT_STARROCKS_JAR = "StarrocksJar";
     public static final String EVAL_METHOD_NAME = "evaluate";
 
@@ -157,7 +157,7 @@ public class CreateFunctionStmt extends DdlStmt {
             intermediateType = returnType;
         }
 
-        String object_format = properties.get(OBJECT_FORMAT_KEY);
+        String object_format = properties.get(TYPE_KEY);
         if (OBJECT_FORMAT_STARROCKS_JAR.equals(object_format)) {
             isStarrocksJar = true;
         }
