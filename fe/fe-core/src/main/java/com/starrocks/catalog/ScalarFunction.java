@@ -308,6 +308,7 @@ public class ScalarFunction extends Function {
         properties.put(CreateFunctionStmt.OBJECT_FILE_KEY, getLocation() == null ? "" : getLocation().toString());
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
         properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName);
+        properties.put(CreateFunctionStmt.OBJECT_FORMAT_KEY, getBinaryType().name());
         return new Gson().toJson(properties);
     }
 }

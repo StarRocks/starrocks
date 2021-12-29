@@ -68,10 +68,8 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String FINALIZE_KEY = "finalize_fn";
     public static final String GET_VALUE_KEY = "get_value_fn";
     public static final String REMOVE_KEY = "remove_fn";
-    public static final String OBJECT_TYPE_KEY = "object_type";
-    public static final String OBJECT_TYPE_STARROCKS_JAR = "StarrocksJar";
-    public static final String PREPARE_METHOD_NAME = "prepare";
-    public static final String CLOSE_METHOD_NAME = "close";
+    public static final String OBJECT_FORMAT_KEY = "object_format";
+    public static final String OBJECT_FORMAT_STARROCKS_JAR = "StarrocksJar";
     public static final String EVAL_METHOD_NAME = "evaluate";
 
 
@@ -159,8 +157,8 @@ public class CreateFunctionStmt extends DdlStmt {
             intermediateType = returnType;
         }
 
-        String lang = properties.get(OBJECT_TYPE_KEY);
-        if (OBJECT_TYPE_STARROCKS_JAR.equals(lang)) {
+        String object_format = properties.get(OBJECT_FORMAT_KEY);
+        if (OBJECT_FORMAT_STARROCKS_JAR.equals(object_format)) {
             isStarrocksJar = true;
         }
 
@@ -185,19 +183,19 @@ public class CreateFunctionStmt extends DdlStmt {
     }
 
     private void analyzeUdfClassInStarrocksJar() throws AnalysisException {
-        String symbol = properties.get(SYMBOL_KEY);
-        if (Strings.isNullOrEmpty(symbol)) {
+        String class_name = properties.get(SYMBOL_KEY);
+        if (Strings.isNullOrEmpty(class_name)) {
             throw new AnalysisException("No '" + SYMBOL_KEY + "' in properties");
         }
 
         try {
             URL[] urls = {new URL("jar:" + objectFile + "!/")};
             URLClassLoader cl = URLClassLoader.newInstance(urls);
-            udfClass = cl.loadClass(symbol);
+            udfClass = cl.loadClass(class_name);
         } catch (MalformedURLException e) {
             throw new AnalysisException("failed to load object_file: " + objectFile);
         } catch (ClassNotFoundException e) {
-            throw new AnalysisException("class '" + symbol + "' not found in object_file :" + objectFile);
+            throw new AnalysisException("class '" + class_name + "' not found in object_file :" + objectFile);
         }
     }
 
@@ -278,8 +276,8 @@ public class CreateFunctionStmt extends DdlStmt {
 
     private void checkStarrocksJarUdfMethod(Method method) throws AnalysisException {
         String name = method.getName();
-        boolean inspected = true;
-        if (PREPARE_METHOD_NAME.equals(name) || EVAL_METHOD_NAME.equals(name)) {
+        boolean checked = true;
+        if (EVAL_METHOD_NAME.equals(name)) {
             Class retType = method.getReturnType();
             checkStarrocksJarUdfType(returnType.getType(), retType, "Return");
             if (method.getParameters().length != argsDef.getArgTypes().length) {
@@ -289,18 +287,11 @@ public class CreateFunctionStmt extends DdlStmt {
                 Parameter p = method.getParameters()[i];
                 checkStarrocksJarUdfType(argsDef.getArgTypes()[i], p.getType(), p.getName());
             }
-        } else if (CLOSE_METHOD_NAME.equals(name)) {
-            Class retType = method.getReturnType();
-            if (!retType.equals(void.class)) {
-                throw new AnalysisException(String.format("UDF '%s' return type should be void", CLOSE_METHOD_NAME));
-            }
-            if (method.getParameters().length != 0) {
-                throw new AnalysisException(String.format("UDF '%s' should have zero parameter", CLOSE_METHOD_NAME));
-            }
         } else {
-            inspected = false;
+            checked = false;
         }
-        if (inspected) {
+
+        if (checked) {
             if (Modifier.isStatic(method.getModifiers())) {
                 throw new AnalysisException(String.format("UDF '%s' should be non-static method", name));
             }
