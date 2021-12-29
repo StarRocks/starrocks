@@ -4,6 +4,8 @@
 
 #include <runtime/types.h>
 
+#include <string_view>
+
 #include "butil/containers/flat_map.h"
 #include "column/column.h"
 #include "column/column_hash.h"
@@ -63,7 +65,7 @@ public:
     Columns& columns() { return _columns; }
 
     // schema must exists.
-    std::string get_column_name(size_t idx) const;
+    std::string_view get_column_name(size_t idx) const;
 
     // schema must exist and will be updated.
     void append_column(ColumnPtr column, const FieldPtr& field);
