@@ -45,21 +45,25 @@ public class CTEPlanTest extends PlanTestBase {
                 "    EXCHANGE ID: 10\n" +
                 "    RANDOM"));
     }
-/*
+
     @Test
     public void testFromUseCte() throws Exception {
         String sql = "with x0 as (select * from t0) " +
                 "select * from (with x1 as (select * from t1) select * from x1 join x0 on x1.v4 = x0.v1) tt";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 01\n" +
-                "    HASH_PARTITIONED: 4: v1\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 04\n" +
-                "    HASH_PARTITIONED: 7: v1\n"));
+        Assert.assertTrue(plan.contains(" 8:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v4 = 10: v1\n" +
+                "  |  \n" +
+                "  |----7:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:EXCHANGE"));
     }
 
+    /*
     @Test
     public void testFromUseSameNameCte() throws Exception {
         String sql = "with x0 as (select * from t0) " +
@@ -73,7 +77,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "    EXCHANGE ID: 04\n" +
                 "    HASH_PARTITIONED: 7: v1\n"));
     }
-*/
+     */
 
     @Test
     public void testCTEJoinReorderLoseStatistics() throws Exception {
