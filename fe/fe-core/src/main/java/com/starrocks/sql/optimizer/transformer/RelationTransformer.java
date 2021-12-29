@@ -401,7 +401,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
             return new LogicalPlan(
                     new OptExprBuilder(new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap),
-                            Collections.emptyList(), new ExpressionMapping(expressionMapping.getScope(), cteOutputs)),
+                            Collections.emptyList(), new ExpressionMapping(node.getScope(), cteOutputs)),
                     null, null);
         } else {
             LogicalPlan logicalPlan = visit(node.getCteQuery());

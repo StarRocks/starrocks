@@ -63,6 +63,37 @@ public class CTEPlanTest extends PlanTestBase {
                 "  4:EXCHANGE"));
     }
 
+    @Test
+    public void testSubqueryUserSameCTE() throws Exception {
+        String sql = "with x0 as (select * from t0) " +
+                "select * from x0 x,t1 y where v1 in (select v2 from x0 z where z.v1 = x.v1)";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 4: v1, 4: v1\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    HASH_PARTITIONED: 11: v2, 10: v1\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+
+        sql = "with x0 as (select * from t0) " +
+                "select * from x0 t,t1 where v1 in (select v2 from x0 where t.v1 = v1)";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 4: v1, 4: v1\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    HASH_PARTITIONED: 11: v2, 10: v1\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+    }
+
     /*
     @Test
     public void testFromUseSameNameCte() throws Exception {
