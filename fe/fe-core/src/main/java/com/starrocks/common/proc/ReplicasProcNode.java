@@ -41,7 +41,7 @@ public class ReplicasProcNode implements ProcNodeInterface {
             .add("LstSuccessVersion").add("LstSuccessVersionHash")
             .add("LstFailedVersion").add("LstFailedVersionHash")
             .add("LstFailedTime").add("SchemaHash").add("DataSize").add("RowCount").add("State")
-            .add("IsBad").add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
+            .add("IsBad").add("IsSetBadForce").add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
             .build();
 
     private long tabletId;
@@ -93,6 +93,7 @@ public class ReplicasProcNode implements ProcNodeInterface {
                     String.valueOf(replica.getRowCount()),
                     String.valueOf(replica.getState()),
                     String.valueOf(replica.isBad()),
+                    String.valueOf(replica.isSetBadForce()),
                     String.valueOf(replica.getVersionCount()),
                     String.valueOf(replica.getPathHash()),
                     metaUrl,

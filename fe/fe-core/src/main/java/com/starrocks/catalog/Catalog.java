@@ -7402,7 +7402,7 @@ public class Catalog {
                 return;
             }
             if (status == ReplicaStatus.BAD || status == ReplicaStatus.OK) {
-                if (replica.setBad(status == ReplicaStatus.BAD)) {
+                if (replica.setBadForce(status == ReplicaStatus.BAD)) {
                     if (!isReplay) {
                         SetReplicaStatusOperationLog log =
                                 new SetReplicaStatusOperationLog(backendId, tabletId, status);

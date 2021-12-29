@@ -120,6 +120,7 @@ public class MetadataViewer {
                             row.add(String.valueOf(replica.getSchemaHash()));
                             row.add(String.valueOf(replica.getVersionCount()));
                             row.add(String.valueOf(replica.isBad()));
+                            row.add(String.valueOf(replica.isSetBadForce()));
                             row.add(replica.getState().name());
                             row.add(status.name());
                             result.add(row);
