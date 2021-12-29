@@ -7,6 +7,7 @@
 
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
+#include "storage/tablet_updates.h"
 
 namespace starrocks {
 
@@ -23,7 +24,7 @@ public:
     RowsetUpdateState();
     ~RowsetUpdateState();
 
-    Status load(int64_t tablet_id, Rowset* rowset);
+    Status load(Tablet* tablet, Rowset* rowset);
 
     Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, const PrimaryIndex& index);
 
@@ -35,7 +36,7 @@ public:
     std::string to_string() const;
 
 private:
-    Status _do_load(Rowset* rowset);
+    Status _do_load(Tablet* tablet, Rowset* rowset);
 
     std::once_flag _load_once_flag;
     Status _status;
@@ -45,6 +46,16 @@ private:
     std::vector<ColumnUniquePtr> _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
+
+    // states for partial update
+    EditVersion _read_version;
+    uint32_t _next_rowset_id = 0;
+    struct PartialUpdateState {
+        vector<uint64_t> src_rss_rowids;
+        vector<std::unique_ptr<vectorized::Column>> write_columns;
+    };
+    // TODO: dump to disk if memory usage is too large
+    std::vector<PartialUpdateState> _parital_update_states;
 
     RowsetUpdateState(const RowsetUpdateState&) = delete;
     const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
