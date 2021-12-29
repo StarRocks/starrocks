@@ -449,7 +449,6 @@ Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
                 (void)!row.raw_json().get(sv);
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
             }
-            continue;
         }
 
         st = parser->advance();
