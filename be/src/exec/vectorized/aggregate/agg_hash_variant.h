@@ -461,7 +461,7 @@ using OneStringAggHashSet = AggHashSetOfOneStringKey<SliceAggHashSet<seed>>;
 template <PhmapSeed seed>
 using NullOneStringAggHashSet = AggHashSetOfOneNullableStringKey<SliceAggHashSet<seed>>;
 template <PhmapSeed seed>
-using SerializedKeyAggHashSet = AggHashSetOfSerializedKey<SliceAggTwoLevelHashSet<seed>>;
+using SerializedKeyAggHashSet = AggHashSetOfSerializedKey<SliceAggHashSet<seed>>;
 template <PhmapSeed seed>
 using SerializedTwoLevelKeyAggHashSet = AggHashSetOfSerializedKey<SliceAggTwoLevelHashSet<seed>>;
 template <PhmapSeed seed>

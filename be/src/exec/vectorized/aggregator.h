@@ -132,6 +132,7 @@ public:
     // we convert the single hash map to two level hash map.
     // two level hash map is better in large data set.
     void try_convert_to_two_level_map();
+    void try_convert_to_two_level_set();
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
