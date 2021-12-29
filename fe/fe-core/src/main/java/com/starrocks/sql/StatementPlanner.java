@@ -14,6 +14,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -32,7 +34,12 @@ public class StatementPlanner {
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
         com.starrocks.sql.analyzer.Analyzer analyzer =
                 new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
-        Relation relation = analyzer.analyze(stmt);
+        Relation relation;
+        try {
+            relation = analyzer.analyze(stmt);
+        } catch (Exception e) {
+            throw new AnalysisException("analyzer error: " + e.getMessage(), e);
+        }
 
         PrivilegeChecker.check(stmt, session.getCatalog().getAuth(), session);
 
@@ -74,25 +81,44 @@ public class StatementPlanner {
 
         //1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
+        LogicalPlan logicalPlan;
+        try {
+            logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
+        } catch (Exception e) {
+            throw new StarRocksPlannerException("transformer error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
+        }
 
         //2. Optimize logical plan and build physical plan
         Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan = optimizer.optimize(
-                session,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+        OptExpression optimizedPlan;
+        try {
+            optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+        } catch (Exception e) {
+            throw new StarRocksPlannerException("optimizer error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
+        }
 
         //3. Build fragment exec plan
-        PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-        return new PlanFragmentBuilder().createPhysicalPlan(
-                optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+        PlannerContext plannerContext;
+        try {
+            plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
+            return new PlanFragmentBuilder().createPhysicalPlan(
+                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+        } catch (Exception e) {
+            throw new StarRocksPlannerException("fragmentBuilder error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
+        }
     }
 
     private ExecPlan createInsertPlan(Relation relation, ConnectContext session) {
-        return new InsertPlanner().plan(relation, session);
+        try {
+            return new InsertPlanner().plan(relation, session);
+        } catch (Exception e) {
+            throw new StarRocksPlannerException("insertPlanner error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
+        }
     }
 
     // Lock all database before analyze

@@ -8,6 +8,11 @@ public class StarRocksPlannerException extends RuntimeException {
         return type;
     }
 
+    public StarRocksPlannerException(String message, ErrorType type, Exception e) {
+        super(message, e);
+        this.type = type;
+    }
+
     public StarRocksPlannerException(String message, ErrorType type) {
         super(message);
         this.type = type;
