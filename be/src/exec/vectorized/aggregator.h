@@ -137,6 +137,7 @@ public:
     // we convert the single hash map to two level hash map.
     // two level hash map is better in large data set.
     void try_convert_to_two_level_map();
+    void try_convert_to_two_level_set();
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
@@ -261,7 +262,7 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                    THROW_BAD_ALLOC_IF_NULL(agg_state);
+                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
                         _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
                     }
@@ -277,7 +278,7 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                    THROW_BAD_ALLOC_IF_NULL(agg_state);
+                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
                         _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
                     }
@@ -472,14 +473,16 @@ private:
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     template <typename HashMapWithKey>
-    void _release_agg_memory(HashMapWithKey& hash_map_with_key) {
-        auto it = hash_map_with_key.hash_map.begin();
-        auto end = hash_map_with_key.hash_map.end();
-        while (it != end) {
-            for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->destroy(it->second + _agg_states_offsets[i]);
+    void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
+        if (hash_map_with_key != nullptr) {
+            auto it = hash_map_with_key->hash_map.begin();
+            auto end = hash_map_with_key->hash_map.end();
+            while (it != end) {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->destroy(it->second + _agg_states_offsets[i]);
+                }
+                ++it;
             }
-            ++it;
         }
     }
 };

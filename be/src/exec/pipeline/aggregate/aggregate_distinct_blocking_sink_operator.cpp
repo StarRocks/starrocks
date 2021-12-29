@@ -45,7 +45,7 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk
 }
 
 Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
+    DCHECK_LE(chunk->num_rows(), state->batch_size());
     _aggregator->evaluate_exprs(chunk.get());
 
     {
@@ -61,6 +61,10 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
     }
         APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
+
+        _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                          _aggregator->mem_pool()->total_reserved_bytes());
+        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
         _aggregator->update_num_input_rows(chunk->num_rows());
         if (limit_with_no_agg) {

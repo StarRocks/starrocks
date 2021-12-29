@@ -60,7 +60,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
              _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
              _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
     const auto chunk_size = chunk->num_rows();
-    DCHECK_LE(chunk_size, config::vector_chunk_size);
+    DCHECK_LE(chunk_size, state->batch_size());
 
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     if (!_aggregator->is_none_group_by_exprs()) {
@@ -76,7 +76,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
 
         _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
                           _aggregator->mem_pool()->total_reserved_bytes());
-        _aggregator->try_convert_to_two_level_map();
+        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
     if (_aggregator->is_none_group_by_exprs()) {
         _aggregator->compute_single_agg_state(chunk_size);

@@ -14,20 +14,16 @@ public:
     explicit ConstColumn(ColumnPtr data_column);
     ConstColumn(ColumnPtr data_column, size_t size);
 
-    // Copy constructor
     ConstColumn(const ConstColumn& rhs) : _data(rhs._data->clone_shared()), _size(rhs._size) {}
 
-    // Move constructor
     ConstColumn(ConstColumn&& rhs) noexcept : _data(std::move(rhs._data)), _size(rhs._size) {}
 
-    // Copy assignment
     ConstColumn& operator=(const ConstColumn& rhs) {
         ConstColumn tmp(rhs);
         this->swap_column(tmp);
         return *this;
     }
 
-    // Move assignment
     ConstColumn& operator=(ConstColumn&& rhs) noexcept {
         ConstColumn tmp(std::move(rhs));
         this->swap_column(tmp);

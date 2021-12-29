@@ -1072,14 +1072,14 @@ public class PlanFragmentBuilder {
                 FunctionCallExpr replaceExpr = null;
                 final String functionName = functionCallExpr.getFnName().getFunction();
                 if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
-                    replaceExpr = new FunctionCallExpr("MULTI_DISTINCT_COUNT", functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction("MULTI_DISTINCT_COUNT",
+                    replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_COUNT, functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,
                             new Type[] {functionCallExpr.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);
                 } else if (functionName.equalsIgnoreCase("SUM")) {
-                    replaceExpr = new FunctionCallExpr("MULTI_DISTINCT_SUM", functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction("MULTI_DISTINCT_SUM",
+                    replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_SUM, functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
                             new Type[] {functionCallExpr.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);
@@ -1145,6 +1145,7 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalTopN(OptExpression optExpr, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
+            Preconditions.checkState(topN.getOffset() >= 0);
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getOrderSpec(), topN.getLimit(),
                         topN.getOffset(),

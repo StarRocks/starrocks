@@ -1312,6 +1312,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_routine_load_lag_metrics = false;
 
+    @ConfField(mutable = true)
+    public static boolean enable_collect_query_detail_info = false;
+
     /**
      * Min lag of routine load job to show in metrics
      * Only show the routine load job whose lag is larger than min_routine_load_lag_for_metrics

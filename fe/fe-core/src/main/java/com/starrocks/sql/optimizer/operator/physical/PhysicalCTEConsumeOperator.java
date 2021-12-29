@@ -66,4 +66,13 @@ public class PhysicalCTEConsumeOperator extends PhysicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), cteId, cteOutputColumnRefMap);
     }
+
+    @Override
+    public String toString() {
+        return "PhysicalCTEConsumeOperator{" +
+                "cteId='" + cteId + '\'' +
+                ", limit=" + limit +
+                ", predicate=" + predicate +
+                '}';
+    }
 }

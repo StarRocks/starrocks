@@ -285,10 +285,9 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_tuple(size_t size) const {
 
 std::unique_ptr<Chunk> Chunk::clone_unique() const {
     std::unique_ptr<Chunk> chunk = clone_empty_with_tuple(0);
-    for (const auto& kv : _slot_id_to_index) {
-        size_t index = kv.second;
-        ColumnPtr column = _columns[index]->clone_shared();
-        chunk->_columns[index] = std::move(column);
+    for (size_t idx = 0; idx < _columns.size(); idx++) {
+        ColumnPtr column = _columns[idx]->clone_shared();
+        chunk->_columns[idx] = std::move(column);
     }
     chunk->check_or_die();
     return chunk;

@@ -59,8 +59,8 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
         bool keep_order) {
     DCHECK(profile != nullptr);
     VLOG_FILE << "creating receiver for fragment=" << fragment_instance_id << ", node=" << dest_node_id;
-    auto pass_through_chunk_buffer = get_pass_through_chunk_buffer(state->query_id());
-    DCHECK(pass_through_chunk_buffer.get() != nullptr);
+    PassThroughChunkBuffer* pass_through_chunk_buffer = get_pass_through_chunk_buffer(state->query_id());
+    DCHECK(pass_through_chunk_buffer != nullptr);
     std::shared_ptr<DataStreamRecvr> recvr(new DataStreamRecvr(
             this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging, buffer_size, profile,
             std::move(sub_plan_query_statistics_recvr), is_pipeline, keep_order, pass_through_chunk_buffer));
@@ -226,34 +226,15 @@ void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
 }
 
 void DataStreamMgr::prepare_pass_through_chunk_buffer(const TUniqueId& query_id) {
-    {
-        std::unique_lock _l(_pass_through_chunk_lock);
-        if (_pass_through_chunk_buffer_manager.find(query_id) == _pass_through_chunk_buffer_manager.end()) {
-            PassThroughChunkBufferPtr buffer = std::make_shared<PassThroughChunkBuffer>(query_id);
-            _pass_through_chunk_buffer_manager.emplace(std::make_pair(query_id, buffer));
-        }
-    }
+    _pass_through_chunk_buffer_manager.open_fragment_instance(query_id);
 }
 
 void DataStreamMgr::destroy_pass_through_chunk_buffer(const TUniqueId& query_id) {
-    {
-        std::unique_lock _l(_pass_through_chunk_lock);
-        auto it = _pass_through_chunk_buffer_manager.find(query_id);
-        if (it != _pass_through_chunk_buffer_manager.end()) {
-            _pass_through_chunk_buffer_manager.erase(it);
-        }
-    }
+    _pass_through_chunk_buffer_manager.close_fragment_instance(query_id);
 }
 
-PassThroughChunkBufferPtr DataStreamMgr::get_pass_through_chunk_buffer(const TUniqueId& query_id) {
-    {
-        std::unique_lock _l(_pass_through_chunk_lock);
-        auto it = _pass_through_chunk_buffer_manager.find(query_id);
-        if (it == _pass_through_chunk_buffer_manager.end()) {
-            return nullptr;
-        }
-        return it->second;
-    }
+PassThroughChunkBuffer* DataStreamMgr::get_pass_through_chunk_buffer(const TUniqueId& query_id) {
+    return _pass_through_chunk_buffer_manager.get(query_id);
 }
 
 } // namespace starrocks

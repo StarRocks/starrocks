@@ -25,14 +25,15 @@ namespace pipeline {
 
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, std::vector<ExprContext*> conjunct_ctxs,
-                    std::vector<ExprContext*>& runtime_in_filters,
+    OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, int64_t limit, bool enable_column_expr_predicate,
+                    std::vector<ExprContext*> conjunct_ctxs, std::vector<ExprContext*>& runtime_in_filters,
                     vectorized::RuntimeFilterProbeCollector* runtime_bloom_filters,
                     std::vector<std::string> key_column_names, bool skip_aggregation,
-                    std::vector<std::string>* unused_output_columns, RuntimeProfile* runtime_profile, int64_t limit)
+                    std::vector<std::string>* unused_output_columns, RuntimeProfile* runtime_profile)
             : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
               _limit(limit),
+              _enable_column_expr_predicate(enable_column_expr_predicate),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _runtime_in_filters(runtime_in_filters),
               _runtime_bloom_filters(*runtime_bloom_filters),
@@ -77,8 +78,9 @@ private:
 
     vectorized::TabletReaderParams _params = {};
 
-    int32_t _tuple_id;
-    int64_t _limit; // -1: no limit
+    const int32_t _tuple_id;
+    const int64_t _limit; // -1: no limit
+    const bool _enable_column_expr_predicate;
     std::vector<ExprContext*> _conjunct_ctxs;
     const std::vector<ExprContext*>& _runtime_in_filters;
     const vectorized::RuntimeFilterProbeCollector& _runtime_bloom_filters;

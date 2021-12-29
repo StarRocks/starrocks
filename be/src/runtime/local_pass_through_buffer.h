@@ -30,18 +30,22 @@ public:
     PassThroughChunkBuffer(const TUniqueId& query_id);
     ~PassThroughChunkBuffer();
     PassThroughChannel* get_or_create_channel(const Key& key);
+    int ref() { return ++_ref_count; }
+    int unref() {
+        _ref_count -= 1;
+        return _ref_count;
+    }
 
 private:
     std::mutex _mutex;
     const TUniqueId _query_id;
     std::unordered_map<Key, PassThroughChannel*, KeyHash> _key_to_channel;
+    int _ref_count;
 };
-using PassThroughChunkBufferPtr = std::shared_ptr<PassThroughChunkBuffer>;
 
 class PassThroughContext {
 public:
-    PassThroughContext(const PassThroughChunkBufferPtr& chunk_buffer, TUniqueId fragment_instance_id,
-                       PlanNodeId node_id)
+    PassThroughContext(PassThroughChunkBuffer* chunk_buffer, TUniqueId fragment_instance_id, PlanNodeId node_id)
             : _chunk_buffer(chunk_buffer), _fragment_instance_id(fragment_instance_id), _node_id(node_id) {}
     void init();
     void append_chunk(int sender_id, const vectorized::Chunk* chunk, size_t chunk_size);
@@ -49,10 +53,25 @@ public:
 
 private:
     // hold this chunk buffer to avoid early deallocation.
-    PassThroughChunkBufferPtr _chunk_buffer;
+    PassThroughChunkBuffer* _chunk_buffer;
     TUniqueId _fragment_instance_id;
     PlanNodeId _node_id;
     PassThroughChannel* _channel = nullptr;
+};
+
+class PassThroughChunkBufferManager {
+public:
+    // Called when fragment instance is about to open/close
+    // We don't care open/close by which fragment instance,
+    // just to want to make sure that fragment instances in a query can
+    // share the same `PassThroughChunkBuffer*` struct
+    void open_fragment_instance(const TUniqueId& query_id);
+    void close_fragment_instance(const TUniqueId& query_id);
+    PassThroughChunkBuffer* get(const TUniqueId& query_id);
+
+private:
+    std::mutex _mutex;
+    std::unordered_map<TUniqueId, PassThroughChunkBuffer*> _query_id_to_buffer;
 };
 
 } // namespace starrocks

@@ -9,7 +9,6 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/tablet.h"
-#include "storage/tablet_updates.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
@@ -23,18 +22,16 @@ RowsetUpdateState::RowsetUpdateState() = default;
 
 RowsetUpdateState::~RowsetUpdateState() = default;
 
-Status RowsetUpdateState::load(int64_t tablet_id, Rowset* rowset) {
+Status RowsetUpdateState::load(Tablet* tablet, Rowset* rowset) {
     if (UNLIKELY(!_status.ok())) {
         return _status;
     }
-    std::call_once(_load_once_flag, [&] {
-        _tablet_id = tablet_id;
-        _status = _do_load(rowset);
-    });
+    std::call_once(_load_once_flag, [&] { _status = _do_load(tablet, rowset); });
     return _status;
 }
 
-Status RowsetUpdateState::_do_load(Rowset* rowset) {
+Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
+    _tablet_id = tablet->tablet_id();
     auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
@@ -106,6 +103,11 @@ Status RowsetUpdateState::_do_load(Rowset* rowset) {
     for (const auto& one_delete : deletes()) {
         _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
     }
+    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    if (!rowset_meta_pb.has_txn_meta()) {
+        return Status::OK();
+    }
+    // TODO: prepare partial update states
     return Status::OK();
 }
 
@@ -184,9 +186,6 @@ static void plan_read_by_rssid(const vector<uint64_t>& rowids, size_t* num_defau
     }
 }
 
-static void gen_column_by_src_column_and_idxes(const vectorized::Column& src, const vector<uint32_t>& idxes,
-                                               std::unique_ptr<vectorized::Column>* dest) {}
-
 Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, const PrimaryIndex& index) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     if (!rowset_meta_pb.has_txn_meta()) {
@@ -208,6 +207,13 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
     vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
     vector<std::unique_ptr<vectorized::Column>> write_columns(read_column_ids.size());
+    for (auto i = 0; i < read_column_ids.size(); i++) {
+        const auto read_column_id = read_column_ids[i];
+        auto tablet_column = tschema.column(read_column_id);
+        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        read_columns[i] = column->clone_empty();
+        write_columns[i] = column->clone_empty();
+    }
     size_t num_segments = rowset->num_segments();
     DCHECK(num_segments == _upserts.size());
     vector<std::pair<string, string>> rewrite_files;
@@ -220,25 +226,25 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         auto& pks = *_upserts[i];
         int64_t t_start = MonotonicMillis();
         std::vector<uint64_t> rowids(pks.size());
-        // TODO: get rowid by pk column using primary index
         int64_t t_get_rowids = MonotonicMillis();
+        index.get(pks, &rowids);
         size_t num_default = 0;
         std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
         vector<uint32_t> idxes;
         // group rowids by rssid, and for each group sort by rowid
         plan_read_by_rssid(rowids, &num_default, &rowids_by_rssid, &idxes);
         // get column values by rowid, also get default values if needed
-        RETURN_IF_ERROR(tablet->updates()->_get_column_values(read_column_ids, num_default > 0, rowids_by_rssid,
-                                                              &read_columns));
+        RETURN_IF_ERROR(
+                tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid, &read_columns));
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); i++) {
-            gen_column_by_src_column_and_idxes(*read_columns[col_idx], idxes, &write_columns[col_idx]);
+            write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0, idxes.size());
         }
         int64_t t_get_column_values = MonotonicMillis();
         auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
         auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
         rewrite_files.emplace_back(src_path, dest_path);
-        RETURN_IF_ERROR(segment_v2::SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(),
-                                                             read_column_ids, write_columns));
+        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
+                                                 write_columns, i));
         int64_t t_rewrite = MonotonicMillis();
         LOG(INFO) << Substitute(
                 "apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #default:$4 getrowid:$5ms #read:$6($7ms) "
