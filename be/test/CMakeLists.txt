@@ -126,6 +126,7 @@ set(EXEC_FILES
         ./storage/page_cache_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
+        ./storage/rowset_update_state_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
         ./storage/rowset/binary_plain_page_test.cpp

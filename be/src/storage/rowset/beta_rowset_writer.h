@@ -49,6 +49,13 @@ public:
     int64_t total_data_size() override { return _total_data_size; }
     RowsetId rowset_id() override { return _context.rowset_id; }
 
+    // only use for ut of partial update
+    // will be delete after write RowsetTxnMetaPB in rowset meta is finished
+    Status add_txn_meta(RowsetTxnMetaPB rowset_txn_meta_pb) {
+        _rowset_meta->set_txn_meta(rowset_txn_meta_pb);
+        return Status::OK();
+    }
+
 protected:
     Status flush_src_rssids(uint32_t segment_id);
 

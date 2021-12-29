@@ -695,24 +695,13 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             << " rowset:" << rowset_id;
     RowsetSharedPtr rowset = _get_rowset(rowset_id);
     auto manager = StorageEngine::instance()->update_manager();
-    // 1. load index
-    auto index_entry = manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
-    auto& index = index_entry->value();
-    auto st = index.load(&_tablet);
-    manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    if (!st.ok()) {
-        LOG(ERROR) << "_apply_rowset_commit error: load primary index failed: " << st << " " << debug_string();
-        manager->index_cache().remove(index_entry);
-        _set_error();
-        return;
-    }
-    // 2. load upserts/deletes in rowset
+
+    // 1. load upserts/deletes in rowset
     auto state_entry = manager->update_state_cache().get_or_create(
             Substitute("$0_$1", tablet_id, rowset->rowset_id().to_string()));
     state_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& state = state_entry->value();
-    st = state.load(&_tablet, rowset.get());
+    auto st = state.load(&_tablet, rowset.get());
     manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
     if (!st.ok()) {
         LOG(ERROR) << "_apply_rowset_commit error: load rowset update state failed: " << st << " " << debug_string();
@@ -720,155 +709,178 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         _set_error();
         return;
     }
-    int64_t t_load = MonotonicMillis();
-    st = state.apply(&_tablet, rowset.get(), rowset_id, index);
-    if (!st.ok()) {
-        LOG(ERROR) << "_apply_rowset_commit error: apply rowset update state failed: " << st << " " << debug_string();
-        manager->update_state_cache().remove(state_entry);
-        _set_error();
-        return;
-    }
-    int64_t t_apply = MonotonicMillis();
-
-    // 3. generate delvec
-    PrimaryIndex::DeletesMap new_deletes;
-    // add initial empty delvec for new segments
-    for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-        new_deletes[rowset_id + i] = {};
-    }
-    auto& upserts = state.upserts();
-    for (uint32_t i = 0; i < upserts.size(); i++) {
-        if (upserts[i] != nullptr) {
-            index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
-            manager->index_cache().update_object_size(index_entry, index.memory_usage());
-        }
-    }
-    size_t delete_op = 0;
-    for (const auto& one_delete : state.deletes()) {
-        delete_op += one_delete->size();
-        index.erase(*one_delete, &new_deletes);
-    }
-    manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    // release resource
-    // update state only used once, so delete it
-    manager->update_state_cache().remove(state_entry);
-    // index may be used for later commits, so keep in cache
-    manager->index_cache().release(index_entry);
-    int64_t t_index = MonotonicMillis();
-
-    size_t ndelvec = new_deletes.size();
-    vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
-    size_t idx = 0;
-    size_t old_total_del = 0;
-    size_t new_del = 0;
-    size_t total_del = 0;
-    string delvec_change_info;
-    for (auto& new_delete : new_deletes) {
-        uint32_t rssid = new_delete.first;
-        if (rssid >= rowset_id && rssid < rowset_id + rowset->num_segments()) {
-            // it's newly added rowset's segment, do not have latest delvec yet
-            new_del_vecs[idx].first = rssid;
-            new_del_vecs[idx].second = std::make_shared<DelVector>();
-            auto& del_ids = new_delete.second;
-            new_del_vecs[idx].second->init(version.major(), del_ids.data(), del_ids.size());
-            if (VLOG_IS_ON(1)) {
-                StringAppendF(&delvec_change_info, " %u:+%zu", rssid, del_ids.size());
-            }
-            new_del += del_ids.size();
-            total_del += del_ids.size();
-        } else {
-            TabletSegmentId tsid;
-            tsid.tablet_id = tablet_id;
-            tsid.segment_id = rssid;
-            DelVectorPtr old_del_vec;
-            // TODO(cbl): should get the version before this apply version, to be safe
-            st = manager->get_latest_del_vec(_tablet.data_dir()->get_meta(), tsid, &old_del_vec);
-            if (!st.ok()) {
-                LOG(ERROR) << "_apply_rowset_commit error: get_latest_del_vec failed: " << st << " " << debug_string();
-                _set_error();
-                return;
-            }
-            new_del_vecs[idx].first = rssid;
-            old_del_vec->add_dels_as_new_version(new_delete.second, version.major(), &(new_del_vecs[idx].second));
-            size_t cur_old = old_del_vec->cardinality();
-            size_t cur_add = new_delete.second.size();
-            size_t cur_new = new_del_vecs[idx].second->cardinality();
-            if (cur_old + cur_add != cur_new) {
-                // should not happen, data inconsistent
-                LOG(FATAL) << Substitute(
-                        "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
-                        "v:$6",
-                        _tablet.tablet_id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), version.major());
-            }
-            if (VLOG_IS_ON(1)) {
-                StringAppendF(&delvec_change_info, " %u:%zu(%ld)+%zu=%zu", rssid, cur_old, old_del_vec->version(),
-                              cur_add, cur_new);
-            }
-            old_total_del += cur_old;
-            new_del += cur_add;
-            total_del += cur_new;
-        }
-
-        idx++;
-
-        // Update the stats of affected rowsets.
-        std::lock_guard lg(_rowset_stats_lock);
-        auto iter = _rowset_stats.upper_bound(rssid);
-        iter--;
-        if (iter == _rowset_stats.end()) {
-            string msg = Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rssid=$1 $2",
-                                    _tablet.tablet_id(), rssid);
-            DCHECK(false) << msg;
-            LOG(ERROR) << msg;
-        } else if (rssid >= iter->first + iter->second->num_segments) {
-            string msg = Substitute("inconsistent rowset_stats, tablet=$0 rssid=$1 >= $2", _tablet.tablet_id(), rssid,
-                                    iter->first + iter->second->num_segments);
-            DCHECK(false) << msg;
-            LOG(ERROR) << msg;
-        } else {
-            iter->second->num_dels += new_delete.second.size();
-            _calc_compaction_score(iter->second.get());
-            DCHECK_LE(iter->second->num_dels, iter->second->num_rows);
-        }
-    }
-    new_deletes.clear();
-    StarRocksMetrics::instance()->update_del_vector_deletes_total.increment(total_del);
-    StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
-    int64_t t_delvec = MonotonicMillis();
 
     {
-        std::lock_guard wl(_lock);
-        // 4. write meta
-        st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version, new_del_vecs);
+        // TODO
+        std::lock_guard lg(_index_lock);
+        // 2. load index
+        auto index_entry = manager->index_cache().get_or_create(tablet_id);
+        index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+        auto& index = index_entry->value();
+        auto st = index.load(&_tablet);
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
         if (!st.ok()) {
-            LOG(ERROR) << "_apply_rowset_commit error: write meta failed: " << st << " " << _debug_string(false);
+            LOG(ERROR) << "_apply_rowset_commit error: load primary index failed: " << st << " " << debug_string();
+            manager->index_cache().remove(index_entry);
             _set_error();
             return;
         }
-        // put delvec in cache
-        TabletSegmentId tsid;
-        tsid.tablet_id = tablet_id;
-        for (auto& delvec_pair : new_del_vecs) {
-            tsid.segment_id = delvec_pair.first;
-            manager->set_cached_del_vec(tsid, delvec_pair.second);
-        }
-        // 5. apply memory
-        _next_log_id++;
-        _apply_version_idx++;
-        _apply_version_changed.notify_all();
-    }
-    _update_total_stats(version_info.rowsets);
-    int64_t t_write = MonotonicMillis();
 
-    size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
-    LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id << " version:" << version_info.version.to_string()
-              << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows << " " << del_percent << "%"
-              << " rowset:" << rowset_id << " #seg:" << rowset->num_segments() << " #op(upsert:" << rowset->num_rows()
-              << " del:" << delete_op << ") #del:" << old_total_del << "+" << new_del << "=" << total_del
-              << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
-              << Substitute("($0/$1/$2/$3/$4)", t_load - t_start, t_apply - t_load, t_index - t_apply,
-                            t_delvec - t_index, t_write - t_delvec);
-    VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
+        int64_t t_load = MonotonicMillis();
+        st = state.apply(&_tablet, rowset.get(), rowset_id, index);
+        if (!st.ok()) {
+            LOG(ERROR) << "_apply_rowset_commit error: apply rowset update state failed: " << st << " "
+                       << debug_string();
+            manager->update_state_cache().remove(state_entry);
+            _set_error();
+            return;
+        }
+        int64_t t_apply = MonotonicMillis();
+
+        // 3. generate delvec
+        PrimaryIndex::DeletesMap new_deletes;
+        // add initial empty delvec for new segments
+        for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+            new_deletes[rowset_id + i] = {};
+        }
+        auto& upserts = state.upserts();
+        for (uint32_t i = 0; i < upserts.size(); i++) {
+            if (upserts[i] != nullptr) {
+                index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
+                manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            }
+        }
+        size_t delete_op = 0;
+        for (const auto& one_delete : state.deletes()) {
+            delete_op += one_delete->size();
+            index.erase(*one_delete, &new_deletes);
+        }
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
+        // release resource
+        // update state only used once, so delete it
+        manager->update_state_cache().remove(state_entry);
+        // index may be used for later commits, so keep in cache
+        manager->index_cache().release(index_entry);
+        int64_t t_index = MonotonicMillis();
+
+        size_t ndelvec = new_deletes.size();
+        vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
+        size_t idx = 0;
+        size_t old_total_del = 0;
+        size_t new_del = 0;
+        size_t total_del = 0;
+        string delvec_change_info;
+        for (auto& new_delete : new_deletes) {
+            uint32_t rssid = new_delete.first;
+            if (rssid >= rowset_id && rssid < rowset_id + rowset->num_segments()) {
+                // it's newly added rowset's segment, do not have latest delvec yet
+                new_del_vecs[idx].first = rssid;
+                new_del_vecs[idx].second = std::make_shared<DelVector>();
+                auto& del_ids = new_delete.second;
+                new_del_vecs[idx].second->init(version.major(), del_ids.data(), del_ids.size());
+                if (VLOG_IS_ON(1)) {
+                    StringAppendF(&delvec_change_info, " %u:+%zu", rssid, del_ids.size());
+                }
+                new_del += del_ids.size();
+                total_del += del_ids.size();
+            } else {
+                TabletSegmentId tsid;
+                tsid.tablet_id = tablet_id;
+                tsid.segment_id = rssid;
+                DelVectorPtr old_del_vec;
+                // TODO(cbl): should get the version before this apply version, to be safe
+                st = manager->get_latest_del_vec(_tablet.data_dir()->get_meta(), tsid, &old_del_vec);
+                if (!st.ok()) {
+                    LOG(ERROR) << "_apply_rowset_commit error: get_latest_del_vec failed: " << st << " "
+                               << debug_string();
+                    _set_error();
+                    return;
+                }
+                new_del_vecs[idx].first = rssid;
+                old_del_vec->add_dels_as_new_version(new_delete.second, version.major(), &(new_del_vecs[idx].second));
+                size_t cur_old = old_del_vec->cardinality();
+                size_t cur_add = new_delete.second.size();
+                size_t cur_new = new_del_vecs[idx].second->cardinality();
+                if (cur_old + cur_add != cur_new) {
+                    // should not happen, data inconsistent
+                    LOG(FATAL) << Substitute(
+                            "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
+                            "v:$6",
+                            _tablet.tablet_id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(),
+                            version.major());
+                }
+                if (VLOG_IS_ON(1)) {
+                    StringAppendF(&delvec_change_info, " %u:%zu(%ld)+%zu=%zu", rssid, cur_old, old_del_vec->version(),
+                                  cur_add, cur_new);
+                }
+                old_total_del += cur_old;
+                new_del += cur_add;
+                total_del += cur_new;
+            }
+
+            idx++;
+
+            // Update the stats of affected rowsets.
+            std::lock_guard lg(_rowset_stats_lock);
+            auto iter = _rowset_stats.upper_bound(rssid);
+            iter--;
+            if (iter == _rowset_stats.end()) {
+                string msg = Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rssid=$1 $2",
+                                        _tablet.tablet_id(), rssid);
+                DCHECK(false) << msg;
+                LOG(ERROR) << msg;
+            } else if (rssid >= iter->first + iter->second->num_segments) {
+                string msg = Substitute("inconsistent rowset_stats, tablet=$0 rssid=$1 >= $2", _tablet.tablet_id(),
+                                        rssid, iter->first + iter->second->num_segments);
+                DCHECK(false) << msg;
+                LOG(ERROR) << msg;
+            } else {
+                iter->second->num_dels += new_delete.second.size();
+                _calc_compaction_score(iter->second.get());
+                DCHECK_LE(iter->second->num_dels, iter->second->num_rows);
+            }
+        }
+        new_deletes.clear();
+        StarRocksMetrics::instance()->update_del_vector_deletes_total.increment(total_del);
+        StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
+        int64_t t_delvec = MonotonicMillis();
+
+        {
+            std::lock_guard wl(_lock);
+            // 4. write meta
+            st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
+                                                        new_del_vecs);
+            if (!st.ok()) {
+                LOG(ERROR) << "_apply_rowset_commit error: write meta failed: " << st << " " << _debug_string(false);
+                _set_error();
+                return;
+            }
+            // put delvec in cache
+            TabletSegmentId tsid;
+            tsid.tablet_id = tablet_id;
+            for (auto& delvec_pair : new_del_vecs) {
+                tsid.segment_id = delvec_pair.first;
+                manager->set_cached_del_vec(tsid, delvec_pair.second);
+            }
+            // 5. apply memory
+            _next_log_id++;
+            _apply_version_idx++;
+            _apply_version_changed.notify_all();
+        }
+        _update_total_stats(version_info.rowsets);
+        int64_t t_write = MonotonicMillis();
+
+        size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
+        LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id
+                  << " version:" << version_info.version.to_string() << " total del/row:" << _cur_total_dels << "/"
+                  << _cur_total_rows << " " << del_percent << "%"
+                  << " rowset:" << rowset_id << " #seg:" << rowset->num_segments()
+                  << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
+                  << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
+                  << Substitute("($0/$1/$2/$3/$4)", t_load - t_start, t_apply - t_load, t_index - t_apply,
+                                t_delvec - t_index, t_write - t_delvec);
+        VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
+    }
 }
 
 RowsetSharedPtr TabletUpdates::_get_rowset(uint32_t rowset_id) {
@@ -2431,6 +2443,42 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }
     }
+    return Status::OK();
+}
+
+Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, Rowset* rowset,
+                                                    const std::vector<ColumnUniquePtr>& upserts,
+                                                    EditVersion* read_version, uint32_t* next_rowset_id,
+                                                    std::vector<std::vector<uint64_t>*>* rss_rowids) {
+    std::lock_guard wl(_lock);
+    std::lock_guard lg(_index_lock);
+
+    // get next_rowset_id and read_version to identify conflict
+    *next_rowset_id = _next_rowset_id;
+    *read_version = _edit_version_infos[_apply_version_idx]->version;
+
+    auto manager = StorageEngine::instance()->update_manager();
+    auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    auto& index = index_entry->value();
+    auto st = index.load(tablet);
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+    if (!st.ok()) {
+        LOG(ERROR) << "prepare_partial_update_states error: load primary index failed: " << st << " " << debug_string();
+        manager->index_cache().remove(index_entry);
+        _set_error();
+        return Status::InternalError("prepare_partial_update_states error: load primary index failed");
+    }
+
+    // get rss_rowids for each segment of rowset
+    size_t num_segments = rowset->num_segments();
+    for (size_t i = 0; i < num_segments; i++) {
+        auto& pks = *upserts[i];
+        index.get(pks, (*rss_rowids)[i]);
+    }
+    // index may be used for later commits, keep in cache
+    manager->index_cache().release(index_entry);
+
     return Status::OK();
 }
 
