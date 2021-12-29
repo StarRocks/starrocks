@@ -390,6 +390,7 @@ public class QueryAnalyzer {
              * use cte column name as output scope of subquery relation fields
              */
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+            ImmutableList.Builder<String> columnOutputNames = ImmutableList.builder();
             for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size();
                     ++fieldIdx) {
                 Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
@@ -403,11 +404,14 @@ public class QueryAnalyzer {
                         originField.getType(),
                         tableName,
                         originField.getOriginExpression()));
+                columnOutputNames.add(withQuery.getColLabels() == null ? originField.getName() :
+                        withQuery.getColLabels().get(fieldIdx));
             }
 
             CTERelation cteRelation = new CTERelation(
                     String.valueOf(RelationId.of(query).hashCode()),
                     withQuery.getName(),
+                    columnOutputNames.build(),
                     query);
             cteRelation.setScope(new Scope(RelationId.of(cteRelation), new RelationFields(outputFields.build())));
             cteScope.addCteQueries(withQuery.getName(), cteRelation);
@@ -487,7 +491,7 @@ public class QueryAnalyzer {
                     public List<String> visitCTE(CTERelation node, Void context) {
                         if (item.getTblName() == null ||
                                 StringUtils.equals(item.getTblName().getTbl(), node.getName())) {
-                            return node.getCteQuery().getColumnOutputNames();
+                            return node.getColumnOutputNames();
                         }
                         return Collections.emptyList();
                     }
@@ -756,8 +760,9 @@ public class QueryAnalyzer {
                 // eg: with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
                 //                "having v1 in (select v3 from w where v2 = 2)
                 // cte used in outer query and subquery can't use same relation-id and field
-                CTERelation newCteRelation =
-                        new CTERelation(cteRelation.getCteId(), tableName.getTbl(), cteRelation.getCteQuery());
+                CTERelation newCteRelation = new CTERelation(cteRelation.getCteId(), tableName.getTbl(),
+                                cteRelation.getColumnOutputNames(),
+                                cteRelation.getCteQuery());
                 newCteRelation.setScope(
                         new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
                 return newCteRelation;
@@ -993,7 +998,7 @@ public class QueryAnalyzer {
 
                     List<List<Expr>> groupingSets =
                             Sets.powerSet(IntStream.range(0, rewriteOriGrouping.size())
-                                            .boxed().collect(Collectors.toSet())).stream()
+                                    .boxed().collect(Collectors.toSet())).stream()
                                     .map(l -> l.stream().map(rewriteOriGrouping::get).collect(Collectors.toList()))
                                     .collect(Collectors.toList());
 

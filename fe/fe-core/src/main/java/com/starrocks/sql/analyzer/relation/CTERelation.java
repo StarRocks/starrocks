@@ -2,14 +2,18 @@
 
 package com.starrocks.sql.analyzer.relation;
 
+import java.util.List;
+
 public class CTERelation extends Relation {
     private final String cteId;
     private final String name;
+    private final List<String> columnOutputNames;
     private final QueryRelation cteQuery;
 
-    public CTERelation(String cteId, String name, QueryRelation cteQuery) {
+    public CTERelation(String cteId, String name, List<String> columnOutputNames, QueryRelation cteQuery) {
         this.cteId = cteId;
         this.name = name;
+        this.columnOutputNames = columnOutputNames;
         this.cteQuery = cteQuery;
     }
 
@@ -23,6 +27,10 @@ public class CTERelation extends Relation {
 
     public String getName() {
         return name;
+    }
+
+    public List<String> getColumnOutputNames() {
+        return columnOutputNames;
     }
 
     @Override
