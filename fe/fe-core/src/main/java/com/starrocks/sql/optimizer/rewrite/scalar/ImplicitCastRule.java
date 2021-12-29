@@ -122,7 +122,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
-        Type compatibleType = TypeManager.getCompatibleTypeForBinary(type1, type2);
+        Type compatibleType =
+                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType().isEquivalence(), type1, type2);
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);

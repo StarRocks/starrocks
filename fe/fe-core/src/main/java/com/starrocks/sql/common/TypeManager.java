@@ -121,7 +121,13 @@ public class TypeManager {
         return compatibleType;
     }
 
-    public static Type getCompatibleTypeForBinary(Type type1, Type type2) {
+    public static Type getCompatibleTypeForBinary(boolean isEquivalence, Type type1, Type type2) {
+        if (isEquivalence) {
+            if ((type1.isStringType() && type2.isNumericType()) || (type1.isNumericType() && type2.isStringType())) {
+                return Type.STRING;
+            }
+        }
+
         return BinaryPredicate.getCmpType(type1, type2);
     }
 
