@@ -119,7 +119,9 @@ public class SubqueryTransformer {
             if (relation instanceof SelectRelation) {
                 SelectRelation selectRelation = (SelectRelation) relation;
                 // For in subQuery, the order by is meaningless
-                selectRelation.getOrderBy().clear();
+                if (!selectRelation.hasLimit()) {
+                    selectRelation.getOrderBy().clear();
+                }
             }
 
             return new RelationTransformer(columnRefFactory, session, outer, cteContext).transform(relation);
