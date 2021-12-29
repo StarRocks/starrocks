@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -391,5 +390,19 @@ public class SelectStmtTest {
         String selectStmtStr =
                 "SELECT db1.tbl1.k1, any_value(db1.tbl1.k2) FROM db1.tbl1 GROUP BY db1.tbl1.k1";
         UtFrameUtils.parseAndAnalyzeStmt(selectStmtStr, ctx);
+    }
+
+    @Test
+    public void testEqualExprNotMonotonic() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        String sql = "select k1 from db1.baseall where (k1=10) = true";
+        String expectString =
+                "[TPlanNode(node_id:0, node_type:OLAP_SCAN_NODE, num_children:0, limit:-1, row_tuples:[0], " +
+                        "nullable_tuples:[false], conjuncts:[TExpr(nodes:[TExprNode(node_type:BINARY_PRED, " +
+                        "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BOOLEAN))]), " +
+                        "opcode:EQ, num_children:2, output_scale:-1, vector_opcode:INVALID_OPCODE, child_type:BOOLEAN, " +
+                        "has_nullable_child:true, is_nullable:true, is_monotonic:false)";
+        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        Assert.assertTrue(thrift.contains(expectString));
     }
 }
