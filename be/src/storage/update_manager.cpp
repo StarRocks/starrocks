@@ -220,7 +220,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     // before used in apply process, in that case, these will be loaded again in apply
     // process.
     auto state_entry = _update_state_cache.get_or_create(Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
-    auto st = state_entry->value().load(tablet->tablet_id(), rowset);
+    auto st = state_entry->value().load(tablet, rowset);
     state_entry->update_expire_time(MonotonicMillis() + _cache_expire_ms);
     _update_state_cache.update_object_size(state_entry, state_entry->value().memory_usage());
     if (st.ok()) {
