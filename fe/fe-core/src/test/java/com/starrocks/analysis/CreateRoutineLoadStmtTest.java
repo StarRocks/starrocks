@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -38,6 +39,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -69,6 +71,11 @@ public class CreateRoutineLoadStmtTest {
         starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test");
+    }
+
+    @AfterClass
+    public static void tearDown() throws Exception {
+        UtFrameUtils.cleanStarRocksFeDir(runningDir);
     }
 
     @Test
