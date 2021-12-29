@@ -182,7 +182,7 @@ inline ColumnPtr ChunkHelper::column_from_field(const Field& field) {
     case OLAP_FIELD_TYPE_DECIMAL128:
         return NullableIfNeed(Decimal128Column::create(field.type()->precision(), field.type()->scale()));
     case OLAP_FIELD_TYPE_ARRAY: {
-        return NullableIfNeed(ArrayColumn::create(column_from_field(field.get_sub_field(0)), UInt32Column::create()));
+        return NullableIfNeed(ArrayColumn::create(column_from_field(field.sub_field(0)), UInt32Column::create()));
     }
     default:
         return NullableIfNeed(column_from_field_type(type, false));

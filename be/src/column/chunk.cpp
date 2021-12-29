@@ -60,7 +60,7 @@ void Chunk::set_num_rows(size_t count) {
     }
 }
 
-std::string Chunk::get_column_name(size_t idx) const {
+std::string_view Chunk::get_column_name(size_t idx) const {
     DCHECK_LT(idx, _columns.size());
     return _schema->field(idx)->name();
 }

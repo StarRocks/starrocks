@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstring>
 #include <iostream>
 #include <string_view>
@@ -25,6 +26,11 @@ public:
     CString() {}
     ~CString() { _dealloc_if_needed(); }
 
+    explicit CString(const std::string_view& v) {
+        assert(v.size() == ::strnlen(v.data(), v.size()));
+        assign(v.data(), v.size());
+    }
+
     // Copy ctor
     CString(const CString& rhs) { assign(rhs.data(), rhs.size()); }
 
@@ -47,11 +53,15 @@ public:
 
     // NOTE: it's caller's duty to ensure that the no zero character exist in |s|, otherwize
     // size() may return a value different from |s.size()|.
-    CString& assign(const std::string_view& s) { return assign(s.data(), s.size()); }
+    CString& assign(const std::string_view& s) {
+        assert(s.size() == ::strnlen(s.data(), s.size()));
+        return assign(s.data(), s.size());
+    }
 
     // NOTE: it's caller's duty to ensure that the no zero character exist in data[0...len), otherwize
     // size() may return a value different from |len|.
     CString& assign(const char* data, uint16_t len) {
+        assert(len == ::strnlen(data, len));
         _dealloc_if_needed();
         char* p = new char[len + 1];
         memcpy(p, data, len);
