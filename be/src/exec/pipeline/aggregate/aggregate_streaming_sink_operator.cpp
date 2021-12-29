@@ -74,7 +74,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
     }
 
     _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
-    _aggregator->try_convert_to_two_level_map();
+    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     return Status::OK();
@@ -112,7 +112,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
 
         _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
                           _aggregator->mem_pool()->total_reserved_bytes());
-        _aggregator->try_convert_to_two_level_map();
+        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
 
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     } else {

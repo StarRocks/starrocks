@@ -74,6 +74,10 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregati
     }
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+
+    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
+    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
+
     return Status::OK();
 }
 
@@ -108,6 +112,10 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
         }
 
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+
+        _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                          _aggregator->mem_pool()->total_reserved_bytes());
+        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
     } else {
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());

@@ -460,7 +460,7 @@ void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* 
     output_chunk_by_streaming(chunk);
 }
 
-#define CONVERT_TO_TWO_LEVEL(DST, SRC)                                                             \
+#define CONVERT_TO_TWO_LEVEL_MAP(DST, SRC)                                                         \
     if (_hash_map_variant.type == vectorized::HashMapVariant::Type::SRC) {                         \
         _hash_map_variant.DST = std::make_unique<decltype(_hash_map_variant.DST)::element_type>(); \
         _hash_map_variant.DST->hash_map.reserve(_hash_map_variant.SRC->hash_map.capacity());       \
@@ -471,10 +471,28 @@ void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* 
         return;                                                                                    \
     }
 
+#define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                         \
+    if (_hash_set_variant.type == vectorized::HashSetVariant::Type::SRC) {                         \
+        _hash_set_variant.DST = std::make_unique<decltype(_hash_set_variant.DST)::element_type>(); \
+        _hash_set_variant.DST->hash_set.reserve(_hash_set_variant.SRC->hash_set.capacity());       \
+        _hash_set_variant.DST->hash_set.insert(_hash_set_variant.SRC->hash_set.begin(),            \
+                                               _hash_set_variant.SRC->hash_set.end());             \
+        _hash_set_variant.type = vectorized::HashSetVariant::Type::DST;                            \
+        _hash_set_variant.SRC.reset();                                                             \
+        return;                                                                                    \
+    }
+
 void Aggregator::try_convert_to_two_level_map() {
     if (_mem_tracker->consumption() > two_level_memory_threshold) {
-        CONVERT_TO_TWO_LEVEL(phase1_slice_two_level, phase1_slice);
-        CONVERT_TO_TWO_LEVEL(phase2_slice_two_level, phase2_slice);
+        CONVERT_TO_TWO_LEVEL_MAP(phase1_slice_two_level, phase1_slice);
+        CONVERT_TO_TWO_LEVEL_MAP(phase2_slice_two_level, phase2_slice);
+    }
+}
+
+void Aggregator::try_convert_to_two_level_set() {
+    if (_mem_tracker->consumption() > two_level_memory_threshold) {
+        CONVERT_TO_TWO_LEVEL_SET(phase1_slice_two_level, phase1_slice);
+        CONVERT_TO_TWO_LEVEL_SET(phase2_slice_two_level, phase2_slice);
     }
 }
 

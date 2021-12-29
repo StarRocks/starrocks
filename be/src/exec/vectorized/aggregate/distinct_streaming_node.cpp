@@ -87,6 +87,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
                 _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
                                   _aggregator->mem_pool()->total_reserved_bytes());
+                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
                 continue;
             } else {
@@ -126,6 +127,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
                     _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
                                       _aggregator->mem_pool()->total_reserved_bytes());
+                    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
                     continue;
                 } else {
