@@ -33,14 +33,23 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     }
 
     _cur_chunk = std::make_shared<vectorized::Chunk>();
-    for (const auto& [k, v] : chunk->get_slot_id_to_index_map()) {
-        if (std::find(_encode_column_cids.begin(), _encode_column_cids.end(), k) == _encode_column_cids.end()) {
-            auto& col = chunk->get_column_by_slot_id(k);
-            _cur_chunk->append_column(col, k);
+    std::vector<std::pair<vectorized::ColumnPtr, int>> columns_with_original_order(chunk->columns().size());
+    const auto& slot_id_to_index_map = chunk->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        if (std::find(_encode_column_cids.begin(), _encode_column_cids.end(), slot_id) == _encode_column_cids.end()) {
+            auto& col = chunk->get_column_by_slot_id(slot_id);
+            columns_with_original_order[index] = std::make_pair(std::move(col), slot_id);
         }
     }
     for (size_t i = 0; i < decode_columns.size(); i++) {
-        _cur_chunk->append_column(decode_columns[i], _decode_column_cids[i]);
+        auto it = slot_id_to_index_map.find(_encode_column_cids[i]);
+        DCHECK(it != slot_id_to_index_map.end());
+        auto& index = it->second;
+        columns_with_original_order[index] = std::make_pair(std::move(decode_columns[i]), _decode_column_cids[i]);
+    }
+
+    for (auto& item : columns_with_original_order) {
+        _cur_chunk->append_column(std::move(item.first), item.second);
     }
 
     DCHECK_CHUNK(_cur_chunk);
