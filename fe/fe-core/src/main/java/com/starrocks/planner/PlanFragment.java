@@ -40,7 +40,6 @@ import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import sun.tools.tree.Context;
 
 import java.util.ArrayList;
 import java.util.List;
