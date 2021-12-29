@@ -364,6 +364,10 @@ public class CastExpr extends Expr {
 
     @Override
     public boolean isSelfMonotonic() {
-        return true;
+        // It's very tempting to think cast is monotonic, but that's not true.
+        // For example `cast(bigint to tinyint) < 10`
+        // maybe min/max value will overflow tinyint, and we will get NULL value, so `NULL is true` is false.
+        // but some values between min/max value like 5,6,7,8 can be evaluated to true.
+        return false;
     }
 }

@@ -381,6 +381,6 @@ public class SelectStmtTest {
 
         String selectStmtStr2 =
                 "SELECT db1.tbl1.k1 FROM db1.tbl1 GROUP BY db1.tbl1 HAVING ((MAX(TIMEDIFF(NULL, NULL))) IS NULL)";
-        UtFrameUtils.parseAndAnalyzeStmt(selectStmtStr2, ctx);
+        UtFrameUtils.parseAndAnalyzeStmt(selectStmtStr2, ctx);    
     }
 }
