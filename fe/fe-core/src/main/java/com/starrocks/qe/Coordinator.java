@@ -1121,6 +1121,8 @@ public class Coordinator {
                 for (int j = 0; j < fragment.getChildren().size(); j++) {
                     int currentChildFragmentParallelism =
                             fragmentExecParamsMap.get(fragment.getChild(j).getFragmentId()).instanceExecParams.size();
+                    // when dop adaptation enabled, numInstances * pipelineDop is equivalent to numInstances in
+                    // non-pipeline engine and pipeline engine(dop adaptation disabled).
                     if (dopAdaptionEnabled) {
                         currentChildFragmentParallelism *= fragment.getChild(j).getPipelineDop();
                     }
@@ -1138,6 +1140,8 @@ public class Coordinator {
                     FragmentExecParams execParams = getMaxParallelismScanFragmentExecParams();
                     if (execParams != null) {
                         maxParallelism = execParams.instanceExecParams.size();
+                        // when dop adaptation enabled, numInstances * pipelineDop is equivalent to numInstances in
+                        // non-pipeline engine and pipeline engine(dop adaptation disabled).
                         if (dopAdaptionEnabled) {
                             maxParallelism *= execParams.fragment.getPipelineDop();
                         }
@@ -1145,6 +1149,9 @@ public class Coordinator {
                     }
                 }
 
+                // hostSet contains target backends to whom fragment instances of the current PlanFragment will be
+                // delivered. when pipeline parallelization is adopted, the number of instances should be the size
+                // of hostSet, that it to say, each backend has exactly one fragment.
                 Set<TNetworkAddress> hostSet = Sets.newHashSet();
                 for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
                     hostSet.add(execParams.host);
@@ -1154,10 +1161,15 @@ public class Coordinator {
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
                     DataSink sink = getDataStreamSink(maxParallelismFragmentExecParams.fragment, fragment);
                     Preconditions.checkArgument(sink != null);
+                    // If the maximum parallel child fragment send data to the current PlanFragment via UNPARTITIONED
+                    // DataStreamSink, then fragment instance parallelization is leveraged, otherwise, pipeline parallelization
+                    // is adopted.
                     if (!sink.getOutputPartition().isPartitioned()) {
+                        // fragment instance parallelization (numInstances=N, pipelineDop=1)
                         maxParallelism = Math.min(hostSet.size() * degreeOfParallelism, maxParallelism);
                         fragment.setPipelineDop(1);
                     } else {
+                        // pipeline parallelization (numInstances=|hostSet|, pipelineDop=degreeOfParallelism)
                         maxParallelism = hostSet.size();
                         fragment.setPipelineDop(degreeOfParallelism);
                     }
@@ -1250,6 +1262,7 @@ public class Coordinator {
                         }
                     }
                 }
+                // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
                 if (dopAdaptionEnabled) {
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
@@ -1452,6 +1465,7 @@ public class Coordinator {
         }
         boolean dopAdaptionEnabled = ConnectContext.get() != null &&
                 ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
+        // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
         if (dopAdaptionEnabled) {
             int numInstances = params.instanceExecParams.size();
             int numBackends = addressToScanRanges.size();

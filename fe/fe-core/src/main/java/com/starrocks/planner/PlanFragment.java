@@ -141,6 +141,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.dataPartition = partition;
         this.outputPartition = DataPartition.UNPARTITIONED;
         this.transferQueryStatisticsWithEveryBatch = false;
+        // when dop adaptation is enabled, parallelExecNum and pipelineDop set to degreeOfParallelism and 1 respectively
+        // in default. these values just a hint to help determine numInstances and pipelineDop of a PlanFragment.
         setParallelExecNumIfExists();
         setPipelineDopIfPipelineEngineEnabled();
         setFragmentInPlanTree(planRoot);
