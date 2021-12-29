@@ -18,6 +18,14 @@ public class StarRocksPlannerException extends RuntimeException {
         this.type = type;
     }
 
+    public static StarRocksPlannerException nest(String message, ErrorType type, Exception e) {
+        if (e instanceof StarRocksPlannerException) {
+            return (StarRocksPlannerException) e;
+        } else {
+            return new StarRocksPlannerException(message, type, e);
+        }
+    }
+
     @Override
     public String getMessage() {
         String message = super.getMessage();

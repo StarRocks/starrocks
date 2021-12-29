@@ -38,7 +38,7 @@ public class StatementPlanner {
         try {
             relation = analyzer.analyze(stmt);
         } catch (Exception e) {
-            throw new AnalysisException("analyzer error: " + e.getMessage(), e);
+            throw StarRocksPlannerException.nest("analyzer error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
         }
 
         PrivilegeChecker.check(stmt, session.getCatalog().getAuth(), session);
@@ -85,7 +85,7 @@ public class StatementPlanner {
         try {
             logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
         } catch (Exception e) {
-            throw new StarRocksPlannerException("transformer error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
+            throw StarRocksPlannerException.nest("transformer error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
         }
 
         //2. Optimize logical plan and build physical plan
@@ -99,7 +99,7 @@ public class StatementPlanner {
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
         } catch (Exception e) {
-            throw new StarRocksPlannerException("optimizer error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
+            throw StarRocksPlannerException.nest("optimizer error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
         }
 
         //3. Build fragment exec plan
@@ -109,7 +109,7 @@ public class StatementPlanner {
             return new PlanFragmentBuilder().createPhysicalPlan(
                     optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
         } catch (Exception e) {
-            throw new StarRocksPlannerException("fragmentBuilder error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
+            throw StarRocksPlannerException.nest("fragmentBuilder error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
         }
     }
 
@@ -117,7 +117,7 @@ public class StatementPlanner {
         try {
             return new InsertPlanner().plan(relation, session);
         } catch (Exception e) {
-            throw new StarRocksPlannerException("insertPlanner error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
+            throw StarRocksPlannerException.nest("insertPlanner error: " + e.getMessage(), ErrorType.INTERNAL_ERROR, e);
         }
     }
 
