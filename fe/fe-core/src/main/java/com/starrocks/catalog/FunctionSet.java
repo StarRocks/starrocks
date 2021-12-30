@@ -205,7 +205,6 @@ public class FunctionSet {
                     .add(FunctionSet.CURRENT_TIMESTAMP)
                     .add(FunctionSet.CURRENT_TIME)
                     .add(FunctionSet.NOW)
-                    .add(FunctionSet.UNIX_TIMESTAMP)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .build();
 

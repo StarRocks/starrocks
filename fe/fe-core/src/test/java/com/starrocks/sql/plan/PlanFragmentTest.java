@@ -5310,4 +5310,12 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertEquals(Type.DATETIME, outColumns.get(0).getType());
         Assert.assertTrue(outColumns.get(0).isNullable());
     }
+
+    @Test
+    public void testFunctionNullable() throws Exception {
+        String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
+                "id:0, fid:50303, could_apply_dict_optimize:false), has_nullable_child:false, is_nullable:true"));
+    }
 }
