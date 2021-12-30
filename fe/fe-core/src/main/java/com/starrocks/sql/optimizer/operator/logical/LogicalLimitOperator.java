@@ -17,7 +17,7 @@ public class LogicalLimitOperator extends LogicalOperator {
     public LogicalLimitOperator(long limit) {
         super(OperatorType.LOGICAL_LIMIT);
         this.limit = limit;
-        offset = -1;
+        offset = DEFAULT_OFFSET;
     }
 
     public LogicalLimitOperator(long limit, long offset) {
@@ -33,7 +33,7 @@ public class LogicalLimitOperator extends LogicalOperator {
     }
 
     public boolean hasOffset() {
-        return offset > 0;
+        return offset > DEFAULT_OFFSET;
     }
 
     public long getOffset() {
@@ -80,7 +80,7 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalLimitOperator, LogicalLimitOperator.Builder> {
-        private long offset = -1;
+        private long offset = DEFAULT_OFFSET;
 
         @Override
         public LogicalLimitOperator build() {

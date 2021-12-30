@@ -24,8 +24,8 @@ public class LogicalTopNOperator extends LogicalOperator {
     public LogicalTopNOperator(List<Ordering> orderByElements) {
         super(OperatorType.LOGICAL_TOPN);
         this.orderByElements = orderByElements;
-        this.limit = -1;
-        this.offset = 0;
+        this.limit = DEFAULT_LIMIT;
+        this.offset = DEFAULT_OFFSET;
         this.sortPhase = SortPhase.FINAL;
     }
 

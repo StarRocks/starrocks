@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
@@ -260,7 +261,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .setType(AggType.LOCAL)
                 .setAggregations(createNormalAgg(AggType.LOCAL, newAggMap))
                 .setPredicate(null)
-                .setLimit(-1)
+                .setLimit(Operator.DEFAULT_LIMIT)
                 .setProjection(null)
                 .build();
         OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
@@ -335,7 +336,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .setPartitionByColumns(partitionColumns)
                 .setSingleDistinctFunctionPos(singleDistinctFunctionPos)
                 .setPredicate(null)
-                .setLimit(-1)
+                .setLimit(Operator.DEFAULT_LIMIT)
                 .setProjection(null)
                 .build();
         OptExpression distinctLocalExpression = OptExpression.create(distinctLocal, distinctGlobalExpression);
