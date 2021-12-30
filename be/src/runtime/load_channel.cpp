@@ -21,101 +21,81 @@
 
 #include "runtime/load_channel.h"
 
+#include <memory>
+
+#include "common/closure_guard.h"
+#include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "storage/lru_cache.h"
 
 namespace starrocks {
 
-LoadChannel::LoadChannel(const UniqueId& load_id, int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker)
-        : _load_id(load_id),
+LoadChannel::LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, int64_t timeout_s,
+                         std::unique_ptr<MemTracker> mem_tracker)
+        : _load_mgr(mgr),
+          _load_id(load_id),
           _timeout_s(timeout_s),
           _mem_tracker(std::move(mem_tracker)),
           _last_updated_time(time(nullptr)) {}
 
-LoadChannel::~LoadChannel() {
-    LOG(INFO) << "load channel mem peak usage=" << _mem_tracker->peak_consumption()
-              << ", info=" << _mem_tracker->debug_string() << ", load_id=" << _load_id;
-    _tablets_channels.clear();
-}
+void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
+                       PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
+    ClosureGuard done_guard(done);
 
-Status LoadChannel::open(const PTabletWriterOpenRequest& params) {
-    int64_t index_id = params.index_id();
-    std::shared_ptr<TabletsChannel> channel;
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        auto it = _tablets_channels.find(index_id);
-        if (it != _tablets_channels.end()) {
-            channel = it->second;
-        } else {
-            // create a new tablets channel
-            TabletsChannelKey key(params.id(), index_id);
-            channel.reset(new TabletsChannel(key, _mem_tracker.get()));
-            _tablets_channels.insert({index_id, channel});
-        }
-    }
-
-    RETURN_IF_ERROR(channel->open(params));
-
-    _opened = true;
-    _last_updated_time.store(time(nullptr));
-    return Status::OK();
-}
-
-Status LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request,
-                              google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec) {
+    _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     int64_t index_id = request.index_id();
-    // 1. get tablets channel
-    std::shared_ptr<TabletsChannel> channel;
+
+    Status st;
     {
         std::lock_guard<std::mutex> l(_lock);
-        auto it = _tablets_channels.find(index_id);
-        if (it == _tablets_channels.end()) {
-            if (_finished_channel_ids.find(index_id) != _finished_channel_ids.end()) {
-                // this channel is already finished, just return OK
-                return Status::OK();
+        if (_tablets_channels.find(index_id) == _tablets_channels.end()) {
+            TabletsChannelKey key(request.id(), index_id);
+            scoped_refptr<TabletsChannel> channel(new TabletsChannel(this, key, _mem_tracker.get()));
+            if (st = channel->open(request); st.ok()) {
+                _tablets_channels.insert({index_id, std::move(channel)});
             }
-            std::stringstream ss;
-            ss << "load channel " << _load_id << " add batch with unknown index id: " << index_id;
-            return Status::InternalError(ss.str());
-        }
-        channel = it->second;
-    }
-
-    // 3. add batch to tablets channel
-    if (request.has_chunk()) {
-        RETURN_IF_ERROR(channel->add_chunk(request));
-    }
-
-    // 4. handle eos
-    Status st;
-    if (request.has_eos() && request.eos()) {
-        bool finished = false;
-        RETURN_IF_ERROR(channel->close(request.sender_id(), &finished, request.partition_ids(), tablet_vec));
-        if (finished) {
-            std::lock_guard<std::mutex> l(_lock);
-            _tablets_channels.erase(index_id);
-            _finished_channel_ids.emplace(index_id);
         }
     }
-    _last_updated_time.store(time(nullptr));
-    return st;
+    LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st;
+    response->mutable_status()->set_status_code(st.code());
+    response->mutable_status()->add_error_msgs(st.get_error_msg());
 }
 
-bool LoadChannel::is_finished() {
-    if (!_opened) {
-        return false;
+void LoadChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
+                            PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
+    ClosureGuard done_guard(done);
+    _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
+    auto channel = get_tablets_channel(request.index_id());
+    if (channel == nullptr) {
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
+        return;
     }
-    std::lock_guard<std::mutex> l(_lock);
-    return _tablets_channels.empty();
+    channel->add_chunk(cntl, request, response, done_guard.release());
 }
 
-Status LoadChannel::cancel() {
-    std::lock_guard<std::mutex> l(_lock);
+void LoadChannel::cancel() {
+    std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
         it.second->cancel();
     }
-    return Status::OK();
+}
+
+void LoadChannel::remove_tablets_channel(int64_t index_id) {
+    std::unique_lock l(_lock);
+    _tablets_channels.erase(index_id);
+    if (_tablets_channels.empty()) {
+        l.unlock();
+        _load_mgr->remove_load_channel(_load_id);
+        // Do NOT touch |this| since here, it could have been deleted.
+    }
+}
+
+scoped_refptr<TabletsChannel> LoadChannel::get_tablets_channel(int64_t index_id) {
+    std::lock_guard l(_lock);
+    auto it = _tablets_channels.find(index_id);
+    return (it != _tablets_channels.end()) ? it->second : nullptr;
 }
 
 } // namespace starrocks
