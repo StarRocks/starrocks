@@ -33,6 +33,10 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     }
 
     _cur_chunk = std::make_shared<vectorized::Chunk>();
+
+    // The order when traversing Chunk::_slot_id_to_index may be unstable of different instance of DictDecodeOperator
+    // Subsequent operator may call Chunk::append_selective which requires Chunk::_slot_id_to_index to be exactly same
+    // So here we keep the output chunks with the same order as original chunks
     std::vector<std::pair<vectorized::ColumnPtr, int>> columns_with_original_order(chunk->columns().size());
     const auto& slot_id_to_index_map = chunk->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
