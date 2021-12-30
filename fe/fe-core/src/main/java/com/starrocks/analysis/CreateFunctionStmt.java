@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
@@ -56,20 +57,14 @@ import java.util.Map;
 
 // create a user define function
 public class CreateFunctionStmt extends DdlStmt {
-    public static final String OBJECT_FILE_KEY = "object_file";
+    public static final String FILE_KEY = "file";
     public static final String SYMBOL_KEY = "symbol";
-    public static final String PREPARE_SYMBOL_KEY = "prepare_fn";
-    public static final String CLOSE_SYMBOL_KEY = "close_fn";
     public static final String MD5_CHECKSUM = "md5";
     public static final String INIT_KEY = "init_fn";
     public static final String UPDATE_KEY = "update_fn";
     public static final String MERGE_KEY = "merge_fn";
-    public static final String SERIALIZE_KEY = "serialize_fn";
-    public static final String FINALIZE_KEY = "finalize_fn";
-    public static final String GET_VALUE_KEY = "get_value_fn";
-    public static final String REMOVE_KEY = "remove_fn";
     public static final String TYPE_KEY = "type";
-    public static final String OBJECT_FORMAT_STARROCKS_JAR = "StarrocksJar";
+    public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
     public static final String EVAL_METHOD_NAME = "evaluate";
 
 
@@ -131,11 +126,8 @@ public class CreateFunctionStmt extends DdlStmt {
         if (isAggregate) {
             analyzeUda();
         } else {
-            if (isStarrocksJar) {
-                analyzeStarrocksJarUdf();
-            } else {
-                analyzeUdf();
-            }
+            Preconditions.checkArgument(isStarrocksJar);
+            analyzeStarrocksJarUdf();
         }
     }
 
@@ -157,12 +149,12 @@ public class CreateFunctionStmt extends DdlStmt {
             intermediateType = returnType;
         }
 
-        String object_format = properties.get(TYPE_KEY);
-        if (OBJECT_FORMAT_STARROCKS_JAR.equals(object_format)) {
+        String type = properties.get(TYPE_KEY);
+        if (TYPE_STARROCKS_JAR.equals(type)) {
             isStarrocksJar = true;
         }
 
-        objectFile = properties.get(OBJECT_FILE_KEY);
+        objectFile = properties.get(FILE_KEY);
         if (Strings.isNullOrEmpty(objectFile)) {
             throw new AnalysisException("No 'object_file' in properties");
         }
@@ -245,20 +237,6 @@ public class CreateFunctionStmt extends DdlStmt {
         function.setChecksum(checksum);
     }
 
-    private void analyzeUdf() throws AnalysisException {
-        String symbol = properties.get(SYMBOL_KEY);
-        if (Strings.isNullOrEmpty(symbol)) {
-            throw new AnalysisException("No 'symbol' in properties");
-        }
-        String prepareFnSymbol = properties.get(PREPARE_SYMBOL_KEY);
-        String closeFnSymbol = properties.get(CLOSE_SYMBOL_KEY);
-        function = ScalarFunction.createUdf(
-                functionName, argsDef.getArgTypes(),
-                returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.HIVE,
-                objectFile, symbol, prepareFnSymbol, closeFnSymbol);
-        function.setChecksum(checksum);
-    }
-
     private void checkStarrocksJarUdfType(Type type, Class ptype, String pname) throws AnalysisException {
         if (!(type instanceof ScalarType)) {
             throw new AnalysisException("UDF does not support non-scalar type: " + type);
@@ -294,6 +272,9 @@ public class CreateFunctionStmt extends DdlStmt {
         if (checked) {
             if (Modifier.isStatic(method.getModifiers())) {
                 throw new AnalysisException(String.format("UDF '%s' should be non-static method", name));
+            }
+            if (!Modifier.isPublic(method.getModifiers())) {
+                throw new AnalysisException(String.format("UDF '%s' should be public method", name));
             }
         }
     }
