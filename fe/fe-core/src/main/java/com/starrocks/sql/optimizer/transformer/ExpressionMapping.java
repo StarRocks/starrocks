@@ -46,11 +46,12 @@ public class ExpressionMapping {
         this.scope = scope;
         List<ColumnRefOperator> fieldsList = new ArrayList<>(fieldMappings);
         if (outer != null) {
+            this.scope.setParent(outer.getScope());
             fieldsList.addAll(outer.getFieldMappings());
+            this.outerScopeRelationId = outer.getScope().getRelationId();
         }
         this.fieldMappings = new ColumnRefOperator[fieldsList.size()];
         fieldsList.toArray(this.fieldMappings);
-        this.outerScopeRelationId = outer.getScope().getRelationId();
     }
 
     public ExpressionMapping(Scope scope) {
