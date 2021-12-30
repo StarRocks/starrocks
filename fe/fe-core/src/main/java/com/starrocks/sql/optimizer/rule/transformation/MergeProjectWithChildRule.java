@@ -45,7 +45,7 @@ public class MergeProjectWithChildRule extends TransformationRule {
         builder.withOperator(child).setProjection(new Projection(logicalProjectOperator.getColumnRefMap(),
                 Maps.newHashMap()));
 
-        if (logicalProjectOperator.getLimit() != -1) {
+        if (logicalProjectOperator.hasLimit()) {
             builder.setLimit(logicalProjectOperator.getLimit());
         } else {
             builder.setLimit(child.getLimit());

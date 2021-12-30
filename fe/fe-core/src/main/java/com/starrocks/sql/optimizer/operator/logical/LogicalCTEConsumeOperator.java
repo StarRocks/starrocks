@@ -6,6 +6,7 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -28,7 +29,7 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
     private final Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
 
     public LogicalCTEConsumeOperator(String cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
-        super(OperatorType.LOGICAL_CTE_CONSUME, -1, null, null);
+        super(OperatorType.LOGICAL_CTE_CONSUME, Operator.DEFAULT_LIMIT, null, null);
         this.cteId = cteId;
         this.cteOutputColumnRefMap = cteOutputColumnRefMap;
     }

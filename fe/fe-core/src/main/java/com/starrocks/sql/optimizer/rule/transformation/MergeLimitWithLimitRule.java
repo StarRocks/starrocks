@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -32,7 +33,7 @@ public class MergeLimitWithLimitRule extends TransformationRule {
         LogicalLimitOperator l2 = (LogicalLimitOperator) input.getInputs().get(0).getOp();
 
         // l2 range
-        long l2Min = l2.hasOffset() ? l2.getOffset() : 0;
+        long l2Min = l2.hasOffset() ? l2.getOffset() : Operator.DEFAULT_OFFSET;
         long l2Max = l2Min + l2.getLimit();
 
         // l1 range
@@ -44,11 +45,11 @@ public class MergeLimitWithLimitRule extends TransformationRule {
 
         if (limit <= 0) {
             limit = 0;
-            offset = -1;
+            offset = Operator.DEFAULT_OFFSET;
         }
 
         if (offset <= 0) {
-            offset = -1;
+            offset = Operator.DEFAULT_OFFSET;
         }
 
         return Lists.newArrayList(OptExpression.create(new LogicalLimitOperator(limit, offset),

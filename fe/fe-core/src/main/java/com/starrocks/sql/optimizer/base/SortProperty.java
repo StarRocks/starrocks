@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.base;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 
@@ -56,6 +57,7 @@ public class SortProperty implements PhysicalProperty {
     @Override
     public GroupExpression appendEnforcers(Group child) {
         return new GroupExpression(new PhysicalTopNOperator(spec,
-                -1, 0, SortPhase.FINAL, false, true, null, null), Lists.newArrayList(child));
+                Operator.DEFAULT_LIMIT, Operator.DEFAULT_OFFSET, SortPhase.FINAL, false, true, null, null),
+                Lists.newArrayList(child));
     }
 }
