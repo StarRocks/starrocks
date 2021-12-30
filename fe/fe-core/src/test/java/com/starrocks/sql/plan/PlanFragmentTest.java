@@ -5183,4 +5183,12 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("<slot 4> : nullif(1: v1, 1: v1) + 0"));
         Assert.assertTrue(plan.contains(" OUTPUT EXPRS:4: expr | 4: expr"));
     }
+
+    @Test
+    public void testFunctionNullable() throws Exception {
+        String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
+                "id:0, fid:50303, could_apply_dict_optimize:false), has_nullable_child:false, is_nullable:true"));
+    }
 }
