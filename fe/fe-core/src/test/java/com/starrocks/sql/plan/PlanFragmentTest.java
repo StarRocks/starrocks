@@ -1260,7 +1260,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("|  equal join conjunct: 1: v1 = 4: v4"));
         Assert.assertTrue(plan.contains("     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(CAST(1: v1 AS VARCHAR(65533)) AS DOUBLE) = CAST(1: v1 AS DOUBLE)\n"
+                + "     PREDICATES: CAST(CAST(1: v1 AS VARCHAR(1048576)) AS DOUBLE) = CAST(1: v1 AS DOUBLE)\n"
                 + "     partitions=0/1"));
     }
 

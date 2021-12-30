@@ -164,7 +164,7 @@ public class ColumnDefTest {
 
     @Test(expected = AnalysisException.class)
     public void testInvalidVarcharInsideArray() throws AnalysisException {
-        Type tooLongVarchar = ScalarType.createVarchar(100000);
+        Type tooLongVarchar = ScalarType.createVarchar(1024*1024+1);
         ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, true,
                 DefaultValueDef.NOT_SET, "");
         column.analyze(true);
