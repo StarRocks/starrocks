@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.cost.CostModel;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
@@ -257,7 +258,7 @@ public class Explain {
             OperatorStr child = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
             PhysicalTopNOperator topn = (PhysicalTopNOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder();
-            if (topn.getLimit() == -1) {
+            if (topn.getLimit() == Operator.DEFAULT_LIMIT) {
                 sb.append("- SORT(");
                 if (topn.getSortPhase().equals(SortPhase.FINAL) && !topn.isSplit()) {
                     sb.append("GLOBAL)");
