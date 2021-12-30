@@ -135,13 +135,12 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
     }
 
     auto context = std::move(res).value();
-    auto channel_size = _tablet_id_to_sorted_indexes.size();
+    auto channel_size = request.has_chunk() ? _tablet_id_to_sorted_indexes.size() : 0;
     auto tablet_ids = request.tablet_ids().data();
     auto tablet_ids_size = request.tablet_ids_size();
-    auto channel_row_idx_start_points = context->_channel_row_idx_start_points.get();
-    auto row_indexes = context->_row_indexes.get();
+    auto channel_row_idx_start_points = context->_channel_row_idx_start_points.get(); // May be a nullptr
+    auto row_indexes = context->_row_indexes.get();                                   // May be a nullptr
     auto& chunk = context->_chunk;
-    DCHECK_EQ(channel_size, _delta_writers.size());
 
     auto count_down_latch = BThreadCountDownLatch(1);
 
@@ -210,19 +209,19 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 }
 
 Status TabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
-    if (UNLIKELY(pb_chunk.is_nulls().empty())) {
-        return Status::InternalError("ChunkPB::is_nulls() is empty");
-    }
-    if (UNLIKELY(pb_chunk.slot_id_map().empty())) {
-        return Status::InternalError("ChunkPB::slot_id_map() is empty");
-    }
-
     if (_has_chunk_meta.load(std::memory_order_acquire)) {
         return Status::OK();
     }
     std::lock_guard l(_chunk_meta_lock);
     if (_has_chunk_meta.load(std::memory_order_acquire)) {
         return Status::OK();
+    }
+
+    if (UNLIKELY(pb_chunk.is_nulls().empty())) {
+        return Status::InternalError("ChunkPB::is_nulls() is empty");
+    }
+    if (UNLIKELY(pb_chunk.slot_id_map().empty())) {
+        return Status::InternalError("ChunkPB::slot_id_map() is empty");
     }
 
     _chunk_meta.slot_id_to_index.reserve(pb_chunk.slot_id_map().size());
@@ -354,10 +353,15 @@ StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_wr
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
 
+    scoped_refptr<WriteContext> context(new WriteContext(response));
+
+    if (!request.has_chunk()) {
+        return std::move(context);
+    }
+
     auto& pchunk = request.chunk();
     RETURN_IF_ERROR(_build_chunk_meta(pchunk));
 
-    scoped_refptr<WriteContext> context(new WriteContext(response));
     vectorized::Chunk& chunk = context->_chunk;
     RETURN_IF_ERROR(chunk.deserialize((const uint8_t*)pchunk.data().data(), pchunk.data().size(), _chunk_meta,
                                       pchunk.serialized_size()));
