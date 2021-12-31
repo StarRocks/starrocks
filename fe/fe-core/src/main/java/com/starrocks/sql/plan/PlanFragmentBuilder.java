@@ -1033,6 +1033,15 @@ public class PlanFragmentBuilder {
                     getSessionVariable().getStreamingPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
+
+            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
+                    inputFragment.getPlanRoot() instanceof OlapScanNode;
+            boolean pipelineDopEnabled = ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
+            if (pipelineDopEnabled && notNeedLocalShuffle) {
+                inputFragment.setNeedsLocalShuffle(false);
+            }
+
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;
         }
