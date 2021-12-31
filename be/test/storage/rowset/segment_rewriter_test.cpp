@@ -24,13 +24,8 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/chunk_iterator.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
-
-#define ASSERT_OK(expr)                                   \
-    do {                                                  \
-        Status _status = (expr);                          \
-        ASSERT_TRUE(_status.ok()) << _status.to_string(); \
-    } while (0)
 
 namespace starrocks {
 

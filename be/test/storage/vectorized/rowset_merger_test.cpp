@@ -19,6 +19,7 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/empty_iterator.h"
 #include "storage/vectorized/union_iterator.h"
+#include "testutil/assert.h"
 
 namespace starrocks::vectorized {
 
@@ -26,24 +27,23 @@ class TestRowsetWriter : public RowsetWriter {
 public:
     ~TestRowsetWriter() = default;
 
-    OLAPStatus init() override { return OLAP_SUCCESS; }
+    Status init() override { return Status::OK(); }
 
-    OLAPStatus add_chunk(const vectorized::Chunk& chunk) override { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    Status add_chunk(const vectorized::Chunk& chunk) override { return Status::NotSupported(""); }
 
-    OLAPStatus flush_chunk(const vectorized::Chunk& chunk) override { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    Status flush_chunk(const vectorized::Chunk& chunk) override { return Status::NotSupported(""); }
 
-    OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override {
-        return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
+    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override {
+        return Status::NotSupported("");
     }
 
-    OLAPStatus add_rowset(RowsetSharedPtr rowset) override { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    Status add_rowset(RowsetSharedPtr rowset) override { return Status::NotSupported(""); }
 
-    OLAPStatus add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
-                                                   const SchemaMapping& schema_mapping) override {
-        return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
+    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) override {
+        return Status::NotSupported("");
     }
 
-    RowsetSharedPtr build() override { return RowsetSharedPtr(); }
+    StatusOr<RowsetSharedPtr> build() override { return RowsetSharedPtr(); }
 
     Version version() override { return Version(); }
 
@@ -53,17 +53,17 @@ public:
 
     RowsetId rowset_id() override { return RowsetId(); }
 
-    OLAPStatus flush() override { return OLAP_SUCCESS; }
-    OLAPStatus flush_columns() override { return OLAP_SUCCESS; }
-    OLAPStatus final_flush() override { return OLAP_SUCCESS; }
+    Status flush() override { return Status::OK(); }
+    Status flush_columns() override { return Status::OK(); }
+    Status final_flush() override { return Status::OK(); }
 
-    OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
+    Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
         all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         all_rssids.insert(all_rssids.end(), rssid.begin(), rssid.end());
-        return OLAP_SUCCESS;
+        return Status::OK();
     }
 
-    OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
+    Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
         if (is_key) {
             all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         } else {
@@ -73,14 +73,14 @@ public:
                 non_key_columns[column_index - 1]->append(*chunk.get_column_by_index(i), 0, chunk.num_rows());
             }
         }
-        return OLAP_SUCCESS;
+        return Status::OK();
     }
 
-    OLAPStatus add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                                      const std::vector<uint32_t>& rssid) {
-        RETURN_NOT_OK(add_columns(chunk, column_indexes, true));
+    Status add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                                  const std::vector<uint32_t>& rssid) {
+        RETURN_IF_ERROR(add_columns(chunk, column_indexes, true));
         all_rssids.insert(all_rssids.end(), rssid.begin(), rssid.end());
-        return OLAP_SUCCESS;
+        return Status::OK();
     }
 
     std::unique_ptr<Column> all_pks;
@@ -116,8 +116,8 @@ public:
             cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
             cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
         }
-        EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
-        return writer->build();
+        CHECK_OK(writer->flush_chunk(*chunk));
+        return *writer->build();
     }
 
     void create_tablet(int64_t tablet_id, int32_t schema_hash) {

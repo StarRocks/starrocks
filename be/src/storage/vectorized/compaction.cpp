@@ -167,29 +167,25 @@ Status Compaction::do_compaction_impl() {
 
     // 2. write combined rows to output rowset
     Statistics stats;
-    Status res;
+    Status st;
     if (algorithm == kVertical) {
-        res = _merge_rowsets_vertically(segment_iterator_num, &stats);
+        st = _merge_rowsets_vertically(segment_iterator_num, &stats);
     } else {
-        res = _merge_rowsets_horizontally(segment_iterator_num, &stats);
+        st = _merge_rowsets_horizontally(segment_iterator_num, &stats);
     }
-    if (!res.ok()) {
-        LOG(WARNING) << "fail to do " << compaction_name() << ". res=" << res.to_string()
-                     << ", tablet=" << _tablet->tablet_id() << ", output_version=" << _output_version.first << "-"
-                     << _output_version.second;
-        return res;
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to do " << compaction_name() << ". res=" << st << ", tablet=" << _tablet->tablet_id()
+                     << ", output_version=" << _output_version.first << "-" << _output_version.second;
+        return st;
     }
     TRACE("merge rowsets finished");
     TRACE_COUNTER_INCREMENT("merged_rows", stats.merged_rows);
     TRACE_COUNTER_INCREMENT("filtered_rows", stats.filtered_rows);
     TRACE_COUNTER_INCREMENT("output_rows", stats.output_rows);
 
-    _output_rowset = _output_rs_writer->build();
-    if (_output_rowset == nullptr) {
-        LOG(WARNING) << "rowset writer build failed. writer version:"
-                     << ", output_version=" << _output_version.first << "-" << _output_version.second;
-        return Status::MemoryAllocFailed("compaction malloc error.");
-    }
+    auto res = _output_rs_writer->build();
+    if (!res.ok()) return res.status();
+    _output_rowset = std::move(res).value();
     TRACE_COUNTER_INCREMENT("output_rowset_data_size", _output_rowset->data_disk_size());
     TRACE_COUNTER_INCREMENT("output_row_num", _output_rowset->num_rows());
     TRACE_COUNTER_INCREMENT("output_segments_num", _output_rowset->num_segments());
@@ -220,12 +216,10 @@ Status Compaction::do_compaction_impl() {
               << ". elapsed time=" << watch.get_elapse_second() << "s.";
 
     // warm-up this rowset
-    auto st = _output_rowset->load();
-    if (!st.ok()) {
-        // only log load failure
-        LOG(WARNING) << "ignore load rowset error tablet:" << _tablet->tablet_id()
-                     << " rowset:" << _output_rowset->rowset_id() << " " << st;
-    }
+    st = _output_rowset->load();
+    // only log load failure
+    LOG_IF(WARNING, !st.ok()) << "ignore load rowset error tablet:" << _tablet->tablet_id()
+                              << " rowset:" << _output_rowset->rowset_id() << " " << st;
 
     return Status::OK();
 }
@@ -317,10 +311,9 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
 
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
 
-        OLAPStatus olap_status = _output_rs_writer->add_chunk(*chunk);
-        if (olap_status != OLAP_SUCCESS) {
-            LOG(WARNING) << "writer add_chunk error, err=" << olap_status;
-            return Status::InternalError("writer add_chunk error.");
+        if (auto st = _output_rs_writer->add_chunk(*chunk); !st.ok()) {
+            LOG(WARNING) << "writer add_chunk error: " << st;
+            return st;
         }
         output_rows += chunk->num_rows();
     }
@@ -335,13 +328,11 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
         stats_output->filtered_rows = reader.stats().rows_del_filtered;
     }
 
-    OLAPStatus olap_status = _output_rs_writer->flush();
-    if (olap_status != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " + _tablet->tablet_id()
-                     << ", err=" << olap_status;
-        return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
+    if (auto st = _output_rs_writer->flush(); !st.ok()) {
+        LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " << _tablet->tablet_id()
+                     << ", err=" << st;
+        return st;
     }
-
     return Status::OK();
 }
 
@@ -416,11 +407,9 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
 
             ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
 
-            OLAPStatus olap_status = _output_rs_writer->add_columns(*chunk, _column_groups[i], is_key);
-            if (olap_status != OLAP_SUCCESS) {
-                LOG(WARNING) << "writer add chunk by columns error. tablet=" << _tablet->tablet_id()
-                             << ", err=" << olap_status;
-                return Status::InternalError("writer add chunk by columns error.");
+            if (auto st = _output_rs_writer->add_columns(*chunk, _column_groups[i], is_key); !st.ok()) {
+                LOG(WARNING) << "writer add chunk by columns error. tablet=" << _tablet->tablet_id() << ", err=" << st;
+                return st;
             }
 
             if (is_key) {
@@ -445,11 +434,10 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
             stats_output->filtered_rows = reader.stats().rows_del_filtered;
         }
 
-        OLAPStatus olap_status = _output_rs_writer->flush_columns();
-        if (olap_status != OLAP_SUCCESS) {
+        if (auto st = _output_rs_writer->flush_columns(); !st.ok()) {
             LOG(WARNING) << "failed to flush column group when merging rowsets of tablet " << _tablet->tablet_id()
-                         << ", err=" << olap_status;
-            return Status::InternalError("failed to flush column group when merging rowsets of tablet error.");
+                         << ", err=" << st;
+            return st;
         }
 
         if (is_key) {
@@ -457,11 +445,10 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         }
     }
 
-    OLAPStatus olap_status = _output_rs_writer->final_flush();
-    if (olap_status != OLAP_SUCCESS) {
+    if (auto st = _output_rs_writer->final_flush(); !st.ok()) {
         LOG(WARNING) << "failed to final flush rowset when merging rowsets of tablet " << _tablet->tablet_id()
-                     << ", err=" << olap_status;
-        return Status::InternalError("failed to final flush rowset when merging rowsets of tablet error.");
+                     << ", err=" << st;
+        return st;
     }
 
     return Status::OK();

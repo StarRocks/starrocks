@@ -25,7 +25,9 @@
 #include <memory>
 #include <vector>
 
+#include "common/status.h"
 #include "storage/olap_define.h"
+#include "util/spinlock.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -58,7 +60,7 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat);
 class FlushToken {
 public:
     explicit FlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
-            : _flush_token(std::move(flush_pool_token)), _flush_status(OLAP_SUCCESS) {}
+            : _flush_token(std::move(flush_pool_token)), _status() {}
 
     Status submit(std::unique_ptr<vectorized::MemTable> mem_table);
 
@@ -67,10 +69,21 @@ public:
     void cancel();
 
     // wait all tasks in token to be completed.
-    OLAPStatus wait();
+    Status wait();
 
     // get flush operations' statistics
     const FlushStatistic& get_stats() const { return _stats; }
+
+    Status status() const {
+        std::lock_guard l(_status_lock);
+        return _status;
+    }
+
+    void set_status(const Status& status) {
+        if (status.ok()) return;
+        std::lock_guard l(_status_lock);
+        if (_status.ok()) _status = status;
+    }
 
 private:
     friend class MemtableFlushTask;
@@ -79,9 +92,10 @@ private:
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 
+    mutable SpinLock _status_lock;
     // Records the current flush status of the tablet.
-    // Note: Once its value is set to Failed, it cannot return to SUCCESS.
-    std::atomic<OLAPStatus> _flush_status;
+    // Note: Once its value is set to Failed, it cannot return to OK.
+    Status _status;
 
     FlushStatistic _stats;
 };

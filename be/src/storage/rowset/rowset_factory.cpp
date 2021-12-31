@@ -80,7 +80,7 @@ Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, s
         DCHECK(context.writer_type == kVertical);
         *output = std::make_unique<VerticalBetaRowsetWriter>(context);
     }
-    return (*output)->init() == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to init rowset writer");
+    return (*output)->init();
 }
 
 } // namespace starrocks
