@@ -294,6 +294,7 @@ struct TExecPlanFragmentParams {
   14: optional TLoadErrorHubInfo load_error_hub_info
 
   50: optional bool is_pipeline
+  51: optional i32 pipeline_dop
 }
 
 struct TExecPlanFragmentResult {
