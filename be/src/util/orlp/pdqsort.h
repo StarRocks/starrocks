@@ -19,8 +19,7 @@ applications, and to alter it and redistribute it freely, subject to the followi
 3. This notice may not be removed or altered from any source distribution.
 */
 
-#ifndef PDQSORT_H
-#define PDQSORT_H
+#pragma once
 
 #include <algorithm>
 #include <cstddef>
@@ -601,5 +600,3 @@ inline void pdqsort_branchless(const bool& is_cancelled, Iter begin, Iter end) {
 }
 
 #undef PDQSORT_PREFER_MOVE
-
-#endif

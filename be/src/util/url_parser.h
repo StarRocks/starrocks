@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_URL_PARSER_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_URL_PARSER_H
+#pragma once
 
 #include "runtime/string_search.hpp"
 #include "runtime/string_value.h"
@@ -90,5 +89,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

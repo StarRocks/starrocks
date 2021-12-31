@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_BUFFER_BUILDER_HPP
-#define STARROCKS_BE_SRC_COMMON_UTIL_BUFFER_BUILDER_HPP
+#pragma once
 
 #include <stdlib.h>
 #include <boost/cstdint.hpp>
@@ -71,5 +70,3 @@ private:
 };
 
 }
-
-#endif

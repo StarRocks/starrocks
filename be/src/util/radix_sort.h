@@ -27,8 +27,7 @@
  *
  */
 
-#ifndef RADIXSORT_H_
-#define RADIXSORT_H_
+#pragma once
 
 #include <malloc.h>
 
@@ -302,5 +301,3 @@ void radixSortLSD(T* arr, size_t size) {
 }
 
 } // namespace starrocks
-
-#endif // RADIXSORT_H_
