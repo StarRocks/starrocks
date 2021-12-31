@@ -106,8 +106,8 @@ public final class QeProcessorImpl implements QeProcessor {
 
     @Override
     public TReportExecStatusResult reportExecStatus(TReportExecStatusParams params, TNetworkAddress beAddr) {
-        if (params.isSetProfile()) {
-            LOG.info("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
+        if (LOG.isDebugEnabled() && params.isSetProfile()) {
+            LOG.debug("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
                     params.backend_num, beAddr);
             LOG.debug("params: {}", params);
