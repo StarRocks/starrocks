@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_PARSE_UTIL_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_PARSE_UTIL_H
+#pragma once
 
 #include <boost/cstdint.hpp>
 #include <string>
@@ -43,5 +42,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif

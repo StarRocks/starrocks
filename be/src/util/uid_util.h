@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_UID_UTIL_H
-#define STARROCKS_BE_SRC_UTIL_UID_UTIL_H
+#pragma once
 
 #include <ostream>
 #include <string>
@@ -144,5 +143,3 @@ struct hash<starrocks::UniqueId> {
 };
 
 } // namespace std
-
-#endif // STARROCKS_BE_SRC_UTIL_UID_UTIL_H

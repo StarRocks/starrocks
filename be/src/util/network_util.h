@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_NETWORK_UTIL_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_NETWORK_UTIL_H
+#pragma once
 
 #include <vector>
 
@@ -62,5 +61,3 @@ TNetworkAddress make_network_address(const std::string& hostname, int port);
 Status get_inet_interfaces(std::vector<std::string>* interfaces, bool include_ipv6 = false);
 
 } // namespace starrocks
-
-#endif

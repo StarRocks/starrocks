@@ -18,8 +18,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-#ifndef STARROCKS_UTIL_DEBUG_LEAKCHECK_DISABLER_H_
-#define STARROCKS_UTIL_DEBUG_LEAKCHECK_DISABLER_H_
+#pragma once
 
 #include "gutil/macros.h"
 #include "util/debug/leak_annotations.h"
@@ -44,5 +43,3 @@ private:
 
 } // namespace debug
 } // namespace starrocks
-
-#endif // STARROCKS_UTIL_DEBUG_LEAKCHECK_DISABLER_H_

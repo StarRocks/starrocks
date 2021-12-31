@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_DEBUG_COUNTERS_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_DEBUG_COUNTERS_H
+#pragma once
 
 #include "util/runtime_profile.h"
 
@@ -67,5 +66,3 @@ public:
 #endif // ENABLE_DEBUG_COUNTERS
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_COMMON_UTIL_DEBUG_COUNTERS_H

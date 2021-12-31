@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_UTIL_OS_INFO_H
-#define STARROCKS_BE_UTIL_OS_INFO_H
+#pragma once
 
 #include <ctime>
 #include <string>
@@ -57,4 +56,3 @@ private:
 };
 
 } // namespace starrocks
-#endif

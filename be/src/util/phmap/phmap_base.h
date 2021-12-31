@@ -2,8 +2,7 @@
 // This file is based on code available under the Apache license here:
 //   https://github.com/greg7mdp/parallel-hashmap/blob/master/parallel_hashmap/phmap_base.h
 
-#if !defined(phmap_base_h_guard_)
-#define phmap_base_h_guard_
+#pragma once
 
 // ---------------------------------------------------------------------------
 // Copyright (c) 2019, Gregory Popovitch - greg7mdp@gmail.com
@@ -4788,5 +4787,3 @@ public:
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-
-#endif // phmap_base_h_guard_

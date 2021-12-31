@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_THREAD_H
-#define STARROCKS_BE_SRC_UTIL_THREAD_H
+#pragma once
 
 #include <pthread.h>
 #include <syscall.h>
@@ -283,5 +282,3 @@ private:
 };
 
 } //namespace starrocks
-
-#endif //STARROCKS_BE_SRC_UTIL_THREAD_H

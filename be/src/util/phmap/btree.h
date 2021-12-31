@@ -35,8 +35,7 @@
 // limitations under the License.
 // ---------------------------------------------------------------------------
 
-#ifndef PHMAP_BTREE_BTREE_CONTAINER_H_
-#define PHMAP_BTREE_BTREE_CONTAINER_H_
+#pragma once
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -3721,5 +3720,3 @@ void erase_if(btree_multimap<K, V, C, A>& map, Pred pred) {
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-
-#endif // PHMAP_BTREE_BTREE_CONTAINER_H_
