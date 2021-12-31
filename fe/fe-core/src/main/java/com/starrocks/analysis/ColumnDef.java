@@ -219,7 +219,7 @@ public class ColumnDef {
             throw new AnalysisException(String.format("Invalid default value for '%s'", name));
         }
 
-        if (defaultValueDef.isSet && defaultValueDef.expr instanceof LiteralExpr) {
+        if (defaultValueDef.isSet && defaultValueDef.expr instanceof Expr) {
             try {
                 validateDefaultValue(type, defaultValueDef.expr);
             } catch (AnalysisException e) {
@@ -289,7 +289,8 @@ public class ColumnDef {
                 throw new AnalysisException(String.format("Default expr for function %s is not supported", functionName));
             }
 
-            if("now".equalsIgnoreCase(functionName) && !type.isDateType()) {
+            // default function current_timestamp currently only support DATETIME type.
+            if("now".equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.DATETIME) {
                 throw new AnalysisException(String.format("Default function now() for type %s is not supported", type));
             }
         } else if (defaultExpr instanceof NullLiteral) {
