@@ -354,11 +354,10 @@ private:
             (*total_chunk)++;
 
             if (mask_buffer) {
-                OLAPStatus olap_status = writer->add_columns_with_rssid(*chunk, column_indexes, rssids);
-                if (olap_status != OLAP_SUCCESS) {
+                if (auto st = writer->add_columns_with_rssid(*chunk, column_indexes, rssids); !st.ok()) {
                     LOG(WARNING) << "writer add_columns_with_rssid error, tablet=" << tablet.tablet_id()
-                                 << ", err=" << olap_status;
-                    return Status::InternalError("writer add_columns_with_rssid error.");
+                                 << ", err=" << st;
+                    return st;
                 }
 
                 if (!source_masks->empty()) {
@@ -366,30 +365,27 @@ private:
                     source_masks->clear();
                 }
             } else {
-                OLAPStatus olap_status = writer->add_chunk_with_rssid(*chunk, rssids);
-                if (olap_status != OLAP_SUCCESS) {
+                if (auto st = writer->add_chunk_with_rssid(*chunk, rssids); !st.ok()) {
                     LOG(WARNING) << "writer add_chunk_with_rssid error, tablet=" << tablet.tablet_id()
-                                 << ", err=" << olap_status;
-                    return Status::InternalError("writer add_chunk_with_rssid error.");
+                                 << ", err=" << st;
+                    return st;
                 }
             }
         }
 
         if (mask_buffer) {
-            OLAPStatus olap_status = writer->flush_columns();
-            if (olap_status != OLAP_SUCCESS) {
+            if (auto st = writer->flush_columns(); !st.ok()) {
                 LOG(WARNING) << "failed to flush columns when merging rowsets of tablet " << tablet.tablet_id()
-                             << ", err=" << olap_status;
-                return Status::InternalError("failed to flush columns when merging rowsets of tablet error.");
+                             << ", err=" << st;
+                return st;
             }
 
             RETURN_IF_ERROR(mask_buffer->flush());
         } else {
-            OLAPStatus olap_status = writer->flush();
-            if (olap_status != OLAP_SUCCESS) {
+            if (auto st = writer->flush(); !st.ok()) {
                 LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " << tablet.tablet_id()
-                             << ", err=" << olap_status;
-                return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
+                             << ", err=" << st;
+                return st;
             }
         }
 
@@ -473,11 +469,9 @@ private:
 
                 ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet.tablet_schema(), chunk.get());
 
-                OLAPStatus olap_status = writer->add_columns(*chunk, column_groups[i], false);
-                if (olap_status != OLAP_SUCCESS) {
-                    LOG(WARNING) << "writer add_columns error, tablet=" << tablet.tablet_id()
-                                 << ", err=" << olap_status;
-                    return Status::InternalError("writer add_columns error.");
+                if (auto st = writer->add_columns(*chunk, column_groups[i], false); !st.ok()) {
+                    LOG(WARNING) << "writer add_columns error, tablet=" << tablet.tablet_id() << ", err=" << st;
+                    return st;
                 }
 
                 if (!source_masks->empty()) {
@@ -485,11 +479,10 @@ private:
                 }
             }
 
-            OLAPStatus olap_status = writer->flush_columns();
-            if (olap_status != OLAP_SUCCESS) {
+            if (auto st = writer->flush_columns(); !st.ok()) {
                 LOG(WARNING) << "failed to flush columns when merging rowsets of tablet " << tablet.tablet_id()
-                             << ", err=" << olap_status;
-                return Status::InternalError("failed to flush rowset when merging rowsets of tablet error.");
+                             << ", err=" << st;
+                return st;
             }
 
             if (non_key_stats.raw_rows_read - non_key_stats.rows_del_vec_filtered != *total_rows) {
@@ -500,11 +493,10 @@ private:
             }
         }
 
-        OLAPStatus olap_status = writer->final_flush();
-        if (olap_status != OLAP_SUCCESS) {
+        if (auto st = writer->final_flush(); !st.ok()) {
             LOG(WARNING) << "failed to final flush rowset when merging rowsets of tablet " << tablet.tablet_id()
-                         << ", err=" << olap_status;
-            return Status::InternalError("failed to final flush rowset when merging rowsets of tablet error.");
+                         << ", err=" << st;
+            return st;
         }
 
         return Status::OK();

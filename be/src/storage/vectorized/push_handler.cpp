@@ -487,18 +487,14 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
         // 3. New RowsetBuilder to write data into rowset
         VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
                 << ", block_row_size=" << cur_tablet->num_rows_per_row_block();
-        if (rowset_writer->flush() != OLAP_SUCCESS) {
-            LOG(WARNING) << "Failed to finalize writer.";
-            st = Status::InternalError("Fail to finalize writer");
+        st = rowset_writer->flush();
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to finalize writer: " << st;
             break;
         }
-        *cur_rowset = rowset_writer->build();
-
-        if (*cur_rowset == nullptr) {
-            LOG(WARNING) << "Fail to build rowset";
-            st = Status::InternalError("Fail to build rowset");
-            break;
-        }
+        auto rowset = rowset_writer->build();
+        if (!rowset.ok()) return rowset.status();
+        *cur_rowset = std::move(rowset).value();
 
         _write_bytes += (*cur_rowset)->data_disk_size();
         _write_rows += (*cur_rowset)->num_rows();
@@ -558,7 +554,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
 
         // 3. read data and write rowset
         // init Reader
-        Status st = reader->init(_request.broker_scan_range, _request.desc_tbl);
+        st = reader->init(_request.broker_scan_range, _request.desc_tbl);
         if (!st.ok()) {
             LOG(WARNING) << "fail to init reader. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name();
             return st;
@@ -578,11 +574,12 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
                     break;
                 }
 
-                if (auto ost = rowset_writer->add_chunk(*chunk); ost != OLAP_SUCCESS) {
+                st = rowset_writer->add_chunk(*chunk);
+                if (!st.ok()) {
                     LOG(WARNING) << "fail to add chunk to rowset writer"
-                                 << ". res=" << ost << ", tablet=" << cur_tablet->full_name()
+                                 << ". res=" << st << ", tablet=" << cur_tablet->full_name()
                                  << ", read_rows=" << num_rows;
-                    return Status::InternalError("Fail to add chunk to rowset writer");
+                    return st;
                 }
 
                 num_rows += chunk->num_rows();
@@ -594,18 +591,13 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
     }
 
     // 4. finish
-    if (rowset_writer->flush() != OLAP_SUCCESS) {
-        LOG(WARNING) << "fail to finalize writer";
-        return Status::InternalError("Fail to finalize writer");
-    }
-    *cur_rowset = rowset_writer->build();
-    if (*cur_rowset == nullptr) {
-        LOG(WARNING) << "fail to build rowset";
-        return Status::InternalError("Fail to build rowset");
-    }
+    RETURN_IF_ERROR(rowset_writer->flush());
+    auto rowset = rowset_writer->build();
+    if (!rowset.ok()) return rowset.status();
+    *cur_rowset = std::move(rowset).value();
 
-    _write_bytes += (*cur_rowset)->data_disk_size();
-    _write_rows += (*cur_rowset)->num_rows();
+    _write_bytes += static_cast<int64_t>((*cur_rowset)->data_disk_size());
+    _write_rows += static_cast<int64_t>((*cur_rowset)->num_rows());
     VLOG(10) << "convert delta file end. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name()
              << ", processed_rows" << num_rows;
     return st;
