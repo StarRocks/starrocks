@@ -94,6 +94,7 @@ struct JoinHashTableItems {
     size_t build_column_count = 0;
     size_t probe_column_count = 0;
     bool with_other_conjunct = false;
+    bool need_create_tuple_columns = true;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
 
@@ -149,6 +150,7 @@ struct HashTableProbeState {
 
 struct HashTableParam {
     bool with_other_conjunct = false;
+    bool need_create_tuple_columns = true;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
@@ -576,6 +578,7 @@ private:
     std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)> _fixed128 = nullptr;
 
     JoinHashMapType _hash_map_type = JoinHashMapType::empty;
+    bool _need_create_tuple_columns = true;
 
     std::unique_ptr<JoinHashTableItems> _table_items;
     std::unique_ptr<HashTableProbeState> _probe_state;

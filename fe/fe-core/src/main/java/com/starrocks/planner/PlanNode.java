@@ -523,7 +523,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             msg.setLocal_rf_waiting_set(waitingPlanNodeIds);
         }
-
+        msg.setNeed_create_tuple_columns(false);
     }
 
     /**
