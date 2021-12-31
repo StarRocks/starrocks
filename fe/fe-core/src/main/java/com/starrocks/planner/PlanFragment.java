@@ -123,6 +123,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // specification of the number of parallel when fragment is executed
     // default value is 1
     protected int parallelExecNum = 1;
+    protected int pipelineDop = 1;
+    protected boolean dopEstimated = false;
 
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
@@ -139,7 +141,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.dataPartition = partition;
         this.outputPartition = DataPartition.UNPARTITIONED;
         this.transferQueryStatisticsWithEveryBatch = false;
+        // when dop adaptation is enabled, parallelExecNum and pipelineDop set to degreeOfParallelism and 1 respectively
+        // in default. these values just a hint to help determine numInstances and pipelineDop of a PlanFragment.
         setParallelExecNumIfExists();
+        setPipelineDopIfPipelineEngineEnabled();
         setFragmentInPlanTree(planRoot);
     }
 
@@ -167,7 +172,15 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     public void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+            int pipelineDop = ConnectContext.get().getSessionVariable().getPipelineDop();
+            int instanceNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+            int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+
+            if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+                parallelExecNum = pipelineDop > 0 ? instanceNum : degreeOfParallelism;
+            } else {
+                parallelExecNum = instanceNum;
+            }
         }
     }
 
@@ -188,6 +201,29 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     public void setParallelExecNum(int parallelExecNum) {
         this.parallelExecNum = parallelExecNum;
+    }
+
+    public void setPipelineDopIfPipelineEngineEnabled() {
+        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            return;
+        }
+        int dop = ConnectContext.get().getSessionVariable().getPipelineDop();
+        this.pipelineDop = dop > 0 ? dop : 1;
+    }
+
+    public void setPipelineDop(int dop) {
+        this.pipelineDop = dop;
+    }
+
+    public int getPipelineDop() {
+        return pipelineDop;
+    }
+
+    public void setDopEstimated() {
+        dopEstimated = true;
+    }
+    public boolean isDopEstimated() {
+        return dopEstimated;
     }
 
     public void setOutputExprs(List<Expr> outputExprs) {

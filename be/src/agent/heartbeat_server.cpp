@@ -63,12 +63,14 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     Status st = _heartbeat(master_info);
     st.to_thrift(&heartbeat_result.status);
 
+    static int32_t num_hardware_cores = std::thread::hardware_concurrency();
     if (st.ok()) {
         heartbeat_result.backend_info.__set_be_port(config::be_port);
         heartbeat_result.backend_info.__set_http_port(config::webserver_port);
         heartbeat_result.backend_info.__set_be_rpc_port(-1);
         heartbeat_result.backend_info.__set_brpc_port(config::brpc_port);
         heartbeat_result.backend_info.__set_version(get_short_version());
+        heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
     }
 }
 
