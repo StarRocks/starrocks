@@ -419,8 +419,10 @@ public class Coordinator {
             // Select top fragment as global runtime filter merge address
             setGlobalRuntimeFilterParams(topParams, toBrpcHost(execBeAddr));
 
-            LOG.info("dispatch query job: {} to {}", DebugUtil.printId(queryId),
-                    topParams.instanceExecParams.get(0).host);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(queryId),
+                        topParams.instanceExecParams.get(0).host);
+            }
 
             // set the broker address for OUTFILE sink
             ResultSink resultSink = (ResultSink) topParams.fragment.getSink();
