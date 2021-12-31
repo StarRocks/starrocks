@@ -168,7 +168,11 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
     }
 
-    PipelineBuilderContext context(_fragment_ctx, degree_of_parallelism);
+    std::remove_cv_t<typeof(request.per_node_scan_dop)> per_node_scan_dop;
+    if (request.__isset.per_node_scan_dop) {
+        per_node_scan_dop = request.per_node_scan_dop;
+    }
+    PipelineBuilderContext context(_fragment_ctx, degree_of_parallelism, std::move(per_node_scan_dop));
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
     // Set up sink, if required

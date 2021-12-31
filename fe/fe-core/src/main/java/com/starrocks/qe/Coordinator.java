@@ -406,6 +406,8 @@ public class Coordinator {
 
         computeFragmentExecParams();
 
+        computeScanDop();
+
         traceInstance();
 
         // create result receiver
@@ -912,6 +914,41 @@ public class Coordinator {
             }
         }
 
+    }
+
+    // compute degree of parallelism(dop) for each OlapScanNode in a fragment instance.
+    // the maxScanOperators is numRows of ScanNode divided by session variable pipelineMaxRowCountPerScanOperator,
+    // then each fragment instance take the share of itself own numScanRanges divided by totalNumScanRanges, and
+    // the dop of OlapScanNode is at least 1 and at most minimum(itself own numScanRanges, half the avg number of be cores).
+    private void computeScanDop() {
+        // only take effect in pipeline engine
+        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            return;
+        }
+        long maxRowCountPerScanOperator = ConnectContext.get().getSessionVariable().getPipelineMaxRowCountPerScanOperator();
+        int dop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+        for (FragmentExecParams params : fragmentExecParamsMap.values()) {
+            List<PlanNode> scanNodes = params.fragment.getOlapScanNodes(params.fragment.getPlanRoot());
+            for (PlanNode node : scanNodes) {
+                OlapScanNode scanNode = (OlapScanNode) node;
+                int totalNumScanRanges = scanNode.getScanRangeLocations(0).size();
+                long numRows = scanNode.getCardinality();
+                if (scanNode.hasLimit()) {
+                    numRows = Math.min(scanNode.getLimit(), numRows);
+                }
+                int maxNumScanOperators = Math.min(1, (int) (numRows / maxRowCountPerScanOperator));
+                for (FInstanceExecParam instanceExecParam : params.instanceExecParams) {
+                    int numScanRanges = 0;
+                    if (instanceExecParam.perNodeScanRanges.containsKey(scanNode.getId())) {
+                        numScanRanges = instanceExecParam.perNodeScanRanges.get(scanNode.getId()).size();
+                    }
+                    int scanDop = maxNumScanOperators * numScanRanges / totalNumScanRanges;
+                    int scanDopLimit = Math.min(dop, numScanRanges);
+                    scanDop = Math.min(scanDopLimit, Math.max(1, scanDop));
+                    instanceExecParam.perNodeScanDop.put(scanNode.getId().asInt(), scanDop);
+                }
+            }
+        }
     }
 
     private void handleMultiCastFragmentParams() throws Exception {
@@ -1709,6 +1746,7 @@ public class Coordinator {
         TUniqueId instanceId;
         TNetworkAddress host;
         Map<Integer, List<TScanRangeParams>> perNodeScanRanges = Maps.newHashMap();
+        Map<Integer, Integer> perNodeScanDop = Maps.newHashMap();
 
         int perFragmentInstanceIdx;
 
@@ -1997,6 +2035,7 @@ public class Coordinator {
                         params.setIs_pipeline(
                                 fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
                         params.setPipeline_dop(fragment.getPipelineDop());
+                        params.setPer_node_scan_dop(instanceExecParam.perNodeScanDop);
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {
