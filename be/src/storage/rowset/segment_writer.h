@@ -105,7 +105,7 @@ public:
     uint32_t num_rows() const { return _num_rows; }
 
     // finalize columns data, index and footer
-    Status finalize(uint64_t* segment_file_size, uint64_t* index_size);
+    Status finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position);
 
     // Used for vertical compaction
     // finalize columns data and index

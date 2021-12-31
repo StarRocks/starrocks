@@ -120,6 +120,9 @@ public:
     ColumnIndexLength index_length() const { return _index_length; }
     void set_index_length(ColumnIndexLength index_length) { _index_length = index_length; }
 
+    std::int32_t referenced_column_id() const { return _referenced_column_id; }
+    void set_index_length(std::int32_t referenced_column_id) { _referenced_column_id = referenced_column_id; }
+
     bool has_default_value() const { return _extra_fields && _extra_fields->has_default_value; }
     std::string default_value() const { return _extra_fields ? _extra_fields->default_value : ""; }
     void set_default_value(std::string value) {
@@ -195,6 +198,7 @@ private:
     ColumnIndexLength _index_length = 0;
     ColumnPrecision _precision = 0;
     ColumnScale _scale = 0;
+    int32_t _referenced_column_id = -1;
 
     uint8_t _flags = 0;
 

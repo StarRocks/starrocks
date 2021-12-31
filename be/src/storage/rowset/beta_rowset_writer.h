@@ -25,6 +25,7 @@
 #include <mutex>
 #include <vector>
 
+#include "gen_cpp/olap_file.pb.h"
 #include "storage/rowset/rowset_writer.h"
 
 namespace starrocks {
@@ -55,6 +56,7 @@ protected:
     RowsetWriterContext _context;
     std::shared_ptr<RowsetMeta> _rowset_meta;
     std::unique_ptr<TabletSchema> _rowset_schema;
+    RowsetTxnMetaPB _rowset_txn_meta_pb;
 
     int _num_segment;
     vector<bool> _segment_has_deletes;

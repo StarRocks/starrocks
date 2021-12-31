@@ -157,9 +157,14 @@ public:
     DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta_pb.mutable_delete_predicate(); }
 
     void set_delete_predicate(const DeletePredicatePB& delete_predicate) {
-        DeletePredicatePB* new_delete_condition = _rowset_meta_pb.mutable_delete_predicate();
-        *new_delete_condition = delete_predicate;
+        *_rowset_meta_pb.mutable_delete_predicate() = delete_predicate;
     }
+
+    const RowsetTxnMetaPB& txn_meta() const { return _rowset_meta_pb.txn_meta(); }
+
+    RowsetTxnMetaPB* mutable_txn_meta() { return _rowset_meta_pb.mutable_txn_meta(); }
+
+    void set_txn_meta(const RowsetTxnMetaPB& txn_meta) { *_rowset_meta_pb.mutable_txn_meta() = txn_meta; }
 
     bool empty() const { return _rowset_meta_pb.empty(); }
 

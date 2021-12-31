@@ -121,6 +121,13 @@ RowsetSharedPtr BetaRowsetWriter::build() {
             _rowset_meta->set_num_delete_files(0);
         }
         _rowset_meta->set_segments_overlap(NONOVERLAPPING);
+        if (_context.partial_update_tablet_schema) {
+            for (const auto& tablet_column : _context.partial_update_tablet_schema->columns()) {
+                _rowset_txn_meta_pb.add_partial_update_column_ids(tablet_column.referenced_column_id());
+                _rowset_txn_meta_pb.add_partial_update_column_unique_ids(tablet_column.unique_id());
+            }
+            _rowset_meta->set_txn_meta(_rowset_txn_meta_pb);
+        }
     } else {
         if (_num_segment <= 1) {
             _rowset_meta->set_segments_overlap(NONOVERLAPPING);
@@ -131,7 +138,6 @@ RowsetSharedPtr BetaRowsetWriter::build() {
     } else {
         _rowset_meta->set_rowset_state(VISIBLE);
     }
-
     RowsetSharedPtr rowset;
     auto status =
             RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, _rowset_meta, &rowset);
@@ -553,11 +559,16 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
 OLAPStatus HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer) {
     uint64_t segment_size;
     uint64_t index_size;
-    Status s = (*segment_writer)->finalize(&segment_size, &index_size);
+    uint64_t footer_position;
+    Status s = (*segment_writer)->finalize(&segment_size, &index_size, &footer_position);
     if (!s.ok()) {
         LOG(WARNING) << "Fail to finalize segment, " << s.to_string();
         return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
     }
+    uint64_t footer_size = segment_size - footer_position;
+    auto* partial_rowset_footer = _rowset_txn_meta_pb.add_partial_rowset_footers();
+    partial_rowset_footer->set_position(footer_position);
+    partial_rowset_footer->set_size(footer_size);
     {
         std::lock_guard<std::mutex> l(_lock);
         _total_data_size += segment_size;
