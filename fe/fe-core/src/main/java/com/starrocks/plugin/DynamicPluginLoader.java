@@ -208,8 +208,8 @@ public class DynamicPluginLoader extends PluginLoader {
         Class<? extends Plugin> pluginClass;
         try {
             pluginClass = loader.loadClass(pluginInfo.getClassName()).asSubclass(Plugin.class);
-        } catch (ClassNotFoundException e) {
-            throw new UserException("Could not find plugin class [" + pluginInfo.getClassName() + "]", e);
+        } catch (ClassNotFoundException | NoClassDefFoundError t) {
+            throw new UserException("Could not find plugin class [" + pluginInfo.getClassName() + "]", t);
         }
 
         return loadPluginClass(pluginClass);
