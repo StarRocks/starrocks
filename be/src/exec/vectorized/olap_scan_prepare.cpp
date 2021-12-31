@@ -802,6 +802,9 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
         const SlotDescriptor* slot_desc = slots[index];
         PrimitiveType ptype = slot_desc->type().type;
         if (!is_scalar_primitive_type(ptype)) continue;
+        // disable on float/double type because min/max value may lose precision
+        // The fix should be on storage layer, and this is just a temporary fix.
+        if (ptype == PrimitiveType::TYPE_FLOAT || ptype == PrimitiveType::TYPE_DOUBLE) continue;
         {
             auto iter = slot_index_to_expr_ctxs.find(index);
             if (iter == slot_index_to_expr_ctxs.end()) {
