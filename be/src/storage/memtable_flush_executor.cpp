@@ -56,11 +56,7 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
 }
 
 Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable) {
-    if (_flush_status.load() != OLAP_SUCCESS) {
-        std::stringstream ss;
-        ss << "tablet_id = " << memtable->tablet_id() << " flush_status error ";
-        return Status::InternalError(ss.str());
-    }
+    RETURN_IF_ERROR(status());
     // Does not acount the size of MemtableFlushTask into any memory tracker
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable));
@@ -71,24 +67,19 @@ void FlushToken::cancel() {
     _flush_token->shutdown();
 }
 
-OLAPStatus FlushToken::wait() {
+Status FlushToken::wait() {
     _flush_token->wait();
-    return _flush_status.load();
+    std::lock_guard l(_status_lock);
+    return _status;
 }
 
 void FlushToken::_flush_memtable(vectorized::MemTable* memtable) {
     // If previous flush has failed, return directly
-    if (_flush_status.load() != OLAP_SUCCESS) {
-        return;
-    }
+    if (!status().ok()) return;
 
     MonotonicStopWatch timer;
     timer.start();
-    _flush_status.store(memtable->flush());
-    if (_flush_status.load() != OLAP_SUCCESS) {
-        return;
-    }
-
+    set_status(memtable->flush());
     _stats.flush_time_ns += timer.elapsed_time();
     _stats.flush_count++;
     _stats.flush_size_bytes += memtable->memory_usage();

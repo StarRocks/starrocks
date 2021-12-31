@@ -536,7 +536,7 @@ ChunkMerger::~ChunkMerger() {
 void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer) {
     aggregator.aggregate();
     while (aggregator.is_finish()) {
-        rowset_writer->add_chunk(*aggregator.aggregate_result());
+        (void)rowset_writer->add_chunk(*aggregator.aggregate_result());
         aggregator.aggregate_reset();
         aggregator.aggregate();
     }
@@ -546,12 +546,10 @@ void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, 
     aggregator.aggregate();
 
     while (aggregator.is_finish()) {
-        rowset_writer->add_chunk(*aggregator.aggregate_result());
+        (void)rowset_writer->add_chunk(*aggregator.aggregate_result());
         aggregator.aggregate_reset();
         aggregator.aggregate();
     }
-
-    return;
 }
 
 bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer) {
@@ -577,7 +575,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
             if (_tablet->keys_type() == KeysType::AGG_KEYS) {
                 aggregate_chunk(*_aggregator, tmp_chunk, rowset_writer);
             } else {
-                rowset_writer->add_chunk(*tmp_chunk);
+                (void)rowset_writer->add_chunk(*tmp_chunk);
             }
             tmp_chunk->reset();
             nread = 0;
@@ -600,14 +598,14 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
         aggregate_chunk(*_aggregator, tmp_chunk, rowset_writer);
         if (_aggregator->has_aggregate_data()) {
             _aggregator->aggregate();
-            rowset_writer->add_chunk(*_aggregator->aggregate_result());
+            (void)rowset_writer->add_chunk(*_aggregator->aggregate_result());
         }
     } else {
-        rowset_writer->add_chunk(*tmp_chunk);
+        (void)rowset_writer->add_chunk(*tmp_chunk);
     }
 
-    if (rowset_writer->flush() != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to finalizing writer.";
+    if (auto st = rowset_writer->flush(); !st.ok()) {
+        LOG(WARNING) << "failed to finalizing writer: " << st;
         process_err();
         return false;
     }
@@ -649,9 +647,9 @@ bool LinkedSchemaChange::process(vectorized::TabletReader* reader, RowsetWriter*
     }
 #endif
 
-    OLAPStatus status =
+    Status status =
             new_rowset_writer->add_rowset_for_linked_schema_change(rowset, _chunk_changer->get_schema_mapping());
-    if (status != OLAP_SUCCESS) {
+    if (!status.ok()) {
         LOG(WARNING) << "fail to convert rowset."
                      << ", new_tablet=" << new_tablet->full_name() << ", base_tablet=" << base_tablet->full_name()
                      << ", version=" << new_rowset_writer->version();
@@ -696,8 +694,8 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
             LOG(WARNING) << "failed to change data in chunk";
             return false;
         }
-        if (new_rowset_writer->add_chunk(*new_chunk) != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to write chunk";
+        if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
+            LOG(WARNING) << "failed to write chunk: " << st;
             return false;
         }
         base_chunk->reset();
@@ -711,14 +709,14 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
             LOG(WARNING) << "failed to change data in chunk";
             return false;
         }
-        if (new_rowset_writer->add_chunk(*new_chunk) != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to write chunk";
+        if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
+            LOG(WARNING) << "failed to write chunk: " << st;
             return false;
         }
     }
 
-    if (new_rowset_writer->flush() != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to flush rowset writer";
+    if (auto st = new_rowset_writer->flush(); !st.ok()) {
+        LOG(WARNING) << "failed to flush rowset writer: " << st;
         return false;
     }
 
@@ -831,8 +829,8 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
         }
     }
 
-    if (OLAP_SUCCESS != new_rowset_writer->flush()) {
-        LOG(WARNING) << "failed to flush rowset writer";
+    if (auto st = new_rowset_writer->flush(); !st.ok()) {
+        LOG(WARNING) << "failed to flush rowset writer: " << st;
         return false;
     }
 
@@ -842,9 +840,12 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
 bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
                                                 TabletSharedPtr tablet) {
     if (chunk_arr.size() == 1) {
-        new_rowset_writer->add_chunk(*chunk_arr[0]);
-        if (new_rowset_writer->flush() != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to finalizing writer.";
+        if (auto st = new_rowset_writer->add_chunk(*chunk_arr[0]); !st.ok()) {
+            LOG(WARNING) << "failed to add chunk: " << st;
+            return false;
+        }
+        if (auto st = new_rowset_writer->flush(); !st.ok()) {
+            LOG(WARNING) << "failed to finalizing writer: " << st;
             return false;
         } else {
             return true;
@@ -1189,24 +1190,24 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         // To prevent deadlocks, be sure to lock the old table first and then the new one
         sc_params.new_tablet->obtain_push_lock();
         DeferOp new_tablet_release_lock([&] { sc_params.new_tablet->release_push_lock(); });
-        RowsetSharedPtr new_rowset = rowset_writer->build();
-        if (new_rowset == nullptr) {
-            LOG(WARNING) << "failed to build rowset, exit alter process";
+        auto new_rowset = rowset_writer->build();
+        if (!new_rowset.ok()) {
+            LOG(WARNING) << "failed to build rowset: " << new_rowset.status() << ". exit alter process";
             break;
         }
-        LOG(INFO) << "new rowset has " << new_rowset->num_segments() << " segments";
-        status = sc_params.new_tablet->add_rowset(new_rowset, false);
+        LOG(INFO) << "new rowset has " << (*new_rowset)->num_segments() << " segments";
+        status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {
             LOG(WARNING) << "version already exist, version revert occurred. "
                          << "tablet=" << sc_params.new_tablet->full_name() << ", version='" << sc_params.version.first
                          << "-" << sc_params.version.second;
-            StorageEngine::instance()->add_unused_rowset(new_rowset);
+            StorageEngine::instance()->add_unused_rowset(*new_rowset);
             status = Status::OK();
         } else if (!status.ok()) {
             LOG(WARNING) << "failed to register new version. "
                          << " tablet=" << sc_params.new_tablet->full_name() << ", version=" << sc_params.version.first
                          << "-" << sc_params.version.second;
-            StorageEngine::instance()->add_unused_rowset(new_rowset);
+            StorageEngine::instance()->add_unused_rowset(*new_rowset);
             break;
         } else {
             VLOG(3) << "register new version. tablet=" << sc_params.new_tablet->full_name()
