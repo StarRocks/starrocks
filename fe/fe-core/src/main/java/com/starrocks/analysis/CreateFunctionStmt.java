@@ -289,29 +289,34 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-    private void analyzeUdfClassInStarrocksJar() throws AnalysisException, IOException {
+    private void analyzeUdfClassInStarrocksJar() throws AnalysisException {
         String class_name = properties.get(SYMBOL_KEY);
         if (Strings.isNullOrEmpty(class_name)) {
             throw new AnalysisException("No '" + SYMBOL_KEY + "' in properties");
         }
 
-        URL[] urls = {new URL("jar:" + objectFile + "!/")};
-        try (URLClassLoader classLoader = URLClassLoader.newInstance(urls)) {
-            udfClass.setClazz(classLoader.loadClass(class_name));
+        try {
+            URL[] urls = {new URL("jar:" + objectFile + "!/")};
+            try (URLClassLoader classLoader = URLClassLoader.newInstance(urls)) {
+                udfClass.setClazz(classLoader.loadClass(class_name));
 
-            if (isAggregate) {
-                String state_class_name = class_name + "$" + STATE_CLASS_NAME;
-                udfStateClass.setClazz(classLoader.loadClass(state_class_name));
-            }
-            udfClass.collectMethods();
+                if (isAggregate) {
+                    String state_class_name = class_name + "$" + STATE_CLASS_NAME;
+                    udfStateClass.setClazz(classLoader.loadClass(state_class_name));
+                }
 
-            if (isAggregate) {
-                udfStateClass.collectMethods();
+            } catch (IOException e) {
+                throw new AnalysisException("Failed to load object_file: " + objectFile);
+            } catch (ClassNotFoundException e) {
+                throw new AnalysisException("Class '" + class_name + "' not found in object_file :" + objectFile);
             }
         } catch (MalformedURLException e) {
-            throw new AnalysisException("Failed to load object_file: " + objectFile);
-        } catch (ClassNotFoundException e) {
-            throw new AnalysisException("Class '" + class_name + "' not found in object_file :" + objectFile);
+            throw new AnalysisException("Object file is invalid: " + objectFile);
+        }
+
+        udfClass.collectMethods();
+        if (isAggregate) {
+            udfStateClass.collectMethods();
         }
     }
 
