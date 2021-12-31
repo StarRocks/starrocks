@@ -11,10 +11,12 @@
 #include "column/datum.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "gutil/casts.h"
 #include "runtime/global_dicts.h"
 #include "simd/simd.h"
 #include "storage/rowset/segment_v2/column_reader.h"
@@ -32,6 +34,14 @@ void ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
         const FieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
         if (_need_rewrite[cid]) {
+            // a local dict size may greater than config::vector_chunk_size, so it may cause a overflow
+            // in Expr::evaluate (default s_all_not_null_column size was config::vector_chunk_size)
+            // so we will disable optimization when dict size greater than vector_chunk_size
+            int dict_size = down_cast<ScalarColumnIterator*>(_column_iterators[cid])->dict_size();
+            if (dict_size > config::vector_chunk_size) {
+                _need_rewrite[cid] = false;
+                continue;
+            }
             _rewrite_predicate(pool, field);
         }
     }
