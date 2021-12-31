@@ -21,12 +21,17 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -34,11 +39,17 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Parameter;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.net.URLConnection;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -46,18 +57,16 @@ import java.util.Map;
 
 // create a user define function
 public class CreateFunctionStmt extends DdlStmt {
-    public static final String OBJECT_FILE_KEY = "object_file";
+    public static final String FILE_KEY = "file";
     public static final String SYMBOL_KEY = "symbol";
-    public static final String PREPARE_SYMBOL_KEY = "prepare_fn";
-    public static final String CLOSE_SYMBOL_KEY = "close_fn";
     public static final String MD5_CHECKSUM = "md5";
     public static final String INIT_KEY = "init_fn";
     public static final String UPDATE_KEY = "update_fn";
     public static final String MERGE_KEY = "merge_fn";
-    public static final String SERIALIZE_KEY = "serialize_fn";
-    public static final String FINALIZE_KEY = "finalize_fn";
-    public static final String GET_VALUE_KEY = "get_value_fn";
-    public static final String REMOVE_KEY = "remove_fn";
+    public static final String TYPE_KEY = "type";
+    public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
+    public static final String EVAL_METHOD_NAME = "evaluate";
+
 
     private final FunctionName functionName;
     private final boolean isAggregate;
@@ -65,11 +74,26 @@ public class CreateFunctionStmt extends DdlStmt {
     private final TypeDef returnType;
     private TypeDef intermediateType;
     private final Map<String, String> properties;
+    private boolean isStarrocksJar = false;
 
     // needed item set after analyzed
     private String objectFile;
     private Function function;
     private String checksum;
+    private Class udfClass;
+
+    private static final ImmutableMap<PrimitiveType, Class> PrimitiveTypeToJavaClassType = new ImmutableMap.Builder<PrimitiveType, Class>()
+            .put(PrimitiveType.BOOLEAN, Boolean.class)
+            .put(PrimitiveType.TINYINT, Byte.class)
+            .put(PrimitiveType.SMALLINT, Short.class)
+            .put(PrimitiveType.INT, Integer.class)
+            .put(PrimitiveType.FLOAT, Float.class)
+            .put(PrimitiveType.DOUBLE, Double.class)
+            .put(PrimitiveType.BIGINT, Long.class)
+            .put(PrimitiveType.CHAR, String.class)
+            .put(PrimitiveType.VARCHAR, String.class)
+            .build();
+
 
     public CreateFunctionStmt(boolean isAggregate, FunctionName functionName, FunctionArgsDef argsDef,
                               TypeDef returnType, TypeDef intermediateType, Map<String, String> properties) {
@@ -102,7 +126,8 @@ public class CreateFunctionStmt extends DdlStmt {
         if (isAggregate) {
             analyzeUda();
         } else {
-            analyzeUdf();
+            Preconditions.checkArgument(isStarrocksJar);
+            analyzeStarrocksJarUdf();
         }
     }
 
@@ -124,7 +149,12 @@ public class CreateFunctionStmt extends DdlStmt {
             intermediateType = returnType;
         }
 
-        objectFile = properties.get(OBJECT_FILE_KEY);
+        String type = properties.get(TYPE_KEY);
+        if (TYPE_STARROCKS_JAR.equals(type)) {
+            isStarrocksJar = true;
+        }
+
+        objectFile = properties.get(FILE_KEY);
         if (Strings.isNullOrEmpty(objectFile)) {
             throw new AnalysisException("No 'object_file' in properties");
         }
@@ -137,6 +167,27 @@ public class CreateFunctionStmt extends DdlStmt {
         String md5sum = properties.get(MD5_CHECKSUM);
         if (md5sum != null && !md5sum.equalsIgnoreCase(checksum)) {
             throw new AnalysisException("library's checksum is not equal with input, checksum=" + checksum);
+        }
+
+        if (isStarrocksJar) {
+            analyzeUdfClassInStarrocksJar();
+        }
+    }
+
+    private void analyzeUdfClassInStarrocksJar() throws AnalysisException {
+        String class_name = properties.get(SYMBOL_KEY);
+        if (Strings.isNullOrEmpty(class_name)) {
+            throw new AnalysisException("No '" + SYMBOL_KEY + "' in properties");
+        }
+
+        try {
+            URL[] urls = {new URL("jar:" + objectFile + "!/")};
+            URLClassLoader cl = URLClassLoader.newInstance(urls);
+            udfClass = cl.loadClass(class_name);
+        } catch (MalformedURLException e) {
+            throw new AnalysisException("failed to load object_file: " + objectFile);
+        } catch (ClassNotFoundException e) {
+            throw new AnalysisException("class '" + class_name + "' not found in object_file :" + objectFile);
         }
     }
 
@@ -186,19 +237,70 @@ public class CreateFunctionStmt extends DdlStmt {
         function.setChecksum(checksum);
     }
 
-    private void analyzeUdf() throws AnalysisException {
-        String symbol = properties.get(SYMBOL_KEY);
-        if (Strings.isNullOrEmpty(symbol)) {
-            throw new AnalysisException("No 'symbol' in properties");
+    private void checkStarrocksJarUdfType(Type type, Class ptype, String pname) throws AnalysisException {
+        if (!(type instanceof ScalarType)) {
+            throw new AnalysisException("UDF does not support non-scalar type: " + type);
         }
-        String prepareFnSymbol = properties.get(PREPARE_SYMBOL_KEY);
-        String closeFnSymbol = properties.get(CLOSE_SYMBOL_KEY);
+        ScalarType scalarType = (ScalarType) type;
+        Class cls = PrimitiveTypeToJavaClassType.get(scalarType.getPrimitiveType());
+        if (cls == null) {
+            throw new AnalysisException("UDF does not support type: " + scalarType);
+        }
+        if (!cls.equals(ptype)) {
+            throw new AnalysisException(String.format("UDF %s[%s] type does not match %s", pname,
+                    ptype.getCanonicalName(), cls.getCanonicalName()));
+        }
+    }
+
+    private void checkStarrocksJarUdfMethod(Method method) throws AnalysisException {
+        String name = method.getName();
+        boolean checked = true;
+        if (EVAL_METHOD_NAME.equals(name)) {
+            Class retType = method.getReturnType();
+            checkStarrocksJarUdfType(returnType.getType(), retType, "Return");
+            if (method.getParameters().length != argsDef.getArgTypes().length) {
+                throw new AnalysisException(String.format("UDF '%s' parameter count does not match", name));
+            }
+            for (int i = 0; i < method.getParameters().length; i++) {
+                Parameter p = method.getParameters()[i];
+                checkStarrocksJarUdfType(argsDef.getArgTypes()[i], p.getType(), p.getName());
+            }
+        } else {
+            checked = false;
+        }
+
+        if (checked) {
+            if (Modifier.isStatic(method.getModifiers())) {
+                throw new AnalysisException(String.format("UDF '%s' should be non-static method", name));
+            }
+            if (!Modifier.isPublic(method.getModifiers())) {
+                throw new AnalysisException(String.format("UDF '%s' should be public method", name));
+            }
+        }
+    }
+
+    private void checkStarrocksJarUdfClass() throws AnalysisException {
+        int evalMethodCount = 0;
+        for (Method m : udfClass.getMethods()) {
+            if (EVAL_METHOD_NAME.equals(m.getName())) {
+                evalMethodCount += 1;
+            }
+            checkStarrocksJarUdfMethod(m);
+        }
+        if (evalMethodCount != 1) {
+            throw new AnalysisException(String.format("UDF should have only one '%s' method", EVAL_METHOD_NAME));
+        }
+    }
+
+    private void analyzeStarrocksJarUdf() throws AnalysisException {
+        checkStarrocksJarUdfClass();
         function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
-                returnType.getType(), argsDef.isVariadic(),
-                objectFile, symbol, prepareFnSymbol, closeFnSymbol);
+                returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
+                objectFile, udfClass.getCanonicalName(), "", "");
         function.setChecksum(checksum);
     }
+
 
     @Override
     public String toSql() {

@@ -296,7 +296,7 @@ public class AggregateFunction extends Function {
     @Override
     public String getProperties() {
         Map<String, String> properties = Maps.newHashMap();
-        properties.put(CreateFunctionStmt.OBJECT_FILE_KEY, getLocation() == null ? "" : getLocation().toString());
+        properties.put(CreateFunctionStmt.FILE_KEY, getLocation() == null ? "" : getLocation().toString());
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
         return new Gson().toJson(properties);
     }
