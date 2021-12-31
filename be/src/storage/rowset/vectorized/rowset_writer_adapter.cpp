@@ -18,52 +18,47 @@ RowsetWriterAdapter::RowsetWriterAdapter(const RowsetWriterContext& context) {
     _in_schema = context.tablet_schema->convert_to_format(context.memory_format_version);
     _out_schema = context.tablet_schema->convert_to_format(context.storage_format_version);
     if (_in_schema == nullptr || _out_schema == nullptr) {
-        _status = OLAP_ERR_INVALID_SCHEMA;
+        _status = Status::InvalidArgument("invalid schema");
     } else {
         RowsetWriterContext rowset_context = context;
         rowset_context.memory_format_version = rowset_context.storage_format_version;
-        _status = RowsetFactory::create_rowset_writer(rowset_context, &_writer).ok() ? OLAP_SUCCESS
-                                                                                     : OLAP_ERR_OTHER_ERROR;
+        _status = RowsetFactory::create_rowset_writer(rowset_context, &_writer);
     }
 }
 
-OLAPStatus RowsetWriterAdapter::init() {
+Status RowsetWriterAdapter::init() {
     return _status;
 }
 
-OLAPStatus RowsetWriterAdapter::add_chunk(const vectorized::Chunk& chunk) {
+Status RowsetWriterAdapter::add_chunk(const vectorized::Chunk& chunk) {
     if (_chunk_converter == nullptr) {
-        RETURN_NOT_OK(_init_chunk_converter());
+        RETURN_IF_ERROR(_init_chunk_converter());
     }
     return _writer->add_chunk(*_chunk_converter->copy_convert(chunk));
 }
 
-OLAPStatus RowsetWriterAdapter::flush_chunk(const vectorized::Chunk& chunk) {
+Status RowsetWriterAdapter::flush_chunk(const vectorized::Chunk& chunk) {
     if (_chunk_converter == nullptr) {
-        RETURN_NOT_OK(_init_chunk_converter());
+        RETURN_IF_ERROR(_init_chunk_converter());
     }
     return _writer->flush_chunk(*_chunk_converter->copy_convert(chunk));
 }
 
-OLAPStatus RowsetWriterAdapter::_init_chunk_converter() {
+Status RowsetWriterAdapter::_init_chunk_converter() {
     _chunk_converter = std::make_unique<ChunkConverter>();
-    auto st =
-            _chunk_converter->init(ChunkHelper::convert_schema(*_in_schema), ChunkHelper::convert_schema(*_out_schema));
-    if (!st.ok()) {
-        _chunk_converter.reset();
-        return OLAP_ERR_INVALID_SCHEMA;
-    }
+    RETURN_IF_ERROR(_chunk_converter->init(ChunkHelper::convert_schema(*_in_schema),
+                                           ChunkHelper::convert_schema(*_out_schema)));
     // |_in_schema| and |_out_schema| can be freed now.
     _in_schema.reset();
     _out_schema.reset();
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-OLAPStatus RowsetWriterAdapter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
-                                                         const vectorized::Column& deletes) {
+Status RowsetWriterAdapter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
+                                                     const vectorized::Column& deletes) {
     LOG(WARNING) << "updatable tablet should not use RowsetWriterAdapter";
     if (_chunk_converter == nullptr) {
-        RETURN_NOT_OK(_init_chunk_converter());
+        RETURN_IF_ERROR(_init_chunk_converter());
     }
     return _writer->flush_chunk_with_deletes(*_chunk_converter->copy_convert(upserts), deletes);
 }

@@ -994,9 +994,10 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
     RETURN_IF_ERROR(vectorized::compaction_merge_rowsets(_tablet, info->start_version.major(), input_rowsets,
                                                          rowset_writer.get(), cfg));
     auto output_rowset = rowset_writer->build();
+    if (!output_rowset.ok()) return output_rowset.status();
     // 4. commit compaction
     EditVersion version;
-    RETURN_IF_ERROR(_commit_compaction(pinfo, output_rowset, &version));
+    RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
     if (wait_apply) {
         // already committed, so we can only ignore timeout error
         _wait_for_version(version, 120000);
@@ -1925,18 +1926,15 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
             return status;
         }
 
-        std::shared_ptr<Rowset> new_rowset = rowset_writer->build();
-        if (new_rowset == nullptr) {
-            LOG(WARNING) << "failed to build rowset, exit alter process";
-            return Status::InternalError("failed to build rowset, exit alter process");
-        }
+        auto new_rowset = rowset_writer->build();
+        if (!new_rowset.ok()) return new_rowset.status();
 
         auto& new_rowset_load_info = new_rowset_load_infos[i];
-        new_rowset_load_info.num_segments = new_rowset->num_segments();
+        new_rowset_load_info.num_segments = (*new_rowset)->num_segments();
         new_rowset_load_info.rowset_id = next_rowset_id;
 
         auto& rowset_meta_pb = new_rowset_load_info.rowset_meta_pb;
-        new_rowset->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
+        (*new_rowset)->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
         rowset_meta_pb.set_rowset_seg_id(new_rowset_load_info.rowset_id);
         rowset_meta_pb.set_rowset_id_v2(rid.to_string());
 
@@ -2038,19 +2036,11 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
                 LOG(WARNING) << "failed to change data in chunk";
                 return Status::InternalError("failed to change data in chunk");
             }
-            if (rowset_writer->add_chunk(*new_chunk) != OLAP_SUCCESS) {
-                LOG(WARNING) << "failed to add chunk";
-                return Status::InternalError("failed to add chunk");
-            }
+            RETURN_IF_ERROR(rowset_writer->add_chunk(*new_chunk));
         }
     }
 
-    if (rowset_writer->flush() != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to flush rowset writer";
-        return Status::InternalError("failed to flush rowset writer");
-    }
-
-    return Status::OK();
+    return rowset_writer->flush();
 }
 
 void TabletUpdates::_remove_unused_rowsets() {

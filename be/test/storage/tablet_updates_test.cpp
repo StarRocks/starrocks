@@ -27,6 +27,7 @@
 #include "storage/vectorized/schema_change.h"
 #include "storage/vectorized/union_iterator.h"
 #include "storage/wrapper_field.h"
+#include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/path_util.h"
 
@@ -54,19 +55,19 @@ public:
         auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
+        for (int64_t key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
+            CHECK_OK(writer->flush_chunk(*chunk));
         } else if (one_delete == nullptr) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush());
+            CHECK_OK(writer->flush());
         } else if (one_delete != nullptr) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk_with_deletes(*chunk, *one_delete));
+            CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
         }
-        return writer->build();
+        return *writer->build();
     }
 
     RowsetSharedPtr create_rowsets(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
@@ -95,9 +96,9 @@ public:
                 cols[1]->append_datum(vectorized::Datum((int16_t)(keys[written_rows + i] % 100 + 1)));
                 cols[2]->append_datum(vectorized::Datum((int32_t)(keys[written_rows + i] % 1000 + 2)));
             }
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
+            CHECK_OK(writer->flush_chunk(*chunk));
         }
-        return writer->build();
+        return *writer->build();
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {

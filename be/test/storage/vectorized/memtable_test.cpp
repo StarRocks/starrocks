@@ -16,6 +16,7 @@
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/schema.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 
 namespace starrocks::vectorized {
@@ -233,8 +234,8 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     std::random_shuffle(indexes.begin(), indexes.end());
     _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
-    ASSERT_EQ(OLAP_SUCCESS, _mem_table->flush());
-    RowsetSharedPtr rowset = _writer->build();
+    ASSERT_OK(_mem_table->flush());
+    RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
     vectorized::RowsetReadOptions rs_opts;
@@ -280,8 +281,8 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     std::random_shuffle(indexes.begin(), indexes.end());
     _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
-    ASSERT_EQ(OLAP_SUCCESS, _mem_table->flush());
-    RowsetSharedPtr rowset = _writer->build();
+    ASSERT_OK(_mem_table->flush());
+    RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
     vectorized::RowsetReadOptions rs_opts;
@@ -334,8 +335,8 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
     std::random_shuffle(indexes.begin(), indexes.end());
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
-    ASSERT_EQ(OLAP_SUCCESS, _mem_table->flush());
-    RowsetSharedPtr rowset = _writer->build();
+    ASSERT_OK(_mem_table->flush());
+    RowsetSharedPtr rowset = *_writer->build();
     EXPECT_EQ(1, rowset->rowset_meta()->get_num_delete_files());
 }
 

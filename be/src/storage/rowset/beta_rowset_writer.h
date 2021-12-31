@@ -25,6 +25,7 @@
 #include <mutex>
 #include <vector>
 
+#include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/rowset/rowset_writer.h"
 
@@ -41,9 +42,9 @@ public:
     explicit BetaRowsetWriter(const RowsetWriterContext& context);
     ~BetaRowsetWriter() override = default;
 
-    OLAPStatus init() override;
+    Status init() override;
 
-    RowsetSharedPtr build() override;
+    StatusOr<RowsetSharedPtr> build() override;
 
     Version version() override { return _context.version; }
     int64_t num_rows() override { return _num_rows_written; }
@@ -83,25 +84,24 @@ public:
     explicit HorizontalBetaRowsetWriter(const RowsetWriterContext& context);
     ~HorizontalBetaRowsetWriter() override;
 
-    OLAPStatus add_chunk(const vectorized::Chunk& chunk) override;
-    OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override;
+    Status add_chunk(const vectorized::Chunk& chunk) override;
+    Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override;
 
-    OLAPStatus flush_chunk(const vectorized::Chunk& chunk) override;
-    OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
+    Status flush_chunk(const vectorized::Chunk& chunk) override;
+    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
 
     // add rowset by create hard link
-    OLAPStatus add_rowset(RowsetSharedPtr rowset) override;
-    OLAPStatus add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
-                                                   const SchemaMapping& schema_mapping) override;
+    Status add_rowset(RowsetSharedPtr rowset) override;
+    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) override;
 
-    OLAPStatus flush() override;
+    Status flush() override;
 
-    RowsetSharedPtr build() override;
+    StatusOr<RowsetSharedPtr> build() override;
 
 private:
-    std::unique_ptr<SegmentWriter> _create_segment_writer();
+    StatusOr<std::unique_ptr<SegmentWriter>> _create_segment_writer();
 
-    OLAPStatus _flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer);
+    Status _flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer);
 
     Status _final_merge();
 
@@ -114,18 +114,21 @@ public:
     explicit VerticalBetaRowsetWriter(const RowsetWriterContext& context);
     ~VerticalBetaRowsetWriter() override;
 
-    OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                           bool is_key) override;
-    OLAPStatus add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                                      const std::vector<uint32_t>& rssid) override;
+    Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                       bool is_key) override;
 
-    OLAPStatus flush_columns() override;
-    OLAPStatus final_flush() override;
+    Status add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                                  const std::vector<uint32_t>& rssid) override;
+
+    Status flush_columns() override;
+
+    Status final_flush() override;
 
 private:
-    std::unique_ptr<SegmentWriter> _create_segment_writer(const std::vector<uint32_t>& column_indexes, bool is_key);
+    StatusOr<std::unique_ptr<SegmentWriter>> _create_segment_writer(const std::vector<uint32_t>& column_indexes,
+                                                                    bool is_key);
 
-    OLAPStatus _flush_columns(std::unique_ptr<SegmentWriter>* segment_writer);
+    Status _flush_columns(std::unique_ptr<SegmentWriter>* segment_writer);
 
     std::vector<std::unique_ptr<SegmentWriter>> _segment_writers;
     size_t _current_writer_index = 0;
