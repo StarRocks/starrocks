@@ -336,7 +336,7 @@ LoadFinishTime: 2019-07-27 11:50:16
 
     A：请参照章节导入总览/通用系统配置/BE配置，适当修改 query_timeout 和 streaming_load_rpc_max_alive_time_sec。
 
-* Q：导入报错：LOAD-RUN-FAIL; msg:Invalid Column Name:xxx
+* Q：导入报错：LOAD-RUN-FAIL; msg:OrcScannerAdapter::init_include_columns. col name = xxx not found
 
     A：如果是Parquet或者ORC格式的数据，需要保持文件头的列名与StarRocks表中的列名一致，如 :
 
