@@ -19,7 +19,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#pragma once
+#ifndef STARROCKS_BE_UDF_UDF_INTERNAL_H
+#define STARROCKS_BE_UDF_UDF_INTERNAL_H
 
 #include <cstdint>
 #include <cstring>
@@ -194,3 +195,5 @@ private:
 };
 
 } // namespace starrocks
+
+#endif

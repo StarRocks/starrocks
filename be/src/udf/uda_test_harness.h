@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_UDF_UDA_TEST_HARNESS_H
-#define STARROCKS_BE_UDF_UDA_TEST_HARNESS_H
+#pragma once
 
 #include <sstream>
 #include <string>
@@ -256,5 +255,3 @@ private:
 } // namespace starrocks_udf
 
 #include "udf/uda_test_harness_impl.hpp"
-
-#endif
