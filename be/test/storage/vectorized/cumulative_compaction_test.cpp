@@ -12,6 +12,7 @@
 #include "storage/tablet_meta.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/compaction.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 
 namespace starrocks::vectorized {
@@ -108,7 +109,7 @@ public:
             cols[1]->append_datum(vectorized::Datum(field_1));
             cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
         }
-        EXPECT_EQ(OLAP_SUCCESS, writer->add_chunk(*chunk));
+        CHECK_OK(writer->add_chunk(*chunk));
     }
 
     void do_compaction() {
@@ -123,7 +124,7 @@ public:
         rowset_writer_add_rows(_rowset_writer);
 
         _rowset_writer->flush();
-        RowsetSharedPtr src_rowset = _rowset_writer->build();
+        RowsetSharedPtr src_rowset = *_rowset_writer->build();
         ASSERT_TRUE(src_rowset != nullptr);
         RowsetId src_rowset_id;
         src_rowset_id.init(10000);
@@ -147,7 +148,7 @@ public:
             rowset_writer_add_rows(_rowset_writer);
 
             _rowset_writer->flush();
-            RowsetSharedPtr src_rowset = _rowset_writer->build();
+            RowsetSharedPtr src_rowset = *_rowset_writer->build();
             ASSERT_TRUE(src_rowset != nullptr);
             ASSERT_EQ(src_rowset_id, src_rowset->rowset_id());
             ASSERT_EQ(1024, src_rowset->num_rows());

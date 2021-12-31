@@ -34,7 +34,6 @@ DIAGNOSTIC_POP
 #include <memory>
 
 #include "env/env.h"
-#include "gutil/strings/strcat.h"
 #include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -46,18 +45,11 @@ DIAGNOSTIC_POP
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/file_utils.h"
 #include "util/path_util.h"
-#include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
-
-using std::list;
-using std::map;
-using std::set;
-using strings::Substitute;
 
 namespace starrocks {
 
@@ -1080,16 +1072,16 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
                 LOG(WARNING) << "failed to init rowset writer for tablet " << tablet->full_name() << ": " << st;
                 break;
             }
-            if (rowset_writer->flush() != OLAP_SUCCESS) {
-                LOG(WARNING) << "failed to flush rowset writer for tablet " << tablet->full_name();
-                st = Status::InternalError("flush rowset failed");
+            st = rowset_writer->flush();
+            if (!st.ok()) {
+                LOG(WARNING) << "failed to flush rowset writer for tablet " << tablet->full_name() << ": " << st;
                 break;
             }
-
-            new_rowset = rowset_writer->build();
-            st = tablet->add_rowset(new_rowset, false);
+            auto new_rowset = rowset_writer->build();
+            if (!new_rowset.ok()) return new_rowset.status();
+            st = tablet->add_rowset(*new_rowset, false);
             if (!st.ok()) {
-                LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name();
+                LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name() << ": " << st;
                 break;
             }
         } while (false);
@@ -1098,7 +1090,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
         if (!st.ok()) {
             LOG(WARNING) << "fail to create initial rowset: " << st << " version=" << version;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
-            return Status::InternalError("fail to create initial rowset");
+            return Status::InternalError(fmt::format("fail to create initial rowset: {}", st.to_string()));
         }
     }
     tablet->set_cumulative_layer_point(request.version + 1);

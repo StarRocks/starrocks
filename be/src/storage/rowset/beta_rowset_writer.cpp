@@ -41,8 +41,6 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/merge_iterator.h"
 #include "storage/vectorized/type_utils.h"
-#include "storage/vectorized/union_iterator.h"
-#include "util/defer_op.h"
 #include "util/pretty_printer.h"
 
 namespace starrocks {
@@ -56,7 +54,7 @@ BetaRowsetWriter::BetaRowsetWriter(const RowsetWriterContext& context)
           _total_data_size(0),
           _total_index_size(0) {}
 
-OLAPStatus BetaRowsetWriter::init() {
+Status BetaRowsetWriter::init() {
     DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
              _context.tablet_schema->contains_format_v2_column()));
     auto real_data_format = _context.storage_format_version;
@@ -92,15 +90,12 @@ OLAPStatus BetaRowsetWriter::init() {
         _rowset_meta->set_version(_context.version);
     }
     _rowset_meta->set_tablet_uid(_context.tablet_uid);
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-RowsetSharedPtr BetaRowsetWriter::build() {
+StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_num_rows_written > 0) {
-        if (auto st = _context.env->sync_dir(_context.rowset_path_prefix); !st.ok()) {
-            LOG(ERROR) << "Fail to sync directory " << _context.rowset_path_prefix << ": " << st;
-            return nullptr;
-        }
+        RETURN_IF_ERROR(_context.env->sync_dir(_context.rowset_path_prefix));
     }
     _rowset_meta->set_num_rows(_num_rows_written);
     _rowset_meta->set_total_row_size(_total_row_size);
@@ -115,11 +110,7 @@ RowsetSharedPtr BetaRowsetWriter::build() {
     _rowset_meta->set_rowset_seg_id(0);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        if (_segment_has_deletes.size() >= 1 && _segment_has_deletes[0]) {
-            _rowset_meta->set_num_delete_files(1);
-        } else {
-            _rowset_meta->set_num_delete_files(0);
-        }
+        _rowset_meta->set_num_delete_files(!_segment_has_deletes.empty() && _segment_has_deletes[0]);
         _rowset_meta->set_segments_overlap(NONOVERLAPPING);
     } else {
         if (_num_segment <= 1) {
@@ -133,36 +124,21 @@ RowsetSharedPtr BetaRowsetWriter::build() {
     }
 
     RowsetSharedPtr rowset;
-    auto status =
-            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, _rowset_meta, &rowset);
-    if (!status.ok()) {
-        LOG(WARNING) << "Fail to create rowset: " << status;
-        return nullptr;
-    }
+    RETURN_IF_ERROR(
+            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, _rowset_meta, &rowset));
     _already_built = true;
     return rowset;
 }
 
 Status BetaRowsetWriter::flush_src_rssids(uint32_t segment_id) {
-    auto path = BetaRowset::segment_srcrssid_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_id);
+    auto path = BetaRowset::segment_srcrssid_file_path(_context.rowset_path_prefix, _context.rowset_id,
+                                                       static_cast<int>(segment_id));
     std::unique_ptr<fs::WritableBlock> wblock;
     fs::CreateBlockOptions opts({path});
-    Status st = _context.block_mgr->create_block(opts, &wblock);
-    if (!st.ok()) {
-        return st;
-    }
-    st = wblock->append(Slice((const char*)(_src_rssids->data()), _src_rssids->size() * sizeof(uint32_t)));
-    if (!st.ok()) {
-        return Status::IOError("flush_src_rssids WritableBlock.append error");
-    }
-    st = wblock->finalize();
-    if (!st.ok()) {
-        return Status::IOError("flush_src_rssids WritableBlock.finalize error");
-    }
-    st = wblock->close();
-    if (!st.ok()) {
-        return Status::IOError("flush_src_rssids WritableBlock.close error");
-    }
+    RETURN_IF_ERROR(_context.block_mgr->create_block(opts, &wblock));
+    RETURN_IF_ERROR(wblock->append(Slice((const char*)(_src_rssids->data()), _src_rssids->size() * sizeof(uint32_t))));
+    RETURN_IF_ERROR(wblock->finalize());
+    RETURN_IF_ERROR(wblock->close());
     _src_rssids->clear();
     _src_rssids.reset();
     return Status::OK();
@@ -232,7 +208,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
     }
 }
 
-std::unique_ptr<SegmentWriter> HorizontalBetaRowsetWriter::_create_segment_writer() {
+StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_segment_writer() {
     std::lock_guard<std::mutex> l(_lock);
     std::string path;
     if ((_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
@@ -248,166 +224,125 @@ std::unique_ptr<SegmentWriter> HorizontalBetaRowsetWriter::_create_segment_write
     }
     std::unique_ptr<fs::WritableBlock> wblock;
     fs::CreateBlockOptions opts({path});
-    Status st = _context.block_mgr->create_block(opts, &wblock);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to create writable block=" << path << ", " << st.to_string();
-        return nullptr;
-    }
-
+    RETURN_IF_ERROR(_context.block_mgr->create_block(opts, &wblock));
     DCHECK(wblock != nullptr);
+
     SegmentWriterOptions writer_options;
     writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
-    std::unique_ptr<SegmentWriter> segment_writer =
-            std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
-    auto s = segment_writer->init();
-    if (!s.ok()) {
-        LOG(WARNING) << "Fail to init segment writer, " << s.to_string();
-        segment_writer.reset(nullptr);
-        return nullptr;
-    }
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
+    RETURN_IF_ERROR(segment_writer->init());
     ++_num_segment;
-    return segment_writer;
+    return std::move(segment_writer);
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
+Status HorizontalBetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
     if (_segment_writer == nullptr) {
-        _segment_writer = _create_segment_writer();
+        auto segment_writer = _create_segment_writer();
+        if (!segment_writer.ok()) return segment_writer.status();
+        _segment_writer = std::move(segment_writer).value();
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
                _segment_writer->num_rows_written() + chunk.num_rows() >= _context.max_rows_per_segment) {
-        RETURN_NOT_OK(_flush_segment_writer(&_segment_writer));
-        _segment_writer = _create_segment_writer();
+        RETURN_IF_ERROR(_flush_segment_writer(&_segment_writer));
+        auto segment_writer = _create_segment_writer();
+        if (!segment_writer.ok()) return segment_writer.status();
+        _segment_writer = std::move(segment_writer).value();
     }
-    if (_segment_writer == nullptr) {
-        return OLAP_ERR_INIT_FAILED;
-    }
-    auto s = _segment_writer->append_chunk(chunk);
-    if (!s.ok()) {
-        LOG(WARNING) << "Fail to append chunk, " << s.to_string();
-        return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
-    }
-    _num_rows_written += chunk.num_rows();
-    _total_row_size += chunk.bytes_usage();
-    return OLAP_SUCCESS;
+
+    RETURN_IF_ERROR(_segment_writer->append_chunk(chunk));
+    _num_rows_written += static_cast<int64_t>(chunk.num_rows());
+    _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
+    return Status::OK();
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk& chunk,
-                                                            const vector<uint32_t>& rssid) {
+Status HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
     if (_segment_writer == nullptr) {
-        _segment_writer = _create_segment_writer();
+        auto segment_writer = _create_segment_writer();
+        if (!segment_writer.ok()) return segment_writer.status();
+        _segment_writer = std::move(segment_writer).value();
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
                _segment_writer->num_rows_written() + chunk.num_rows() >= _context.max_rows_per_segment) {
-        RETURN_NOT_OK(_flush_segment_writer(&_segment_writer));
-        _segment_writer = _create_segment_writer();
+        RETURN_IF_ERROR(_flush_segment_writer(&_segment_writer));
+        auto segment_writer = _create_segment_writer();
+        if (!segment_writer.ok()) return segment_writer.status();
+        _segment_writer = std::move(segment_writer).value();
     }
-    if (_segment_writer == nullptr) {
-        return OLAP_ERR_INIT_FAILED;
-    }
-    auto s = _segment_writer->append_chunk(chunk);
+
+    RETURN_IF_ERROR(_segment_writer->append_chunk(chunk));
     if (!_src_rssids) {
         _src_rssids = std::make_unique<vector<uint32_t>>();
     }
     _src_rssids->insert(_src_rssids->end(), rssid.begin(), rssid.end());
-    if (!s.ok()) {
-        LOG(WARNING) << "Fail to append chunk, " << s.to_string();
-        return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
-    }
-    _num_rows_written += chunk.num_rows();
-    _total_row_size += chunk.bytes_usage();
-    return OLAP_SUCCESS;
+    _num_rows_written += static_cast<int64_t>(chunk.num_rows());
+    _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
+    return Status::OK();
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
-    std::unique_ptr<SegmentWriter> segment_writer = _create_segment_writer();
-    if (segment_writer == nullptr) {
-        return OLAP_ERR_INIT_FAILED;
-    }
-    auto s = segment_writer->append_chunk(chunk);
-    if (!s.ok()) {
-        LOG(WARNING) << "Fail to append chunk, " << s.to_string();
-        return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
-    }
+Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
+    auto segment_writer = _create_segment_writer();
+    if (!segment_writer.ok()) return segment_writer.status();
+    RETURN_IF_ERROR((*segment_writer)->append_chunk(chunk));
     {
         std::lock_guard<std::mutex> l(_lock);
-        _num_rows_written += chunk.num_rows();
-        _total_row_size += chunk.bytes_usage();
+        _num_rows_written += static_cast<int64_t>(chunk.num_rows());
+        _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
     }
-    RETURN_NOT_OK(_flush_segment_writer(&segment_writer));
-    return OLAP_SUCCESS;
+    return _flush_segment_writer(&segment_writer.value());
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
-                                                                const vectorized::Column& deletes) {
+Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
+                                                            const vectorized::Column& deletes) {
     if (!deletes.empty()) {
         auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
         std::unique_ptr<fs::WritableBlock> wblock;
         fs::CreateBlockOptions opts({path});
-        Status st = _context.block_mgr->create_block(opts, &wblock);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to create writable block=" << path << ", " << st.to_string();
-            return OLAP_ERR_INIT_FAILED;
-        }
+        RETURN_IF_ERROR(_context.block_mgr->create_block(opts, &wblock));
         size_t sz = deletes.serialize_size();
         // TODO(cbl): temp buffer doubles the memory usage, need to optimize
         string content;
         content.resize(sz);
         const_cast<vectorized::Column&>(deletes).serialize_column((uint8_t*)(content.data()));
-        st = wblock->append(Slice(content.data(), content.size()));
-        if (!st.ok()) {
-            return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
-        }
-        st = wblock->finalize();
-        if (!st.ok()) {
-            return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
-        }
-        st = wblock->close();
-        if (!st.ok()) {
-            return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
-        }
+        RETURN_IF_ERROR(wblock->append(Slice(content.data(), content.size())));
+        RETURN_IF_ERROR(wblock->finalize());
+        RETURN_IF_ERROR(wblock->close());
         _segment_has_deletes.resize(_num_segment + 1, false);
         _segment_has_deletes[_num_segment] = true;
     }
     return flush_chunk(upserts);
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
+Status HorizontalBetaRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     assert(rowset->rowset_meta()->rowset_type() == BETA_ROWSET);
-    if (!rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id).ok()) {
-        return OLAP_ERR_OTHER_ERROR;
-    }
+    RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
-    _total_row_size += rowset->total_row_size();
-    _total_data_size += rowset->rowset_meta()->data_disk_size();
-    _total_index_size += rowset->rowset_meta()->index_disk_size();
-    _num_segment += rowset->num_segments();
+    _total_row_size += static_cast<int64_t>(rowset->total_row_size());
+    _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());
+    _total_index_size += static_cast<int64_t>(rowset->rowset_meta()->index_disk_size());
+    _num_segment += static_cast<int>(rowset->num_segments());
     // TODO update zonemap
     if (rowset->rowset_meta()->has_delete_predicate()) {
         _rowset_meta->set_delete_predicate(rowset->rowset_meta()->delete_predicate());
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
-                                                                           const SchemaMapping& schema_mapping) {
+Status HorizontalBetaRowsetWriter::add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
+                                                                       const SchemaMapping& schema_mapping) {
     // TODO use schema_mapping to transfer zonemap
     return add_rowset(rowset);
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::flush() {
+Status HorizontalBetaRowsetWriter::flush() {
     if (_segment_writer != nullptr) {
-        RETURN_NOT_OK(_flush_segment_writer(&_segment_writer));
+        return _flush_segment_writer(&_segment_writer);
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-RowsetSharedPtr HorizontalBetaRowsetWriter::build() {
+StatusOr<RowsetSharedPtr> HorizontalBetaRowsetWriter::build() {
     if (!_tmp_segment_files.empty()) {
-        auto s = _final_merge();
-        if (!s.ok()) {
-            LOG(WARNING) << "final merge error: " << s.to_string();
-            return nullptr;
-        }
+        RETURN_IF_ERROR(_final_merge());
     }
     // When building a rowset, we must ensure that the current _segment_writer has been
     // flushed, that is, the current _segment_wirter is nullptr
@@ -550,31 +485,23 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     return Status::OK();
 }
 
-OLAPStatus HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer) {
+Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer) {
     uint64_t segment_size;
     uint64_t index_size;
-    Status s = (*segment_writer)->finalize(&segment_size, &index_size);
-    if (!s.ok()) {
-        LOG(WARNING) << "Fail to finalize segment, " << s.to_string();
-        return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
-    }
+    RETURN_IF_ERROR((*segment_writer)->finalize(&segment_size, &index_size));
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += segment_size;
-        _total_index_size += index_size;
+        _total_data_size += static_cast<int64_t>(segment_size);
+        _total_index_size += static_cast<int64_t>(index_size);
     }
     if (_src_rssids) {
-        Status st = flush_src_rssids(_segment_writer->segment_id());
-        if (!st.ok()) {
-            LOG(WARNING) << "flush_src_rssids error: " << st.to_string();
-            return OLAP_ERR_IO_ERROR;
-        }
+        RETURN_IF_ERROR(flush_src_rssids(_segment_writer->segment_id()));
     }
 
     // check global_dict efficacy
     const auto& seg_global_dict_columns_valid_info = (*segment_writer)->global_dict_columns_valid_info();
     for (const auto& it : seg_global_dict_columns_valid_info) {
-        if (it.second == false) {
+        if (!it.second) {
             _global_dict_columns_valid_info[it.first] = false;
         } else {
             if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
@@ -585,7 +512,7 @@ OLAPStatus HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<Seg
     }
 
     (*segment_writer).reset();
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 VerticalBetaRowsetWriter::VerticalBetaRowsetWriter(const RowsetWriterContext& context) : BetaRowsetWriter(context) {}
@@ -607,40 +534,27 @@ VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
     }
 }
 
-OLAPStatus VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
-                                                 const std::vector<uint32_t>& column_indexes, bool is_key) {
-    auto segment_writer_add_chunk = [&](const vectorized::Chunk& chunk) -> OLAPStatus {
-        auto s = _segment_writers[_current_writer_index]->append_chunk(chunk);
-        if (!s.ok()) {
-            LOG(WARNING) << "Fail to append chunk by columns. st=" << s.to_string();
-            return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
-        }
-        return OLAP_SUCCESS;
-    };
-
+Status VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
+                                             const std::vector<uint32_t>& column_indexes, bool is_key) {
     size_t chunk_num_rows = chunk.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);
-        std::unique_ptr<SegmentWriter> segment_writer = _create_segment_writer(column_indexes, is_key);
-        if (segment_writer == nullptr) {
-            return OLAP_ERR_INIT_FAILED;
-        }
-        _segment_writers.emplace_back(std::move(segment_writer));
+        auto segment_writer = _create_segment_writer(column_indexes, is_key);
+        if (!segment_writer.ok()) return segment_writer.status();
+        _segment_writers.emplace_back(std::move(segment_writer).value());
         _current_writer_index = 0;
-        RETURN_NOT_OK(segment_writer_add_chunk(chunk));
+        RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(chunk));
     } else if (is_key) {
         // key columns
         if (_segment_writers[_current_writer_index]->num_rows_written() + chunk_num_rows >=
             _context.max_rows_per_segment) {
-            RETURN_NOT_OK(_flush_columns(&_segment_writers[_current_writer_index]));
-            std::unique_ptr<SegmentWriter> segment_writer = _create_segment_writer(column_indexes, is_key);
-            if (segment_writer == nullptr) {
-                return OLAP_ERR_INIT_FAILED;
-            }
-            _segment_writers.emplace_back(std::move(segment_writer));
+            RETURN_IF_ERROR(_flush_columns(&_segment_writers[_current_writer_index]));
+            auto segment_writer = _create_segment_writer(column_indexes, is_key);
+            if (!segment_writer.ok()) return segment_writer.status();
+            _segment_writers.emplace_back(std::move(segment_writer).value());
             ++_current_writer_index;
         }
-        RETURN_NOT_OK(segment_writer_add_chunk(chunk));
+        RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(chunk));
     } else {
         // non key columns
         uint32_t num_rows_written = _segment_writers[_current_writer_index]->num_rows_written();
@@ -649,15 +563,11 @@ OLAPStatus VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
 
         // init segment writer
         if (_current_writer_index == 0 && num_rows_written == 0) {
-            auto s = _segment_writers[_current_writer_index]->init(column_indexes, is_key);
-            if (!s.ok()) {
-                LOG(WARNING) << "Fail to init segment writer, " << s.to_string();
-                return OLAP_ERR_INIT_FAILED;
-            }
+            RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key));
         }
 
         if (num_rows_written + chunk_num_rows <= segment_num_rows) {
-            RETURN_NOT_OK(segment_writer_add_chunk(chunk));
+            RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(chunk));
         } else {
             // split into multi chunks and write into multi segments
             auto write_chunk = chunk.clone_empty();
@@ -665,13 +575,9 @@ OLAPStatus VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
             size_t offset = 0;
             while (num_left_rows > 0) {
                 if (segment_num_rows == num_rows_written) {
-                    RETURN_NOT_OK(_flush_columns(&_segment_writers[_current_writer_index]));
+                    RETURN_IF_ERROR(_flush_columns(&_segment_writers[_current_writer_index]));
                     ++_current_writer_index;
-                    auto s = _segment_writers[_current_writer_index]->init(column_indexes, is_key);
-                    if (!s.ok()) {
-                        LOG(WARNING) << "Fail to init segment writer, " << s.to_string();
-                        return OLAP_ERR_INIT_FAILED;
-                    }
+                    RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key));
                     num_rows_written = _segment_writers[_current_writer_index]->num_rows_written();
                     segment_num_rows = _segment_writers[_current_writer_index]->num_rows();
                 }
@@ -681,7 +587,7 @@ OLAPStatus VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
                     write_size = num_left_rows;
                 }
                 write_chunk->append(chunk, offset, write_size);
-                RETURN_NOT_OK(segment_writer_add_chunk(*write_chunk));
+                RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(*write_chunk));
                 write_chunk->reset();
                 num_left_rows -= write_size;
                 offset += write_size;
@@ -693,48 +599,47 @@ OLAPStatus VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
     }
 
     if (is_key) {
-        _num_rows_written += chunk_num_rows;
+        _num_rows_written += static_cast<int64_t>(chunk_num_rows);
     }
-    _total_row_size += chunk.bytes_usage();
-    return OLAP_SUCCESS;
+    _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
+    return Status::OK();
 }
 
-OLAPStatus VerticalBetaRowsetWriter::add_columns_with_rssid(const vectorized::Chunk& chunk,
-                                                            const std::vector<uint32_t>& column_indexes,
-                                                            const std::vector<uint32_t>& rssid) {
-    RETURN_NOT_OK(add_columns(chunk, column_indexes, true));
+Status VerticalBetaRowsetWriter::add_columns_with_rssid(const vectorized::Chunk& chunk,
+                                                        const std::vector<uint32_t>& column_indexes,
+                                                        const std::vector<uint32_t>& rssid) {
+    RETURN_IF_ERROR(add_columns(chunk, column_indexes, true));
     if (!_src_rssids) {
         _src_rssids = std::make_unique<std::vector<uint32_t>>();
     }
     _src_rssids->insert(_src_rssids->end(), rssid.begin(), rssid.end());
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-OLAPStatus VerticalBetaRowsetWriter::flush_columns() {
+Status VerticalBetaRowsetWriter::flush_columns() {
     if (_segment_writers.empty()) {
-        return OLAP_SUCCESS;
+        return Status::OK();
     }
 
     DCHECK(_segment_writers[_current_writer_index]);
-    RETURN_NOT_OK(_flush_columns(&_segment_writers[_current_writer_index]));
+    RETURN_IF_ERROR(_flush_columns(&_segment_writers[_current_writer_index]));
     _current_writer_index = 0;
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-OLAPStatus VerticalBetaRowsetWriter::final_flush() {
+Status VerticalBetaRowsetWriter::final_flush() {
     if (_segment_writers.empty()) {
-        return OLAP_SUCCESS;
+        return Status::OK();
     }
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
-        Status s = segment_writer->finalize_footer(&segment_size);
-        if (!s.ok()) {
-            LOG(WARNING) << "Fail to finalize segment footer, " << s.to_string();
-            return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
+        if (auto st = segment_writer->finalize_footer(&segment_size); !st.ok()) {
+            LOG(WARNING) << "Fail to finalize segment footer, " << st;
+            return st;
         }
         {
             std::lock_guard<std::mutex> l(_lock);
-            _total_data_size += segment_size;
+            _total_data_size += static_cast<int64_t>(segment_size);
         }
 
         // check global_dict efficacy
@@ -752,57 +657,39 @@ OLAPStatus VerticalBetaRowsetWriter::final_flush() {
 
         segment_writer.reset();
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-std::unique_ptr<SegmentWriter> VerticalBetaRowsetWriter::_create_segment_writer(
+StatusOr<std::unique_ptr<SegmentWriter>> VerticalBetaRowsetWriter::_create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     std::lock_guard<std::mutex> l(_lock);
     std::string path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
     std::unique_ptr<fs::WritableBlock> wblock;
     fs::CreateBlockOptions opts({path});
-    Status st = _context.block_mgr->create_block(opts, &wblock);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to create writable block=" << path << ", " << st.to_string();
-        return nullptr;
-    }
+    RETURN_IF_ERROR(_context.block_mgr->create_block(opts, &wblock));
 
     DCHECK(wblock != nullptr);
     SegmentWriterOptions writer_options;
     writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
-    std::unique_ptr<SegmentWriter> segment_writer =
-            std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
-    auto s = segment_writer->init(column_indexes, is_key);
-    if (!s.ok()) {
-        LOG(WARNING) << "Fail to init segment writer, " << s.to_string();
-        segment_writer.reset(nullptr);
-        return nullptr;
-    }
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
+    RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
     ++_num_segment;
-    return segment_writer;
+    return std::move(segment_writer);
 }
 
-OLAPStatus VerticalBetaRowsetWriter::_flush_columns(std::unique_ptr<SegmentWriter>* segment_writer) {
+Status VerticalBetaRowsetWriter::_flush_columns(std::unique_ptr<SegmentWriter>* segment_writer) {
     uint64_t index_size = 0;
-    Status s = (*segment_writer)->finalize_columns(&index_size);
-    if (!s.ok()) {
-        LOG(WARNING) << "Fail to finalize segment columns, " << s.to_string();
-        return OLAP_ERR_WRITER_DATA_WRITE_ERROR;
-    }
+    RETURN_IF_ERROR((*segment_writer)->finalize_columns(&index_size));
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_index_size += index_size;
+        _total_index_size += static_cast<int64_t>(index_size);
     }
     if (_src_rssids) {
-        Status st = flush_src_rssids((*segment_writer)->segment_id());
-        if (!st.ok()) {
-            LOG(WARNING) << "flush_src_rssids error: " << st.to_string();
-            return OLAP_ERR_IO_ERROR;
-        }
+        return flush_src_rssids((*segment_writer)->segment_id());
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 } // namespace starrocks
