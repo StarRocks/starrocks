@@ -219,6 +219,14 @@ public class HashJoinNode extends PlanNode {
         this.distrMode = distrMode;
     }
 
+    public DistributionMode getDistributionMode() {
+        return this.distrMode;
+    }
+
+    public boolean isBroadcast() {
+        return this.distrMode == DistributionMode.BROADCAST;
+    }
+
     public boolean isLocalHashBucket() {
         return isLocalHashBucket;
     }

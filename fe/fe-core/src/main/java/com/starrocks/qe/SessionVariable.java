@@ -28,6 +28,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileMode;
 import com.starrocks.thrift.TQueryOptions;
@@ -539,6 +540,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return parallelExecInstanceNum;
     }
 
+    // when pipeline engine is enabled
+    // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
+    // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
+    // in case of pipeline_dop <= 0 and avgNumCores >=2; return avgNumCores/2;
+    public int getDegreeOfParallelism() {
+        if (enablePipelineEngine) {
+            if (pipelineDop > 0) {
+                return pipelineDop * parallelExecInstanceNum;
+            }
+            int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+            return avgNumOfCores < 2 ? 1 : avgNumOfCores / 2;
+        } else {
+            return parallelExecInstanceNum;
+        }
+    }
+
     public void setParallelExecInstanceNum(int parallelExecInstanceNum) {
         this.parallelExecInstanceNum = parallelExecInstanceNum;
     }
@@ -685,6 +702,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnablePipelineEngine() {
         return enablePipelineEngine;
+    }
+
+    public boolean isPipelineDopAdaptionEnabled() {
+        return enablePipelineEngine && pipelineDop <= 0;
     }
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {

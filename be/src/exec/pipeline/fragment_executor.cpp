@@ -148,8 +148,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     int32_t degree_of_parallelism = 1;
-    if (query_options.__isset.pipeline_dop && query_options.pipeline_dop > 0) {
-        degree_of_parallelism = query_options.pipeline_dop;
+    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
+        degree_of_parallelism = request.pipeline_dop;
     } else {
         // default dop is a half of the number of hardware threads.
         degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);

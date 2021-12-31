@@ -248,6 +248,11 @@ public class HeartbeatMgr extends MasterDaemon {
                         version = tBackendInfo.getVersion();
                     }
 
+                    // Update number of hardare of cores of corresponding backend.
+                    if (tBackendInfo.isSetNum_hardware_cores()) {
+                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, tBackendInfo.getNum_hardware_cores());
+                    }
+
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
                     return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, System.currentTimeMillis(),
                             version);

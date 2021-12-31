@@ -119,10 +119,10 @@ public class CTEPlanTest extends PlanTestBase {
 
         Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 01\n" +
-                "    HASH_PARTITIONED: 4: v1\n" +
+                "    UNPARTITIONED\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 04\n" +
-                "    HASH_PARTITIONED: 7: v1\n"));
+                "    EXCHANGE ID: 03\n" +
+                "    UNPARTITIONED\n"));
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
     }
