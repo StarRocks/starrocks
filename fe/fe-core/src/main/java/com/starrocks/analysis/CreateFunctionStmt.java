@@ -289,16 +289,14 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-    private void analyzeUdfClassInStarrocksJar() throws AnalysisException {
+    private void analyzeUdfClassInStarrocksJar() throws AnalysisException, IOException {
         String class_name = properties.get(SYMBOL_KEY);
         if (Strings.isNullOrEmpty(class_name)) {
             throw new AnalysisException("No '" + SYMBOL_KEY + "' in properties");
         }
 
-        URLClassLoader classLoader = null;
-        try {
-            URL[] urls = {new URL("jar:" + objectFile + "!/")};
-            classLoader = URLClassLoader.newInstance(urls);
+        URL[] urls = {new URL("jar:" + objectFile + "!/")};
+        try (URLClassLoader classLoader = URLClassLoader.newInstance(urls)) {
             udfClass.setClazz(classLoader.loadClass(class_name));
 
             if (isAggregate) {
@@ -314,14 +312,6 @@ public class CreateFunctionStmt extends DdlStmt {
             throw new AnalysisException("Failed to load object_file: " + objectFile);
         } catch (ClassNotFoundException e) {
             throw new AnalysisException("Class '" + class_name + "' not found in object_file :" + objectFile);
-        } finally {
-            if (classLoader != null) {
-                try {
-                    classLoader.close();
-                } catch (IOException e) {
-                    // pass
-                }
-            }
         }
     }
 
