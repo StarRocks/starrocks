@@ -59,7 +59,6 @@ import com.starrocks.sql.analyzer.relation.QueryRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -820,11 +819,10 @@ public class ExpressionAnalyzer {
             return null;
         }
 
-        if (Config.enable_udf) {
-            throw UnsupportedException.unsupportedException("CBO Optimizer don't support UDF function: " + fnName);
-        } else {
+        if (!Config.enable_udf) {
             throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
                     ErrorType.USER_ERROR);
         }
+        return fn;
     }
 }
