@@ -159,8 +159,8 @@ public class AggregateFunction extends Function {
             this.binaryType = binaryType;
         }
 
-        public static AggregateFunctionBuilder createUdfBuilder() {
-            return new AggregateFunctionBuilder(TFunctionBinaryType.HIVE);
+        public static AggregateFunctionBuilder createUdfBuilder(TFunctionBinaryType binaryType) {
+            return new AggregateFunctionBuilder(binaryType);
         }
 
         public AggregateFunctionBuilder name(FunctionName name) {

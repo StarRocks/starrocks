@@ -101,35 +101,37 @@ public class CreateFunctionStmt extends DdlStmt {
                     .build();
 
     private static class UDFInternalClass {
-        public Class myClass = null;
+        public Class clazz = null;
         public Map<String, Method> methods = null;
 
         public String getCanonicalName() {
-            return myClass.getCanonicalName();
+            return clazz.getCanonicalName();
         }
 
-        public void setMyClass(Class myClass) {
-            this.myClass = myClass;
+        public void setClazz(Class clazz) {
+            this.clazz = clazz;
         }
 
         public void collectMethods() throws AnalysisException {
-            Map<String, Method> ret = new HashMap<>();
-            for (Method m : myClass.getMethods()) {
-                String name = m.getName();
-                if (ret.containsKey(name)) {
-                    throw new AnalysisException(String.format(
-                            "UDF class '%s' has more then one method '%s'".format(myClass.getCanonicalName(), name)));
+            methods = new HashMap<>();
+            for (Method m : clazz.getMethods()) {
+                if (!m.getDeclaringClass().equals(clazz)) {
+                    continue;
                 }
-                ret.put(name, m);
+                String name = m.getName();
+                if (methods.containsKey(name)) {
+                    throw new AnalysisException(String.format(
+                            "UDF class '%s' has more than one method '%s' ", clazz.getCanonicalName(), name));
+                }
+                methods.put(name, m);
             }
-            methods = ret;
         }
 
         public Method getMethod(String name, boolean required) throws AnalysisException {
             Method m = methods.get(name);
             if (m == null && required) {
                 throw new AnalysisException(
-                        String.format("UDF class '%s must have method '%s'", myClass.getCanonicalName(), name));
+                        String.format("UDF class '%s must have method '%s'", clazz.getCanonicalName(), name));
             }
             return m;
         }
@@ -137,12 +139,12 @@ public class CreateFunctionStmt extends DdlStmt {
         public void checkMethodNonStaticAndPublic(Method method) throws AnalysisException {
             if (Modifier.isStatic(method.getModifiers())) {
                 throw new AnalysisException(
-                        String.format("UDF class '%s' method '%s' should be non-static", myClass.getCanonicalName(),
+                        String.format("UDF class '%s' method '%s' should be non-static", clazz.getCanonicalName(),
                                 method.getName()));
             }
             if (!Modifier.isPublic(method.getModifiers())) {
                 throw new AnalysisException(
-                        String.format("UDF class '%s' method '%s' should be public", myClass.getCanonicalName(),
+                        String.format("UDF class '%s' method '%s' should be public", clazz.getCanonicalName(),
                                 method.getName()));
             }
         }
@@ -160,7 +162,7 @@ public class CreateFunctionStmt extends DdlStmt {
             if (!expType.equals(ptype)) {
                 throw new AnalysisException(
                         String.format("UDF class '%s' method '%s' parameter %s[%s] expect type %s",
-                                myClass.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
                                 expType.getCanonicalName()));
             }
         }
@@ -170,7 +172,7 @@ public class CreateFunctionStmt extends DdlStmt {
             if (method.getParameters().length != argumentCount) {
                 throw new AnalysisException(
                         String.format("UDF class '%s' method '%s' expect argument count %d",
-                                myClass.getCanonicalName(), method.getName(), argumentCount));
+                                clazz.getCanonicalName(), method.getName(), argumentCount));
             }
         }
 
@@ -187,19 +189,19 @@ public class CreateFunctionStmt extends DdlStmt {
             if (!(expType instanceof ScalarType)) {
                 throw new AnalysisException(
                         String.format("UDF class '%s' method '%s' does not support non-scalar type '%s'",
-                                myClass.getCanonicalName(), method.getName(), expType));
+                                clazz.getCanonicalName(), method.getName(), expType));
             }
             ScalarType scalarType = (ScalarType) expType;
             Class cls = PrimitiveTypeToJavaClassType.get(scalarType.getPrimitiveType());
             if (cls == null) {
                 throw new AnalysisException(
                         String.format("UDF class '%s' method '%s' does not support type '%s'",
-                                myClass.getCanonicalName(), method.getName(), scalarType));
+                                clazz.getCanonicalName(), method.getName(), scalarType));
             }
             if (!cls.equals(ptype)) {
                 throw new AnalysisException(
                         String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
-                                myClass.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
                                 cls.getCanonicalName()));
             }
         }
@@ -219,6 +221,10 @@ public class CreateFunctionStmt extends DdlStmt {
             this.properties = ImmutableSortedMap.of();
         } else {
             this.properties = ImmutableSortedMap.copyOf(properties, String.CASE_INSENSITIVE_ORDER);
+        }
+        this.udfClass = new UDFInternalClass();
+        if (isAggregate) {
+            this.udfStateClass = new UDFInternalClass();
         }
     }
 
@@ -281,10 +287,6 @@ public class CreateFunctionStmt extends DdlStmt {
         if (md5sum != null && !md5sum.equalsIgnoreCase(checksum)) {
             throw new AnalysisException("library's checksum is not equal with input, checksum=" + checksum);
         }
-
-        if (isStarrocksJar) {
-            analyzeUdfClassInStarrocksJar();
-        }
     }
 
     private void analyzeUdfClassInStarrocksJar() throws AnalysisException {
@@ -293,15 +295,33 @@ public class CreateFunctionStmt extends DdlStmt {
             throw new AnalysisException("No '" + SYMBOL_KEY + "' in properties");
         }
 
+        URLClassLoader classLoader = null;
         try {
             URL[] urls = {new URL("jar:" + objectFile + "!/")};
-            URLClassLoader cl = URLClassLoader.newInstance(urls);
-            udfClass.setMyClass(cl.loadClass(class_name));
+            classLoader = URLClassLoader.newInstance(urls);
+            udfClass.setClazz(classLoader.loadClass(class_name));
+
+            if (isAggregate) {
+                String state_class_name = class_name + "$" + STATE_CLASS_NAME;
+                udfStateClass.setClazz(classLoader.loadClass(state_class_name));
+            }
             udfClass.collectMethods();
+
+            if (isAggregate) {
+                udfStateClass.collectMethods();
+            }
         } catch (MalformedURLException e) {
             throw new AnalysisException("Failed to load object_file: " + objectFile);
         } catch (ClassNotFoundException e) {
             throw new AnalysisException("Class '" + class_name + "' not found in object_file :" + objectFile);
+        } finally {
+            if (classLoader != null) {
+                try {
+                    classLoader.close();
+                } catch (IOException e) {
+                    // pass
+                }
+            }
         }
     }
 
@@ -354,16 +374,9 @@ public class CreateFunctionStmt extends DdlStmt {
 
     private void checkStarrocksJarUdafStateClass() throws AnalysisException {
         // Check internal State class
-        for (Class cls : udfClass.myClass.getClasses()) {
-            if (cls.getSimpleName().equals(STATE_CLASS_NAME)) {
-                udfStateClass.setMyClass(cls);
-                udfStateClass.collectMethods();
-                break;
-            }
-        }
         // should be public & static.
-        Class stateClass = udfStateClass.myClass;
-        if (stateClass == null || !Modifier.isPublic(stateClass.getModifiers()) ||
+        Class stateClass = udfStateClass.clazz;
+        if (!Modifier.isPublic(stateClass.getModifiers()) ||
                 !Modifier.isStatic(stateClass.getModifiers())) {
             throw new AnalysisException(
                     String.format("UDAF '%s' should have one public & static 'State' class",
@@ -383,7 +396,7 @@ public class CreateFunctionStmt extends DdlStmt {
             // State create()
             Method method = udfClass.getMethod(CREATE_METHOD_NAME, true);
             udfClass.checkMethodNonStaticAndPublic(method);
-            udfClass.checkReturnJavaType(method, udfStateClass.myClass);
+            udfClass.checkReturnJavaType(method, udfStateClass.clazz);
             udfClass.checkArgumentCount(method, 0);
         }
         {
@@ -392,7 +405,7 @@ public class CreateFunctionStmt extends DdlStmt {
             udfClass.checkMethodNonStaticAndPublic(method);
             udfClass.checkReturnJavaType(method, void.class);
             udfClass.checkArgumentCount(method, 1);
-            udfClass.checkParamJavaType(method, udfStateClass.myClass, method.getParameters()[0]);
+            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
         }
         {
             // void update(State, ....)
@@ -400,9 +413,9 @@ public class CreateFunctionStmt extends DdlStmt {
             udfClass.checkMethodNonStaticAndPublic(method);
             udfClass.checkReturnJavaType(method, void.class);
             udfClass.checkArgumentCount(method, argsDef.getArgTypes().length + 1);
-            udfClass.checkParamJavaType(method, udfStateClass.myClass, method.getParameters()[0]);
-            for (int i = 1; i < argsDef.getArgTypes().length; i++) {
-                udfClass.checkParamUdfType(method, argsDef.getArgTypes()[i - 1], method.getParameters()[i]);
+            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
+            for (int i = 0; i < argsDef.getArgTypes().length; i++) {
+                udfClass.checkParamUdfType(method, argsDef.getArgTypes()[i], method.getParameters()[i + 1]);
             }
         }
         {
@@ -411,7 +424,7 @@ public class CreateFunctionStmt extends DdlStmt {
             udfClass.checkMethodNonStaticAndPublic(method);
             udfClass.checkReturnJavaType(method, void.class);
             udfClass.checkArgumentCount(method, 2);
-            udfClass.checkParamJavaType(method, udfStateClass.myClass, method.getParameters()[0]);
+            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
             udfClass.checkParamJavaType(method, java.nio.ByteBuffer.class, method.getParameters()[1]);
         }
         {
@@ -420,7 +433,7 @@ public class CreateFunctionStmt extends DdlStmt {
             udfClass.checkMethodNonStaticAndPublic(method);
             udfClass.checkReturnJavaType(method, void.class);
             udfClass.checkArgumentCount(method, 2);
-            udfClass.checkParamJavaType(method, udfStateClass.myClass, method.getParameters()[0]);
+            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
             udfClass.checkParamJavaType(method, java.nio.ByteBuffer.class, method.getParameters()[1]);
         }
         {
@@ -429,7 +442,7 @@ public class CreateFunctionStmt extends DdlStmt {
             udfClass.checkMethodNonStaticAndPublic(method);
             udfClass.checkReturnUdfType(method, returnType.getType());
             udfClass.checkArgumentCount(method, 1);
-            udfClass.checkParamJavaType(method, udfStateClass.myClass, method.getParameters()[0]);
+            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
         }
     }
 
@@ -437,7 +450,7 @@ public class CreateFunctionStmt extends DdlStmt {
         checkStarrocksJarUdafStateClass();
         checkStarrocksJarUdafClass();
         AggregateFunction.AggregateFunctionBuilder builder =
-                AggregateFunction.AggregateFunctionBuilder.createUdfBuilder();
+                AggregateFunction.AggregateFunctionBuilder.createUdfBuilder(TFunctionBinaryType.SRJAR);
         builder.name(functionName).argsType(argsDef.getArgTypes()).retType(returnType.getType()).
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType.getType()).objectFile(objectFile)
                 .symbolName(udfClass.getCanonicalName());
