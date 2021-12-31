@@ -653,7 +653,7 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
                 "  |  group by: [10: S_ADDRESS, INT, false]\n" +
-                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.MAX_VARCHAR_LENGTH + ")) = ''"));
+                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH + ")) = ''"));
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  cardinality: 1"));

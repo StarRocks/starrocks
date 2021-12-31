@@ -4080,7 +4080,7 @@ type ::=
   | KW_PERCENTILE
   {: RESULT = Type.PERCENTILE; :}
   | KW_STRING
-  {: ScalarType type = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+  {: ScalarType type = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
      type.setAssignedStrLenInColDefinition();
      RESULT = type;
   :}
