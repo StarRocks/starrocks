@@ -145,6 +145,10 @@ public class AggregateFunction extends Function {
         returnsNonNullOnEmpty = false;
     }
 
+    public String getSymbolName() {
+        return symbolName == null ? Strings.EMPTY : symbolName;
+    }
+
     public static class AggregateFunctionBuilder {
         TFunctionBinaryType binaryType;
         FunctionName name;
@@ -239,7 +243,10 @@ public class AggregateFunction extends Function {
             sb.append("IF NOT EXISTS ");
         }
         sb.append(dbName() + "." + signatureString() + "\n")
-                .append(" RETURNS " + getReturnType() + "\n");
+                .append(" RETURNS " + getReturnType() + "\n")
+                .append(" LOCATION '" + getLocation() + "'\n")
+                .append(" SYMBOL='" + getSymbolName() + "'\n");
+
         if (getIntermediateType() != null) {
             sb.append(" INTERMEDIATE " + getIntermediateType() + "\n");
         }
@@ -256,6 +263,7 @@ public class AggregateFunction extends Function {
         } else {
             aggFn.setIntermediate_type(getReturnType().toThrift());
         }
+        aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
         return fn;
     }
