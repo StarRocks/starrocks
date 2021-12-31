@@ -23,7 +23,7 @@ public:
     using PushDownPredicates = std::unordered_map<ColumnId, PredicateList>;
 
     ColumnPredicateRewriter(ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
-                            const Schema& schema, const std::vector<uint8_t>& need_rewrite, int column_size,
+                            const Schema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
                             SparseRange& scan_range)
             : _column_iterators(column_iterators),
               _predicates(pushdown_predicates),
@@ -45,7 +45,7 @@ private:
     ColumnIterators& _column_iterators;
     PushDownPredicates& _predicates;
     const Schema& _schema;
-    const std::vector<uint8_t>& _need_rewrite;
+    std::vector<uint8_t>& _need_rewrite;
     const int _column_size;
     SparseRange& _scan_range;
 };
