@@ -936,16 +936,16 @@ public class Coordinator {
                 if (scanNode.hasLimit()) {
                     numRows = Math.min(scanNode.getLimit(), numRows);
                 }
-                int maxNumScanOperators = Math.min(1, (int) (numRows / maxRowCountPerScanOperator));
+                int maxNumScanOperators = Math.max(1, (int) (numRows / maxRowCountPerScanOperator));
                 for (FInstanceExecParam instanceExecParam : params.instanceExecParams) {
                     int numScanRanges = 0;
                     if (instanceExecParam.perNodeScanRanges.containsKey(scanNode.getId())) {
                         numScanRanges = instanceExecParam.perNodeScanRanges.get(scanNode.getId()).size();
                     }
                     int scanDop = maxNumScanOperators * numScanRanges / totalNumScanRanges;
-                    int scanDopLimit = Math.min(dop, numScanRanges);
+                    int scanDopLimit = Math.max(1, Math.min(dop, numScanRanges));
                     scanDop = Math.min(scanDopLimit, Math.max(1, scanDop));
-                    instanceExecParam.perNodeScanDop.put(scanNode.getId().asInt(), scanDop);
+                    instanceExecParam.perScanNodeDop.put(scanNode.getId().asInt(), scanDop);
                 }
             }
         }
@@ -1746,7 +1746,7 @@ public class Coordinator {
         TUniqueId instanceId;
         TNetworkAddress host;
         Map<Integer, List<TScanRangeParams>> perNodeScanRanges = Maps.newHashMap();
-        Map<Integer, Integer> perNodeScanDop = Maps.newHashMap();
+        Map<Integer, Integer> perScanNodeDop = Maps.newHashMap();
 
         int perFragmentInstanceIdx;
 
@@ -2035,7 +2035,7 @@ public class Coordinator {
                         params.setIs_pipeline(
                                 fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
                         params.setPipeline_dop(fragment.getPipelineDop());
-                        params.setPer_node_scan_dop(instanceExecParam.perNodeScanDop);
+                        params.setPer_scan_node_dop(instanceExecParam.perScanNodeDop);
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {

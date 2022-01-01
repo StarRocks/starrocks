@@ -199,10 +199,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             return Lists.newArrayList(root);
         }
 
-        if (root.getChildren().isEmpty()) {
-            return Lists.newArrayList();
-        }
-
         List<PlanNode> scanNodes = Lists.newArrayList();
         for (PlanNode child : root.getChildren()) {
             scanNodes.addAll(getOlapScanNodes(child));
