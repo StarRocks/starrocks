@@ -511,7 +511,7 @@ public final class MetricRepo {
 
     // update some metrics to make a ready to be visited
     private static void updateMetrics() {
-        SYSTEM_METRICS.update();
+        // SYSTEM_METRICS.update();
     }
 
     // collect table-level metrics
