@@ -528,7 +528,7 @@ private:
         }
     }
 
-    static ColumnPtr _array_contains_generic(const Column& array, const Column& target, const boolean retIndex) {
+    static ColumnPtr _array_contains_generic(const Column& array, const Column& target, const bool retIndex) {
         // array_contains(NULL, xxx) -> NULL
         if (array.only_null()) {
             auto result = NullableColumn::create(Int8Column::create(), NullColumn::create());
