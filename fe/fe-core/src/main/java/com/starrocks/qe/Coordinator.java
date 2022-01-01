@@ -1469,7 +1469,7 @@ public class Coordinator {
         boolean dopAdaptionEnabled = ConnectContext.get() != null &&
                 ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
         // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-        if (dopAdaptionEnabled) {
+        if (dopAdaptionEnabled && params.fragment.isNeedsLocalShuffle()) {
             int numInstances = params.instanceExecParams.size();
             int numBackends = addressToScanRanges.size();
             int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();

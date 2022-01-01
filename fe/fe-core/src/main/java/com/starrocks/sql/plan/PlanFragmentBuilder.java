@@ -868,6 +868,22 @@ public class PlanFragmentBuilder {
             }
         }
 
+        // return true if all leaf offspring of the root are OlapScanNodes.
+        public static boolean allLeafAreOlapScanNodes(PlanNode root) {
+            if (root instanceof OlapScanNode) {
+                return true;
+            }
+            if (root.getChildren().isEmpty()) {
+                return false;
+            }
+            for (PlanNode childNode : root.getChildren()) {
+                if (!allLeafAreOlapScanNodes(childNode)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
@@ -1034,9 +1050,8 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            PlanNode rootNode = inputFragment.getPlanRoot();
-            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() && (rootNode instanceof OlapScanNode ||
-                    rootNode instanceof ProjectNode && rootNode.getChild(0) instanceof OlapScanNode);
+            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
+                    allLeafAreOlapScanNodes(inputFragment.getPlanRoot());
             boolean pipelineDopEnabled = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
             if (pipelineDopEnabled && notNeedLocalShuffle) {

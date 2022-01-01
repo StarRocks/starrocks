@@ -236,6 +236,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.needsLocalShuffle = need;
     }
 
+
+
     public boolean isNeedsLocalShuffle() {
         return needsLocalShuffle;
     }
