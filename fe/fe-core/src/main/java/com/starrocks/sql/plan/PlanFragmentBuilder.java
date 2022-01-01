@@ -1034,8 +1034,9 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
-                    inputFragment.getPlanRoot() instanceof OlapScanNode;
+            PlanNode rootNode = inputFragment.getPlanRoot();
+            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() && (rootNode instanceof OlapScanNode ||
+                    rootNode instanceof ProjectNode && rootNode.getChild(0) instanceof OlapScanNode);
             boolean pipelineDopEnabled = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
             if (pipelineDopEnabled && notNeedLocalShuffle) {
