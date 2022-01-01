@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_CPU_INFO_H
-#define STARROCKS_BE_SRC_UTIL_CPU_INFO_H
+#pragma once
 
 #include <boost/cstdint.hpp>
 #include <memory>
@@ -222,4 +221,3 @@ private:
     static std::vector<int> numa_node_core_idx_;
 };
 } // namespace starrocks
-#endif

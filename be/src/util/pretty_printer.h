@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef IMPALA_UTIL_PRETTY_PRINTER_H
-#define IMPALA_UTIL_PRETTY_PRINTER_H
+#pragma once
 
 #include <boost/algorithm/string.hpp>
 #include <cmath>
@@ -278,5 +277,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

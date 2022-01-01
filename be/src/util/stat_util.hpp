@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_STAT_UTIL_HPP
-#define STARROCKS_BE_SRC_COMMON_UTIL_STAT_UTIL_HPP
+#pragma once
 
 #include <math.h>
 
@@ -51,5 +50,3 @@ public:
 };
 
 }
-
-#endif

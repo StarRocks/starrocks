@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_UTF8_CHECK_H
-#define STARROCKS_BE_SRC_UTIL_UTF8_CHECK_H
+#pragma once
 
 #include <cstddef>
 
@@ -31,5 +30,3 @@ bool validate_utf8(const char* src, size_t len);
 // chech utf8 use naive c++
 bool validate_utf8_naive(const char* data, size_t len);
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_UTIL_UTF8_CHECK_H

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_MONOTIME_H
-#define STARROCKS_BE_SRC_UTIL_MONOTIME_H
+#pragma once
 
 #include <cstdint>
 #include <string>
@@ -406,5 +405,3 @@ MonoDelta operator-(const MonoTime& t_end, const MonoTime& t_begin);
 ///@}
 
 } // namespace starrocks
-
-#endif //STARROCKS_BE_SRC_UTIL_MONOTIME_H

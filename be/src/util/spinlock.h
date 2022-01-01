@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_SPINLOCK_H
-#define STARROCKS_BE_SRC_UTIL_SPINLOCK_H
-
+#pragma once
 #include "common/logging.h"
 
 namespace starrocks {
@@ -77,5 +75,3 @@ private:
 };
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_UTIL_SPINLOCK_H

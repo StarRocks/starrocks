@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_BATCH_PROCESS_THREAD_POOL_HPP
-#define STARROCKS_BE_SRC_COMMON_UTIL_BATCH_PROCESS_THREAD_POOL_HPP
+#pragma once
 
 #include <unistd.h>
 
@@ -184,5 +183,3 @@ private:
 };
 
 }
-
-#endif

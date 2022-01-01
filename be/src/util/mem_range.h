@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_MEM_RANGE_H
-#define STARROCKS_BE_SRC_UTIL_MEM_RANGE_H
+#pragma once
 
 #include <cstdint>
 
@@ -47,5 +46,3 @@ private:
     int64_t len_;
 };
 } // namespace starrocks
-
-#endif

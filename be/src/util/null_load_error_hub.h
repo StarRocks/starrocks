@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_NULL_LOAD_ERROR_HUB_H
-#define STARROCKS_BE_SRC_UTIL_NULL_LOAD_ERROR_HUB_H
+#pragma once
 
 #include <mutex>
 #include <queue>
@@ -55,5 +54,3 @@ private:
 }; // end class NullLoadErrorHub
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_UTIL_NULL_LOAD_ERROR_HUB_H

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_INTERNAL_QUEUE_H
-#define STARROCKS_BE_SRC_UTIL_INTERNAL_QUEUE_H
+#pragma once
 
 #include <functional>
 #include <mutex>
@@ -282,4 +281,3 @@ class InternalQueue : public InternalQueueBase<SpinLock, T> {};
 template <typename T>
 class InternalList : public InternalQueueBase<FakeLock, T> {};
 } // namespace starrocks
-#endif

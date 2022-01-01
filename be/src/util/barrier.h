@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_BARRIER_H
-#define STARROCKS_BE_SRC_UTIL_BARRIER_H
+#pragma once
 
 #include <condition_variable>
 #include <mutex>
@@ -64,7 +63,5 @@ private:
     const int _initial_count;
     DISALLOW_COPY_AND_ASSIGN(Barrier);
 };
-
-#endif //STARROCKS_BE_SRC_UTIL_BARRIER_H
 
 } // namespace starrocks
