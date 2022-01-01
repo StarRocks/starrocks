@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_PROGRESS_UPDATER_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_PROGRESS_UPDATER_H
+#pragma once
 
 #include <boost/cstdint.hpp>
 #include <string>
@@ -68,5 +67,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

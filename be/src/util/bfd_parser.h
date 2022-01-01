@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_BFD_PARSER_H
-#define STARROCKS_BE_SRC_UTIL_BFD_PARSER_H
+#pragma once
 
 #ifndef PACKAGE
 #define PACKAGE
@@ -78,5 +77,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif
