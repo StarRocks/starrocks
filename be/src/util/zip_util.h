@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_ZIP_UTIL_H
-#define STARROCKS_BE_SRC_UTIL_ZIP_UTIL_H
+#pragma once
 
 #include <string>
 #include <utility>
@@ -74,5 +73,3 @@ private:
     std::vector<std::string> _clean_paths;
 };
 } // namespace starrocks
-
-#endif //CORE_ZIP_UTIL_H

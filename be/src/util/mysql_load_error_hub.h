@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_MYSQL_LOAD_ERROR_HUB_H
-#define STARROCKS_BE_SRC_UTIL_MYSQL_LOAD_ERROR_HUB_H
+#pragma once
 
 #include <mutex>
 #include <queue>
@@ -108,5 +107,3 @@ private:
 }; // end class MysqlLoadErrorHub
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_UTIL_MYSQL_LOAD_ERROR_HUB_H

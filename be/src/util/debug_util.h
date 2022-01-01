@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_DEBUG_UTIL_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_DEBUG_UTIL_H
+#pragma once
 
 #include <boost/cstdint.hpp>
 #include <ostream>
@@ -58,5 +57,3 @@ std::string get_version_string(bool compact);
 std::string hexdump(const char* buf, int len);
 
 } // namespace starrocks
-
-#endif

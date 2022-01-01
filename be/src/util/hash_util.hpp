@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_HASH_UTIL_HPP
-#define STARROCKS_BE_SRC_COMMON_UTIL_HASH_UTIL_HPP
+#pragma once
 
 #include "common/logging.h"
 #include "common/compiler_util.h"
@@ -472,5 +471,3 @@ struct hash<std::pair<starrocks::TUniqueId, int64_t>> {
 };
 
 }
-
-#endif
