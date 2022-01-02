@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_PRIMITIVE_TYPE_H
-#define STARROCKS_BE_RUNTIME_PRIMITIVE_TYPE_H
+#pragma once
 
 #include <string>
 
@@ -181,5 +180,3 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name)
 PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type);
 
 } // namespace starrocks
-
-#endif

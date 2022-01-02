@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_ROWSET_FACTORY_H
-#define STARROCKS_BE_SRC_OLAP_ROWSET_FACTORY_H
+#pragma once
 
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/data_dir.h"
@@ -45,5 +44,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_ROWSET_FACTORY_H

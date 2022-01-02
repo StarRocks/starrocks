@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_OLAP_DEFINE_H
-#define STARROCKS_BE_SRC_OLAP_OLAP_DEFINE_H
+#pragma once
 
 #include <cstdint>
 #include <cstdlib>
@@ -314,5 +313,3 @@ private:                                 \
 #endif
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_DEFINE_H

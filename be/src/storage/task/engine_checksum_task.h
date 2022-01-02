@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TASK_ENGINE_CHECKSUM_TASK_H
-#define STARROCKS_BE_SRC_OLAP_TASK_ENGINE_CHECKSUM_TASK_H
+#pragma once
 
 #include "gen_cpp/AgentService_types.h"
 #include "storage/olap_define.h"
@@ -51,4 +50,3 @@ private:
 }; // EngineTask
 
 } // namespace starrocks
-#endif //STARROCKS_BE_SRC_OLAP_TASK_ENGINE_CHECKSUM_TASK_H

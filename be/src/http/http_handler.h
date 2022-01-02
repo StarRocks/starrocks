@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_HTTP_HANDLER_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_HTTP_HANDLER_H
+#pragma once
 
 namespace starrocks {
 
@@ -46,5 +45,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif

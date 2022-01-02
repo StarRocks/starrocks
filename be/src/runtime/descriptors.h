@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_DESCRIPTORS_H
-#define STARROCKS_BE_RUNTIME_DESCRIPTORS_H
+#pragma once
 
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/common.h>
@@ -444,5 +443,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

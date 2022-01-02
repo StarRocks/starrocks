@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SERVICE_BACKEND_OPTIONS_H
-#define STARROCKS_BE_SERVICE_BACKEND_OPTIONS_H
+#pragma once
 
 #include <gutil/macros.h>
 
@@ -48,5 +47,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif //STARROCKS_BE_SERVICE_BACKEND_OPTIONS_H

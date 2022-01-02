@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_BUFFER_CONTROL_BLOCK_H
-#define STARROCKS_BE_RUNTIME_BUFFER_CONTROL_BLOCK_H
+#pragma once
 
 #include <condition_variable>
 #include <deque>
@@ -128,5 +127,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

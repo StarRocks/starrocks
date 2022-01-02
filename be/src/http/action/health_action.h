@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_HTTP_ACTION_HEALTH_ACTION_H
-#define STARROCKS_BE_SRC_HTTP_ACTION_HEALTH_ACTION_H
+#pragma once
 
 #include "http/http_handler.h"
 
@@ -42,5 +41,3 @@ private:
 };
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_HTTP_ACTION_HEALTH_ACTION_H

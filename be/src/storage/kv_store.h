@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_OLAP_KV_STORE_H
-#define STARROCKS_BE_SRC_OLAP_OLAP_KV_STORE_H
+#pragma once
 
 #include <rocksdb/write_batch.h>
 
@@ -76,5 +75,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_KV_STORE_H

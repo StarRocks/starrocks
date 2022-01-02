@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#ifndef STARROCKS_BE_SRC_OLAP_LRU_CACHE_H
-#define STARROCKS_BE_SRC_OLAP_LRU_CACHE_H
+#pragma once
 
 #include <rapidjson/document.h>
 
@@ -349,5 +348,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_LRU_CACHE_H
