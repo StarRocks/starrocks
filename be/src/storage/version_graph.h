@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_VERSION_GRAPH_H
-#define STARROCKS_BE_SRC_OLAP_VERSION_GRAPH_H
+#pragma once
 
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
@@ -186,5 +185,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_VERSION_GRAPH_H

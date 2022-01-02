@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_EXPORT_TASK_MGR_H
-#define STARROCKS_BE_SRC_RUNTIME_EXPORT_TASK_MGR_H
+#pragma once
 
 #include <mutex>
 #include <unordered_set>
@@ -83,5 +82,3 @@ private:
 };
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_RUNTIME_EXPORT_TASK_MGR_H

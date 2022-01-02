@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_UDF_UDF_DEBUG_H
-#define STARROCKS_BE_UDF_UDF_DEBUG_H
+#pragma once
 
 #include <sstream>
 #include <string>
@@ -50,5 +49,3 @@ std::string debug_string(const StringVal& val) {
 }
 
 } // namespace starrocks_udf
-
-#endif

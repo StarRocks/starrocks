@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_PLAN_FRAGMENT_EXECUTOR_H
-#define STARROCKS_BE_RUNTIME_PLAN_FRAGMENT_EXECUTOR_H
+#pragma once
 
 #include <condition_variable>
 #include <functional>
@@ -225,5 +224,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

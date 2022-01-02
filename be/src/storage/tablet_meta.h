@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TABLET_META_H
-#define STARROCKS_BE_SRC_OLAP_TABLET_META_H
+#pragma once
 
 #include <mutex>
 #include <shared_mutex>
@@ -369,5 +368,3 @@ bool operator==(const TabletMeta& a, const TabletMeta& b);
 bool operator!=(const TabletMeta& a, const TabletMeta& b);
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_TABLET_META_H

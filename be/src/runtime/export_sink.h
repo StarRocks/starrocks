@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_EXPORT_SINK_H
-#define STARROCKS_BE_SRC_RUNTIME_EXPORT_SINK_H
+#pragma once
 
 #include <vector>
 
@@ -86,5 +85,3 @@ private:
 };
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_RUNTIME_EXPORT_SINK_H

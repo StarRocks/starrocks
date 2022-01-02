@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_SNAPSHOT_MANAGER_H
-#define STARROCKS_BE_SRC_OLAP_SNAPSHOT_MANAGER_H
+#pragma once
 
 #include <condition_variable>
 #include <ctime>
@@ -107,5 +106,3 @@ private:
 }; // SnapshotManager
 
 } // namespace starrocks
-
-#endif

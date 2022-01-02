@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_UTILS_H
-#define STARROCKS_BE_SRC_OLAP_UTILS_H
+#pragma once
 
 #include <fcntl.h>
 #include <pthread.h>
@@ -163,5 +162,3 @@ bool valid_bool(const std::string& value_str);
     } while (0)
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_UTILS_H

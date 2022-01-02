@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_PLUGIN_PLUGIN_ZIP_H
-#define STARROCKS_BE_PLUGIN_PLUGIN_ZIP_H
+#pragma once
 
 #include <utility>
 
@@ -46,4 +45,3 @@ private:
 };
 
 } // namespace starrocks
-#endif //STARROCKS_BE_PLUGIN_PLUGIN_ZIP_H
