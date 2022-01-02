@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_FIELD_H
-#define STARROCKS_BE_SRC_OLAP_FIELD_H
+#pragma once
 
 #include <sstream>
 #include <string>
@@ -595,5 +594,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_FIELD_H

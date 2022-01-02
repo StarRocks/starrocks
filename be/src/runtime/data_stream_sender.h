@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_DATA_STREAM_SENDER_H
-#define STARROCKS_BE_RUNTIME_DATA_STREAM_SENDER_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -208,5 +207,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

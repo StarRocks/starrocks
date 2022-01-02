@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_RECVR_H
-#define STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_RECVR_H
+#pragma once
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -200,5 +199,3 @@ private:
 };
 
 } // end namespace starrocks
-
-#endif // end STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_RECVR_H

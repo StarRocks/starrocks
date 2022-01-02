@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TABLET_SCHEMA_H
-#define STARROCKS_BE_SRC_OLAP_TABLET_SCHEMA_H
+#pragma once
 
 #include <gtest/gtest_prod.h>
 
@@ -298,5 +297,3 @@ bool operator==(const TabletSchema& a, const TabletSchema& b);
 bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_TABLET_SCHEMA_H

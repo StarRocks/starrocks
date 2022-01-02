@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_MGR_H
-#define STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_MGR_H
+#pragma once
 
 #include <list>
 #include <mutex>
@@ -144,5 +143,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

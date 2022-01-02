@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_MYSQL_TABLE_WRITER_H
-#define STARROCKS_BE_RUNTIME_MYSQL_TABLE_WRITER_H
+#pragma once
 
 #include <string>
 #include <string_view>
@@ -109,5 +108,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

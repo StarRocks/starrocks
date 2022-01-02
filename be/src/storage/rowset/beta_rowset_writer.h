@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_ROWSET_BETA_ROWSET_WRITER_H
-#define STARROCKS_BE_SRC_OLAP_ROWSET_BETA_ROWSET_WRITER_H
+#pragma once
 
 #include <mutex>
 #include <vector>
@@ -133,5 +132,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif //STARROCKS_BE_SRC_OLAP_ROWSET_BETA_ROWSET_WRITER_H
