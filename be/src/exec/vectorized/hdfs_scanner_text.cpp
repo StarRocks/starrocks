@@ -45,7 +45,7 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     _reader = std::make_unique<HdfsScannerCSVReader>(_scanner_params.fs, _record_delimiter, _field_delimiter,
-                                          _scanner_params.scan_ranges[0]->offset);
+                                                     _scanner_params.scan_ranges[0]->offset);
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto slot = _scanner_params.materialize_slots[i];
         ConverterPtr conv = csv::get_converter(slot->type(), true);

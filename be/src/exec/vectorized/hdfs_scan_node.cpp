@@ -7,9 +7,9 @@
 
 #include "env/env_hdfs.h"
 #include "exec/vectorized/hdfs_scanner.h"
+#include "exec/vectorized/hdfs_scanner_text.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exec/vectorized/hdfs_scanner_text.h"
 #include "exprs/vectorized/runtime_filter.h"
 #include "fmt/core.h"
 #include "glog/logging.h"

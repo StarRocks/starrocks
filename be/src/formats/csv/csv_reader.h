@@ -88,9 +88,7 @@ protected:
     raw::RawVector<char> _storage;
     CSVBuffer _buff;
 
-    virtual Status _fill_buffer() {
-        return Status::InternalError("unsupported csv reader!");
-    }
+    virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
 
 private:
     Status _expand_buffer();

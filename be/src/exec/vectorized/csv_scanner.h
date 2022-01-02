@@ -33,7 +33,7 @@ private:
     class ScannerCSVReader : public CSVReader {
     public:
         ScannerCSVReader(std::shared_ptr<SequentialFile> file, char record_delimiter, string field_delimiter)
-                :CSVReader(record_delimiter, field_delimiter) {
+                : CSVReader(record_delimiter, field_delimiter) {
             _file = file;
         }
 

@@ -22,8 +22,9 @@ public:
 private:
     class HdfsScannerCSVReader : public CSVReader {
     public:
-        HdfsScannerCSVReader(std::shared_ptr<RandomAccessFile> file, char record_delimiter, string field_delimiter, size_t offset)
-                :CSVReader(record_delimiter, field_delimiter) {
+        HdfsScannerCSVReader(std::shared_ptr<RandomAccessFile> file, char record_delimiter, string field_delimiter,
+                             size_t offset)
+                : CSVReader(record_delimiter, field_delimiter) {
             _file = file;
             _offset = offset;
         }
