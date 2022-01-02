@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_MYSQL_TABLE_SINK_H
-#define STARROCKS_BE_RUNTIME_MYSQL_TABLE_SINK_H
+#pragma once
 
 #include <memory>
 #include <vector>
@@ -75,5 +74,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_HTTP_SNAPSHOT_ACTION_H
-#define STARROCKS_BE_SRC_HTTP_SNAPSHOT_ACTION_H
+#pragma once
 
 #include <cstdint>
 #include <string>
@@ -49,4 +48,3 @@ private:
 }; // end class SnapshotAction
 
 } // end namespace starrocks
-#endif // STARROCKS_BE_SRC_HTTP_SNAPSHOT_ACTION_H

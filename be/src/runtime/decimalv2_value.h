@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_DECIMALV2_VALUE_H
-#define STARROCKS_BE_SRC_RUNTIME_DECIMALV2_VALUE_H
+#pragma once
 
 #include <cctype>
 #include <climits>
@@ -290,5 +289,3 @@ struct hash<starrocks::DecimalV2Value> {
     size_t operator()(const starrocks::DecimalV2Value& v) const { return starrocks::hash_value(v); }
 };
 } // namespace std
-
-#endif // STARROCKS_BE_SRC_RUNTIME_DECIMALV2_VALUE_H

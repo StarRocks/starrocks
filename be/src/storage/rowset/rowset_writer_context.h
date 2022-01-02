@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_CONTEXT_H
-#define STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_CONTEXT_H
+#pragma once
 
 #include "env/env.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -84,5 +83,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_CONTEXT_H

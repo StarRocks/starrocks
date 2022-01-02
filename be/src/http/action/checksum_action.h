@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_HTTP_CHECKSUM_ACTION_H
-#define STARROCKS_BE_SRC_HTTP_CHECKSUM_ACTION_H
+#pragma once
 
 #include <cstdint>
 
@@ -46,4 +45,3 @@ private:
 }; // end class ChecksumAction
 
 } // end namespace starrocks
-#endif // STARROCKS_BE_SRC_COMMON_UTIL_DOWNLOAD_ACTION_H

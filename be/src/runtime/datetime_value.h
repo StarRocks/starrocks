@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_DATETIME_VALUE_H
-#define STARROCKS_BE_RUNTIME_DATETIME_VALUE_H
+#pragma once
 
 #include <re2/re2.h>
 
@@ -534,5 +533,3 @@ struct hash<starrocks::DateTimeValue> {
     size_t operator()(const starrocks::DateTimeValue& v) const { return starrocks::hash_value(v); }
 };
 } // namespace std
-
-#endif

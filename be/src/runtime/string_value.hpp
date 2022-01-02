@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_STRING_VALUE_INLINE_H
-#define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_STRING_VALUE_INLINE_H
+#pragma once
 
 #include <cstring>
 
@@ -124,5 +123,3 @@ inline StringValue StringValue::trim() const {
 }
 
 } // namespace starrocks
-
-#endif

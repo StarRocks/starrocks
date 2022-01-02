@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TASK_ENGINE_TASK_H
-#define STARROCKS_BE_SRC_OLAP_TASK_ENGINE_TASK_H
+#pragma once
 
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -45,4 +44,3 @@ public:
 };
 
 } // end namespace starrocks
-#endif //STARROCKS_BE_SRC_OLAP_TASK_ENGINE_TASK_H

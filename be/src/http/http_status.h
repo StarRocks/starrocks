@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_HTTP_STATUS_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_HTTP_STATUS_H
+#pragma once
 
 #include <string>
 
@@ -74,5 +73,3 @@ std::string to_code(const HttpStatus& status);
 std::string defalut_reason(const HttpStatus& status);
 
 } // namespace starrocks
-
-#endif
