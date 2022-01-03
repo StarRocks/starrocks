@@ -939,8 +939,8 @@ public class Coordinator {
                 int maxNumScanOperators = Math.max(1, (int) (numRows / maxRowCountPerScanOperator));
                 for (FInstanceExecParam instanceExecParam : params.instanceExecParams) {
                     int numScanRanges = 0;
-                    if (instanceExecParam.perNodeScanRanges.containsKey(scanNode.getId())) {
-                        numScanRanges = instanceExecParam.perNodeScanRanges.get(scanNode.getId()).size();
+                    if (instanceExecParam.perNodeScanRanges.containsKey(scanNode.getId().asInt())) {
+                        numScanRanges = instanceExecParam.perNodeScanRanges.get(scanNode.getId().asInt()).size();
                     }
                     int scanDop = maxNumScanOperators * numScanRanges / totalNumScanRanges;
                     int scanDopLimit = Math.max(1, Math.min(dop, numScanRanges));
