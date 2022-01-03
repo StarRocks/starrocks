@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_MURMUR3_HH
-#define ORC_MURMUR3_HH
+#pragma once
 
 #include "orc/orc-config.hh"
 
@@ -40,5 +39,3 @@ private:
 };
 
 } // namespace orc
-
-#endif //ORC_MURMUR3_HH

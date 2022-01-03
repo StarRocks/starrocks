@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_OLAP_COMMON_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_OLAP_COMMON_H
+#pragma once
 
 #include <column/type_traits.h>
 
@@ -817,7 +816,5 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
 }
 
 } // namespace starrocks
-
-#endif
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

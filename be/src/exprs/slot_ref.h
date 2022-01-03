@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXPRS_SLOT_REF_H
-#define STARROCKS_BE_SRC_QUERY_EXPRS_SLOT_REF_H
+#pragma once
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
@@ -82,5 +81,3 @@ inline ColumnPtr& SlotRef::get_column(Expr* expr, vectorized::Chunk* chunk) {
     return (chunk)->get_column_by_slot_id(ref->slot_id());
 }
 } // namespace starrocks
-
-#endif

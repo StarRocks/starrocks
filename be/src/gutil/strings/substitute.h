@@ -8,8 +8,7 @@ using std::string;
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/stringpiece.h"
 
-#ifndef STRINGS_SUBSTITUTE_H_
-#define STRINGS_SUBSTITUTE_H_
+#pragma once
 
 namespace strings {
 
@@ -180,5 +179,3 @@ inline string Substitute(StringPiece format, const internal::SubstituteArg& arg0
 }
 
 } // namespace strings
-
-#endif // STRINGS_SUBSTITUTE_H_

@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_EXPRESSIONTREE_HH
-#define ORC_EXPRESSIONTREE_HH
+#pragma once
 
 #include <limits>
 #include <memory>
@@ -84,5 +83,3 @@ private:
 };
 
 } // namespace orc
-
-#endif //ORC_EXPRESSIONTREE_HH

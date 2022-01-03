@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_PREDICATELEAF_HH
-#define ORC_PREDICATELEAF_HH
+#pragma once
 
 #include <string>
 #include <vector>
@@ -132,5 +131,3 @@ struct PredicateLeafComparator {
 };
 
 } // namespace orc
-
-#endif //ORC_PREDICATELEAF_HH

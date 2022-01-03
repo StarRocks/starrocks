@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_INPUTSTREAM_HH
-#define ORC_INPUTSTREAM_HH
+#pragma once
 
 #include <fstream>
 #include <iostream>

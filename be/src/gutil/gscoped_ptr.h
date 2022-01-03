@@ -91,8 +91,7 @@
 // some of the older compilers we have to support.
 // -------------------------------------------------------------------------
 
-#ifndef GUTIL_GSCOPED_PTR_H_
-#define GUTIL_GSCOPED_PTR_H_
+#pragma once
 
 // This is an implementation designed to match the anticipated future TR2
 // implementation of the scoped_ptr class, and its closely-related brethren,
@@ -805,5 +804,3 @@ template <typename T>
 gscoped_ptr<T> make_gscoped_ptr(T* ptr) {
     return gscoped_ptr<T>(ptr);
 }
-
-#endif // GUTIL_GSCOPED_PTR_H_

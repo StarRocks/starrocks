@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_EXCEPTIONS_HH
-#define ORC_EXCEPTIONS_HH
+#pragma once
 
 #include <stdexcept>
 #include <string>
@@ -63,5 +62,3 @@ private:
     InvalidArgument& operator=(const InvalidArgument&) = delete;
 };
 } // namespace orc
-
-#endif
