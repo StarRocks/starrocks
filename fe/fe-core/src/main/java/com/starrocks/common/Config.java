@@ -1321,4 +1321,11 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long min_routine_load_lag_for_metrics = 10000;
+
+    /**
+     * bdb je log level
+     * If you want to print all levels of logs, set to ALL
+     */
+    @ConfField
+    public static String bdb_je_log_level = "INFO";
 }
