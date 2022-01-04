@@ -39,6 +39,12 @@ if (WITH_HDFS)
     )
 endif()
 
+if (WITH_AWS)
+    set(EXEC_FILES ${EXEC_FILES}
+        s3_client.cpp
+    )
+endif()
+
 add_library(Env STATIC
     ${EXEC_FILES}
 )

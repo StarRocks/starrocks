@@ -744,6 +744,15 @@ build_aliyun_oss_jars() {
     cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/aliyun_oss_jars
 }
 
+# aws cpp sdk
+build_aws_cpp_sdk() {
+    check_if_source_exist $AWS_CPP_SDK_SOURCE
+    cd $TP_SOURCE_DIR/$AWS_CPP_SDK_SOURCE
+    mkdir -p build && cd build
+    $CMAKE_CMD .. -DBUILD_ONLY="s3;transfer" -DENABLE_TESTING=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    make -j$PARALLEL && make install
+}
+
 build_libevent
 build_zlib
 build_lz4
@@ -779,6 +788,7 @@ build_ragel
 build_hyperscan
 build_mariadb
 build_aliyun_oss_jars
+#build_aws_cpp_sdk # do not build this by default now
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

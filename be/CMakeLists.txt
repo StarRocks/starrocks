@@ -186,6 +186,12 @@ if (WITH_HDFS)
     set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 endif()
 
+if (WITH_AWS)
+    set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
+    find_package(AWSSDK REQUIRED COMPONENTS core s3 transfer)
+    include_directories(${AWSSDK_INCLUDE_DIRS})
+endif()
+
 add_library(libevent STATIC IMPORTED)
 set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
 
@@ -323,6 +329,10 @@ if (WITH_HDFS)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_HDFS")
 endif()
 
+if (WITH_AWS)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_AWS")
+endif()
+
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
 endif()
@@ -451,6 +461,13 @@ if (WITH_HDFS)
     set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
         hdfs
         jvm
+        )
+endif()
+
+if (WITH_AWS)
+    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+        ${AWSSDK_LINK_LIBRARIES}
+        ${AWSSDK_PLATFORM_DEPS}
         )
 endif()
 
