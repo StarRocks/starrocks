@@ -342,11 +342,11 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     return ArrayRemoveImpl::evaluate(*arg0, *arg1);
 }
 
-template<typename ReturnType>
 class ArrayContainsImpl {
 public:
     // If retIndex=true in function array_indexof, it will return index of elemt if the array contain it or 0 if not contain.
     // If retIndex=false in function array_contains, it will return 1 if contain or 0 if not contain.
+    template<typename ReturnType>
     static ColumnPtr evaluate(const Column& array, const Column& element, const bool retIndex) {
         return _array_contains_generic(array, element, retIndex);
     }
@@ -550,14 +550,14 @@ ColumnPtr ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* conte
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayContainsImpl<UInt8Column>::evaluate(*arg0, *arg1, false);
+    return ArrayContainsImpl::evaluate<UInt8Column>(*arg0, *arg1, false);
 }
 
 ColumnPtr ArrayFunctions::array_indexof([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayContainsImpl<Int32Column>::evaluate(*arg0, *arg1, true);
+    return ArrayContainsImpl::evaluate<Int32Column>(*arg0, *arg1, true);
 }
 
 class ArrayArithmeticImpl {
