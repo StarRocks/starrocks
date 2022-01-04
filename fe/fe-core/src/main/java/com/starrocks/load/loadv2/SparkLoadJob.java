@@ -128,11 +128,10 @@ public class SparkLoadJob extends BulkLoadJob {
     // members below updated when job state changed to loading
     // { tableId.partitionId.indexId.bucket.schemaHash -> (etlFilePath, etlFileSize) }
     private Map<String, Pair<String, Long>> tabletMetaToFileInfo = Maps.newHashMap();
+    private SparkLoadAppHandle sparkLoadAppHandle = new SparkLoadAppHandle();
 
     // --- members below not persist ---
     private ResourceDesc resourceDesc;
-    // for spark standalone
-    private SparkLoadAppHandle sparkLoadAppHandle = new SparkLoadAppHandle();
     // for straggler wait long time to commit transaction
     private long quorumFinishTimestamp = -1;
     // below for push task
@@ -695,7 +694,6 @@ public class SparkLoadJob extends BulkLoadJob {
                 }
             }
             // clear job infos that not persist
-            sparkLoadAppHandle = null;
             resourceDesc = null;
             tableToLoadPartitions.clear();
             indexToPushBrokerReaderParams.clear();
