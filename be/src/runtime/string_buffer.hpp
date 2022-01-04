@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_STRING_BUFFER_H
-#define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_STRING_BUFFER_H
+#pragma once
 
 #include "runtime/mem_pool.h"
 #include "runtime/string_value.h"
@@ -129,5 +128,3 @@ private:
 };
 
 }
-
-#endif

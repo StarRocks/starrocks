@@ -193,6 +193,7 @@ public class Coordinator {
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
+    private final Map<PlanNodeId, Set<PlanNodeId>> exchangeIds = new HashMap<>();
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -419,8 +420,10 @@ public class Coordinator {
             // Select top fragment as global runtime filter merge address
             setGlobalRuntimeFilterParams(topParams, toBrpcHost(execBeAddr));
 
-            LOG.info("dispatch query job: {} to {}", DebugUtil.printId(queryId),
-                    topParams.instanceExecParams.get(0).host);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(queryId),
+                        topParams.instanceExecParams.get(0).host);
+            }
 
             // set the broker address for OUTFILE sink
             ResultSink resultSink = (ResultSink) topParams.fragment.getSink();
@@ -1026,6 +1029,35 @@ public class Coordinator {
         return maxParallelismExecParams;
     }
 
+    private Set<PlanNodeId> getExchangeNodes(PlanNode node) {
+        if (exchangeIds.containsKey(node.getId())) {
+            return exchangeIds.get(node.getId());
+        }
+        Set<PlanNodeId> ids = new HashSet<>();
+        for (PlanNode child : node.getChildren()) {
+            ids.addAll(getExchangeNodes(child));
+        }
+        exchangeIds.put(node.getId(), ids);
+        return ids;
+    }
+
+    private DataStreamSink getDataStreamSink(PlanFragment fragment, PlanFragment destFragment) {
+        DataSink sink = fragment.getSink();
+        if (sink instanceof DataStreamSink) {
+            return (DataStreamSink) sink;
+        } else if (sink instanceof MultiCastDataSink) {
+            MultiCastDataSink multiCastDataSink = (MultiCastDataSink) sink;
+            Set<PlanNodeId> fragmentExchIds = getExchangeNodes(destFragment.getPlanRoot());
+            List<DataStreamSink> sinks = multiCastDataSink.getDataStreamSinks().stream()
+                    .filter(s -> fragmentExchIds.contains(s.getExchNodeId())).collect(Collectors.toList());
+            List<DataStreamSink> partitionedSinks = sinks.stream()
+                    .filter(s -> s.getOutputPartition().isPartitioned()).collect(Collectors.toList());
+            return partitionedSinks.isEmpty() ? sinks.get(0) : partitionedSinks.get(0);
+        } else {
+            return null;
+        }
+    }
+
     private boolean hasShuffleHashBucketJoin(PlanNode node) {
         if (node instanceof HashJoinNode) {
             HashJoinNode hashJoinNode = (HashJoinNode) node;
@@ -1050,6 +1082,9 @@ public class Coordinator {
         // compute hosts of producer fragment before those of consumer fragment(s),
         // the latter might inherit the set of hosts from the former
         // compute hosts *bottom up*.
+
+        boolean dopAdaptionEnabled = ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
         for (int i = fragments.size() - 1; i >= 0; --i) {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
@@ -1087,6 +1122,11 @@ public class Coordinator {
                 for (int j = 0; j < fragment.getChildren().size(); j++) {
                     int currentChildFragmentParallelism =
                             fragmentExecParamsMap.get(fragment.getChild(j).getFragmentId()).instanceExecParams.size();
+                    // when dop adaptation enabled, numInstances * pipelineDop is equivalent to numInstances in
+                    // non-pipeline engine and pipeline engine(dop adaptation disabled).
+                    if (dopAdaptionEnabled) {
+                        currentChildFragmentParallelism *= fragment.getChild(j).getPipelineDop();
+                    }
                     if (currentChildFragmentParallelism > maxParallelism) {
                         maxParallelism = currentChildFragmentParallelism;
                         inputFragmentIndex = j;
@@ -1100,7 +1140,40 @@ public class Coordinator {
                 if (hasShuffleHashBucketJoinInFragment) {
                     FragmentExecParams execParams = getMaxParallelismScanFragmentExecParams();
                     if (execParams != null) {
+                        maxParallelism = execParams.instanceExecParams.size();
+                        // when dop adaptation enabled, numInstances * pipelineDop is equivalent to numInstances in
+                        // non-pipeline engine and pipeline engine(dop adaptation disabled).
+                        if (dopAdaptionEnabled) {
+                            maxParallelism *= execParams.fragment.getPipelineDop();
+                        }
                         maxParallelismFragmentExecParams = execParams;
+                    }
+                }
+
+                // hostSet contains target backends to whom fragment instances of the current PlanFragment will be
+                // delivered. when pipeline parallelization is adopted, the number of instances should be the size
+                // of hostSet, that it to say, each backend has exactly one fragment.
+                Set<TNetworkAddress> hostSet = Sets.newHashSet();
+                for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
+                    hostSet.add(execParams.host);
+                }
+
+                if (dopAdaptionEnabled) {
+                    int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+                    Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
+                    DataSink sink = getDataStreamSink(maxParallelismFragmentExecParams.fragment, fragment);
+                    Preconditions.checkArgument(sink != null);
+                    // If the maximum parallel child fragment send data to the current PlanFragment via UNPARTITIONED
+                    // DataStreamSink, then fragment instance parallelization is leveraged, otherwise, pipeline parallelization
+                    // is adopted.
+                    if (!sink.getOutputPartition().isPartitioned()) {
+                        // fragment instance parallelization (numInstances=N, pipelineDop=1)
+                        maxParallelism = Math.min(hostSet.size() * degreeOfParallelism, maxParallelism);
+                        fragment.setPipelineDop(1);
+                    } else {
+                        // pipeline parallelization (numInstances=|hostSet|, pipelineDop=degreeOfParallelism)
+                        maxParallelism = hostSet.size();
+                        fragment.setPipelineDop(degreeOfParallelism);
                     }
                 }
 
@@ -1109,14 +1182,9 @@ public class Coordinator {
                 if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable() != null) {
                     exchangeInstances = ConnectContext.get().getSessionVariable().getExchangeInstanceParallel();
                 }
-                if (exchangeInstances > 0 &&
-                        maxParallelismFragmentExecParams.instanceExecParams.size() > exchangeInstances) {
+                if (exchangeInstances > 0 && maxParallelism > exchangeInstances) {
                     // random select some instance
-                    // get distinct host,  when parallel_fragment_exec_instance_num > 1, single host may execute severval instances
-                    Set<TNetworkAddress> hostSet = Sets.newHashSet();
-                    for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
-                        hostSet.add(execParams.host);
-                    }
+                    // get distinct host,  when parallel_fragment_exec_instance_num > 1, single host may execute several instances
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
                     if (!hasShuffleHashBucketJoinInFragment) {
                         Collections.shuffle(hosts, instanceRandom);
@@ -1127,8 +1195,10 @@ public class Coordinator {
                         params.instanceExecParams.add(instanceParam);
                     }
                 } else {
-                    for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
-                        FInstanceExecParam instanceParam = new FInstanceExecParam(null, execParams.host, 0, params);
+                    List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
+                    for (int index = 0; index < maxParallelism; ++index) {
+                        TNetworkAddress host = hosts.get(index % hosts.size());
+                        FInstanceExecParam instanceParam = new FInstanceExecParam(null, host, 0, params);
                         params.instanceExecParams.add(instanceParam);
                     }
                 }
@@ -1150,6 +1220,7 @@ public class Coordinator {
                     fragmentIdToSeqToAddressMap.containsKey(fragment.getFragmentId())
                     && fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()).size() > 0);
             boolean hasBucketShuffle = isBucketShuffleJoin(fragment.getFragmentId().asInt());
+
             if (hasColocate || hasBucketShuffle) {
                 computeColocatedJoinInstanceParam(fragment.getFragmentId(), parallelExecInstanceNum, params);
             } else {
@@ -1192,6 +1263,15 @@ public class Coordinator {
                             }
                         }
                     }
+                }
+                // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
+                if (dopAdaptionEnabled) {
+                    int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+                    FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
+                    int numBackends = param.scanRangeAssignment.size();
+                    int numInstances = param.instanceExecParams.size();
+                    int pipelineDop = Math.max(1, degreeOfParallelism / Math.max(1, numInstances / numBackends));
+                    param.fragment.setPipelineDop(pipelineDop);
                 }
             }
 
@@ -1385,6 +1465,16 @@ public class Coordinator {
                 }
                 params.instanceExecParams.add(instanceParam);
             }
+        }
+        boolean dopAdaptionEnabled = ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
+        // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
+        if (dopAdaptionEnabled) {
+            int numInstances = params.instanceExecParams.size();
+            int numBackends = addressToScanRanges.size();
+            int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+            int pipelineDop = Math.max(1, degreeOfParallelism / Math.max(1, numInstances / numBackends));
+            params.fragment.setPipelineDop(pipelineDop);
         }
     }
 
@@ -1903,6 +1993,7 @@ public class Coordinator {
                     if (isEnablePipelineEngine) {
                         params.setIs_pipeline(
                                 fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                        params.setPipeline_dop(fragment.getPipelineDop());
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {

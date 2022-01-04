@@ -246,6 +246,9 @@ enum TFunctionBinaryType {
 
   // Native-interface, precompiled to IR; loaded from *.ll
   IR,
+
+  // StarRocks customized UDF in jar.
+  SRJAR
 }
 
 // Represents a fully qualified function name.
@@ -433,4 +436,3 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
 }
-

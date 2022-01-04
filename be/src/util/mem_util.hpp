@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef  STARROCKS_BE_SRC_COMMON_UTIL_MEM_UTIL_HPP
-#define  STARROCKS_BE_SRC_COMMON_UTIL_MEM_UTIL_HPP
+#pragma once
 
 #include <cstring>
 
@@ -627,7 +626,5 @@ B255:
 }
 
 }
-
-#endif  // STARROCKS_BE_SRC_COMMON_SRC_UTIL_MEM_UTIL_H
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

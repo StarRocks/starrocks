@@ -1238,8 +1238,8 @@ public class PlanFragmentBuilder {
                     context.getPlanCtx().getNextNodeId(),
                     inputFragment.getPlanRoot(),
                     sortInfo,
-                    limit != -1,
-                    limit == -1,
+                    limit != Operator.DEFAULT_LIMIT,
+                    limit == Operator.DEFAULT_LIMIT,
                     0);
             sortNode.setLimit(limit);
             sortNode.setOffset(offset);
@@ -1261,6 +1261,27 @@ public class PlanFragmentBuilder {
             } else {
                 node.setIsPushDown(false);
             }
+        }
+
+        private void estimateDopOfBroadcastJoinInPipeline(PlanFragment fragment) {
+            if (ConnectContext.get() == null ||
+                    !ConnectContext.get().getSessionVariable().isEnablePipelineEngine() ||
+                    ConnectContext.get().getSessionVariable().getPipelineDop() > 0) {
+                return;
+            }
+            if (fragment.isDopEstimated()) {
+                return;
+            }
+            Preconditions.checkArgument(fragment.getPlanRoot() instanceof HashJoinNode);
+            HashJoinNode hashJoinNode = (HashJoinNode) fragment.getPlanRoot();
+            HashJoinNode.DistributionMode distributionMode = hashJoinNode.getDistributionMode();
+            if (!distributionMode.equals(HashJoinNode.DistributionMode.BROADCAST) &&
+                    !distributionMode.equals(HashJoinNode.DistributionMode.REPLICATED)) {
+                return;
+            }
+            fragment.setPipelineDop(fragment.getParallelExecNum());
+            fragment.setParallelExecNum(1);
+            fragment.setDopEstimated();
         }
 
         @Override
@@ -1440,6 +1461,7 @@ public class PlanFragmentBuilder {
                     leftFragment.setPlanRoot(hashJoinNode);
                     leftFragment.addChild(rightFragment.getChild(0));
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+                    estimateDopOfBroadcastJoinInPipeline(leftFragment);
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
@@ -1502,6 +1524,7 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(leftFragment);
 
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+                    estimateDopOfBroadcastJoinInPipeline(leftFragment);
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();

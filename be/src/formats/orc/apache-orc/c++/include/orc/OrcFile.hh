@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_FILE_HH
-#define ORC_FILE_HH
+#pragma once
 
 #include <string>
 
@@ -142,5 +141,3 @@ ORC_UNIQUE_PTR<OutputStream> writeLocalFile(const std::string& path);
    */
 ORC_UNIQUE_PTR<Writer> createWriter(const Type& type, OutputStream* stream, const WriterOptions& options);
 } // namespace orc
-
-#endif

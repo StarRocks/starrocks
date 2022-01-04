@@ -21,8 +21,7 @@
  */
 
 // clang-format off
-#ifndef ORC_OPTIONS_HH
-#define ORC_OPTIONS_HH
+#pragma once
 
 #include "orc/Int128.hh"
 #include "orc/OrcFile.hh"
@@ -297,5 +296,3 @@ namespace orc {
       return privateBits->useWriterTimezone;
     }
 }
-
-#endif

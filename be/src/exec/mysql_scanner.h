@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_MYSQL_SCANNER_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_MYSQL_SCANNER_H
+#pragma once
 
 #include <cstdlib>
 #include <string>
@@ -75,5 +74,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

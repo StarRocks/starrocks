@@ -5,6 +5,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "serde/column_array_serde.h"
 
 namespace starrocks::vectorized {
 
@@ -107,18 +108,15 @@ Status RowSourceMaskBuffer::_create_tmp_file() {
 }
 
 Status RowSourceMaskBuffer::_serialize_masks() {
-    size_t content_size = _mask_column->serialize_size();
-    ssize_t w_size = ::write(_tmp_file_fd, &content_size, sizeof(uint64_t));
+    uint64_t num_rows = _mask_column->size();
+    ssize_t w_size = ::write(_tmp_file_fd, &num_rows, sizeof(num_rows));
     if (w_size != sizeof(uint64_t)) {
         PLOG(WARNING) << "fail to write masks size to mask file. write size=" << w_size;
         return Status::InternalError("fail to write masks size to mask file");
     }
-
-    string content;
-    content.resize(content_size);
-    _mask_column->serialize_column((uint8_t*)(content.data()));
-    w_size = ::write(_tmp_file_fd, content.data(), content_size);
-    if (w_size != content_size) {
+    const std::vector<uint16_t>& data = _mask_column->get_data();
+    w_size = ::write(_tmp_file_fd, data.data(), data.size() * sizeof(data[0]));
+    if (w_size != data.size() * sizeof(data[0])) {
         PLOG(WARNING) << "fail to write masks to mask file. write size=" << w_size;
         return Status::InternalError("fail to write masks to mask file");
     }
@@ -126,8 +124,8 @@ Status RowSourceMaskBuffer::_serialize_masks() {
 }
 
 Status RowSourceMaskBuffer::_deserialize_masks() {
-    uint64_t content_size = 0;
-    ssize_t r_size = ::read(_tmp_file_fd, &content_size, sizeof(uint64_t));
+    uint64_t num_rows = 0;
+    ssize_t r_size = ::read(_tmp_file_fd, &num_rows, sizeof(num_rows));
     if (r_size == 0) {
         return Status::EndOfFile("end of file");
     } else if (r_size != sizeof(uint64_t)) {
@@ -135,14 +133,14 @@ Status RowSourceMaskBuffer::_deserialize_masks() {
         return Status::InternalError("fail to read masks size from mask file");
     }
 
-    string content;
-    content.resize(content_size);
-    r_size = ::read(_tmp_file_fd, content.data(), content_size);
-    if (r_size != content_size) {
+    std::vector<uint16_t> content;
+    raw::stl_vector_resize_uninitialized(&content, num_rows);
+    r_size = ::read(_tmp_file_fd, content.data(), content.size() * sizeof(content[0]));
+    if (r_size != content.size() * sizeof(content[0])) {
         PLOG(WARNING) << "fail to read masks from mask file. read size=" << r_size;
         return Status::InternalError("fail to read masks from mask file");
     }
-    _mask_column->deserialize_column((uint8_t*)(content.data()));
+    _mask_column->get_data().swap(content);
     return Status::OK();
 }
 

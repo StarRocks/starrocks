@@ -23,7 +23,6 @@ package com.starrocks.common.util;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
@@ -32,19 +31,6 @@ import java.util.Enumeration;
 import java.util.List;
 
 public class NetUtils {
-
-    // Target format is "host:port"
-    public static InetSocketAddress createSocketAddr(String target) {
-        int colonIndex = target.indexOf(':');
-        if (colonIndex < 0) {
-            throw new RuntimeException("Not a host:port pair : " + target);
-        }
-
-        String hostname = target.substring(0, colonIndex);
-        int port = Integer.parseInt(target.substring(colonIndex + 1));
-
-        return new InetSocketAddress(hostname, port);
-    }
 
     public static void getHosts(List<InetAddress> hosts) {
         Enumeration<NetworkInterface> n = null;
@@ -67,11 +53,8 @@ public class NetUtils {
 
     public static boolean isPortUsing(String host, int port) throws UnknownHostException {
         boolean flag = false;
-        InetAddress theAddress = InetAddress.getByName(host);
-        try {
-            Socket socket = new Socket(theAddress, port);
+        try (Socket socket = new Socket(host, port)) {
             flag = true;
-            socket.close();
         } catch (IOException e) {
             // do nothing
         }

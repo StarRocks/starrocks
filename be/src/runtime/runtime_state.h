@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_RUNTIME_RUNTIME_STATE_H
-#define STARROCKS_BE_SRC_QUERY_RUNTIME_RUNTIME_STATE_H
+#pragma once
 
 #include <atomic>
 #include <fstream>
@@ -429,5 +428,3 @@ private:
     } while (false)
 
 } // namespace starrocks
-
-#endif // end of STARROCKS_BE_SRC_QUERY_RUNTIME_RUNTIME_STATE_H

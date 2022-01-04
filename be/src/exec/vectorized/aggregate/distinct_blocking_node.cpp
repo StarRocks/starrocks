@@ -6,7 +6,6 @@
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/aggregator.h"
 #include "runtime/current_thread.h"
 
@@ -117,10 +116,10 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
+    size_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having
-    size_t old_size = (*chunk)->num_rows();
     ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
     _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
 
@@ -153,14 +152,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    // The san operator followed by an aggregate operator indicates the aggregating key is the same as
-    // the bucket key of this table, so we needn't local shuffle for this case.
-    auto* source_op = operators_with_sink[0].get();
-    if (typeid(*source_op) != typeid(pipeline::ScanOperatorFactory)) {
-        operators_with_sink =
-                context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, partition_expr_ctxs);
-    }
-
+    operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, partition_expr_ctxs);
     operators_with_sink.push_back(std::move(sink_operator));
     context->add_pipeline(operators_with_sink);
     // Aggregator must be used by a pair of sink and source operators,

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_DEBUG_RUNTIME_PROFILE_H
-#define STARROCKS_BE_SRC_UTIL_DEBUG_RUNTIME_PROFILE_H
+#pragma once
 
 #include "common/object_pool.h"
 #include "util/runtime_profile.h"
@@ -37,4 +36,3 @@ private:
     RuntimeProfile* const _profile;
 };
 } // namespace starrocks
-#endif

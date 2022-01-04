@@ -12,15 +12,10 @@
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/substitute.h"
+#include "testutil/assert.h"
 #include "util/thrift_client.h"
 
 namespace starrocks {
-
-#define CHECK_OK(stmt)                                \
-    do {                                              \
-        Status __status = (stmt);                     \
-        CHECK(__status.ok()) << __status.to_string(); \
-    } while (0)
 
 class MockBrokerServer {
 public:
@@ -292,12 +287,6 @@ protected:
     MockBrokerServer* _server = nullptr;
     std::vector<char> _buff;
 };
-
-#define ASSERT_OK(stmt)                             \
-    do {                                            \
-        Status __st = (stmt);                       \
-        ASSERT_TRUE(__st.ok()) << __st.to_string(); \
-    } while (0)
 
 std::string read(std::unique_ptr<SequentialFile>& f, int len) {
     std::string s(len, '\0');

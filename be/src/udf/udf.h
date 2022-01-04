@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_UDF_UDF_H
-#define STARROCKS_BE_UDF_UDF_H
+#pragma once
 
 #include <cstdint>
 #include <cstring>
@@ -784,5 +783,3 @@ using starrocks_udf::DecimalV2Val;
 using starrocks_udf::DateTimeVal;
 using starrocks_udf::HllVal;
 using starrocks_udf::FunctionContext;
-
-#endif

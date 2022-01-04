@@ -141,7 +141,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitOperator(Operator node, ExpressionContext context) {
         ScalarOperator predicate = null;
-        long limit = -1;
+        long limit = Operator.DEFAULT_LIMIT;
 
         if (node instanceof LogicalOperator) {
             LogicalOperator logical = (LogicalOperator) node;
@@ -158,7 +158,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             statistics = estimateStatistics(ImmutableList.of(predicate), statistics);
         }
 
-        if (limit != -1 && limit < statistics.getOutputRowCount()) {
+        if (limit != Operator.DEFAULT_LIMIT && limit < statistics.getOutputRowCount()) {
             statistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
         }
 

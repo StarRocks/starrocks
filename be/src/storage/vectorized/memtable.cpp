@@ -11,7 +11,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema.h"
 #include "storage/vectorized/chunk_helper.h"
-#include "util/defer_op.h"
 #include "util/orlp/pdqsort.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -49,7 +48,7 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
     }
 }
 
-MemTable::~MemTable() {}
+MemTable::~MemTable() = default;
 
 size_t MemTable::memory_usage() const {
     size_t size = 0;
@@ -185,24 +184,23 @@ Status MemTable::finalize() {
     return Status::OK();
 }
 
-OLAPStatus MemTable::flush() {
-    if (_result_chunk == nullptr) {
-        return OLAP_SUCCESS;
+Status MemTable::flush() {
+    if (UNLIKELY(_result_chunk == nullptr)) {
+        return Status::OK();
     }
-
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
-        if (!_deletes || _deletes->size() == 0) {
-            RETURN_NOT_OK(_rowset_writer->flush_chunk(*_result_chunk));
+        if (!_deletes || _deletes->empty()) {
+            RETURN_IF_ERROR(_rowset_writer->flush_chunk(*_result_chunk));
         } else {
-            RETURN_NOT_OK(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
+            RETURN_IF_ERROR(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
         }
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
     StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
     VLOG(1) << "memtable flush: " << duration_ns / 1000 << "us";
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 void MemTable::_merge() {
@@ -281,7 +279,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
     auto op_column = src->get_column_by_index(op_column_id);
     src->remove_column_by_index(op_column_id);
     size_t nrows = src->num_rows();
-    const uint8_t* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+    auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
     size_t ndel = 0;
     for (size_t i = 0; i < nrows; i++) {
         ndel += (ops[i] == TOpType::DELETE);

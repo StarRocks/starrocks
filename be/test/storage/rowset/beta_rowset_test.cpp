@@ -40,6 +40,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/column_predicate.h"
+#include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/file_utils.h"
 
@@ -225,8 +226,8 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
                 cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
             }
-            rowset_writer->add_chunk(*chunk.get());
-            EXPECT_EQ(OLAP_SUCCESS, rowset_writer->flush());
+            ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+            ASSERT_OK(rowset_writer->flush());
         }
 
         {
@@ -237,8 +238,8 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
                 cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
             }
-            rowset_writer->add_chunk(*chunk.get());
-            EXPECT_EQ(OLAP_SUCCESS, rowset_writer->flush());
+            ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+            ASSERT_OK(rowset_writer->flush());
         }
 
         {
@@ -249,11 +250,11 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
                 cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
             }
-            rowset_writer->add_chunk(*chunk.get());
-            EXPECT_EQ(OLAP_SUCCESS, rowset_writer->flush());
+            ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+            ASSERT_OK(rowset_writer->flush());
         }
 
-        rowset = rowset_writer->build();
+        rowset = rowset_writer->build().value();
         ASSERT_TRUE(rowset != nullptr);
         ASSERT_EQ(1, rowset->rowset_meta()->num_segments());
         ASSERT_EQ(rows_per_segment * 2, rowset->rowset_meta()->num_rows());
@@ -331,9 +332,9 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
-            ASSERT_EQ(OLAP_SUCCESS, rowset_writer->add_columns(*chunk, column_indexes, true));
+            ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, true));
         }
-        ASSERT_EQ(OLAP_SUCCESS, rowset_writer->flush_columns());
+        ASSERT_OK(rowset_writer->flush_columns());
     }
 
     {
@@ -350,14 +351,14 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
                 }
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
-            ASSERT_EQ(OLAP_SUCCESS, rowset_writer->add_columns(*chunk, column_indexes, false));
+            ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, false));
         }
-        ASSERT_EQ(OLAP_SUCCESS, rowset_writer->flush_columns());
+        ASSERT_OK(rowset_writer->flush_columns());
     }
-    ASSERT_EQ(OLAP_SUCCESS, rowset_writer->final_flush());
+    ASSERT_OK(rowset_writer->final_flush());
 
     // check rowset
-    RowsetSharedPtr rowset = rowset_writer->build();
+    RowsetSharedPtr rowset = rowset_writer->build().value();
     ASSERT_EQ(num_rows, rowset->rowset_meta()->num_rows());
     ASSERT_EQ(3, rowset->rowset_meta()->num_segments());
 

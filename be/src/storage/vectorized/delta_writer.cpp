@@ -244,10 +244,7 @@ Status DeltaWriter::_flush_memtable_async() {
 
 Status DeltaWriter::_flush_memtable() {
     RETURN_IF_ERROR(_flush_memtable_async());
-    if (_flush_token->wait() != OLAPStatus::OLAP_SUCCESS) {
-        return Status::InternalError("fail to flush memtable");
-    }
-    return Status::OK();
+    return _flush_token->wait();
 }
 
 void DeltaWriter::_reset_mem_table() {
@@ -269,16 +266,20 @@ Status DeltaWriter::commit() {
         break;
     }
 
-    if (_flush_token->wait() != OLAPStatus::OLAP_SUCCESS) {
+    if (auto st = _flush_token->wait(); UNLIKELY(!st.ok())) {
+        LOG(WARNING) << st;
         _set_state(kAborted);
-        return Status::InternalError("fail to flush memtable");
+        return st;
     }
 
-    _cur_rowset = _rowset_writer->build();
-    if (_cur_rowset == nullptr) {
+    if (auto res = _rowset_writer->build(); res.ok()) {
+        _cur_rowset = std::move(res).value();
+    } else {
+        LOG(WARNING) << res.status();
         _set_state(kAborted);
-        return Status::InternalError("Fail to build rowset");
+        return res.status();
     }
+
     _cur_rowset->set_schema(&_tablet->tablet_schema());
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);

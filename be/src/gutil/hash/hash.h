@@ -70,8 +70,7 @@
 // property.  We already have several such functions; see
 // hash_unittest.cc for the details and unittests.
 
-#ifndef UTIL_HASH_HASH_H_
-#define UTIL_HASH_HASH_H_
+#pragma once
 
 #include <algorithm>
 #include <cstddef>
@@ -402,4 +401,3 @@ extern template class hash_map<std::string, std::string>;
 } // namespace __gnu_cxx
 
 #endif // defined(__GNUC__)
-#endif // UTIL_HASH_HASH_H_

@@ -3,6 +3,7 @@
 #include "rowset_update_state.h"
 
 #include "gutil/strings/substitute.h"
+#include "serde/column_array_serde.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"
@@ -51,11 +52,13 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         RETURN_IF_ERROR(block_manager->open_block(path, &rblock));
         uint64_t file_size = 0;
         rblock->size(&file_size);
-        std::string read_buffer(file_size, 0);
-        Slice read_slice(read_buffer);
+        std::vector<uint8_t> read_buffer(file_size);
+        Slice read_slice(read_buffer.data(), read_buffer.size());
         rblock->read(0, read_slice);
         auto col = pk_column->clone();
-        col->deserialize_column((uint8_t*)(read_buffer.data()));
+        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
+            return Status::InternalError("column deserialization failed");
+        }
         _deletes.emplace_back(std::move(col));
     }
 
@@ -237,6 +240,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         RETURN_IF_ERROR(
                 tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid, &read_columns));
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); i++) {
+            write_columns[col_idx]->reset_column();
             write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0, idxes.size());
         }
         int64_t t_get_column_values = MonotonicMillis();

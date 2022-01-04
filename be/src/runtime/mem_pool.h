@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_MEM_POOL_H
-#define STARROCKS_BE_RUNTIME_MEM_POOL_H
+#pragma once
 
 #include <algorithm>
 #include <cstddef>
@@ -269,5 +268,3 @@ private:
 template uint8_t* MemPool::allocate<false>(int64_t size, int alignment);
 template uint8_t* MemPool::allocate<true>(int64_t size, int alignment);
 } // namespace starrocks
-
-#endif

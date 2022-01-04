@@ -20,8 +20,7 @@
 * limitations under the License.
 */
 
-#ifndef ORC_RLEV2UTIL_HH
-#define ORC_RLEV2UTIL_HH
+#pragma once
 
 #include "RLEv2.hh"
 
@@ -81,5 +80,3 @@ inline uint32_t RleEncoderV2::getOpCode(EncodingType encoding) {
     return static_cast<uint32_t>(encoding << 6);
 }
 } // namespace orc
-
-#endif //ORC_RLEV2UTIL_HH

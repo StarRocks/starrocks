@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_UTIL_LRU_CACHE_HPP
-#define STARROCKS_BE_UTIL_LRU_CACHE_HPP
+#pragma once
 
 #include <list>
 #include <unordered_map>
@@ -125,5 +124,3 @@ private:
 };
 
 }
-
-#endif

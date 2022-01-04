@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_DPP_SINK_INTERNAL_H
-#define STARROCKS_BE_RUNTIME_DPP_SINK_INTERNAL_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -243,5 +242,3 @@ struct hash<starrocks::TabletDesc> {
 };
 
 } // namespace std
-
-#endif

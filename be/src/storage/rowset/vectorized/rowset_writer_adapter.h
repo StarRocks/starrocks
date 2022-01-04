@@ -21,28 +21,27 @@ public:
 
     ~RowsetWriterAdapter() override = default;
 
-    OLAPStatus init() override;
+    Status init() override;
 
-    OLAPStatus add_chunk(const vectorized::Chunk& chunk) override;
+    Status add_chunk(const vectorized::Chunk& chunk) override;
 
-    OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override {
+    Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override {
         return _writer->add_chunk_with_rssid(chunk, rssid);
     }
 
-    OLAPStatus flush_chunk(const vectorized::Chunk& chunk) override;
+    Status flush_chunk(const vectorized::Chunk& chunk) override;
 
-    OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
+    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
 
-    OLAPStatus add_rowset(RowsetSharedPtr rowset) override { return _writer->add_rowset(rowset); }
+    Status add_rowset(RowsetSharedPtr rowset) override { return _writer->add_rowset(rowset); }
 
-    OLAPStatus add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
-                                                   const SchemaMapping& schema_mapping) override {
+    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) override {
         return _writer->add_rowset_for_linked_schema_change(std::move(rowset), schema_mapping);
     }
 
-    OLAPStatus flush() override { return _writer->flush(); }
+    Status flush() override { return _writer->flush(); }
 
-    RowsetSharedPtr build() override { return _writer->build(); }
+    StatusOr<RowsetSharedPtr> build() override { return _writer->build(); }
 
     Version version() override { return _writer->version(); }
 
@@ -53,14 +52,14 @@ public:
     RowsetId rowset_id() override { return _writer->rowset_id(); }
 
 private:
-    OLAPStatus _init_chunk_converter();
+    Status _init_chunk_converter();
 
     std::unique_ptr<TabletSchema> _in_schema;
     std::unique_ptr<TabletSchema> _out_schema;
     std::unique_ptr<RowsetWriter> _writer;
     std::unique_ptr<ChunkConverter> _chunk_converter;
 
-    OLAPStatus _status = OLAP_SUCCESS;
+    Status _status;
 };
 
 } // namespace starrocks::vectorized

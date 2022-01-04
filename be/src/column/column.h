@@ -245,18 +245,6 @@ public:
     // One element serialize_size
     virtual uint32_t serialize_size(size_t idx) const = 0;
 
-    // The serialize bytes size when serialize by directly copy whole column data
-    virtual size_t serialize_size() const = 0;
-
-    // Serialize whole column data to dst
-    // The return value is dst + column serialize_size
-    virtual uint8_t* serialize_column(uint8_t* dst) = 0;
-
-    // Deserialize whole column from the src
-    // The return value is src + column serialize_size
-    // TODO(kks): validate the input src column data
-    virtual const uint8_t* deserialize_column(const uint8_t* src) = 0;
-
     // return new empty column with the same type
     virtual MutablePtr clone_empty() const = 0;
 

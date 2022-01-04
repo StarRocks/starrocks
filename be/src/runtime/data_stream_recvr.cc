@@ -37,6 +37,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/vectorized/sorted_chunks_merger.h"
+#include "serde/protobuf_serde.h"
 #include "util/block_compression.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
@@ -141,7 +142,7 @@ private:
 
     typedef std::list<ChunkItem> ChunkQueue;
     ChunkQueue _chunk_queue;
-    vectorized::RuntimeChunkMeta _chunk_meta;
+    serde::ProtobufChunkMeta _chunk_meta;
 
     std::unordered_set<int> _sender_eos_set;          // sender_id
     std::unordered_map<int, int64_t> _packet_seq_map; // be_number => packet_seq
@@ -541,8 +542,12 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
     size_t serialized_size = pchunk.serialized_size();
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(chunk->deserialize((const uint8_t*)pchunk.data().data(),
-                                                               pchunk.data().size(), _chunk_meta, serialized_size)));
+        TRY_CATCH_BAD_ALLOC({
+            serde::ProtobufChunkDeserializer des(_chunk_meta);
+            StatusOr<vectorized::Chunk> res = des.deserialize(pchunk.data());
+            if (!res.ok()) return res.status();
+            *chunk = std::move(res).value();
+        });
     } else {
         size_t uncompressed_size = 0;
         {
@@ -556,8 +561,13 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
         }
         {
             SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(
-                    chunk->deserialize(uncompressed_buffer->data(), uncompressed_size, _chunk_meta, serialized_size)));
+            TRY_CATCH_BAD_ALLOC({
+                std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
+                serde::ProtobufChunkDeserializer des(_chunk_meta);
+                StatusOr<vectorized::Chunk> res = des.deserialize(buff);
+                if (!res.ok()) return res.status();
+                *chunk = std::move(res).value();
+            });
         }
     }
     return Status::OK();

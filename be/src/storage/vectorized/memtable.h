@@ -23,6 +23,7 @@ public:
              RowsetWriter* rowset_writer, MemTracker* mem_tracker);
 
     ~MemTable();
+
     int64_t tablet_id() const { return _tablet_id; }
 
     // the total memory used (contain tmp chunk and aggregator chunk)
@@ -34,7 +35,9 @@ public:
 
     // return true suggests caller should flush this memory table
     bool insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
-    OLAPStatus flush();
+
+    Status flush();
+
     Status finalize();
 
     bool is_full() const;

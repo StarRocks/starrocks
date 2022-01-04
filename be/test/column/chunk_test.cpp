@@ -144,36 +144,6 @@ TEST_F(ChunkTest, get_column_by_index) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ChunkTest, test_serde) {
-    auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
-
-    std::string buffer;
-    buffer.resize(chunk->serialize_size());
-    size_t written_size = chunk->serialize((uint8_t*)buffer.data());
-
-    RuntimeChunkMeta meta;
-    meta.slot_id_to_index.reserve(2);
-    meta.slot_id_to_index[0] = 0;
-    meta.slot_id_to_index[1] = 1;
-    meta.is_nulls.resize(2, false);
-    meta.is_consts.resize(2, false);
-    meta.types.resize(2);
-    meta.types[0] = TypeDescriptor(PrimitiveType::TYPE_INT);
-    meta.types[1] = TypeDescriptor(PrimitiveType::TYPE_INT);
-
-    std::unique_ptr<Chunk> new_chunk = chunk->clone_empty_with_schema();
-    new_chunk->deserialize((uint8_t*)buffer.data(), buffer.size(), meta, written_size);
-
-    ASSERT_EQ(new_chunk->num_rows(), chunk->num_rows());
-    for (size_t i = 0; i < chunk->columns().size(); ++i) {
-        ASSERT_EQ(chunk->columns()[i]->size(), new_chunk->columns()[i]->size());
-        for (size_t j = 0; j < chunk->columns()[i]->size(); ++j) {
-            ASSERT_EQ(chunk->columns()[i]->get(j).get_int32(), new_chunk->columns()[i]->get(j).get_int32());
-        }
-    }
-}
-
-// NOLINTNEXTLINE
 TEST_F(ChunkTest, test_copy_one_row) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 

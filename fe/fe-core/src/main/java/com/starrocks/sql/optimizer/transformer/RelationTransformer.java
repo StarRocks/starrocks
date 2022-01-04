@@ -335,7 +335,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                         colRefToColumnMetaMapBuilder.build(),
                         columnMetaToColRefMap,
                         DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
-                        -1,
+                        Operator.DEFAULT_LIMIT,
                         null,
                         ((OlapTable) node.getTable()).getBaseIndexId(),
                         null,
@@ -345,22 +345,22 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(),
-                    colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, -1, null);
+                    colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalSchemaScanOperator(node.getTable(),
                             colRefToColumnMetaMapBuilder.build(),
-                            columnMetaToColRefMap, -1,
+                            columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
         } else if (Table.TableType.MYSQL.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalMysqlScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                            columnMetaToColRefMap, -1,
+                            columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
         } else if (Table.TableType.ELASTICSEARCH.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalEsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                            columnMetaToColRefMap, -1,
+                            columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
             EsTablePartitions esTablePartitions = ((LogicalEsScanOperator) scanOperator).getEsTablePartitions();
             EsTable table = (EsTable) scanOperator.getTable();
@@ -401,7 +401,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
             return new LogicalPlan(
                     new OptExprBuilder(new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap),
-                            Collections.emptyList(), new ExpressionMapping(expressionMapping.getScope(), cteOutputs)),
+                            Collections.emptyList(), new ExpressionMapping(node.getScope(), cteOutputs)),
                     null, null);
         } else {
             LogicalPlan logicalPlan = visit(node.getCteQuery());

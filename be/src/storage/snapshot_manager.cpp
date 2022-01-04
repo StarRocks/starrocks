@@ -251,20 +251,17 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
         return Status::RuntimeError("fail to create rowset writer");
     }
 
-    if (rs_writer->add_rowset(org_rowset) != OLAP_SUCCESS) {
-        LOG(WARNING) << "Fail to add rowset " << org_rowset->rowset_id() << " to rowset " << rowset_id;
-        return Status::RuntimeError("fail to add rowset");
+    if (auto st = rs_writer->add_rowset(org_rowset); !st.ok()) {
+        LOG(WARNING) << "Fail to add rowset " << org_rowset->rowset_id() << " to rowset " << rowset_id << ": " << st;
+        return st;
     }
-    RowsetSharedPtr new_rowset = rs_writer->build();
-    if (new_rowset == nullptr) {
-        return Status::RuntimeError("fail to build rowset");
+    auto new_rowset = rs_writer->build();
+    if (!new_rowset.ok()) return new_rowset.status();
+    if (auto st = (*new_rowset)->load(); !st.ok()) {
+        LOG(WARNING) << "Fail to load new rowset: " << st;
+        return st;
     }
-    auto st = new_rowset->load();
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to load new rowset: " << st.to_string();
-        return Status::RuntimeError("fail to load new rowset");
-    }
-    new_rowset->rowset_meta()->to_rowset_pb(new_rs_meta_pb);
+    (*new_rowset)->rowset_meta()->to_rowset_pb(new_rs_meta_pb);
     org_rowset->remove();
     return Status::OK();
 }

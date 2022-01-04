@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_STRING_PARSER_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_STRING_PARSER_H
+#pragma once
 
 #include <cmath>
 #include <cstdint>
@@ -753,5 +752,3 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
 }
 
 } // namespace starrocks
-
-#endif // end of STARROCKS_BE_SRC_COMMON_UTIL_STRING_PARSER_HPP

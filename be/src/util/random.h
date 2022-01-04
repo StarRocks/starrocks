@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_RANDOM_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_RANDOM_H
+#pragma once
 
 #include <cstdint>
 
@@ -76,5 +75,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif //STARROCKS_BE_SRC_COMMON_UTIL_RANDOM_H

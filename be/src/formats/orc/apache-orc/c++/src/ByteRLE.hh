@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_BYTE_RLE_HH
-#define ORC_BYTE_RLE_HH
+#pragma once
 
 #include <memory>
 
@@ -112,5 +111,3 @@ std::unique_ptr<ByteRleDecoder> createByteRleDecoder(std::unique_ptr<SeekableInp
    */
 std::unique_ptr<ByteRleDecoder> createBooleanRleDecoder(std::unique_ptr<SeekableInputStream> input);
 } // namespace orc
-
-#endif

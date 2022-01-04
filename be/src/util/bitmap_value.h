@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_BITMAP_VALUE_H
-#define STARROCKS_BE_SRC_UTIL_BITMAP_VALUE_H
+#pragma once
 
 #include <algorithm>
 #include <cstdarg>
@@ -1735,5 +1734,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif //STARROCKS_BE_SRC_UTIL_BITMAP_VALUE_H
