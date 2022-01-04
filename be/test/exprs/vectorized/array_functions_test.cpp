@@ -617,7 +617,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
-        EXPECT_EQ(1, result->get(0).get_int8());
+        EXPECT_EQ(-1, result->get(0).get_int8());
     }
     // array_indexof(ARRAY<ARRAY<int>>[], ARRAY<int>[])
     {
@@ -884,6 +884,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_target) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
+        std::cout << "HZW:" <<  result->get(0).get_int8() << std::endl;
         EXPECT_EQ(-1, result->get(0).get_int8());
     }
     // array_indexof(ARRAY<TINYINT>[1, 2, 3], 2): 1
@@ -902,6 +903,9 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_target) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
+        std::cout << "HZW:" <<  result->get(0).get_int8() << std::endl;
+        std::cout << "HZW:" <<  result->get(1).get_int8() << std::endl;
+        std::cout << "HZW:" <<  result->get(2).get_int8() << std::endl;
         EXPECT_EQ(1, result->get(0).get_int8());
         EXPECT_EQ(-1, result->get(1).get_int8());
         EXPECT_EQ(-1, result->get(2).get_int8());
