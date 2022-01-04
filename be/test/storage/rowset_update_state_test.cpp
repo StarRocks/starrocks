@@ -8,12 +8,10 @@
 #include <iostream>
 
 #include "column/datum_tuple.h"
-#include "common/logging.h"
 #include "env/env_memory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -21,7 +19,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/rowset/vectorized/rowset_options.h"
-#include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
@@ -30,6 +27,7 @@
 #include "storage/vectorized/chunk_iterator.h"
 #include "storage/vectorized/empty_iterator.h"
 #include "storage/vectorized/union_iterator.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 
 namespace starrocks {
@@ -74,13 +72,13 @@ public:
             cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
+            CHECK_OK(writer->flush_chunk(*chunk));
         } else if (one_delete == nullptr) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush());
+            CHECK_OK(writer->flush());
         } else if (one_delete != nullptr) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk_with_deletes(*chunk, *one_delete));
+            CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
         }
-        return writer->build();
+        return *writer->build();
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
@@ -221,7 +219,7 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
         cols[0]->append_datum(vectorized::Datum(keys[i]));
         cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
     }
-    EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
+    CHECK_OK(writer->flush_chunk(*chunk));
 
     // add RowsetTxnMetaPB into rowset meta
     RowsetTxnMetaPB txn_meta;
@@ -230,7 +228,7 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     txn_meta.add_partial_update_column_unique_ids(0);
     txn_meta.add_partial_update_column_unique_ids(1);
     writer->add_txn_meta(txn_meta);
-    RowsetSharedPtr partial_rowset = writer->build();
+    RowsetSharedPtr partial_rowset = *writer->build();
 
     // check data of write column
     RowsetUpdateState state;
