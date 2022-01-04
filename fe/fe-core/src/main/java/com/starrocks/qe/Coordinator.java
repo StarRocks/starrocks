@@ -1309,8 +1309,12 @@ public class Coordinator {
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
                     int numInstances = param.instanceExecParams.size();
+                    OlapScanNode scanNode = (OlapScanNode) leftMostNode;
+                    int numScanRangesPerInstance = numInstances / scanNode.getScanRangeLocations(0).size();
+                    numScanRangesPerInstance = Math.max(1, numScanRangesPerInstance);
                     int pipelineDop =
                             Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
+                    pipelineDop = Math.max(1, Math.max(pipelineDop, numScanRangesPerInstance));
                     param.fragment.setPipelineDop(pipelineDop);
                 }
             }
