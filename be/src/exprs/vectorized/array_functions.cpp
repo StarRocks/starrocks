@@ -557,7 +557,7 @@ ColumnPtr ArrayFunctions::array_indexof([[maybe_unused]] FunctionContext* contex
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayContainsImpl<Int32Column>::evaluate(*arg0, *arg1, true);
+    return ArrayContainsImpl<UInt32Column>::evaluate(*arg0, *arg1, true);
 }
 
 class ArrayArithmeticImpl {
