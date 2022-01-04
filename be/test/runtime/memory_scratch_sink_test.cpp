@@ -115,7 +115,7 @@ void MemoryScratchSinkTest::init() {
 
 void MemoryScratchSinkTest::init_runtime_state() {
     TQueryOptions query_options;
-    query_options.chunk_size = 1024;
+    query_options.batch_size = 1024;
     TUniqueId query_id;
     query_id.lo = 10;
     query_id.hi = 100;

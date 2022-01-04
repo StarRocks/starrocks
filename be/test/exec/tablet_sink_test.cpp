@@ -292,7 +292,7 @@ public:
 TEST_F(OlapTableSinkTest, init_fail1) {
     TUniqueId fragment_id;
     TQueryOptions query_options;
-    query_options.chunk_size = 1;
+    query_options.batch_size = 1;
     RuntimeState state(fragment_id, query_options, TQueryGlobals(), _env);
     state.init_mem_trackers(TUniqueId());
 
@@ -350,7 +350,7 @@ TEST_F(OlapTableSinkTest, init_fail1) {
 TEST_F(OlapTableSinkTest, init_fail3) {
     TUniqueId fragment_id;
     TQueryOptions query_options;
-    query_options.chunk_size = 1;
+    query_options.batch_size = 1;
     RuntimeState state(fragment_id, query_options, TQueryGlobals(), _env);
     state.init_mem_trackers(TUniqueId());
 
@@ -409,7 +409,7 @@ TEST_F(OlapTableSinkTest, init_fail3) {
 TEST_F(OlapTableSinkTest, init_fail4) {
     TUniqueId fragment_id;
     TQueryOptions query_options;
-    query_options.chunk_size = 1;
+    query_options.batch_size = 1;
     RuntimeState state(fragment_id, query_options, TQueryGlobals(), _env);
     state.init_mem_trackers(TUniqueId());
 

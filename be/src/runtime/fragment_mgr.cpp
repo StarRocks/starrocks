@@ -675,7 +675,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     exec_fragment_params.__set_params(fragment_exec_params);
     // batch_size for one RowBatch
     TQueryOptions query_options;
-    query_options.chunk_size = params.batch_size;
+    query_options.batch_size = params.batch_size;
     query_options.query_timeout = params.query_timeout;
     query_options.mem_limit = params.mem_limit;
     query_options.query_type = TQueryType::EXTERNAL;

@@ -73,7 +73,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CODEGEN_LEVEL = "codegen_level";
     // mem limit can't smaller than bufferpool's default page size
     public static final int MIN_EXEC_MEM_LIMIT = 2097152;
-    public static final String CHUNK_SIZE = "chunk_size";
+    public static final String BATCH_SIZE = "batch_size";
     public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
     public static final String STREAMING_PREAGGREGATION_MODE = "streaming_preaggregation_mode";
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
@@ -278,8 +278,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CODEGEN_LEVEL)
     private int codegenLevel = 0;
 
-    @VariableMgr.VarAttr(name = CHUNK_SIZE)
-    private int chunkSize = 4096;
+    @VariableMgr.VarAttr(name = BATCH_SIZE, alias = "chunk_size", flag = VariableMgr.INVISIBLE)
+    private int batchSize = 4096;
+    private static final int PIPELINE_BATCH_SIZE = 16384;
 
     @VariableMgr.VarAttr(name = DISABLE_STREAMING_PREAGGREGATIONS)
     private boolean disableStreamPreaggregations = false;
@@ -786,8 +787,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setIs_report_success(isReportSucc);
         tResult.setCodegen_level(codegenLevel);
-
-        tResult.setChunk_size(chunkSize);
+        if (isEnablePipelineEngine()) {
+            tResult.setBatch_size(PIPELINE_BATCH_SIZE);
+        } else {
+            tResult.setBatch_size(batchSize);
+        }
         tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
         tResult.setLoad_mem_limit(loadMemLimit);
 
@@ -890,7 +894,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 collationServer = Text.readString(in);
             }
             if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_38) {
-                chunkSize = in.readInt();
+                batchSize = in.readInt();
                 disableStreamPreaggregations = in.readBoolean();
                 parallelExecInstanceNum = in.readInt();
             }

@@ -33,7 +33,7 @@ protected:
     std::shared_ptr<RuntimeState> _create_runtime_state() {
         TUniqueId fragment_id;
         TQueryOptions query_options;
-        query_options.chunk_size = config::vector_chunk_size;
+        query_options.batch_size = config::vector_chunk_size;
         TQueryGlobals query_globals;
         auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
         runtime_state->init_instance_mem_tracker();
