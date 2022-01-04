@@ -760,6 +760,10 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     public void clearSparkLauncherLog() {
+        if (sparkLoadAppHandle == null) {
+            return;
+        }
+
         String logPath = sparkLoadAppHandle.getLogPath();
         if (!Strings.isNullOrEmpty(logPath)) {
             File file = new File(logPath);
