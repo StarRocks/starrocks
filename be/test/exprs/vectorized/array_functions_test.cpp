@@ -580,6 +580,446 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
     }
 }
 
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
+    // array_indexof([], 1)
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        target->append_datum(Datum{(int32_t)1});
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+    }
+    // array_indexof([], "abc")
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        target->append_datum(Datum{"abc"});
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+    }
+    // array_indexof(ARRAY<ARRAY<int>>[], [1])
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        target->append_datum(Datum(DatumArray{Datum{(int32_t)1}}));
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+        EXPECT_EQ(1, result->get(0).get_int8());
+    }
+    // array_indexof(ARRAY<ARRAY<int>>[], ARRAY<int>[])
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        target->append_datum(Datum(DatumArray{}));
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+    }
+    // multiple lines with const target:
+    //  array_indexof([], 1);
+    //  array_indexof([], 1);
+    //  array_indexof([], 1);
+    //  array_indexof([], 1);
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        DCHECK(target->is_constant());
+        target->append_datum(Datum((int32_t)1));
+        target->resize(4);
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_EQ(-1, result->get(1).get_int8());
+        EXPECT_EQ(-1, result->get(2).get_int8());
+        EXPECT_EQ(-1, result->get(3).get_int8());
+    }
+    // multiple lines with different target:
+    //  array_indexof([], 1);
+    //  array_indexof([], 2);
+    //  array_indexof([], NULL);
+    //  array_indexof([], 3);
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        target->append_datum(Datum((int32_t)1));
+        target->append_datum(Datum((int32_t)2));
+        target->append_datum(Datum{});
+        target->append_datum(Datum((int32_t)3));
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_EQ(-1, result->get(1).get_int8());
+        EXPECT_EQ(-1, result->get(2).get_int8());
+        EXPECT_EQ(-1, result->get(3).get_int8());
+    }
+    // multiple lines with Only-NULL target:
+    //  array_indexof([], NULL);
+    //  array_indexof([], NULL);
+    //  array_indexof([], NULL);
+    //  array_indexof([], NULL);
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+
+        auto target = ColumnHelper::create_const_null_column(1);
+        target->resize(4);
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_EQ(-1, result->get(1).get_int8());
+        EXPECT_EQ(-1, result->get(2).get_int8());
+        EXPECT_EQ(-1, result->get(3).get_int8());
+
+        array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_EQ(-1, result->get(1).get_int8());
+        EXPECT_EQ(-1, result->get(2).get_int8());
+        EXPECT_EQ(-1, result->get(3).get_int8());
+
+        array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(4, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_EQ(-1, result->get(1).get_int8());
+        EXPECT_EQ(-1, result->get(2).get_int8());
+        EXPECT_EQ(-1, result->get(3).get_int8());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
+    /// Test class:
+    ///  - Both the array elements and targets has NO NULL.
+
+    // array_indexof(array<boolean>[], 0) : -1
+    // array_indexof(array<boolean>[], 1) : -1
+    // array_indexof(array<boolean>[0], 0) : 0
+    // array_indexof(array<boolean>[0], 1) : -1
+    // array_indexof(array<boolean>[1], 0) : -1
+    // array_indexof(array<boolean>[1], 1) : 0
+    // array_indexof(array<boolean>[1,0], 0) : 1
+    // array_indexof(array<boolean>[1,0], 1) : 0
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(DatumArray{(int8_t) false});
+        array->append_datum(DatumArray{(int8_t) false});
+        array->append_datum(DatumArray{(int8_t) true});
+        array->append_datum(DatumArray{(int8_t) true});
+        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+        target->append_datum(Datum{(int8_t)0});
+        target->append_datum(Datum{(int8_t)1});
+        target->append_datum(Datum{(int8_t)0});
+        target->append_datum(Datum{(int8_t)1});
+        target->append_datum(Datum{(int8_t)0});
+        target->append_datum(Datum{(int8_t)1});
+        target->append_datum(Datum{(int8_t)0});
+        target->append_datum(Datum{(int8_t)1});
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(8, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_EQ(-1, result->get(1).get_int8());
+        EXPECT_EQ(0, result->get(2).get_int8());
+        EXPECT_EQ(-1, result->get(3).get_int8());
+        EXPECT_EQ(-1, result->get(4).get_int8());
+        EXPECT_EQ(0, result->get(5).get_int8());
+        EXPECT_EQ(1, result->get(6).get_int8());
+        EXPECT_EQ(0, result->get(7).get_int8());
+    }
+    // array_indexof([], 3) : -1
+    // array_indexof([2], 3) : -1
+    // array_indexof([1, 2, 3], 3) : 2
+    // array_indexof([3, 2, 1], 3) : 0
+    // array_indexof([2, 1, 3], 3) : 2
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(DatumArray{2});
+        array->append_datum(DatumArray{1, 2, 3});
+        array->append_datum(DatumArray{3, 2, 1});
+        array->append_datum(DatumArray{2, 1, 3});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        target->append_datum(Datum{3});
+        target->resize(5);
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(5, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_EQ(-1, result->get(1).get_int8());
+        EXPECT_EQ(2, result->get(2).get_int8());
+        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ(2, result->get(4).get_int8());
+    }
+    // array_indexof([], []) : -1
+    // array_indexof([[]], []) : 0
+    // array_indexof([["d", "o"], ["r"], ["i", "s"]], []) : -1
+    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["d"]) : -1
+    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["d", "o"]) : 0
+    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["o", "d"]) : -1
+    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["r"]) : 1
+    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["ri"]) : -1
+    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["r", "i"]) : -1
+    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["i", "s"]) : 2
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        array->append_datum(Datum(DatumArray{}));
+        array->append_datum(DatumArray{DatumArray{}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+        array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
+
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        target->append_datum(Datum(DatumArray{}));
+        target->append_datum(Datum(DatumArray{}));
+        target->append_datum(Datum(DatumArray{}));
+        target->append_datum(DatumArray{"d"});
+        target->append_datum(DatumArray{"d", "o"});
+        target->append_datum(DatumArray{"o", "d"});
+        target->append_datum(DatumArray{"r"});
+        target->append_datum(DatumArray{"ri"});
+        target->append_datum(DatumArray{"r", "i"});
+        target->append_datum(DatumArray{"i", "s"});
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(10, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
+        EXPECT_EQ(-1, result->get(2).get_int8());
+        EXPECT_EQ(-1, result->get(3).get_int8());
+        EXPECT_EQ(0, result->get(4).get_int8());
+        EXPECT_EQ(-1, result->get(5).get_int8());
+        EXPECT_EQ(1, result->get(6).get_int8());
+        EXPECT_EQ(-1, result->get(7).get_int8());
+        EXPECT_EQ(-1, result->get(8).get_int8());
+        EXPECT_EQ(2, result->get(9).get_int8());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_indexof_has_null_element) {
+    // array_indexof([NULL], "abc"): -1
+    // array_indexof(["abc", NULL], "abc"): 0
+    // array_indexof([NULL, "abc"], "abc"): 1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{Datum{}});
+        array->append_datum(DatumArray{"abc", Datum{}});
+        array->append_datum(DatumArray{Datum{}, "abc"});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        target->append_datum(Datum{"abc"});
+        target->append_datum(Datum{"abc"});
+        target->append_datum(Datum{"abc"});
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
+        EXPECT_EQ(1, result->get(2).get_int8());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_indexof_has_null_target) {
+    // array_indexof(["abc", "def"], NULL): -1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{"abc", "def"});
+
+        // const-null column.
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(1, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+    }
+    // array_indexof(ARRAY<TINYINT>[1, 2, 3], 2): 1
+    // array_indexof(ARRAY<TINYINT>[1, 2, 3], 4): -1 
+    // array_indexof(ARRAY<TINYINT>[1, 2, 3], NULL): -1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
+        array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
+        array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        target->append_datum(Datum((int8_t)2));
+        target->append_datum(Datum((int8_t)4));
+        target->append_datum(Datum());
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(1, result->get(0).get_int8());
+        EXPECT_EQ(-1, result->get(1).get_int8());
+        EXPECT_EQ(-1, result->get(2).get_int8());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_indexof_has_null_element_and_target) {
+    // array_indexof([NULL], NULL): 0
+    // array_indexof([NULL, "abc"], NULL): 0
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{Datum()});
+        array->append_datum(DatumArray{Datum(), "abc"});
+
+        // const-null column.
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(2, result->size());
+        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
+    }
+    // array_indexof([NULL], NULL): 0
+    // array_indexof([NULL, [1,2]], NULL): 0
+    // array_indexof([NULL, [1,2]], [1,2]): 1
+    // array_indexof([[1,2], NULL], [1,2]): 0
+    // array_indexof([[1,2], NULL], NULL): 1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(DatumArray{Datum()});
+        array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
+        array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
+        array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
+        array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
+        target->append_datum(Datum());
+        target->append_datum(Datum());
+        target->append_datum(DatumArray{1, 2});
+        target->append_datum(DatumArray{1, 2});
+        target->append_datum(Datum());
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(5, result->size());
+        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
+        EXPECT_EQ(1, result->get(2).get_int8());
+        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ(1, result->get(4).get_int8());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_indexof_nullable_array) {
+    // array_indexof(["a", "b"], "c"): -1
+    // array_indexof(NULL, "c"): null
+    // array_indexof(["a", "b", "c"], "c"): 2
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        array->append_datum(DatumArray{"a", "b"});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{"a", "b", "c"});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        target->append_datum(Datum("c"));
+        target->append_datum(Datum("c"));
+        target->append_datum(Datum("c"));
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_EQ(2, result->get(2).get_int8());
+    }
+    // array_indexof([["a"], ["b"]], ["c"]): -1
+    // array_indexof(NULL, ["c"]): null
+    // array_indexof([["a", "b"], ["c"]], ["c"]): 1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        array->append_datum(DatumArray{DatumArray{"a"}, DatumArray{"b"}});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{DatumArray{"a", "b"}, DatumArray{"c"}});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), false);
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(DatumArray{"c"});
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(-1, result->get(0).get_int8());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_EQ(1, result->get(2).get_int8());
+    }
+    // array_indexof(NULL, NULL): null
+    // array_indexof(NULL, ["a"]): null
+    // array_indexof(NULL, [NULL]): null
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        array->append_datum(Datum());
+        array->append_datum(Datum());
+        array->append_datum(Datum());
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), true);
+        target->append_datum(Datum());
+        target->append_datum(DatumArray{"a"});
+        target->append_datum(DatumArray{Datum()});
+
+        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE(result->get(0).is_null());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_TRUE(result->get(2).is_null());
+    }
+}
+
+
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
     // array_remove([], 1) -> []
