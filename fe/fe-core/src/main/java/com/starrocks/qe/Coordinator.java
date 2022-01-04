@@ -926,7 +926,7 @@ public class Coordinator {
             return;
         }
         long maxRowCountPerScanOperator = ConnectContext.get().getSessionVariable().getPipelineMaxRowCountPerScanOperator();
-        int dop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+        int dop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism() * 2;
         for (FragmentExecParams params : fragmentExecParamsMap.values()) {
             List<PlanNode> scanNodes = params.fragment.getOlapScanNodes(params.fragment.getPlanRoot());
             for (PlanNode node : scanNodes) {
@@ -944,7 +944,13 @@ public class Coordinator {
                     }
                     int scanDop = maxNumScanOperators * numScanRanges / totalNumScanRanges;
                     int scanDopLimit = Math.max(1, Math.min(dop, numScanRanges));
-                    scanDop = Math.min(scanDopLimit, Math.max(1, scanDop));
+                    // numRows is 0 means that scanNode.getCardinality() return an inexact evaluated value, so in such
+                    // scenarios, scanDopLimit is used in default.
+                    if (numRows > 0) {
+                        scanDop = Math.min(scanDopLimit, Math.max(1, scanDop));
+                    } else {
+                        scanDop = scanDopLimit;
+                    }
                     instanceExecParam.perScanNodeDop.put(scanNode.getId().asInt(), scanDop);
                 }
             }
@@ -1310,11 +1316,27 @@ public class Coordinator {
                     int numBackends = param.scanRangeAssignment.size();
                     int numInstances = param.instanceExecParams.size();
                     OlapScanNode scanNode = (OlapScanNode) leftMostNode;
-                    int numScanRangesPerInstance = numInstances / scanNode.getScanRangeLocations(0).size();
+                    int numScanRangesPerInstance = scanNode.getScanRangeLocations(0).size() / numInstances;
                     numScanRangesPerInstance = Math.max(1, numScanRangesPerInstance);
+                    long numRows = scanNode.getCardinality();
+                    if (scanNode.hasLimit()) {
+                        numRows = Math.min(numRows, scanNode.getLimit());
+                    }
+
+                    float inputBytes = numRows * scanNode.getAvgRowSize();
+                    long maxBytesPerOperator = ConnectContext.get().getSessionVariable().getPipelineMaxInputBytesPerOperator();
+                    int numOperatorsPerInstance = Math.max(1, (int) (inputBytes / maxBytesPerOperator / numInstances));
                     int pipelineDop =
                             Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
-                    pipelineDop = Math.max(1, Math.max(pipelineDop, numScanRangesPerInstance));
+
+                    // Although 0 may be returned by scanNode.getCardinality(), scanNode still can produce rows for its
+                    // following operator.
+                    if (numRows > 0) {
+                        pipelineDop = Math.min(pipelineDop, numOperatorsPerInstance);
+                    } else {
+                        pipelineDop = Math.min(pipelineDop, numScanRangesPerInstance);
+                    }
+                    pipelineDop = Math.max(1, pipelineDop);
                     param.fragment.setPipelineDop(pipelineDop);
                 }
             }
