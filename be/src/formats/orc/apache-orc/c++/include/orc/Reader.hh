@@ -21,8 +21,7 @@
  */
 
 // clang-format off
-#ifndef ORC_READER_HH
-#define ORC_READER_HH
+#pragma once
 
 #include "orc/BloomFilter.hh"
 #include "orc/Common.hh"
@@ -572,5 +571,3 @@ namespace orc {
 
   };
 }
-
-#endif

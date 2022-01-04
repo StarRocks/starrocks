@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_TRUTHVALUE_HH
-#define ORC_TRUTHVALUE_HH
+#pragma once
 
 namespace orc {
 
@@ -51,5 +50,3 @@ TruthValue operator!(TruthValue val);
 bool isNeeded(TruthValue val);
 
 } // namespace orc
-
-#endif //ORC_TRUTHVALUE_HH

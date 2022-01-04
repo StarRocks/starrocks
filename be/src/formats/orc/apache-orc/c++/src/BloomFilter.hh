@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_BLOOMFILTER_IMPL_HH
-#define ORC_BLOOMFILTER_IMPL_HH
+#pragma once
 
 #include <cmath>
 #include <sstream>
@@ -193,5 +192,3 @@ struct BloomFilterUTF8Utils {
 };
 
 } // namespace orc
-
-#endif //ORC_BLOOMFILTER_IMPL_HH

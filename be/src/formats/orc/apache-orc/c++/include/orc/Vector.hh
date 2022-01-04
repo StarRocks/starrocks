@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_VECTOR_HH
-#define ORC_VECTOR_HH
+#pragma once
 
 #include <cstdlib>
 #include <cstring>
@@ -348,5 +347,3 @@ struct TimestampVectorBatch : public ColumnVectorBatch {
 };
 
 } // namespace orc
-
-#endif

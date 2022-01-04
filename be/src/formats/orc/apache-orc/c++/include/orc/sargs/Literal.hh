@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_LITERAL_HH
-#define ORC_LITERAL_HH
+#pragma once
 
 #include "orc/Int128.hh"
 #include "orc/Vector.hh"
@@ -156,5 +155,3 @@ private:
 };
 
 } // namespace orc
-
-#endif //ORC_LITERAL_HH

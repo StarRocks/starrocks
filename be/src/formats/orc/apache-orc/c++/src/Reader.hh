@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_READER_IMPL_HH
-#define ORC_READER_IMPL_HH
+#pragma once
 
 #include "ColumnReader.hh"
 #include "RLE.hh"
@@ -328,5 +327,3 @@ public:
 };
 
 } // namespace orc
-
-#endif

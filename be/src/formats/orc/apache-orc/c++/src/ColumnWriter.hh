@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_COLUMN_WRITER_HH
-#define ORC_COLUMN_WRITER_HH
+#pragma once
 
 #include "BloomFilter.hh"
 #include "ByteRLE.hh"
@@ -203,5 +202,3 @@ protected:
 std::unique_ptr<ColumnWriter> buildWriter(const Type& type, const StreamsFactory& factory,
                                           const WriterOptions& options);
 } // namespace orc
-
-#endif
