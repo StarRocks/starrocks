@@ -29,8 +29,7 @@
 // and Google friendly API.
 //
 
-#ifndef UTIL_GTL_STL_UTIL_H_
-#define UTIL_GTL_STL_UTIL_H_
+#pragma once
 
 #include <algorithm>
 #include <cstddef>
@@ -887,5 +886,3 @@ T* release_ptr(T** ptr) {
     *ptr = NULL;
     return tmp;
 }
-
-#endif // UTIL_GTL_STL_UTIL_H_

@@ -16,8 +16,7 @@
  * limitations under the License.
  */
 
-#ifndef ZERO_COPY_STREAM_WRAPPER_HH
-#define ZERO_COPY_STREAM_WRAPPER_HH
+#pragma once
 
 #include "Adaptor.hh"
 
@@ -36,5 +35,3 @@ DIAGNOSTIC_IGNORE("-Wreserved-id-macro")
 #include <google/protobuf/io/zero_copy_stream.h>
 
 DIAGNOSTIC_POP
-
-#endif

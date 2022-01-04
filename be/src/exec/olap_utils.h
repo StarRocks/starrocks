@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_OLAP_UTILS_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_OLAP_UTILS_H
+#pragma once
 
 #include <cmath>
 
@@ -220,5 +219,3 @@ inline SQLFilterOp to_olap_filter_type(TExprOpcode::type type, bool opposite) {
 }
 
 } // namespace starrocks
-
-#endif

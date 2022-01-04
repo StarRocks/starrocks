@@ -16,8 +16,7 @@
  * limitations under the License.
  */
 
-#ifndef GTEST_WRAPPER_H
-#define GTEST_WRAPPER_H
+#pragma once
 
 #include "Adaptor.hh"
 
@@ -62,5 +61,3 @@ DIAGNOSTIC_IGNORE(4805) // '==': unsafe mix of type 'const bool' and type 'const
 #include "gtest/gtest.h"
 
 DIAGNOSTIC_POP
-
-#endif

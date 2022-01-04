@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_COMMON_HH
-#define ORC_COMMON_HH
+#pragma once
 
 #include <string>
 
@@ -286,5 +285,3 @@ inline bool operator==(const Decimal& lhs, const Decimal& rhs) {
 }
 
 } // namespace orc
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef _UTFH_
-#define _UTFH_ 1
+#pragma once
 
 #include <cstdint>
 
@@ -208,6 +207,4 @@ int isspacerune(Rune r);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif
