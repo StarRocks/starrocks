@@ -4,6 +4,8 @@
 
 #include "common/status.h"
 
+#include <fmt/format.h>
+
 #include "gen_cpp/Status_types.h"  // for TStatus
 #include "gen_cpp/status.pb.h"     // for PStatus
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
@@ -11,42 +13,59 @@
 namespace starrocks {
 
 // See Status::_state for details.
-static const char g_moved_from_state[8] = {'\x00', '\x00', '\x00', '\x00', TStatusCode::INTERNAL_ERROR,
-                                           '\x00', '\x00', '\x00'};
+static const char g_moved_from_state[5] = {'\x00', '\x00', '\x00', '\x00', TStatusCode::INTERNAL_ERROR};
 
-inline const char* assemble_state(TStatusCode::type code, const Slice& msg, int16_t precise_code, const Slice& msg2) {
+inline const char* assemble_state(TStatusCode::type code, Slice msg, Slice ctx) {
     DCHECK(code != TStatusCode::OK);
 
-    const uint32_t len1 = msg.size;
-    const uint32_t len2 = msg2.size;
-    const uint32_t size = len1 + ((len2 > 0) ? (2 + len2) : 0);
-    auto result = new char[size + 7];
-    memcpy(result, &size, sizeof(size));
+    msg.size = std::min<size_t>(msg.size, std::numeric_limits<uint16_t>::max());
+    ctx.size = std::min<size_t>(ctx.size, std::numeric_limits<uint16_t>::max());
+
+    const uint16_t len1 = msg.size;
+    const uint16_t len2 = ctx.size;
+    const uint32_t size = static_cast<uint32_t>(len1) + len2;
+    auto result = new char[size + 5];
+    memcpy(result + 0, &len1, sizeof(len1));
+    memcpy(result + 2, &len2, sizeof(len2));
     result[4] = static_cast<char>(code);
-    memcpy(result + 5, &precise_code, sizeof(precise_code));
-    memcpy(result + 7, msg.data, len1);
-    if (len2 > 0) {
-        result[7 + len1] = ':';
-        result[8 + len1] = ' ';
-        memcpy(result + 9 + len1, msg2.data, len2);
-    }
+    strings::memcpy_inlined(result + 5, msg.data, len1);
+    strings::memcpy_inlined(result + 5 + len1, ctx.data, len2);
     return result;
 }
 
-const char* Status::copy_state(const char* state) {
-    uint32_t size;
-    strings::memcpy_inlined(&size, state, sizeof(size));
-    auto result = new char[size + 7];
-    strings::memcpy_inlined(result, state, size + 7);
+const char* Status::copy_state(const char* state) const {
+    uint16_t len1;
+    uint16_t len2;
+    strings::memcpy_inlined(&len1, state + 0, sizeof(len1));
+    strings::memcpy_inlined(&len2, state + sizeof(len1), sizeof(len2));
+    uint32_t length = static_cast<uint32_t>(len1) + len2 + 5;
+    auto result = new char[length];
+    strings::memcpy_inlined(result, state, length);
+    return result;
+}
+
+const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) const {
+    uint16_t len1;
+    uint16_t len2;
+    strings::memcpy_inlined(&len1, state + 0, sizeof(len1));
+    strings::memcpy_inlined(&len2, state + sizeof(len1), sizeof(len2));
+    uint32_t old_length = static_cast<uint32_t>(len1) + len2 + 5;
+    ctx.size = std::min<size_t>(ctx.size, std::numeric_limits<uint16_t>::max() - old_length);
+    uint32_t new_length = old_length + ctx.size;
+    auto result = new char[new_length];
+    strings::memcpy_inlined(result, state, old_length);
+    strings::memcpy_inlined(result + old_length, ctx.data, ctx.size);
+    uint16_t new_len2 = len2 + ctx.size;
+    memcpy(result + 2, &new_len2, sizeof(new_len2));
     return result;
 }
 
 Status::Status(const TStatus& s) : _state(nullptr) {
     if (s.status_code != TStatusCode::OK) {
         if (s.error_msgs.empty()) {
-            _state = assemble_state(s.status_code, Slice(), 1, Slice());
+            _state = assemble_state(s.status_code, Slice(), Slice());
         } else {
-            _state = assemble_state(s.status_code, s.error_msgs[0], 1, Slice());
+            _state = assemble_state(s.status_code, s.error_msgs[0], Slice());
         }
     }
 }
@@ -55,15 +74,14 @@ Status::Status(const PStatus& s) : _state(nullptr) {
     TStatusCode::type code = (TStatusCode::type)s.status_code();
     if (code != TStatusCode::OK) {
         if (s.error_msgs_size() == 0) {
-            _state = assemble_state(code, Slice(), 1, Slice());
+            _state = assemble_state(code, Slice(), Slice());
         } else {
-            _state = assemble_state(code, s.error_msgs(0), 1, Slice());
+            _state = assemble_state(code, s.error_msgs(0), Slice());
         }
     }
 }
 
-Status::Status(TStatusCode::type code, const Slice& msg, int16_t precise_code, const Slice& msg2)
-        : _state(assemble_state(code, msg, precise_code, msg2)) {}
+Status::Status(TStatusCode::type code, Slice msg, Slice ctx) : _state(assemble_state(code, msg, ctx)) {}
 
 void Status::to_thrift(TStatus* s) const {
     s->error_msgs.clear();
@@ -165,14 +183,8 @@ std::string Status::to_string() const {
     }
 
     result.append(": ");
-    Slice msg = message();
+    Slice msg = detailed_message();
     result.append(reinterpret_cast<const char*>(msg.data), msg.size);
-    int16_t posix = precise_code();
-    if (posix != 1) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), " (error %d)", posix);
-        result.append(buf);
-    }
     return result;
 }
 
@@ -181,23 +193,50 @@ Slice Status::message() const {
         return Slice();
     }
 
-    uint32_t length;
-    memcpy(&length, _state, sizeof(length));
-    return Slice(_state + 7, length);
+    uint16_t len1;
+    memcpy(&len1, _state, sizeof(len1));
+    return Slice(_state + 5, len1);
 }
 
+Slice Status::detailed_message() const {
+    if (_state == nullptr) {
+        return Slice();
+    }
+
+    uint16_t len1;
+    uint16_t len2;
+    memcpy(&len1, _state + 0, sizeof(len1));
+    memcpy(&len2, _state + 2, sizeof(len2));
+    uint32_t length = static_cast<uint32_t>(len1) + len2;
+    return Slice(_state + 5, length);
+}
 Status Status::clone_and_prepend(const Slice& msg) const {
     if (ok()) {
         return *this;
     }
-    return Status(code(), msg, precise_code(), message());
+    auto msg2 = message();
+    std::string_view msg_view(reinterpret_cast<const char*>(msg.data), msg.size);
+    std::string_view msg_view2(reinterpret_cast<const char*>(msg2.data), msg2.size);
+    return Status(code(), fmt::format("{}:{}", msg_view, msg_view2));
 }
 
 Status Status::clone_and_append(const Slice& msg) const {
     if (ok()) {
         return *this;
     }
-    return Status(code(), message(), precise_code(), msg);
+    auto msg2 = message();
+    std::string_view msg_view(reinterpret_cast<const char*>(msg.data), msg.size);
+    std::string_view msg_view2(reinterpret_cast<const char*>(msg2.data), msg2.size);
+    return Status(code(), fmt::format("{}:{}", msg_view2, msg_view));
+}
+
+Status Status::clone_and_append_context(const char* filename, int line, const char* expr) const {
+    if (UNLIKELY(ok())) {
+        return *this;
+    }
+    Status ret;
+    ret._state = copy_state_with_extra_ctx(_state, fmt::format("\n{}:{} {}", filename, line, expr));
+    return ret;
 }
 
 const char* Status::moved_from_state() {
