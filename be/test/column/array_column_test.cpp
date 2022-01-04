@@ -440,36 +440,6 @@ PARALLEL_TEST(ArrayColumnTest, test_compare_at) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(ArrayColumnTest, test_serde) {
-    auto offsets = UInt32Column::create();
-    auto elements = Int32Column::create();
-    auto column = ArrayColumn::create(elements, offsets);
-
-    // insert [1, 2, 3], [4, 5, 6]
-    elements->append(1);
-    elements->append(2);
-    elements->append(3);
-    offsets->append(3);
-
-    elements->append(4);
-    elements->append(5);
-    elements->append(6);
-    offsets->append(6);
-
-    std::vector<uint8_t> buffer;
-    buffer.resize(column->serialize_size());
-    column->serialize_column(buffer.data());
-
-    auto offsets_2 = UInt32Column::create();
-    auto elements_2 = Int32Column::create();
-    auto column_2 = ArrayColumn::create(elements, offsets_2);
-    column_2->deserialize_column(buffer.data());
-
-    ASSERT_EQ("[1, 2, 3]", column_2->debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", column_2->debug_item(1));
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_multi_dimension_array) {
     auto offsets = UInt32Column::create();
     auto elements = Int32Column::create();

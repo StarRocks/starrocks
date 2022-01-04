@@ -188,22 +188,6 @@ void ArrayColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t 
     }
 }
 
-size_t ArrayColumn::serialize_size() const {
-    return _offsets->serialize_size() + _elements->serialize_size();
-}
-
-uint8_t* ArrayColumn::serialize_column(uint8_t* dst) {
-    dst = _offsets->serialize_column(dst);
-    dst = _elements->serialize_column(dst);
-    return dst;
-}
-
-const uint8_t* ArrayColumn::deserialize_column(const uint8_t* src) {
-    src = _offsets->deserialize_column(src);
-    src = _elements->deserialize_column(src);
-    return src;
-}
-
 MutableColumnPtr ArrayColumn::clone_empty() const {
     return create_mutable(_elements->clone_empty(), UInt32Column::create());
 }

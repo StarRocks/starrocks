@@ -109,27 +109,6 @@ public:
 
     void set_columns(const Columns& columns) { _columns = columns; }
 
-    // The size for serialize chunk meta and chunk data
-    size_t serialize_size() const;
-
-    // Serialize chunk data and meta to ChunkPB
-    // The result value is the chunk data serialize size
-    size_t serialize_with_meta(starrocks::ChunkPB* chunk) const;
-
-    // Only serialize chunk data to dst
-    // The serialize format:
-    //     version(4 byte)
-    //     num_rows(4 byte)
-    //     column 1 data
-    //     column 2 data
-    //     ...
-    //     column n data
-    // Note: You should ensure the dst buffer size is enough
-    size_t serialize(uint8_t* dst) const;
-
-    // Deserialize chunk by |src| (chunk data) and |meta| (chunk meta)
-    Status deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta, size_t serialized_size);
-
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     // not clone tuple column
     ChunkUniquePtr clone_empty() const;
@@ -307,16 +286,6 @@ inline const ColumnPtr& Chunk::get_tuple_column_by_id(TupleId tuple_id) const {
 inline ColumnPtr& Chunk::get_tuple_column_by_id(TupleId tuple_id) {
     return _columns[_tuple_id_to_index[tuple_id]];
 }
-
-// Chunk meta for runtime compute
-// Currently Used in DataStreamRecvr to deserialize Chunk
-struct RuntimeChunkMeta {
-    std::vector<TypeDescriptor> types;
-    std::vector<bool> is_nulls;
-    std::vector<bool> is_consts;
-    Chunk::SlotHashMap slot_id_to_index;
-    Chunk::TupleHashMap tuple_id_to_index;
-};
 
 } // namespace vectorized
 } // namespace starrocks
