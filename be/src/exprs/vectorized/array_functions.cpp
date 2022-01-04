@@ -357,7 +357,8 @@ private:
                               const NullColumn::Container* null_map_elements,
                               const NullColumn::Container* null_map_targets, const bool retIndex) {
         const size_t num_array = offsets.size() - 1;
-        auto result = retIndex? Int32Column::create() :UInt8Column::create();
+        
+        auto result = if(retIndex) Int32Column::create() else UInt8Column::create();
         result->resize(num_array);
 
         auto* result_ptr = result->get_data().data();
@@ -408,7 +409,7 @@ private:
                     found = (elements_ptr[offset + j] == targets_ptr[i]);
                 }
                 if (found) {
-                    if (retIndx) {
+                    if (retIndex) {
                         found = j + 1;
                     }
                     break;
@@ -493,7 +494,7 @@ private:
             targets = nullable->has_null() ? targets : nullable->data_column().get();
         }
         if (targets->only_null() && !nullable_element) {
-            auto result = retIndex? Int32Column::create() :UInt8Column::create();
+            auto result = if(retIndex) Int32Column::create() else UInt8Column::create();
             result->resize(array.size());
             return result;
         }
