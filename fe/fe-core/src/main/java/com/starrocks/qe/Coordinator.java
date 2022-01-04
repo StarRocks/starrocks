@@ -1085,7 +1085,6 @@ public class Coordinator {
 
         boolean dopAdaptionEnabled = ConnectContext.get() != null &&
                 ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
-        int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
         for (int i = fragments.size() - 1; i >= 0; --i) {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
@@ -1160,6 +1159,7 @@ public class Coordinator {
                 }
 
                 if (dopAdaptionEnabled) {
+                    int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
                     DataSink sink = getDataStreamSink(maxParallelismFragmentExecParams.fragment, fragment);
                     Preconditions.checkArgument(sink != null);
@@ -1266,6 +1266,7 @@ public class Coordinator {
                 }
                 // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
                 if (dopAdaptionEnabled) {
+                    int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
                     int numInstances = param.instanceExecParams.size();
