@@ -411,7 +411,7 @@ std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, cons
 }
 
 std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_tablet_schema,
-                                                   const std::vector<std::size_t>& column_indexes) {
+                                                   const std::vector<int32_t>& referenced_column_ids) {
     TabletSchemaPB partial_tablet_schema_pb;
     partial_tablet_schema_pb.set_id(src_tablet_schema.id());
     partial_tablet_schema_pb.set_next_column_unique_id(src_tablet_schema.next_column_unique_id());
@@ -422,9 +422,9 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     if (src_tablet_schema.has_bf_fpp()) {
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema.bf_fpp());
     }
-    for (const auto index : column_indexes) {
+    for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
-        src_tablet_schema.column(index).to_schema_pb(tablet_column);
+        src_tablet_schema.column(referenced_column_id).to_schema_pb(tablet_column);
     }
     auto partial_tablet_schema = std::make_shared<TabletSchema>();
     partial_tablet_schema->init_from_pb(partial_tablet_schema_pb);

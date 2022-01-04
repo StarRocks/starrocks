@@ -57,7 +57,7 @@ protected:
     RowsetWriterContext _context;
     std::shared_ptr<RowsetMeta> _rowset_meta;
     std::unique_ptr<TabletSchema> _rowset_schema;
-    RowsetTxnMetaPB _rowset_txn_meta_pb;
+    std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta_pb;
 
     int _num_segment;
     vector<bool> _segment_has_deletes;

@@ -111,9 +111,9 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.adaptive_page_format = (_opts.storage_format_version > 1);
         opts.meta = _footer.add_columns();
 
-        if (!_opts.column_indexes.empty()) {
-            DCHECK(_opts.column_indexes.size() == num_columns);
-            _init_column_meta(opts.meta, _opts.column_indexes[column_index], column);
+        if (!_opts.referenced_column_ids.empty()) {
+            DCHECK(_opts.referenced_column_ids.size() == num_columns);
+            _init_column_meta(opts.meta, _opts.referenced_column_ids[column_index], column);
         } else {
             _init_column_meta(opts.meta, column_index, column);
         }
