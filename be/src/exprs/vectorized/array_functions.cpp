@@ -499,6 +499,12 @@ private:
         if (targets->only_null() && !nullable_element) {
             auto result = UInt8Column::create();
             result->resize(array.size());
+            if (retIndex) {
+                auto* result_ptr = result->get_data().data();
+                for (size_t i = 0; i < array.size(); i++) {
+                    result_ptr[i] = -1;
+                }
+            }
             return result;
         }
         // Expand Only-Null column.
