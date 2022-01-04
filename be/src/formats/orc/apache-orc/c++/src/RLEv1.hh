@@ -20,8 +20,7 @@
 * limitations under the License.
 */
 
-#ifndef ORC_RLEV1_HH
-#define ORC_RLEV1_HH
+#pragma once
 
 #include <memory>
 
@@ -88,5 +87,3 @@ private:
     bool repeating;
 };
 } // namespace orc
-
-#endif // ORC_RLEV1_HH

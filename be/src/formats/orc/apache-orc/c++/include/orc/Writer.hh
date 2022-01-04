@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_WRITER_HH
-#define ORC_WRITER_HH
+#pragma once
 
 #include <memory>
 #include <set>
@@ -263,5 +262,3 @@ public:
     virtual void addUserMetadata(const std::string name, const std::string value) = 0;
 };
 } // namespace orc
-
-#endif

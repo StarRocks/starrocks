@@ -2,8 +2,7 @@
 //
 // Google-specific types
 
-#ifndef BASE_BASICTYPES_H_
-#define BASE_BASICTYPES_H_
+#pragma once
 
 #include "gutil/integral_types.h"
 #include "gutil/macros.h"
@@ -18,5 +17,3 @@
 //
 template <typename T>
 inline void ignore_result(const T&) {}
-
-#endif // BASE_BASICTYPES_H_

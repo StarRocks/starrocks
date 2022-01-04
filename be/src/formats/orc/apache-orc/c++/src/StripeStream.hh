@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_STRIPE_STREAM_HH
-#define ORC_STRIPE_STREAM_HH
+#pragma once
 
 #include "Timezone.hh"
 #include "TypeImpl.hh"
@@ -182,5 +181,3 @@ public:
 };
 
 } // namespace orc
-
-#endif

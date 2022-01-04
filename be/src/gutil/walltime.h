@@ -20,8 +20,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-#ifndef GUTIL_WALLTIME_H_
-#define GUTIL_WALLTIME_H_
+#pragma once
 
 #include <sys/time.h>
 
@@ -207,4 +206,3 @@ private:
 
 // inline method bodies
 #include "gutil/cycleclock-inl.h" // IWYU pragma: export
-#endif                            // GUTIL_WALLTIME_H_

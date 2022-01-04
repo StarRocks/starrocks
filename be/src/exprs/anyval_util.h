@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXPRS_ANYVAL_UTIL_H
-#define STARROCKS_BE_SRC_QUERY_EXPRS_ANYVAL_UTIL_H
+#pragma once
 
 #include "common/status.h"
 #include "exprs/expr.h"
@@ -40,4 +39,3 @@ public:
 };
 
 } // namespace starrocks
-#endif

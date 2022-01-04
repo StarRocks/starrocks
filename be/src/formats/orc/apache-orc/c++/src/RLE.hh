@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_RLE_HH
-#define ORC_RLE_HH
+#pragma once
 
 #include <memory>
 
@@ -143,5 +142,3 @@ std::unique_ptr<RleDecoder> createRleDecoder(std::unique_ptr<SeekableInputStream
                                              DataBuffer<char>* sharedBufferPtr = nullptr);
 
 } // namespace orc
-
-#endif // ORC_RLE_HH

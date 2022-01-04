@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_COLUMN_PRINTER_HH
-#define ORC_COLUMN_PRINTER_HH
+#pragma once
 
 #include <cstdio>
 #include <memory>
@@ -50,4 +49,3 @@ public:
 
 ORC_UNIQUE_PTR<ColumnPrinter> createColumnPrinter(std::string&, const Type* type);
 } // namespace orc
-#endif

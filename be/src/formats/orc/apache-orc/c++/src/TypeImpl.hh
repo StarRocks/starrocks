@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef TYPE_IMPL_HH
-#define TYPE_IMPL_HH
+#pragma once
 
 #include <vector>
 
@@ -187,5 +186,3 @@ std::unique_ptr<Type> convertType(const proto::Type& type, const proto::Footer& 
    */
 std::unique_ptr<Type> buildSelectedType(const Type* fileType, const std::vector<bool>& selected);
 } // namespace orc
-
-#endif

@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_SARGSAPPLIER_HH
-#define ORC_SARGSAPPLIER_HH
+#pragma once
 
 #include <orc/Common.hh>
 #include <unordered_map>
@@ -104,5 +103,3 @@ private:
 };
 
 } // namespace orc
-
-#endif //ORC_SARGSAPPLIER_HH

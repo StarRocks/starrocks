@@ -26,8 +26,7 @@
 // Additional constants from logging.h and its dependencies which are
 // not exported by glog.
 
-#ifndef _LOGGING_IN_H_
-#define _LOGGING_IN_H_
+#pragma once
 
 // DFATAL is FATAL in debug mode, ERROR in normal mode
 #ifdef NDEBUG
@@ -50,5 +49,3 @@ const bool GUTIL_DEBUG_MODE = false;
 #else
 const bool GUTIL_DEBUG_MODE = true;
 #endif
-
-#endif // _LOGGING_IN_H_
