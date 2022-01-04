@@ -17,6 +17,9 @@ namespace starrocks {
 class PStatus;
 class TStatus;
 
+template <typename T>
+class StatusOr;
+
 class Status {
 public:
     Status() {}
@@ -257,13 +260,22 @@ inline std::ostream& operator<<(std::ostream& os, const Status& st) {
     return os << st.to_string();
 }
 
+inline const Status& to_status(const Status& st) {
+    return st;
+}
+
+template <typename T>
+inline const Status& to_status(const StatusOr<T>& st) {
+    return st.status();
+}
+
 // some generally useful macros
-#define RETURN_IF_ERROR(stmt)            \
-    do {                                 \
-        const Status& _status_ = (stmt); \
-        if (UNLIKELY(!_status_.ok())) {  \
-            return _status_;             \
-        }                                \
+#define RETURN_IF_ERROR(stmt)           \
+    do {                                \
+        const auto& _status_ = (stmt);  \
+        if (UNLIKELY(!_status_.ok())) { \
+            return to_status(_status_); \
+        }                               \
     } while (false)
 
 #define RETURN_IF_STATUS_ERROR(status, stmt) \
