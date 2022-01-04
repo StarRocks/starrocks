@@ -133,7 +133,7 @@ public class BDBEnvironment {
         }
 
         java.util.logging.Logger parent = java.util.logging.Logger.getLogger("com.sleepycat.je");
-        parent.setLevel(Level.parse(Config.bdb_je_log_level));
+        parent.setLevel(Level.parse(Config.bdbje_log_level));
 
         // set environment config
         environmentConfig = new EnvironmentConfig();
@@ -141,7 +141,7 @@ public class BDBEnvironment {
         environmentConfig.setAllowCreate(true);
         environmentConfig.setCachePercent(MEMORY_CACHE_PERCENT);
         environmentConfig.setLockTimeout(Config.bdbje_lock_timeout_second, TimeUnit.SECONDS);
-        environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdb_je_log_level);
+        environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdbje_log_level);
         if (isElectable) {
             Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),
                     getSyncPolicy(Config.replica_sync_policy), getAckPolicy(Config.replica_ack_policy));
