@@ -396,6 +396,7 @@ private:
                     }
                     if (null_element) {
                         found = 1;
+                        index = j;
                         break;
                     }
                 }
