@@ -171,23 +171,6 @@ PARALLEL_TEST(BinaryColumnTest, test_compare_at) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(BinaryColumnTest, test_serde) {
-    std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
-    auto c1 = BinaryColumn::create();
-    auto c2 = BinaryColumn::create();
-    c1->append_strings(strings);
-
-    std::vector<uint8_t> buffer;
-    buffer.resize(c1->serialize_size());
-    c1->serialize_column(buffer.data());
-    c2->deserialize_column(buffer.data());
-
-    for (size_t i = 0; i < c1->size(); i++) {
-        ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
-    }
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_append_binary) {
     auto c1 = BinaryColumn::create();
     auto c2 = BinaryColumn::create();

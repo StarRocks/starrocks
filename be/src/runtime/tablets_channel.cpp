@@ -30,6 +30,7 @@
 #include "exec/tablet_info.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/load_channel.h"
+#include "serde/protobuf_serde.h"
 #include "storage/vectorized/delta_writer.h"
 #include "storage/vectorized/memtable.h"
 #include "util/starrocks_metrics.h"
@@ -216,43 +217,9 @@ Status TabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
     if (_has_chunk_meta.load(std::memory_order_acquire)) {
         return Status::OK();
     }
-
-    if (UNLIKELY(pb_chunk.is_nulls().empty())) {
-        return Status::InternalError("ChunkPB::is_nulls() is empty");
-    }
-    if (UNLIKELY(pb_chunk.slot_id_map().empty())) {
-        return Status::InternalError("ChunkPB::slot_id_map() is empty");
-    }
-
-    _chunk_meta.slot_id_to_index.reserve(pb_chunk.slot_id_map().size());
-    for (int i = 0; i < pb_chunk.slot_id_map().size(); i += 2) {
-        _chunk_meta.slot_id_to_index[pb_chunk.slot_id_map()[i]] = pb_chunk.slot_id_map()[i + 1];
-    }
-
-    _chunk_meta.is_nulls.resize(pb_chunk.is_nulls().size());
-    for (int i = 0; i < pb_chunk.is_nulls().size(); ++i) {
-        _chunk_meta.is_nulls[i] = pb_chunk.is_nulls()[i];
-    }
-    _chunk_meta.is_consts.resize(pb_chunk.is_nulls().size(), false);
-
-    size_t column_index = 0;
-    _chunk_meta.types.resize(pb_chunk.is_nulls().size());
-    for (auto tuple_desc : _row_desc->tuple_descriptors()) {
-        const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
-        for (const auto& kv : _chunk_meta.slot_id_to_index) {
-            for (auto slot : slots) {
-                if (kv.first == slot->id()) {
-                    _chunk_meta.types[kv.second] = slot->type();
-                    ++column_index;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (UNLIKELY(column_index != _chunk_meta.is_nulls.size())) {
-        return Status::InternalError("column_index != _chunk_meta.is_nulls.size()");
-    }
+    StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, pb_chunk);
+    if (!res.ok()) return res.status();
+    _chunk_meta = std::move(res).value();
     _has_chunk_meta.store(true, std::memory_order_release);
     return Status::OK();
 }
@@ -363,8 +330,10 @@ StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_wr
     RETURN_IF_ERROR(_build_chunk_meta(pchunk));
 
     vectorized::Chunk& chunk = context->_chunk;
-    RETURN_IF_ERROR(chunk.deserialize((const uint8_t*)pchunk.data().data(), pchunk.data().size(), _chunk_meta,
-                                      pchunk.serialized_size()));
+    serde::ProtobufChunkDeserializer des(_chunk_meta);
+    StatusOr<vectorized::Chunk> res = des.deserialize(pchunk.data());
+    if (!res.ok()) return res.status();
+    chunk = std::move(res).value();
     if (UNLIKELY(request.tablet_ids_size() != chunk.num_rows())) {
         return Status::InvalidArgument("request.tablet_ids_size() != chunk.num_rows()");
     }
