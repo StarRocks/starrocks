@@ -342,6 +342,7 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     return ArrayRemoveImpl::evaluate(*arg0, *arg1);
 }
 
+template<typename ReturnType>
 class ArrayContainsImpl {
 public:
     // If retIndex=true in function array_indexof, it will return index of elemt if the array contain it or 0 if not contain.
@@ -358,7 +359,7 @@ private:
                               const NullColumn::Container* null_map_targets, const bool retIndex) {
         const size_t num_array = offsets.size() - 1;
         
-        auto result = if(retIndex) Int32Column::create() else UInt8Column::create();
+        auto result = ReturnType::create();
         result->resize(num_array);
 
         auto* result_ptr = result->get_data().data();
@@ -494,7 +495,7 @@ private:
             targets = nullable->has_null() ? targets : nullable->data_column().get();
         }
         if (targets->only_null() && !nullable_element) {
-            auto result = if(retIndex) Int32Column::create() else UInt8Column::create();
+             auto result = ReturnType::create();
             result->resize(array.size());
             return result;
         }
@@ -549,14 +550,14 @@ ColumnPtr ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* conte
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayContainsImpl::evaluate(*arg0, *arg1, false);
+    return ArrayContainsImpl<UInt8Column>::evaluate(*arg0, *arg1, false);
 }
 
 ColumnPtr ArrayFunctions::array_indexof([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayContainsImpl::evaluate(*arg0, *arg1, true);
+    return ArrayContainsImpl<Int32Column>::evaluate(*arg0, *arg1, true);
 }
 
 class ArrayArithmeticImpl {
