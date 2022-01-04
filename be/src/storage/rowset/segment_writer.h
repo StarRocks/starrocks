@@ -56,6 +56,7 @@ struct SegmentWriterOptions {
     uint32_t storage_format_version = 1;
     uint32_t num_rows_per_block = 1024;
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
+    std::vector<std::size_t> column_indexes;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.

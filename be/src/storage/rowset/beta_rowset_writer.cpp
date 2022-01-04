@@ -239,6 +239,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_seg
     writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
+    writer_options.column_indexes = _context.column_indexes;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     ++_num_segment;
@@ -686,6 +687,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalBetaRowsetWriter::_create_segme
     writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
+    writer_options.column_indexes = _context.column_indexes;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
     ++_num_segment;

@@ -111,7 +111,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.adaptive_page_format = (_opts.storage_format_version > 1);
         opts.meta = _footer.add_columns();
 
-        _init_column_meta(opts.meta, column_index, column);
+        if (!_opts.column_indexes.empty()) {
+            DCHECK(_opts.column_indexes.size() == num_columns);
+            _init_column_meta(opts.meta, _opts.column_indexes[column_index], column);
+        } else {
+            _init_column_meta(opts.meta, column_index, column);
+        }
 
         // now we create zone map for key columns
         // and not support zone map for array type.
