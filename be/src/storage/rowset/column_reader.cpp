@@ -162,23 +162,17 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
 
             // elements
             auto res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(0), _file_name);
-            if (!res.ok()) {
-                return res.status();
-            }
+            RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // null flags
             res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(1), _file_name);
-            if (!res.ok()) {
-                return res.status();
-            }
+            RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
             res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(2), _file_name);
-            if (!res.ok()) {
-                return res.status();
-            }
+            RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         } else {
             if (meta->children_columns_size() != 2) {
@@ -188,16 +182,12 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
 
             // elements
             auto res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(0), _file_name);
-            if (!res.ok()) {
-                return res.status();
-            }
+            RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
             res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(1), _file_name);
-            if (!res.ok()) {
-                return res.status();
-            }
+            RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         }
         return Status::OK();
