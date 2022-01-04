@@ -526,12 +526,12 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
-            if (!res.ok()) return res.status();
+            RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
             StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src);
-            if (!res.ok()) return res.status();
+            RETURN_IF_ERROR(res);
             res->Swap(dst);
         }
     }
