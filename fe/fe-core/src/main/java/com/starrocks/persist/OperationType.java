@@ -38,6 +38,7 @@ public class OperationType {
     public static final short OP_ADD_PARTITION = 12;
     public static final short OP_DROP_PARTITION = 13;
     public static final short OP_MODIFY_PARTITION = 14;
+    @Deprecated
     public static final short OP_ERASE_TABLE = 15;
     public static final short OP_ERASE_PARTITION = 16;
     public static final short OP_RECOVER_TABLE = 17;

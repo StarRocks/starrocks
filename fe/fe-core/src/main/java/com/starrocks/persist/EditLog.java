@@ -968,10 +968,6 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_TABLE, info);
     }
 
-    public void logEraseTable(long tableId) {
-        logEdit(OperationType.OP_ERASE_TABLE, new Text(Long.toString(tableId)));
-    }
-
     public void logEraseMultiTables(List<Long> tableIds) {
         logEdit(OperationType.OP_ERASE_MULTI_TABLES, new MultiEraseTableInfo(tableIds));
     }
