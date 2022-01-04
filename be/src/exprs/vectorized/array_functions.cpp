@@ -344,6 +344,8 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
 
 class ArrayContainsImpl {
 public:
+    // If retIndex=true in function array_indexof, it will return index of elemt if the array contain it or 0 if not contain.
+    // If retIndex=false in function array_contains, it will return 1 if contain or 0 if not contain.
     static ColumnPtr evaluate(const Column& array, const Column& element, const bool retIndex) {
         return _array_contains_generic(array, element, retIndex);
     }
@@ -355,7 +357,7 @@ private:
                               const NullColumn::Container* null_map_elements,
                               const NullColumn::Container* null_map_targets, const bool retIndex) {
         const size_t num_array = offsets.size() - 1;
-        auto result = UInt8Column::create();
+        auto result = retIndex? Int32Column::create() :UInt8Column::create();
         result->resize(num_array);
 
         auto* result_ptr = result->get_data().data();
@@ -376,7 +378,6 @@ private:
             size_t offset = offsets_ptr[i];
             size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
             uint8_t found = 0;
-            uint8_t index = -1;
             for (size_t j = 0; j < array_size; j++) {
                 if constexpr (NullableElement && !NullableTarget) {
                     if (is_null(null_map_elements, offset + j)) {
@@ -395,8 +396,7 @@ private:
                         continue;
                     }
                     if (null_element) {
-                        found = 1;
-                        index = j;
+                        found = retIndex ? j + 1: 1;
                         break;
                     }
                 }
@@ -408,18 +408,13 @@ private:
                     found = (elements_ptr[offset + j] == targets_ptr[i]);
                 }
                 if (found) {
-                    index = j;
+                    if (retIndx) {
+                        found = j + 1;
+                    }
                     break;
                 }
             }
-            if (retIndex)
-            {
-                result_ptr[i] = index;
-            } 
-            else
-            {
-                result_ptr[i] = found;
-            }
+            result_ptr[i] = found;
         }
         return result;
     }
@@ -498,14 +493,8 @@ private:
             targets = nullable->has_null() ? targets : nullable->data_column().get();
         }
         if (targets->only_null() && !nullable_element) {
-            auto result = UInt8Column::create();
+            auto result = retIndex? Int32Column::create() :UInt8Column::create();
             result->resize(array.size());
-            if (retIndex) {
-                auto* result_ptr = result->get_data().data();
-                for (size_t i = 0; i < array.size(); i++) {
-                    result_ptr[i] = -1;
-                }
-            }
             return result;
         }
         // Expand Only-Null column.
