@@ -593,7 +593,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
     }
     // array_indexof([], "abc"): 0
     {
@@ -605,7 +605,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
     }
     // array_indexof(ARRAY<ARRAY<int>>[], [1]): 0
     {
@@ -617,7 +617,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
     }
     // array_indexof(ARRAY<ARRAY<int>>[], ARRAY<int>[]): 0
     {
@@ -629,7 +629,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
     }
     // multiple lines with const target:
     //  array_indexof([], 1): 0;
@@ -650,10 +650,10 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
+        EXPECT_EQ(0, result->get(1).get_int32());
+        EXPECT_EQ(0, result->get(2).get_int32());
+        EXPECT_EQ(0, result->get(3).get_int32());
     }
     // multiple lines with different target:
     //  array_indexof([], 1): 0;
@@ -675,10 +675,10 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
+        EXPECT_EQ(0, result->get(1).get_int32());
+        EXPECT_EQ(0, result->get(2).get_int32());
+        EXPECT_EQ(0, result->get(3).get_int32());
     }
     // multiple lines with Only-NULL target:
     //  array_indexof([], NULL): 0;
@@ -697,10 +697,10 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
+        EXPECT_EQ(0, result->get(1).get_int32());
+        EXPECT_EQ(0, result->get(2).get_int32());
+        EXPECT_EQ(0, result->get(3).get_int32());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
@@ -709,10 +709,10 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
+        EXPECT_EQ(0, result->get(1).get_int32());
+        EXPECT_EQ(0, result->get(2).get_int32());
+        EXPECT_EQ(0, result->get(3).get_int32());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
@@ -721,10 +721,10 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
+        EXPECT_EQ(0, result->get(1).get_int32());
+        EXPECT_EQ(0, result->get(2).get_int32());
+        EXPECT_EQ(0, result->get(3).get_int32());
     }
 }
 
@@ -764,14 +764,14 @@ TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(8, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(1, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
-        EXPECT_EQ(0, result->get(4).get_int8());
-        EXPECT_EQ(1, result->get(5).get_int8());
-        EXPECT_EQ(2, result->get(6).get_int8());
-        EXPECT_EQ(1, result->get(7).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
+        EXPECT_EQ(0, result->get(1).get_int32());
+        EXPECT_EQ(1, result->get(2).get_int32());
+        EXPECT_EQ(0, result->get(3).get_int32());
+        EXPECT_EQ(0, result->get(4).get_int32());
+        EXPECT_EQ(1, result->get(5).get_int32());
+        EXPECT_EQ(2, result->get(6).get_int32());
+        EXPECT_EQ(1, result->get(7).get_int32());
     }
     // array_indexof([], 3) : 0
     // array_indexof([2], 3) : 0
@@ -792,11 +792,11 @@ TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(5, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(3, result->get(2).get_int8());
-        EXPECT_EQ(1, result->get(3).get_int8());
-        EXPECT_EQ(3, result->get(4).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
+        EXPECT_EQ(0, result->get(1).get_int32());
+        EXPECT_EQ(3, result->get(2).get_int32());
+        EXPECT_EQ(1, result->get(3).get_int32());
+        EXPECT_EQ(3, result->get(4).get_int32());
     }
     // array_indexof([], []) : 0
     // array_indexof([[]], []) : 1
@@ -835,16 +835,16 @@ TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(10, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(1, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
-        EXPECT_EQ(1, result->get(4).get_int8());
-        EXPECT_EQ(0, result->get(5).get_int8());
-        EXPECT_EQ(2, result->get(6).get_int8());
-        EXPECT_EQ(0, result->get(7).get_int8());
-        EXPECT_EQ(0, result->get(8).get_int8());
-        EXPECT_EQ(3, result->get(9).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
+        EXPECT_EQ(1, result->get(1).get_int32());
+        EXPECT_EQ(0, result->get(2).get_int32());
+        EXPECT_EQ(0, result->get(3).get_int32());
+        EXPECT_EQ(1, result->get(4).get_int32());
+        EXPECT_EQ(0, result->get(5).get_int32());
+        EXPECT_EQ(2, result->get(6).get_int32());
+        EXPECT_EQ(0, result->get(7).get_int32());
+        EXPECT_EQ(0, result->get(8).get_int32());
+        EXPECT_EQ(3, result->get(9).get_int32());
     }
 }
 
@@ -866,9 +866,9 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_element) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(1, result->get(1).get_int8());
-        EXPECT_EQ(2, result->get(2).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
+        EXPECT_EQ(1, result->get(1).get_int32());
+        EXPECT_EQ(2, result->get(2).get_int32());
     }
 }
 
@@ -884,7 +884,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_target) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
     }
     // array_indexof(ARRAY<TINYINT>[1, 2, 3], 2): 2
     // array_indexof(ARRAY<TINYINT>[1, 2, 3], 4): 0 
@@ -902,9 +902,9 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_target) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
-        EXPECT_EQ(2, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
+        EXPECT_EQ(2, result->get(0).get_int32());
+        EXPECT_EQ(0, result->get(1).get_int32());
+        EXPECT_EQ(0, result->get(2).get_int32());
     }
 }
 
@@ -922,8 +922,8 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_element_and_target) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(2, result->size());
-        EXPECT_EQ(1, result->get(0).get_int8());
-        EXPECT_EQ(1, result->get(1).get_int8());
+        EXPECT_EQ(1, result->get(0).get_int32());
+        EXPECT_EQ(1, result->get(1).get_int32());
     }
     // array_indexof([NULL], NULL): 1
     // array_indexof([NULL, [1,2]], NULL): 1
@@ -947,11 +947,11 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_element_and_target) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(5, result->size());
-        EXPECT_EQ(1, result->get(0).get_int8());
-        EXPECT_EQ(1, result->get(1).get_int8());
-        EXPECT_EQ(2, result->get(2).get_int8());
-        EXPECT_EQ(1, result->get(3).get_int8());
-        EXPECT_EQ(2, result->get(4).get_int8());
+        EXPECT_EQ(1, result->get(0).get_int32());
+        EXPECT_EQ(1, result->get(1).get_int32());
+        EXPECT_EQ(2, result->get(2).get_int32());
+        EXPECT_EQ(1, result->get(3).get_int32());
+        EXPECT_EQ(2, result->get(4).get_int32());
     }
 }
 
@@ -973,9 +973,9 @@ TEST_F(ArrayFunctionsTest, array_indexof_nullable_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_EQ(3, result->get(2).get_int8());
+        EXPECT_EQ(3, result->get(2).get_int32());
     }
     // array_indexof([["a"], ["b"]], ["c"]): 0
     // array_indexof(NULL, ["c"]): null
@@ -993,9 +993,9 @@ TEST_F(ArrayFunctionsTest, array_indexof_nullable_array) {
 
         auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_EQ(2, result->get(2).get_int8());
+        EXPECT_EQ(2, result->get(2).get_int32());
     }
     // array_indexof(NULL, NULL): null
     // array_indexof(NULL, ["a"]): null
