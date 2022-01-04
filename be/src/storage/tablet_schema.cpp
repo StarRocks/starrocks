@@ -256,7 +256,6 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
           _aggregation(rhs._aggregation),
           _type(rhs._type),
           _index_length(rhs._index_length),
-          _referenced_column_id(rhs._referenced_column_id),
           _precision(rhs._precision),
           _scale(rhs._scale),
           _flags(rhs._flags) {
@@ -272,7 +271,6 @@ TabletColumn::TabletColumn(TabletColumn&& rhs)
           _aggregation(rhs._aggregation),
           _type(rhs._type),
           _index_length(rhs._index_length),
-          _referenced_column_id(rhs._referenced_column_id),
           _precision(rhs._precision),
           _scale(rhs._scale),
           _flags(rhs._flags),
@@ -292,7 +290,6 @@ void TabletColumn::swap(TabletColumn* rhs) {
     swap(_aggregation, rhs->_aggregation);
     swap(_type, rhs->_type);
     swap(_index_length, rhs->_index_length);
-    swap(_referenced_column_id, rhs->_referenced_column_id);
     swap(_precision, rhs->_precision);
     swap(_scale, rhs->_scale);
     swap(_flags, rhs->_flags);
@@ -338,9 +335,6 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
         // DCHECK_LE(column.index_length(), UINT8_MAX);
         _index_length = column.index_length();
     }
-    if (column.has_referenced_column_id()) {
-        _referenced_column_id = column.referenced_column_id();
-    }
     if (column.has_aggregation()) {
         _aggregation = get_aggregation_type_by_string(column.aggregation());
     }
@@ -373,7 +367,6 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     }
     column->set_length(_length);
     column->set_index_length(_index_length);
-    column->set_referenced_column_id(_referenced_column_id);
     column->set_is_bf_column(is_bf_column());
     column->set_aggregation(get_string_by_aggregation_type(_aggregation));
     column->set_has_bitmap_index(has_bitmap_index());
@@ -432,7 +425,6 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     for (const auto index : column_indexes) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema.column(index).to_schema_pb(tablet_column);
-        tablet_column->set_referenced_column_id(index);
     }
     auto partial_tablet_schema = std::make_shared<TabletSchema>();
     partial_tablet_schema->init_from_pb(partial_tablet_schema_pb);
@@ -568,7 +560,6 @@ bool operator==(const TabletColumn& a, const TabletColumn& b) {
     }
     if (a._length != b._length) return false;
     if (a._index_length != b._index_length) return false;
-    if (a._referenced_column_id != b._referenced_column_id) return false;
     return true;
 }
 
@@ -601,8 +592,8 @@ std::string TabletColumn::debug_string() const {
        << ",default_value=" << (has_default_value() ? default_value() : "N/A")
        << ",precision=" << (has_precision() ? std::to_string(_precision) : "N/A")
        << ",frac=" << (has_scale() ? std::to_string(_scale) : "N/A") << ",length=" << _length
-       << ",index_length=" << _index_length << ", referenced_column_id=" << _referenced_column_id
-       << ",is_bf_column=" << is_bf_column() << ",has_bitmap_index=" << has_bitmap_index() << ")";
+       << ",index_length=" << _index_length << ",is_bf_column=" << is_bf_column()
+       << ",has_bitmap_index=" << has_bitmap_index() << ")";
     return ss.str();
 }
 

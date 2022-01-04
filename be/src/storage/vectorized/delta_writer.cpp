@@ -141,7 +141,7 @@ Status DeltaWriter::_init() {
     // maybe partial update, change to partial tablet schema
     if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
         partial_col_num < _tablet->tablet_schema().num_columns()) {
-        std::vector<std::size_t> column_indexes;
+        writer_context.column_indexes.reserve(partial_col_num);
         for (auto i = 0; i < partial_col_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
             std::size_t index = _tablet->field_index(slot_col_name);
@@ -151,9 +151,10 @@ Status DeltaWriter::_init() {
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
-            column_indexes.push_back(index);
+            writer_context.column_indexes.push_back(index);
         }
-        writer_context.partial_update_tablet_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+        writer_context.partial_update_tablet_schema =
+                TabletSchema::create(_tablet->tablet_schema(), writer_context.column_indexes);
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();

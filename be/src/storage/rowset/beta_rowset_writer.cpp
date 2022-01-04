@@ -113,8 +113,10 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
         _rowset_meta->set_num_delete_files(!_segment_has_deletes.empty() && _segment_has_deletes[0]);
         _rowset_meta->set_segments_overlap(NONOVERLAPPING);
         if (_context.partial_update_tablet_schema) {
-            for (const auto& tablet_column : _context.partial_update_tablet_schema->columns()) {
-                _rowset_txn_meta_pb.add_partial_update_column_ids(tablet_column.referenced_column_id());
+            DCHECK(_context.column_indexes.size() == _context.partial_update_tablet_schema->columns().size());
+            for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
+                const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
+                _rowset_txn_meta_pb.add_partial_update_column_ids(_context.column_indexes[i]);
                 _rowset_txn_meta_pb.add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
             _rowset_meta->set_txn_meta(_rowset_txn_meta_pb);
