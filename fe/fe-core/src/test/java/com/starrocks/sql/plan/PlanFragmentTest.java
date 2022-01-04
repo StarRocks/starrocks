@@ -5245,7 +5245,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testOnlyCrossJoin() throws Exception {
         String sql = "select * from t0 as x0 join t1 as x1 on (1 = 2) is not null;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains(" OUTPUT EXPRS:4: expr | 4: expr"));
     }
 
@@ -5254,5 +5253,15 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from t0 as x0 left outer join t1 as x1 on (1 = 2) is not null";
         Assert.assertThrows("No equal on predicate in LEFT OUTER JOIN is not supported", SemanticException.class,
                 () -> getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testDecimalConstRewrite() throws Exception {
+        String sql = "select * from t0 WHERE CAST( - 8 AS DECIMAL ) * + 52 + 87 < - 86";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: TRUE"));
     }
 }
