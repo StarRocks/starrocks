@@ -147,10 +147,10 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 #undef HASH_MAP_METHOD
     }
 
+    size_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having
-    size_t old_size = (*chunk)->num_rows();
     ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
     _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
 
