@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -33,7 +34,6 @@ import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,8 +80,7 @@ public class HiveMetaClient {
     public HiveMetaClient(String uris) {
         HiveConf conf = new HiveConf();
         conf.set("hive.metastore.uris", uris);
-        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
-                String.valueOf(Config.hive_meta_store_timeout_s));
+        conf.set("hive.metastore.client.socket.timeout", String.valueOf(Config.hive_meta_store_timeout_s));
         this.conf = conf;
     }
 
@@ -90,7 +89,7 @@ public class HiveMetaClient {
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
             hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
-                    HiveMetaStoreThriftClient.class.getName());
+                    HiveMetaStoreClient.class.getName());
         }
 
         @Override
