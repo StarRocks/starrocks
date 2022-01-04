@@ -147,9 +147,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         static_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
-    std::vector<ExecNode*> adaptor_nodes;
-    _plan->collect_nodes(TPlanNodeType::ADAPTER_NODE, &adaptor_nodes);
-
     RETURN_IF_ERROR(_plan->prepare(_runtime_state));
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
