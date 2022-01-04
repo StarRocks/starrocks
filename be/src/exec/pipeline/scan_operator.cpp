@@ -106,7 +106,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     }
 
     auto&& chunk = _chunk_source->get_next_chunk_from_buffer();
-    // If buffer size is smaller than half of buffer_size,
+    // If number of cached chunk is smaller than half of buffer_size,
     // we can start the next scan task ahead of time to obtain better continuity
     if (_chunk_source->get_buffer_size() < (_buffer_size >> 1) && !_is_io_task_active.load(std::memory_order_acquire) &&
         _chunk_source->has_next_chunk()) {

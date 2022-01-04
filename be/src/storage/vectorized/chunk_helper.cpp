@@ -93,7 +93,7 @@ ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema)
 
 template <typename T>
 struct ColumnDeleter {
-    ColumnDeleter(size_t chunk_size) : chunk_size(chunk_size) {}
+    ColumnDeleter(uint32_t chunk_size) : chunk_size(chunk_size) {}
     void operator()(Column* ptr) const { return_column<T>(down_cast<T*>(ptr), chunk_size); }
     uint32_t chunk_size;
 };
