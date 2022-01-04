@@ -219,7 +219,7 @@ public class ColumnDef {
             throw new AnalysisException(String.format("Invalid default value for '%s'", name));
         }
 
-        if (defaultValueDef.isSet && defaultValueDef.expr instanceof Expr) {
+        if (defaultValueDef.isSet && defaultValueDef.expr != null) {
             try {
                 validateDefaultValue(type, defaultValueDef.expr);
             } catch (AnalysisException e) {
