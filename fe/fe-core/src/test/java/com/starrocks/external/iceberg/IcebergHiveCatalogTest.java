@@ -50,9 +50,6 @@ public class IcebergHiveCatalogTest {
         IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030");
         Table table = icebergHiveCatalog.loadTable(identifier);
         Assert.assertTrue(table.name().equals("test"));
-
-        Assert.assertNull(icebergHiveCatalog.loadTable(
-                        IcebergUtil.getIcebergTableIdentifier("db0", "table0")).name());
     }
 
 }
