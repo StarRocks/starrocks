@@ -868,16 +868,13 @@ public class PlanFragmentBuilder {
             }
         }
 
-        // return true if all leaf offspring of the root are OlapScanNodes.
-        public static boolean allLeafAreOlapScanNodes(PlanNode root) {
-            if (root instanceof OlapScanNode) {
-                return true;
-            }
-            if (root.getChildren().isEmpty()) {
+        // return true if all leaf offspring are not ExchangeNode
+        public static boolean hasNoExchangeNodes(PlanNode root) {
+            if (root instanceof ExchangeNode) {
                 return false;
             }
             for (PlanNode childNode : root.getChildren()) {
-                if (!allLeafAreOlapScanNodes(childNode)) {
+                if (!hasNoExchangeNodes(childNode)) {
                     return false;
                 }
             }
@@ -1051,7 +1048,7 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
-                    allLeafAreOlapScanNodes(inputFragment.getPlanRoot());
+                    hasNoExchangeNodes(inputFragment.getPlanRoot());
             boolean pipelineDopEnabled = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
             if (pipelineDopEnabled && notNeedLocalShuffle) {
