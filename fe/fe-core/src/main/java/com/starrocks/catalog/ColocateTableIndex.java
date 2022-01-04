@@ -312,7 +312,8 @@ public class ColocateTableIndex implements Writable {
     public Set<GroupId> getAllGroupIds() {
         readLock();
         try {
-            return group2Tables.keySet();
+            // make a copy set to avoid ConcurrentModificationException
+            return new HashSet<>(group2Tables.keySet());
         } finally {
             readUnlock();
         }
