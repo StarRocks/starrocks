@@ -82,7 +82,6 @@ OutPut Exchange Id: 25
 |  cardinality: 16390852
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 22:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -100,7 +99,6 @@ OutPut Exchange Id: 25
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 |----21:EXCHANGE
 |       cardinality: 200000

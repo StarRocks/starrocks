@@ -101,69 +101,65 @@ OutPut Exchange Id: 22
 20:Project
 |  output columns:
 |  46 <-> [46: N_NAME, VARCHAR, false]
-|  51 <-> [51: N_NAME, CHAR, false]
+|  51 <-> [51: N_NAME, VARCHAR, false]
 |  55 <-> year[(cast([19: L_SHIPDATE, DATE, false] as DATETIME)); args: DATETIME; result: SMALLINT; args nullable: true; result nullable: true]
 |  56 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 554645
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  equal join conjunct: [39: C_NATIONKEY, INT, false] = [50: N_NATIONKEY, INT, false]
+|  equal join conjunct: [11: L_SUPPKEY, INT, false] = [1: S_SUPPKEY, INT, false]
 |  other join predicates: ((46: N_NAME = 'CANADA') AND (51: N_NAME = 'IRAN')) OR ((46: N_NAME = 'IRAN') AND (51: N_NAME = 'CANADA'))
 |  build runtime filters:
-|  - filter_id = 3, build_expr = (50: N_NATIONKEY), remote = true
+|  - filter_id = 3, build_expr = (1: S_SUPPKEY), remote = false
 |  cardinality: 554645
 |  column statistics:
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 277544.5544554456] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 277544.5544554456] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 |----18:EXCHANGE
-|       cardinality: 25
+|       cardinality: 1000000
 |
-16:Project
+12:Project
 |  output columns:
+|  11 <-> [11: L_SUPPKEY, INT, false]
 |  14 <-> [14: L_EXTENDEDPRICE, DOUBLE, false]
 |  15 <-> [15: L_DISCOUNT, DOUBLE, false]
 |  19 <-> [19: L_SHIPDATE, DATE, false]
-|  39 <-> [39: C_NATIONKEY, INT, false]
-|  46 <-> [46: N_NAME, VARCHAR, false]
+|  51 <-> [51: N_NAME, CHAR, false]
 |  cardinality: 173465347
 |  column statistics:
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-15:HASH JOIN
+11:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  equal join conjunct: [11: L_SUPPKEY, INT, false] = [1: S_SUPPKEY, INT, false]
+|  equal join conjunct: [39: C_NATIONKEY, INT, false] = [50: N_NATIONKEY, INT, false]
 |  build runtime filters:
-|  - filter_id = 2, build_expr = (1: S_SUPPKEY), remote = false
+|  - filter_id = 1, build_expr = (50: N_NATIONKEY), remote = true
 |  cardinality: 173465347
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-|----14:EXCHANGE
-|       cardinality: 1000000
+|----10:EXCHANGE
+|       cardinality: 25
 |
 8:Project
 |  output columns:
@@ -196,7 +192,7 @@ OutPut Exchange Id: 22
 |----6:EXCHANGE
 |       cardinality: 150000000
 |       probe runtime filters:
-|       - filter_id = 3, probe_expr = (39: C_NATIONKEY)
+|       - filter_id = 1, probe_expr = (39: C_NATIONKEY)
 |
 0:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -207,7 +203,7 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 actualRows=0, avgRowSize=32.0
 cardinality: 173465347
 probe runtime filters:
-- filter_id = 2, probe_expr = (11: L_SUPPKEY)
+- filter_id = 3, probe_expr = (11: L_SUPPKEY)
 column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -215,31 +211,13 @@ column statistics:
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
 
-PLAN FRAGMENT 3(F09)
+PLAN FRAGMENT 3(F07)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 18
 
-17:OlapScanNode
-table: nation, rollup: nation
-preAggregation: on
-Predicates: 51: N_NAME IN ('IRAN', 'CANADA')
-partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10185
-actualRows=0, avgRowSize=29.0
-cardinality: 25
-column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-
-PLAN FRAGMENT 4(F05)
-
-Input Partition: RANDOM
-OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 14
-
-13:Project
+17:Project
 |  output columns:
 |  1 <-> [1: S_SUPPKEY, INT, false]
 |  46 <-> [46: N_NAME, CHAR, false]
@@ -248,11 +226,11 @@ OutPut Exchange Id: 14
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-12:HASH JOIN
+16:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [4: S_NATIONKEY, INT, false] = [45: N_NATIONKEY, INT, false]
 |  build runtime filters:
-|  - filter_id = 1, build_expr = (45: N_NATIONKEY), remote = false
+|  - filter_id = 2, build_expr = (45: N_NATIONKEY), remote = false
 |  cardinality: 1000000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -260,10 +238,10 @@ OutPut Exchange Id: 14
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-|----11:EXCHANGE
+|----15:EXCHANGE
 |       cardinality: 25
 |
-9:OlapScanNode
+13:OlapScanNode
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
@@ -271,21 +249,39 @@ tabletList=10111
 actualRows=0, avgRowSize=8.0
 cardinality: 1000000
 probe runtime filters:
-- filter_id = 1, probe_expr = (4: S_NATIONKEY)
+- filter_id = 2, probe_expr = (4: S_NATIONKEY)
 column statistics:
 * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 
-PLAN FRAGMENT 5(F06)
+PLAN FRAGMENT 4(F08)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 11
+OutPut Exchange Id: 15
 
-10:OlapScanNode
+14:OlapScanNode
 table: nation, rollup: nation
 preAggregation: on
 Predicates: 46: N_NAME IN ('CANADA', 'IRAN')
+partitionsRatio=1/1, tabletsRatio=1/1
+tabletList=10185
+actualRows=0, avgRowSize=29.0
+cardinality: 25
+column statistics:
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+
+PLAN FRAGMENT 5(F05)
+
+Input Partition: RANDOM
+OutPut Partition: UNPARTITIONED
+OutPut Exchange Id: 10
+
+9:OlapScanNode
+table: nation, rollup: nation
+preAggregation: on
+Predicates: 51: N_NAME IN ('IRAN', 'CANADA')
 partitionsRatio=1/1, tabletsRatio=1/1
 tabletList=10185
 actualRows=0, avgRowSize=29.0
@@ -351,7 +347,7 @@ tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
 actualRows=0, avgRowSize=12.0
 cardinality: 15000000
 probe runtime filters:
-- filter_id = 3, probe_expr = (39: C_NATIONKEY)
+- filter_id = 1, probe_expr = (39: C_NATIONKEY)
 column statistics:
 * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
 * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE

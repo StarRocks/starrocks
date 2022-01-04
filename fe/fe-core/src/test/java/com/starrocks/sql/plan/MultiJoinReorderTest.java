@@ -32,6 +32,11 @@ public class MultiJoinReorderTest extends PlanTestBase {
     }
 
     @Test
+    public void test() throws Exception {
+        String sql = "select v1,v4,v7 from t0 inner join t1 on v2 = v5 inner join t2 on v v3 = v8";
+    }
+
+    @Test
     public void testCrossJoinReorderGreedy() throws Exception {
         connectContext.getSessionVariable().disableDPJoinReorder();
 
@@ -496,6 +501,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String sql = "select count(*) from t0,t1,t2,t3,t0 as t4, t1 as t5 where true";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("17:CROSS JOIN"));
+        Assert.assertTrue(plan.contains("23:AGGREGATE (merge finalize)"));
     }
 }

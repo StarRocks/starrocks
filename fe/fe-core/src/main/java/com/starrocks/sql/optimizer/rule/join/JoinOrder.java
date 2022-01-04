@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
@@ -12,10 +13,8 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -227,8 +226,8 @@ public abstract class JoinOrder {
         if (exprInfo.leftChildExpr != null) {
             cost += exprInfo.leftChildExpr.bestExprInfo.cost;
             cost += exprInfo.rightChildExpr.bestExprInfo.cost;
-            LogicalJoinOperator joinOperator = (LogicalJoinOperator) exprInfo.expr.getOp();
-            if (penaltyCross && joinOperator.getJoinType().isCrossJoin()) {
+            MultiJoinOperator joinOperator = (MultiJoinOperator) exprInfo.expr.getOp();
+            if (penaltyCross && joinOperator.getJoinOperator().getJoinType().isCrossJoin()) {
                 cost *= Constants.CrossJoinCostPenalty;
             }
         }
@@ -279,15 +278,26 @@ public abstract class JoinOrder {
         pushRequiredColumns(leftExprInfo, leftExpression);
         pushRequiredColumns(rightExprInfo, rightExpression);
 
+        ColumnRefSet outputColumns = new ColumnRefSet();
+        outputColumns.union(leftExprInfo.expr.getOutputColumns());
+        outputColumns.union(rightExprInfo.expr.getOutputColumns());
+        MultiJoinOperator multiJoinOperator = new MultiJoinOperator(
+                new LogicalProjectOperator(
+                        outputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+                                .collect(Collectors.toMap(Function.identity(), Function.identity()))),
+                newJoin);
+
         // In StarRocks, we only support hash join.
         // So we always use small table as right child
         if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
-            OptExpression joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
+            OptExpression joinExpr = OptExpression.create(multiJoinOperator, rightExprInfo.expr,
                     leftExprInfo.expr);
+            joinExpr.deriveLogicalPropertyItself();
             return new ExpressionInfo(joinExpr, rightGroup, leftGroup);
         } else {
-            OptExpression joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
+            OptExpression joinExpr = OptExpression.create(multiJoinOperator, leftExprInfo.expr,
                     rightExprInfo.expr);
+            joinExpr.deriveLogicalPropertyItself();
             return new ExpressionInfo(joinExpr, leftGroup, rightGroup);
         }
     }
@@ -297,16 +307,17 @@ public abstract class JoinOrder {
             return;
         }
 
-        Map<ColumnRefOperator, ScalarOperator> projection = exprInfo.expr.getOutputColumns()
-                .getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
-                .collect(Collectors.toMap(Function.identity(), Function.identity()));
-        projection.putAll(expression);
-        if (exprInfo.expr.getOp().getProjection() != null) {
-            projection.putAll(exprInfo.expr.getOp().getProjection().getColumnRefMap());
+        if (!(exprInfo.expr.getOp() instanceof MultiJoinOperator)) {
+            Preconditions.checkState(false);
         }
-        Operator.Builder builder = OperatorBuilderFactory.build(exprInfo.expr.getOp());
+
+        MultiJoinOperator multiJoinOperator = (MultiJoinOperator) exprInfo.expr.getOp();
+
+        Map<ColumnRefOperator, ScalarOperator> projection =
+                new HashMap<>(multiJoinOperator.getProjectOperator().getColumnRefMap());
+        projection.putAll(expression);
         exprInfo.expr = OptExpression.create(
-                builder.withOperator(exprInfo.expr.getOp()).setProjection(new Projection(projection)).build(),
+                new MultiJoinOperator(new LogicalProjectOperator(projection), multiJoinOperator.getJoinOperator()),
                 exprInfo.expr.getInputs());
         exprInfo.expr.deriveLogicalPropertyItself();
     }

@@ -10,7 +10,9 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
+import com.starrocks.sql.optimizer.rewrite.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rewrite.PruneAggregateNodeRule;
+import com.starrocks.sql.optimizer.rewrite.RemoveUnusedProject;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
@@ -19,7 +21,6 @@ import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinForceLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
-import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
@@ -138,6 +139,8 @@ public class Optimizer {
 
     OptExpression physicalRuleRewrite(TaskContext rootTaskContext, OptExpression result) {
         Preconditions.checkState(result.getOp().isPhysical());
+        result = new RemoveUnusedProject().rewrite(result);
+        result = new MergeProjectWithChildRule().rewrite(result);
 
         // Since there may be many different plans in the logic phase, it's possible
         // that this switch can't turned on after logical optimization, so we only determine
@@ -189,7 +192,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteOnlyOnce(memo, rootTaskContext, LimitPruneTabletsRule.getInstance());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
-        ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
+        //ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
 

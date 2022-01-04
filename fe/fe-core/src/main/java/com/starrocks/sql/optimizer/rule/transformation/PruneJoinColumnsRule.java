@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -9,6 +11,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import jersey.repackaged.com.google.common.collect.Lists;
 
 import java.util.Collections;
 import java.util.List;
@@ -25,8 +28,33 @@ public class PruneJoinColumnsRule extends TransformationRule {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
 
         ColumnRefSet requiredColumns = context.getTaskContext().get(0).getRequiredColumns();
-        requiredColumns.union(joinOperator.getRequiredChildInputColumns());
+        ColumnRefSet outputColumns = (ColumnRefSet) joinOperator.getOutputColumns(new ExpressionContext(input)).clone();
+        outputColumns.intersect(requiredColumns);
+        if (outputColumns.isEmpty()) {
+            Preconditions.checkState(false);
+            /*
+            ColumnRefSet columnRefSet = new ColumnRefSet();
+            columnRefSet.union(input.inputAt(0).getOutputColumns());
+            columnRefSet.union(input.inputAt(1).getOutputColumns());
 
-        return Collections.emptyList();
+            ColumnRefOperator columnRefOperator = Utils.findSmallestColumnRef(
+                    joinOperator.getRequiredChildInputColumns()
+                            .getStream().mapToObj(c ->
+                                    context.getColumnRefFactory().getColumnRef(c)).collect(Collectors.toList()));
+            outputColumns.union(columnRefOperator);
+             */
+        }
+
+        if (!outputColumns.equals(joinOperator.getOutputColumns())) {
+            LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder()
+                    .withOperator(joinOperator)
+                    .setOutputColumns(outputColumns)
+                    .build();
+            requiredColumns.union(newJoin.getRequiredChildInputColumns());
+            return Lists.newArrayList(OptExpression.create(newJoin, input.getInputs()));
+        } else {
+            requiredColumns.union(joinOperator.getRequiredChildInputColumns());
+            return Collections.emptyList();
+        }
     }
 }

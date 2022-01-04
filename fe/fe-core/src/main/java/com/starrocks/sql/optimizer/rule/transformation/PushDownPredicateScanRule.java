@@ -74,6 +74,9 @@ public class PushDownPredicateScanRule extends TransformationRule {
             LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectMap);
             OptExpression project = OptExpression.create(logicalProjectOperator, OptExpression.create(newScanOperator));
             return Lists.newArrayList(project);
+
+
+            //return Lists.newArrayList(OptExpression.create(newScanOperator));
         } else if (logicalScanOperator instanceof LogicalEsScanOperator) {
             LogicalEsScanOperator esScanOperator = (LogicalEsScanOperator) logicalScanOperator;
             LogicalEsScanOperator newScanOperator = new LogicalEsScanOperator(

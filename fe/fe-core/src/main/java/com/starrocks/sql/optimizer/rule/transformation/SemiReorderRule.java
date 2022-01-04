@@ -9,13 +9,14 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,11 +30,11 @@ import java.util.stream.Collectors;
  */
 public class SemiReorderRule extends TransformationRule {
     public SemiReorderRule() {
-        super(RuleType.TF_JOIN_SEMI_REORDER, Pattern.create(OperatorType.LOGICAL_JOIN).
-                addChildren(
-                        Pattern.create(OperatorType.LOGICAL_JOIN)
-                                .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)),
-                        Pattern.create(OperatorType.PATTERN_LEAF)));
+        super(RuleType.TF_JOIN_SEMI_REORDER, Pattern.create(OperatorType.LOGICAL_JOIN).addChildren(
+                Pattern.create(OperatorType.LOGICAL_PROJECT).addChildren(
+                        Pattern.create(OperatorType.LOGICAL_JOIN).addChildren(
+                                Pattern.create(OperatorType.PATTERN_MULTI_LEAF))),
+                Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
     @Override
@@ -46,7 +47,7 @@ public class SemiReorderRule extends TransformationRule {
         // Because the X and Z nodes will be used to build a new semi join,
         // all existing predicates must be included in these two nodes
         ColumnRefSet usedInRewriteSemiJoin = new ColumnRefSet();
-        usedInRewriteSemiJoin.union(input.inputAt(0).inputAt(0).getOutputColumns());
+        usedInRewriteSemiJoin.union(input.inputAt(0).inputAt(0).inputAt(0).getOutputColumns());
         usedInRewriteSemiJoin.union(input.inputAt(1).getOutputColumns());
 
         if (!usedInRewriteSemiJoin.containsAll(topJoin.getOnPredicate().getUsedColumns())) {
@@ -58,22 +59,26 @@ public class SemiReorderRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
-        LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
+        OptExpression topJoinOpt = input;
+        OptExpression bottomJoinOpt = input.inputAt(0).inputAt(0);
+
+        LogicalJoinOperator topJoin = (LogicalJoinOperator) topJoinOpt.getOp();
+        LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) bottomJoinOpt.getOp();
 
         Preconditions.checkState(topJoin.getPredicate() == null);
 
-        LogicalJoinOperator newTopJoin = new LogicalJoinOperator.Builder().withOperator(leftChildJoin)
-                .setProjection(topJoin.getProjection())
+        LogicalJoinOperator newTopJoin = new LogicalJoinOperator.Builder()
+                .withOperator(leftChildJoin)
+                .setOutputColumns(topJoinOpt.getOutputColumns())
                 .build();
 
-        ColumnRefSet leftChildInputColumns = new ColumnRefSet();
-        leftChildInputColumns.union(input.inputAt(0).inputAt(0).getOutputColumns());
-        leftChildInputColumns.union(input.inputAt(1).getOutputColumns());
+        ColumnRefSet newBottomJoinInputColumns = new ColumnRefSet();
+        newBottomJoinInputColumns.union(bottomJoinOpt.inputAt(0).getOutputColumns());
+        newBottomJoinInputColumns.union(topJoinOpt.inputAt(1).getOutputColumns());
 
         ColumnRefSet newSemiOutputColumns = new ColumnRefSet();
-        for (int id : leftChildInputColumns.getColumnIds()) {
-            if (newTopJoin.getProjection().getOutputColumns().stream().anyMatch(c -> c.getId() == id)) {
+        for (int id : newBottomJoinInputColumns.getColumnIds()) {
+            if (topJoinOpt.getOutputColumns().contains(id)) {
                 newSemiOutputColumns.union(id);
             }
 
@@ -85,7 +90,7 @@ public class SemiReorderRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
         if (newSemiOutputColumns.isEmpty()) {
             ColumnRefOperator smallestColumnRef = Utils.findSmallestColumnRef(
-                    leftChildInputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+                    newBottomJoinInputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
                             .collect(Collectors.toList())
             );
             projectMap.put(smallestColumnRef, smallestColumnRef);
@@ -94,12 +99,17 @@ public class SemiReorderRule extends TransformationRule {
                     .collect(Collectors.toMap(Function.identity(), Function.identity()));
         }
 
+        LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(projectMap);
         LogicalJoinOperator newSemiJoin = new LogicalJoinOperator.Builder().withOperator(topJoin)
-                .setProjection(new Projection(projectMap)).build();
-        return Lists.newArrayList(OptExpression.create(newTopJoin,
-                Lists.newArrayList(
-                        OptExpression.create(newSemiJoin,
-                                Lists.newArrayList(input.inputAt(0).inputAt(0), input.inputAt(1))),
-                        input.inputAt(0).inputAt(1))));
+                .setOutputColumns(new ColumnRefSet(new ArrayList<>(projectMap.keySet())))
+                .build();
+
+        return Lists.newArrayList(OptExpression.create(newTopJoin, Lists.newArrayList(
+                OptExpression.create(newProjectOperator, Lists.newArrayList(
+                        OptExpression.create(newSemiJoin, Lists.newArrayList(
+                                bottomJoinOpt.inputAt(0),
+                                topJoinOpt.inputAt(1))))),
+                bottomJoinOpt.inputAt(1)
+        )));
     }
 }

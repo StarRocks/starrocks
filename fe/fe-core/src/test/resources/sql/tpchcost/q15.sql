@@ -170,7 +170,7 @@ rollup: lineitem
 tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=21861386
-avgRowSize=32.0
+avgRowSize=24.0
 numNodes=0
 
 PLAN FRAGMENT 6
@@ -199,7 +199,7 @@ rollup: lineitem
 tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=21861386
-avgRowSize=32.0
+avgRowSize=24.0
 numNodes=0
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
@@ -214,7 +214,6 @@ column statistics:
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
-* L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
 * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
@@ -232,7 +231,6 @@ OutPut Exchange Id: 22
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
 |  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 20:Project
@@ -391,7 +389,6 @@ OutPut Exchange Id: 09
 |  cardinality: 21861386
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 6:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -399,14 +396,13 @@ preAggregation: on
 Predicates: [38: L_SHIPDATE, DATE, false] >= '1995-07-01', [38: L_SHIPDATE, DATE, false] < '1995-10-01'
 partitionsRatio=1/1, tabletsRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-actualRows=0, avgRowSize=32.0
+actualRows=0, avgRowSize=24.0
 cardinality: 21861386
 column statistics:
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 * L_SHIPDATE-->[8.04528E8, 8.124768E8, 0.0, 4.0, 2526.0] ESTIMATE
-* expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 
 PLAN FRAGMENT 6(F01)
 
@@ -430,7 +426,6 @@ OutPut Exchange Id: 04
 |  cardinality: 21861386
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 1:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -438,12 +433,11 @@ preAggregation: on
 Predicates: [19: L_SHIPDATE, DATE, false] >= '1995-07-01', [19: L_SHIPDATE, DATE, false] < '1995-10-01'
 partitionsRatio=1/1, tabletsRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-actualRows=0, avgRowSize=32.0
+actualRows=0, avgRowSize=24.0
 cardinality: 21861386
 column statistics:
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 * L_SHIPDATE-->[8.04528E8, 8.124768E8, 0.0, 4.0, 2526.0] ESTIMATE
-* expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 [end]

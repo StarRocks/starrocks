@@ -498,7 +498,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY"));
-        Assert.assertTrue(plan.contains("  14:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("  13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
@@ -770,7 +770,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     preAggregation: on\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=10015,10017,10019\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
@@ -779,7 +779,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     preAggregation: on\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=10006,10008,10010\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
@@ -797,7 +797,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     preAggregation: on\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=10015,10017,10019\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
@@ -806,7 +806,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     preAggregation: on\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=10006,10008,10010\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
                     "     cardinality: 800000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
@@ -824,7 +824,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     preAggregation: on\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=10015,10017,10019\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
@@ -833,7 +833,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     preAggregation: on\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=10006,10008,10010\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     actualRows=0, avgRowSize=3.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));

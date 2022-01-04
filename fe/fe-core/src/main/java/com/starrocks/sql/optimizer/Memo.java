@@ -87,6 +87,9 @@ public class Memo {
             Group existedGroup = existedGroupExpression.getGroup();
 
             if (needMerge(targetGroup, existedGroup)) {
+                if (targetGroup.getId() == 87 || existedGroup.getId() == 87) {
+                    Preconditions.checkState(true);
+                }
                 mergeGroup(existedGroup, targetGroup);
             }
 
@@ -131,6 +134,9 @@ public class Memo {
         }
 
         GroupExpression groupExpression = new GroupExpression(expression.getOp(), inputs);
+        if (targetGroup != null && targetGroup.getId() == 87) {
+            Preconditions.checkState(true);
+        }
         Pair<Boolean, GroupExpression> result = insertGroupExpression(groupExpression, targetGroup);
         if (result.first && targetGroup == null) {
             // For new group, we need drive property from expression
@@ -206,10 +212,14 @@ public class Memo {
         // When some rule merge two groups to one group, or
         // the GroupExpressions of one group are all removed.
         // The group is empty, We should remove it.
+        removeAllEmptyGroup();
+        /*
         List<Group> groups = getAllEmptyGroups();
         for (Group group : groups) {
             removeOneGroup(group);
         }
+
+         */
     }
 
     private List<Group> getAllEmptyGroups() {

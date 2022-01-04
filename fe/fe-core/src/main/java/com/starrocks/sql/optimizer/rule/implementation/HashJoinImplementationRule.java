@@ -29,7 +29,8 @@ public class HashJoinImplementationRule extends ImplementationRule {
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
-                joinOperator.getProjection());
+                joinOperator.getProjection(),
+                joinOperator.getOutputColumns());
         OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
         return Lists.newArrayList(result);
     }

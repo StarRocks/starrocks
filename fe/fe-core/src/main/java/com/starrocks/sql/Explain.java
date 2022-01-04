@@ -321,6 +321,7 @@ public class Explain {
             PhysicalAssertOneRowOperator assertOneRow = (PhysicalAssertOneRowOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder(
                     "- ASSERT " + assertOneRow.getAssertion().name() + " " + assertOneRow.getCheckRows());
+            sb.append(buildOutputColumns(assertOneRow, ""));
             sb.append("\n");
             buildCostEstimate(sb, optExpression, context.step);
             buildCommonProperty(sb, assertOneRow, context.step);

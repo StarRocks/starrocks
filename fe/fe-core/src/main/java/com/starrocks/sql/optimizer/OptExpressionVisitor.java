@@ -94,6 +94,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitMultiJoin(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     /**
      * Physical operator visitor
      */

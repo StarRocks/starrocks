@@ -19,13 +19,15 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
     private final JoinOperator joinType;
     private final ScalarOperator joinPredicate;
     private final String joinHint;
+    private final ColumnRefSet outputColumns;
 
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator joinPredicate,
                                     String joinHint,
                                     long limit,
                                     ScalarOperator predicate,
-                                    Projection projection) {
+                                    Projection projection,
+                                    ColumnRefSet outputColumns) {
         super(OperatorType.PHYSICAL_HASH_JOIN);
         this.joinType = joinType;
         this.joinPredicate = joinPredicate;
@@ -33,6 +35,7 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+        this.outputColumns = outputColumns;
     }
 
     public JoinOperator getJoinType() {
@@ -88,12 +91,13 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
             return false;
         }
         PhysicalHashJoinOperator that = (PhysicalHashJoinOperator) o;
-        return joinType == that.joinType && Objects.equals(joinPredicate, that.joinPredicate);
+        return joinType == that.joinType && Objects.equals(joinPredicate, that.joinPredicate) &&
+                Objects.equals(outputColumns, that.outputColumns);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), joinType, joinPredicate);
+        return Objects.hash(super.hashCode(), joinType, joinPredicate, outputColumns);
     }
 
     @Override

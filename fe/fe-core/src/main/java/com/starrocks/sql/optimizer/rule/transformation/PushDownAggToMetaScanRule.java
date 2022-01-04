@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 // For meta scan query: select max(a), min(a), dict_merge(a) from test_all_type [_META_]
 // we need to push max, min, dict_merge aggregate function infos to meta scan node
@@ -93,7 +94,10 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         LogicalMetaScanOperator newMetaScan =
                 new LogicalMetaScanOperator(metaScan.getTable(), newScanColumnRefs, aggColumnIdToNames);
 
-        OptExpression newProject = new OptExpression(project);
+        OptExpression newProject =
+                new OptExpression(new LogicalProjectOperator(newScanColumnRefs.keySet().stream().collect(
+                        Collectors.toMap(java.util.function.Function.identity(),
+                                java.util.function.Function.identity()))));
         newProject.getInputs().add(OptExpression.create(newMetaScan));
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(

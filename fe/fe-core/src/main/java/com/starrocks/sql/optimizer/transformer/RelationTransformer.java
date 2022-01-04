@@ -379,11 +379,14 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));
+        return new LogicalPlan(scanBuilder, outputVariables, null);
+        /*
         LogicalProjectOperator projectOperator =
                 new LogicalProjectOperator(outputVariables.stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
 
         return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, null);
+         */
     }
 
     @Override
@@ -432,7 +435,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
             ExpressionMapping expressionMapping = new ExpressionMapping(new Scope(RelationId.of(node),
                     node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
                     Streams.concat(leftPlan.getRootBuilder().getFieldMappings().stream(),
-                            rightPlan.getRootBuilder().getFieldMappings().stream())
+                                    rightPlan.getRootBuilder().getFieldMappings().stream())
                             .collect(Collectors.toList()));
 
             Operator root = new LogicalApplyOperator(null, null, correlation, false);
@@ -450,14 +453,15 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                 node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields()));
         joinScope.setParent(node.getScope().getParent());
         ExpressionMapping expressionMapping = new ExpressionMapping(joinScope, Streams.concat(
-                leftPlan.getRootBuilder().getFieldMappings().stream(),
-                rightPlan.getRootBuilder().getFieldMappings().stream())
+                        leftPlan.getRootBuilder().getFieldMappings().stream(),
+                        rightPlan.getRootBuilder().getFieldMappings().stream())
                 .collect(Collectors.toList()));
 
         if (node.getOnPredicate() == null) {
             OptExprBuilder joinOptExprBuilder = new OptExprBuilder(new LogicalJoinOperator.Builder()
                     .setJoinType(JoinOperator.CROSS_JOIN)
                     .setJoinHint(node.getJoinHint())
+                    .setOutputColumns(new ColumnRefSet(expressionMapping.getFieldMappings()))
                     .build(), Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
                     expressionMapping);
 
@@ -500,14 +504,15 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                     Lists.newArrayList(rightPlan.getRootBuilder().getFieldMappings()));
         } else {
             outputExpressionMapping = new ExpressionMapping(node.getScope(), Streams.concat(
-                    leftPlan.getRootBuilder().getFieldMappings().stream(),
-                    rightPlan.getRootBuilder().getFieldMappings().stream())
+                            leftPlan.getRootBuilder().getFieldMappings().stream(),
+                            rightPlan.getRootBuilder().getFieldMappings().stream())
                     .collect(Collectors.toList()));
         }
 
         LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder()
                 .setJoinType(node.getType())
                 .setOnPredicate(onPredicate)
+                .setOutputColumns(new ColumnRefSet(outputExpressionMapping.getFieldMappings()))
                 .setJoinHint(node.getJoinHint())
                 .build();
 

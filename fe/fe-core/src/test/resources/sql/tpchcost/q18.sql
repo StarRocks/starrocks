@@ -38,7 +38,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-19:MERGING-EXCHANGE
+18:MERGING-EXCHANGE
 limit: 100
 
 PLAN FRAGMENT 1
@@ -46,34 +46,34 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
 
 STREAM DATA SINK
-EXCHANGE ID: 19
+EXCHANGE ID: 18
 UNPARTITIONED
 
-18:TOP-N
+17:TOP-N
 |  order by: <slot 13> 13: O_TOTALPRICE DESC, <slot 14> 14: O_ORDERDATE ASC
 |  offset: 0
 |  limit: 100
 |
-17:AGGREGATE (merge finalize)
+16:AGGREGATE (merge finalize)
 |  output: sum(56: sum)
 |  group by: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
 |
-16:EXCHANGE
+15:EXCHANGE
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 16
+EXCHANGE ID: 15
 HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
 
-15:AGGREGATE (update serialize)
+14:AGGREGATE (update serialize)
 |  STREAMING
 |  output: sum(24: L_QUANTITY)
 |  group by: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
 |
-14:Project
+13:Project
 |  <slot 1> : 1: C_CUSTKEY
 |  <slot 2> : 2: C_NAME
 |  <slot 10> : 10: O_ORDERKEY
@@ -81,13 +81,13 @@ HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: 
 |  <slot 14> : 14: O_ORDERDATE
 |  <slot 24> : 24: L_QUANTITY
 |
-13:HASH JOIN
+12:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 20: L_ORDERKEY = 10: O_ORDERKEY
 |
-|----12:EXCHANGE
+|----11:EXCHANGE
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -105,23 +105,23 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 12
+EXCHANGE ID: 11
 UNPARTITIONED
 
-11:Project
+10:Project
 |  <slot 1> : 1: C_CUSTKEY
 |  <slot 2> : 2: C_NAME
 |  <slot 10> : 10: O_ORDERKEY
 |  <slot 13> : 13: O_TOTALPRICE
 |  <slot 14> : 14: O_ORDERDATE
 |
-10:HASH JOIN
+9:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 1: C_CUSTKEY = 11: O_CUSTKEY
 |
-|----9:EXCHANGE
+|----8:EXCHANGE
 |
 1:OlapScanNode
 TABLE: customer
@@ -139,15 +139,9 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 09
+EXCHANGE ID: 08
 UNPARTITIONED
 
-8:Project
-|  <slot 10> : 10: O_ORDERKEY
-|  <slot 11> : 11: O_CUSTKEY
-|  <slot 13> : 13: O_TOTALPRICE
-|  <slot 14> : 14: O_ORDERDATE
-|
 7:HASH JOIN
 |  join op: LEFT SEMI JOIN (BROADCAST)
 |  hash predicates:

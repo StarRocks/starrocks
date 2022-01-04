@@ -4,11 +4,16 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -16,6 +21,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class PruneProjectColumnsRule extends TransformationRule {
 
@@ -39,6 +45,38 @@ public class PruneProjectColumnsRule extends TransformationRule {
                 newMap.put(columnRefOperator, operator);
             }
         }));
+
+        if (input.inputAt(0).getOp() instanceof LogicalJoinOperator ||
+                input.inputAt(0).getOp() instanceof LogicalScanOperator) {
+            //LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.inputAt(0).getOp();
+            LogicalOperator operator = (LogicalOperator) input.inputAt(0).getOp();
+            ColumnRefSet requiredColumns = requiredInputColumns;
+            ColumnRefSet outputColumns =
+                    (ColumnRefSet) operator.getOutputColumns(new ExpressionContext(input)).clone();
+            outputColumns.intersect(requiredColumns);
+            if (outputColumns.isEmpty()) {
+                if (operator instanceof LogicalJoinOperator &&
+                        ((LogicalJoinOperator) operator).getOnPredicate() != null) {
+                    outputColumns.union(((LogicalJoinOperator) operator).getOnPredicate().getUsedColumns());
+                    outputColumns.intersect(input.inputAt(0).getOutputColumns());
+                }
+                if (operator.getPredicate() != null) {
+                    outputColumns.union(operator.getPredicate().getUsedColumns());
+                    outputColumns.intersect(input.inputAt(0).getOutputColumns());
+                }
+                if (outputColumns.isEmpty()) {
+                    outputColumns.union(input.inputAt(0).getOutputColumns());
+                }
+
+                ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(
+                        outputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+                                .collect(Collectors.toList()));
+                if (newMap.isEmpty()) {
+                    newMap.put(smallestColumn, smallestColumn);
+                }
+                requiredOutputColumns.union(smallestColumn);
+            }
+        }
 
         // Change the requiredOutputColumns in context
         requiredOutputColumns.union(requiredInputColumns);

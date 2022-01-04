@@ -24,6 +24,8 @@ public class LogicalJoinOperator extends LogicalOperator {
     // For mark the node has been push  down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
 
+    private final ColumnRefSet outputColumns;
+
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
         this(joinType, onPredicate, "", Operator.DEFAULT_LIMIT, null, false);
     }
@@ -39,6 +41,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.joinHint = joinHint;
 
         this.hasPushDownJoinOnClause = hasPushDownJoinOnClause;
+        this.outputColumns = null;
     }
 
     private LogicalJoinOperator(Builder builder) {
@@ -48,6 +51,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.joinHint = builder.joinHint;
 
         this.hasPushDownJoinOnClause = builder.hasPushDownJoinOnClause;
+        this.outputColumns = builder.outputColumns;
     }
 
     // Constructor for UT, don't use this ctor except ut
@@ -56,6 +60,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.onPredicate = null;
         this.joinType = JoinOperator.INNER_JOIN;
         this.joinHint = "";
+        this.outputColumns = null;
     }
 
     public boolean isHasPushDownJoinOnClause() {
@@ -91,6 +96,10 @@ public class LogicalJoinOperator extends LogicalOperator {
             result.union(predicate.getUsedColumns());
         }
 
+        if (outputColumns != null) {
+            result.union(outputColumns);
+        }
+
         if (projection != null) {
             projection.getColumnRefMap().values().forEach(s -> result.union(s.getUsedColumns()));
             result.except(new ColumnRefSet(new ArrayList<>(projection.getCommonSubOperatorMap().keySet())));
@@ -101,15 +110,18 @@ public class LogicalJoinOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        if (projection != null) {
-            return new ColumnRefSet(projection.getOutputColumns());
-        } else {
+        if (outputColumns == null) {
             ColumnRefSet columns = new ColumnRefSet();
             for (int i = 0; i < expressionContext.arity(); ++i) {
                 columns.union(expressionContext.getChildLogicalProperty(i).getOutputColumns());
             }
             return columns;
         }
+        return outputColumns;
+    }
+
+    public ColumnRefSet getOutputColumns() {
+        return outputColumns;
     }
 
     @Override
@@ -137,12 +149,13 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         LogicalJoinOperator rhs = (LogicalJoinOperator) o;
 
-        return joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate);
+        return joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate) &&
+                Objects.equals(outputColumns, rhs.outputColumns);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), joinType, onPredicate);
+        return Objects.hash(super.hashCode(), joinType, onPredicate, outputColumns);
     }
 
     @Override
@@ -159,6 +172,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         private ScalarOperator onPredicate;
         private String joinHint = "";
         private boolean hasPushDownJoinOnClause = false;
+        private ColumnRefSet outputColumns;
 
         @Override
         public LogicalJoinOperator build() {
@@ -172,6 +186,7 @@ public class LogicalJoinOperator extends LogicalOperator {
             this.onPredicate = joinOperator.onPredicate;
             this.joinHint = joinOperator.joinHint;
             this.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
+            this.outputColumns = joinOperator.outputColumns;
             return this;
         }
 
@@ -187,6 +202,11 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         public Builder setProjection(Projection projection) {
             this.projection = projection;
+            return this;
+        }
+
+        public Builder setOutputColumns(ColumnRefSet outputColumns) {
+            this.outputColumns = outputColumns;
             return this;
         }
 

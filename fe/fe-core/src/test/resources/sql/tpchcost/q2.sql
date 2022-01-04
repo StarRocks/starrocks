@@ -54,13 +54,11 @@ cardinality: 100
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
 * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 180000.00000000003] ESTIMATE
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 180000.00000000003] ESTIMATE
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
 * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
-* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 180000.00000000003] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
@@ -77,13 +75,11 @@ OutPut Exchange Id: 38
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 180000.00000000003] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 180000.00000000003] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 180000.00000000003] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 36:Project

@@ -256,7 +256,7 @@ rollup: t0
 tabletRatio=3/3
 tabletList=10006,10008,10010
 cardinality=1
-avgRowSize=4.0
+avgRowSize=3.0
 numNodes=0
 
 PLAN FRAGMENT 2
@@ -299,7 +299,7 @@ rollup: t3
 tabletRatio=3/3
 tabletList=10033,10035,10037
 cardinality=1
-avgRowSize=5.0
+avgRowSize=3.0
 numNodes=0
 [end]
 
@@ -542,7 +542,7 @@ INNER JOIN (join-predicate [2: v2 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
-            EXCHANGE GATHER
+            TOP-N (order by [[4: v4 ASC NULLS FIRST]])
                 TOP-N (order by [[4: v4 ASC NULLS FIRST]])
                     TOP-N (order by [[5: v5 ASC NULLS FIRST]])
                         TOP-N (order by [[5: v5 ASC NULLS FIRST]])

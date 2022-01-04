@@ -52,6 +52,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.rule.join.MultiJoinOperator;
 
 /**
  * OperatorVisitor is used to traverse Operator
@@ -163,6 +164,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitMockOperator(MockOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitMultiJoin(MultiJoinOperator node, C context) {
         return visitOperator(node, context);
     }
 

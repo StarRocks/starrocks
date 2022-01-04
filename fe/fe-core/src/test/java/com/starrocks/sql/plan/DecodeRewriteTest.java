@@ -494,7 +494,8 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "               ORDER  BY state) \n" +
                 "ORDER  BY hiredate";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  5:Decode\n" +
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("  4:Decode\n" +
                 "  |  <dict id 10> : <string id 2>"));
 
         sql = "select * from join1 join pushdown_test on join1.id = pushdown_test.k1;";
