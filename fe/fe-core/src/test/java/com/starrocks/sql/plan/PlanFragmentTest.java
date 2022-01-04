@@ -5232,12 +5232,27 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  limit: 5"));
         connectContext.getSessionVariable().setSqlSelectLimit(limit);
     }
-  
+
     @Test
     public void testProjectReuse() throws Exception {
         String sql = "select nullif(v1, v1) + (0) as a , nullif(v1, v1) + (1 - 1) as b from t0;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("<slot 4> : nullif(1: v1, 1: v1) + 0"));
         Assert.assertTrue(plan.contains(" OUTPUT EXPRS:4: expr | 4: expr"));
+    }
+
+    @Test
+    public void testOnlyCrossJoin() throws Exception {
+        String sql = "select * from t0 as x0 join t1 as x1 on (1 = 2) is not null;";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains(" OUTPUT EXPRS:4: expr | 4: expr"));
+    }
+
+    @Test
+    public void testFailedLeftJoin() {
+        String sql = "select * from t0 as x0 left outer join t1 as x1 on (1 = 2) is not null";
+        Assert.assertThrows("No equal on predicate in LEFT OUTER JOIN is not supported", SemanticException.class,
+                () -> getFragmentPlan(sql));
     }
 }
