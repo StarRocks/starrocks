@@ -97,12 +97,6 @@ public:
 
     uint32_t serialize_size(size_t idx) const override;
 
-    size_t serialize_size() const override;
-
-    uint8_t* serialize_column(uint8_t* dst) override;
-
-    const uint8_t* deserialize_column(const uint8_t* src) override;
-
     MutableColumnPtr clone_empty() const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;

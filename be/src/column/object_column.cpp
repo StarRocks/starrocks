@@ -160,43 +160,6 @@ uint32_t ObjectColumn<T>::serialize_size(size_t idx) const {
 }
 
 template <typename T>
-size_t ObjectColumn<T>::serialize_size() const {
-    // | count(4 byte) | size (8 byte)| object(size byte) | size(8 byte) |....
-    return byte_size() + sizeof(uint32_t) + _pool.size() * sizeof(uint64_t);
-}
-
-template <typename T>
-uint8_t* ObjectColumn<T>::serialize_column(uint8_t* dst) {
-    encode_fixed32_le(dst, _pool.size());
-    dst += sizeof(uint32_t);
-
-    for (int i = 0; i < _pool.size(); ++i) {
-        uint64_t actual = _pool[i].serialize(dst + sizeof(uint64_t));
-        encode_fixed64_le(dst, actual);
-
-        dst += sizeof(uint64_t);
-        dst += actual;
-    }
-    return dst;
-}
-
-template <typename T>
-const uint8_t* ObjectColumn<T>::deserialize_column(const uint8_t* src) {
-    uint32_t count = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
-    for (int i = 0; i < count; ++i) {
-        uint64_t size = decode_fixed64_le(src);
-        src += sizeof(uint64_t);
-
-        _pool.emplace_back(Slice(src, size));
-        src += size;
-    }
-
-    return src;
-}
-
-template <typename T>
 size_t ObjectColumn<T>::filter_range(const Column::Filter& filter, size_t from, size_t to) {
     size_t old_sz = size();
     size_t new_sz = from;

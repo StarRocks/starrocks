@@ -23,7 +23,7 @@ class Chunk;
 class Field;
 class Column;
 class Schema;
-struct RuntimeChunkMeta;
+struct ProtobufChunkMeta;
 
 // We may change the Buffer implementation in the future.
 template <typename T>

@@ -373,40 +373,6 @@ void BinaryColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t
     }
 }
 
-uint8_t* BinaryColumn::serialize_column(uint8_t* dst) {
-    uint32_t bytes_size = _bytes.size() * sizeof(uint8_t);
-    encode_fixed32_le(dst, bytes_size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _bytes.data(), bytes_size);
-    dst += bytes_size;
-
-    uint32_t offsets_size = _offsets.size() * sizeof(Offset);
-    encode_fixed32_le(dst, offsets_size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _offsets.data(), offsets_size);
-    dst += offsets_size;
-    return dst;
-}
-
-const uint8_t* BinaryColumn::deserialize_column(const uint8_t* src) {
-    uint32_t bytes_size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
-    _bytes.resize(bytes_size);
-    strings::memcpy_inlined(_bytes.data(), src, bytes_size);
-    src += bytes_size;
-
-    uint32_t offsets_size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
-    _offsets.resize(offsets_size / sizeof(Offset));
-    strings::memcpy_inlined(_offsets.data(), src, offsets_size);
-    src += offsets_size;
-    return src;
-}
-
 void BinaryColumn::fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
         hashes[i] = HashUtil::fnv_hash(_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i], hashes[i]);
