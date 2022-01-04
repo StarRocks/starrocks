@@ -268,6 +268,10 @@ if (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES} ./exec/vectorized/hdfs_scan_node_test.cpp)
 endif ()
 
+if (WITH_AWS)
+    set(EXEC_FILES ${EXEC_FILES} ./env/s3_client_test.cpp)
+endif ()
+
 add_executable(starrocks_test ${EXEC_FILES})
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})

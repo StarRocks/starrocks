@@ -743,6 +743,15 @@ build_aws_cpp_sdk() {
     make -j$PARALLEL && make install
 }
 
+# aws cpp sdk
+build_aws_cpp_sdk() {
+    check_if_source_exist $AWS_CPP_SDK_SOURCE
+    cd $TP_SOURCE_DIR/$AWS_CPP_SDK_SOURCE
+    mkdir -p build && cd build
+    $CMAKE_CMD .. -DBUILD_ONLY="s3;transfer" -DENABLE_TESTING=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    make -j$PARALLEL && make install
+}
+
 build_libevent
 build_zlib
 build_lz4
