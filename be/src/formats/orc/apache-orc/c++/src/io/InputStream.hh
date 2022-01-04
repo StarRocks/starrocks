@@ -108,5 +108,3 @@ public:
 };
 
 } // namespace orc
-
-#endif //ORC_INPUTSTREAM_HH
