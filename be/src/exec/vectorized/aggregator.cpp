@@ -406,10 +406,12 @@ void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
 void Aggregator::process_limit(vectorized::ChunkPtr* chunk) {
     if (_reached_limit()) {
         int64_t num_rows_over = _num_rows_returned - _limit;
-        (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
-        COUNTER_SET(_rows_returned_counter, _limit);
-        _is_ht_eos = true;
-        LOG(INFO) << "Aggregate Node ReachedLimit " << _limit;
+        if ((*chunk)->num_rows() > num_rows_over) {
+            (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
+            COUNTER_SET(_rows_returned_counter, _limit);
+            _is_ht_eos = true;
+            LOG(INFO) << "Aggregate Node ReachedLimit " << _limit;
+        }
     }
 }
 
