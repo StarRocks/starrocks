@@ -486,9 +486,9 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                     new ColumnRefSet(leftPlan.getOutputColumn()),
                     new ColumnRefSet(rightPlan.getOutputColumn()), conjuncts);
 
-            Preconditions.checkState(eqPredicate.size() > 0);
-
-            onPredicate = Utils.compoundAnd(eqPredicate.get(0), onPredicate);
+            if (eqPredicate.size() > 0) {
+                onPredicate = Utils.compoundAnd(eqPredicate.get(0), onPredicate);
+            }
         }
 
         ExpressionMapping outputExpressionMapping;
