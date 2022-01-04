@@ -311,6 +311,18 @@ CONF_mInt32(update_compaction_trace_threshold, "20");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
+CONF_mBool(enable_compaction, "true");
+CONF_Bool(enable_new_compaction_framework, "false");
+CONF_mInt32(max_compaction_task_num, "2");
+CONF_mInt32(max_compaction_task_per_disk, "1");
+// < 0 means no limit
+CONF_mInt32(max_level_0_compaction_task, "-1");
+CONF_mInt32(max_level_1_compaction_task, "1");
+// 5GB
+CONF_mInt64(min_level_0_compaction_size, "5368709120");
+// 20GB
+CONF_mInt64(min_level_1_compaction_size, "21474836480");
+
 // Max row source mask memory bytes, default is 200M.
 // Should be smaller than compaction_mem_limit.
 // When the row source mask buffer exceeds this, it will be persisted to a temporary file on the disk.

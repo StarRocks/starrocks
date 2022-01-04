@@ -40,6 +40,9 @@ using RowsetMetaSharedPtr = std::shared_ptr<RowsetMeta>;
 
 class RowsetMeta {
 public:
+    // for ut
+    RowsetMeta() = default;
+
     ~RowsetMeta() = default;
 
     bool init(const std::string_view& pb_rowset_meta) {

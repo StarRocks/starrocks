@@ -215,14 +215,14 @@ int64_t Thread::current_thread_id() {
     return syscall(SYS_gettid);
 }
 
-void Thread::set_thread_name(pthread_t t, const std::string name) {
+void Thread::set_thread_name(pthread_t t, const std::string& name) {
     int ret = pthread_setname_np(t, name.data());
     if (ret) {
         LOG(WARNING) << "failed to set thread name: " << name;
     }
 }
 
-void Thread::set_thread_name(std::thread& t, const std::string name) {
+void Thread::set_thread_name(std::thread& t, const std::string& name) {
     Thread::set_thread_name(t.native_handle(), name);
 }
 

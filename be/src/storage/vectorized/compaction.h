@@ -4,6 +4,7 @@
 
 #include <vector>
 
+#include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -18,13 +19,6 @@ namespace starrocks::vectorized {
 
 class DataDir;
 
-enum CompactionAlgorithm {
-    // compaction by all columns together.
-    kHorizontal = 0,
-    // compaction by column group, for tablet with many columns.
-    kVertical = 1
-};
-
 const char* compaction_algorithm_to_string(CompactionAlgorithm algorithm);
 
 // This class is a base class for compaction.
@@ -36,13 +30,6 @@ const char* compaction_algorithm_to_string(CompactionAlgorithm algorithm);
 //  4. gc unused rowstes
 class Compaction {
 public:
-    struct Statistics {
-        // number of rows written to the destination rowset after merge
-        int64_t output_rows = 0;
-        int64_t merged_rows = 0;
-        int64_t filtered_rows = 0;
-    };
-
     explicit Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet);
     virtual ~Compaction();
 
@@ -52,16 +39,6 @@ public:
     virtual Status compact() = 0;
 
     static Status init(int concurreny);
-
-    // choose compaction algorithm according to tablet schema, max columns per group and segment iterator num.
-    // 1. if the number of columns in the schema is less than or equal to max_columns_per_group, use kHorizontal.
-    // 2. if source_num is less than or equal to 1, or is more than MAX_SOURCES, use kHorizontal.
-    static CompactionAlgorithm choose_compaction_algorithm(size_t num_columns, int64_t max_columns_per_group,
-                                                           size_t source_num);
-
-    static uint32_t get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size);
-    static int32_t get_read_chunk_size(int64_t mem_limit, int32_t config_chunk_size, int64_t num_rows,
-                                       int64_t total_mem_footprint, size_t source_num);
 
     static void split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
                                          std::vector<std::vector<uint32_t>>* column_groups);
@@ -75,8 +52,6 @@ protected:
     Status do_compaction_impl();
 
     Status modify_rowsets();
-
-    Status construct_output_rowset_writer(uint32_t max_rows_per_segment, CompactionAlgorithm algorithm);
 
     Status check_version_continuity(const std::vector<RowsetSharedPtr>& rowsets);
     Status check_correctness(const Statistics& stats);

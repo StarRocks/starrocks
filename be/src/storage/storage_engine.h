@@ -89,6 +89,8 @@ public:
     template <bool include_unused = false>
     std::vector<DataDir*> get_stores();
 
+    size_t get_store_num() { return _store_map.size(); }
+
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
     // get root path for creating tablet. The returned vector of root path should be random,
@@ -312,6 +314,8 @@ private:
     std::vector<std::thread> _path_scan_threads;
     // threads to run tablet checkpoint
     std::vector<std::thread> _tablet_checkpoint_threads;
+
+    std::thread _compaction_scheduler;
 
     // For tablet and disk-stat report
     std::mutex _report_mtx;

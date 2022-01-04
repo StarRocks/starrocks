@@ -21,6 +21,7 @@
 
 #include "storage/task/engine_publish_version_task.h"
 
+#include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/tablet_manager.h"

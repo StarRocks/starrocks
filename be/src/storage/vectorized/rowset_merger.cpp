@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "gutil/stl_util.h"
+#include "storage/compaction_utils.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
@@ -245,10 +246,10 @@ public:
         vector<vector<uint32_t>> column_groups;
         MonotonicStopWatch timer;
         timer.start();
-        if (cfg.algorithm == kVertical) {
+        if (cfg.algorithm == VERTICAL_COMPACTION) {
             int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
-            Compaction::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(), max_columns_per_group,
-                                                 &column_groups);
+            CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(),
+                                                      max_columns_per_group, &column_groups);
             RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,
                                                  &total_input_size, &total_rows, &total_chunk, &stats));
         } else {

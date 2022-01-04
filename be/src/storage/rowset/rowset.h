@@ -24,6 +24,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <variant>
 #include <vector>
 
 #include "common/statusor.h"

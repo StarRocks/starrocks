@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "gutil/strings/substitute.h"
+#include "storage/compaction_utils.h"
 #include "storage/kv_store.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
@@ -275,7 +276,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
     cfg.chunk_size = 1000 + rand() % 2000;
-    cfg.algorithm = kVertical;
+    cfg.algorithm = HORIZONTAL_COMPACTION;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
@@ -386,7 +387,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
     cfg.chunk_size = 100 + rand() % 2000;
-    cfg.algorithm = kVertical;
+    cfg.algorithm = HORIZONTAL_COMPACTION;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
