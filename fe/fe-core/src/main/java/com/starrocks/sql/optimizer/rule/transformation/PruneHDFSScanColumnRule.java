@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -31,6 +32,7 @@ import static java.util.function.UnaryOperator.identity;
 public class PruneHDFSScanColumnRule extends TransformationRule {
     public static final PruneHDFSScanColumnRule HIVE_SCAN = new PruneHDFSScanColumnRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final PruneHDFSScanColumnRule ICEBERG_SCAN = new PruneHDFSScanColumnRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final PruneHDFSScanColumnRule HUDI_SCAN = new PruneHDFSScanColumnRule(OperatorType.LOGICAL_HUDI_SCAN);
 
     public PruneHDFSScanColumnRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PRUNE_OLAP_SCAN_COLUMNS, Pattern.create(logicalOperatorType));
@@ -116,6 +118,28 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             icebergScanOperator.getMinMaxColumnRefMap().putAll(logicalIcebergScanOperator.getMinMaxColumnRefMap());
 
             return Lists.newArrayList(new OptExpression(icebergScanOperator));
+        } else if (scanOperator instanceof LogicalHudiScanOperator) {
+            LogicalHudiScanOperator logicalHudiScanOperator = (LogicalHudiScanOperator) scanOperator;
+            Map<ColumnRefOperator, Column> newColumnRefMap = scanColumns.stream()
+                    .collect(Collectors.toMap(identity(), logicalHudiScanOperator.getColRefToColumnMetaMap()::get));
+
+            LogicalHudiScanOperator hudiScanOperator = new LogicalHudiScanOperator(
+                    logicalHudiScanOperator.getTable(),
+                    logicalHudiScanOperator.getTableType(),
+                    newColumnRefMap,
+                    logicalHudiScanOperator.getColumnMetaToColRefMap(),
+                    logicalHudiScanOperator.getLimit(),
+                    logicalHudiScanOperator.getPredicate());
+
+            hudiScanOperator.getIdToPartitionKey().putAll(logicalHudiScanOperator.getIdToPartitionKey());
+            hudiScanOperator.setSelectedPartitionIds(logicalHudiScanOperator.getSelectedPartitionIds());
+            hudiScanOperator.getPartitionConjuncts().addAll(logicalHudiScanOperator.getPartitionConjuncts());
+            hudiScanOperator.getNoEvalPartitionConjuncts().addAll(logicalHudiScanOperator.getNoEvalPartitionConjuncts());
+            hudiScanOperator.getNonPartitionConjuncts().addAll(logicalHudiScanOperator.getNonPartitionConjuncts());
+            hudiScanOperator.getMinMaxConjuncts().addAll(logicalHudiScanOperator.getMinMaxConjuncts());
+            hudiScanOperator.getMinMaxColumnRefMap().putAll(logicalHudiScanOperator.getMinMaxColumnRefMap());
+
+            return Lists.newArrayList(new OptExpression(hudiScanOperator));
         } else {
             throw new StarRocksPlannerException("Unsupported logical scan operator type!", ErrorType.INTERNAL_ERROR);
         }

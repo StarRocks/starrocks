@@ -15,6 +15,7 @@ import com.starrocks.sql.optimizer.rule.implementation.FilterImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
@@ -39,6 +40,7 @@ import com.starrocks.sql.optimizer.rule.transformation.EsScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.HiveScanPartitionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.HudiScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.InlineCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
@@ -118,6 +120,7 @@ public class RuleSet {
             new OlapScanImplementationRule(),
             new HiveScanImplementationRule(),
             new IcebergScanImplementationRule(),
+            new HudiScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
@@ -156,6 +159,7 @@ public class RuleSet {
                 MergeLimitDirectRule.OLAP_SCAN,
                 MergeLimitDirectRule.HIVE_SCAN,
                 MergeLimitDirectRule.ICEBERG_SCAN,
+                MergeLimitDirectRule.HUDI_SCAN,
                 MergeLimitDirectRule.SCHEMA_SCAN,
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
@@ -172,6 +176,7 @@ public class RuleSet {
                 new PartitionPruneRule(),
                 new DistributionPruneRule(),
                 new HiveScanPartitionPruneRule(),
+                new HudiScanPartitionPruneRule(),
                 new EsScanPartitionPruneRule(),
                 new PartitionPredicatePrune()
         ));
@@ -183,6 +188,7 @@ public class RuleSet {
                 PruneScanColumnRule.ES_SCAN,
                 PruneHDFSScanColumnRule.HIVE_SCAN,
                 PruneHDFSScanColumnRule.ICEBERG_SCAN,
+                PruneHDFSScanColumnRule.HUDI_SCAN,
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
                 new PruneAggregateColumnsRule(),
@@ -204,6 +210,7 @@ public class RuleSet {
                 new PushDownPredicateCTEAnchor(),
                 PushDownPredicateScanRule.OLAP_SCAN,
                 PushDownPredicateScanRule.ICEBERG_SCAN,
+                PushDownPredicateScanRule.HUDI_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),

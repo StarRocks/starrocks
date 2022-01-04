@@ -91,6 +91,7 @@ public class CreateTableStmt extends DdlStmt {
         engineNames.add("elasticsearch");
         engineNames.add("hive");
         engineNames.add("iceberg");
+        engineNames.add("hudi");
     }
 
     // for backup. set to -1 for normal use
@@ -265,7 +266,8 @@ public class CreateTableStmt extends DdlStmt {
 
         // analyze key desc
         if (!(engineName.equals("mysql") || engineName.equals("broker") ||
-                engineName.equals("hive") || engineName.equals("iceberg"))) {
+                engineName.equals("hive") || engineName.equals("iceberg")) ||
+                engineName.equals("hudi")) {
             // olap table
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();
@@ -332,7 +334,7 @@ public class CreateTableStmt extends DdlStmt {
                 }
             }
         } else {
-            // mysql, broker, iceberg and hive do not need key desc
+            // mysql, broker, iceberg, hudi and hive do not need key desc
             if (keysDesc != null) {
                 throw new AnalysisException("Create " + engineName + " table should not contain keys desc");
             }

@@ -51,6 +51,7 @@ import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
@@ -1422,7 +1423,8 @@ public class Coordinator {
 
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
-            if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode)) {
+            if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
+                    scanNode instanceof HudiScanNode) {
                 HDFSBackendSelector selector = new HDFSBackendSelector(scanNode, locations, assignment,
                         ScanRangeAssignType.SCAN_DATA_SIZE);
                 List<Long> scanRangesBytes = Lists.newArrayList();
