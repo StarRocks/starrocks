@@ -30,7 +30,6 @@ set(EXEC_FILES
         ./exec/plain_text_line_reader_gzip_test.cpp
         ./exec/plain_text_line_reader_lz4frame_test.cpp
         ./exec/plain_text_line_reader_uncompressed_test.cpp
-        #./exec/tablet_sink_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
         #./exec/vectorized/csv_scanner_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
