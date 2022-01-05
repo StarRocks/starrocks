@@ -2446,8 +2446,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
     return Status::OK();
 }
 
-Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, Rowset* rowset,
-                                                    const std::vector<ColumnUniquePtr>& upserts,
+Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
                                                     EditVersion* read_version, uint32_t* next_rowset_id,
                                                     std::vector<std::vector<uint64_t>*>* rss_rowids) {
     std::lock_guard wl(_lock);
@@ -2471,7 +2470,7 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, Rowset* rows
     }
 
     // get rss_rowids for each segment of rowset
-    size_t num_segments = rowset->num_segments();
+    uint32_t num_segments = upserts.size();
     for (size_t i = 0; i < num_segments; i++) {
         auto& pks = *upserts[i];
         index.get(pks, (*rss_rowids)[i]);

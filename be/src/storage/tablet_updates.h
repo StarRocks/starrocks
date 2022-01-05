@@ -220,7 +220,7 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<vectorized::Column>>* columns);
 
-    Status prepare_partial_update_states(Tablet* tablet, Rowset* rowset, const std::vector<ColumnUniquePtr>& upserts,
+    Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
                                          EditVersion* read_version, uint32_t* next_rowset_id,
                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
 

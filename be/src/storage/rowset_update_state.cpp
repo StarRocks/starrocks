@@ -224,8 +224,9 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     for (size_t i = 0; i < num_segments; ++i) {
         rss_rowids[i] = &(_parital_update_states[i].src_rss_rowids);
     }
-    RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states(tablet, rowset, _upserts, &_read_version,
-                                                                     &_next_rowset_id, &rss_rowids));
+    DCHECK_EQ(_upserts.size(), num_segments);
+    RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states(tablet, _upserts, &_read_version, &_next_rowset_id,
+                                                                     &rss_rowids));
 
     for (size_t i = 0; i < num_segments; i++) {
         size_t num_default = 0;
