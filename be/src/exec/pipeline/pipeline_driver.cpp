@@ -347,6 +347,15 @@ std::string PipelineDriver::to_readable_string() const {
     return ss.str();
 }
 
+starrocks::workgroup::WorkGroup* PipelineDriver::workgroup() {
+    DCHECK(_workgroup != nullptr);
+    return _workgroup;
+}
+
+void PipelineDriver::set_workgroup(starrocks::workgroup::WorkGroup* wg) {
+    this->_workgroup = wg;
+}
+
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
     if (_fragment_ctx->is_canceled()) {
         cancel_operators(runtime_state);

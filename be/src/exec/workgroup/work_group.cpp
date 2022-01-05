@@ -51,6 +51,14 @@ WorkGroupPtr WorkGroupManager::pick_next_wg_for_io() {
     return _wg_io_queue.pick_next();
 }
 
+WorkGroupQueue& WorkGroupManager::get_cpu_queue() {
+    return _wg_cpu_queue;
+}
+
+WorkGroupQueue& WorkGroupManager::get_io_queue() {
+    return _wg_io_queue;
+}
+
 namespace {
 class DefaultWorkGroupInitialization {
 public:

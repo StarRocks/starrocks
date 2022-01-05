@@ -103,6 +103,10 @@ public:
     // get next workgroup for io
     WorkGroupPtr pick_next_wg_for_io();
 
+    WorkGroupQueue& get_cpu_queue();
+
+    WorkGroupQueue& get_io_queue();
+
 private:
     std::mutex _mutex;
     std::unordered_map<int, WorkGroupPtr> _workgroups;
