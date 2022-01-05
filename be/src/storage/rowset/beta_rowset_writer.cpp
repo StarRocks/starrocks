@@ -34,7 +34,6 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/segment_writer.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/aggregate_iterator.h"
@@ -90,6 +89,15 @@ Status BetaRowsetWriter::init() {
         _rowset_meta->set_version(_context.version);
     }
     _rowset_meta->set_tablet_uid(_context.tablet_uid);
+
+    _writer_options.storage_format_version = _context.storage_format_version;
+    _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
+    _writer_options.referenced_column_ids = _context.referenced_column_ids;
+
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+        _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
+    }
+
     return Status::OK();
 }
 
@@ -114,7 +122,6 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
         _rowset_meta->set_segments_overlap(NONOVERLAPPING);
         if (_context.partial_update_tablet_schema) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
-            _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
             for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
                 const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
@@ -235,13 +242,8 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_seg
     fs::CreateBlockOptions opts({path});
     RETURN_IF_ERROR(_context.block_mgr->create_block(opts, &wblock));
     DCHECK(wblock != nullptr);
-
-    SegmentWriterOptions writer_options;
-    writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
-    writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
-    writer_options.referenced_column_ids = _context.referenced_column_ids;
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     ++_num_segment;
     return std::move(segment_writer);
@@ -686,12 +688,8 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalBetaRowsetWriter::_create_segme
     RETURN_IF_ERROR(_context.block_mgr->create_block(opts, &wblock));
 
     DCHECK(wblock != nullptr);
-    SegmentWriterOptions writer_options;
-    writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
-    writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
-    writer_options.referenced_column_ids = _context.referenced_column_ids;
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
     ++_num_segment;
     return std::move(segment_writer);
