@@ -379,7 +379,7 @@ private:
         for (size_t i = 0; i < num_array; i++) {
             size_t offset = offsets_ptr[i];
             size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
-            ReturnType found = 0;
+            size_t found = 0;
             for (size_t j = 0; j < array_size; j++) {
                 if constexpr (NullableElement && !NullableTarget) {
                     if (is_null(null_map_elements, offset + j)) {
