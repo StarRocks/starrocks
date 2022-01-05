@@ -51,8 +51,8 @@ std::string MysqlConnInfo::debug_string() const {
     return ss.str();
 }
 
-MysqlTableWriter::MysqlTableWriter(const std::vector<ExprContext*>& output_expr_ctxs, int batch_size)
-        : _output_expr_ctxs(output_expr_ctxs), _batch_size(batch_size) {}
+MysqlTableWriter::MysqlTableWriter(const std::vector<ExprContext*>& output_expr_ctxs, int chunk_size)
+        : _output_expr_ctxs(output_expr_ctxs), _chunk_size(chunk_size) {}
 
 MysqlTableWriter::~MysqlTableWriter() {
     if (_mysql_conn) {
@@ -202,14 +202,14 @@ Status MysqlTableWriter::append(vectorized::Chunk* chunk) {
 
     int num_rows = chunk->num_rows();
     int i = 0;
-    while (i + _batch_size < num_rows) {
+    while (i + _chunk_size < num_rows) {
         std::string_view insert_stmt;
-        RETURN_IF_ERROR(_build_insert_sql(i, i + _batch_size, &insert_stmt));
+        RETURN_IF_ERROR(_build_insert_sql(i, i + _chunk_size, &insert_stmt));
         if (mysql_real_query(_mysql_conn, insert_stmt.data(), insert_stmt.length())) {
             return Status::InternalError(fmt::format("Insert to mysql server({}) failed, err:{}",
                                                      mysql_get_host_info(_mysql_conn), mysql_error(_mysql_conn)));
         }
-        i += _batch_size;
+        i += _chunk_size;
     }
 
     std::string_view insert_stmt;

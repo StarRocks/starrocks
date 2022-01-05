@@ -73,7 +73,7 @@ ORCScanner::ORCScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile
                        const TBrokerScanRange& scan_range, starrocks::vectorized::ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
-          _max_chunk_size(config::vector_chunk_size ? config::vector_chunk_size : 4096),
+          _max_chunk_size(_state->chunk_size() ? _state->chunk_size() : 4096),
           _next_range(0),
           _error_counter(0),
           _status_eof(false) {}
@@ -105,7 +105,7 @@ Status ORCScanner::open() {
     for (int i = 0; i < num_columns_from_orc; ++i) {
         _orc_slot_descriptors[i] = _src_slot_descriptors[i];
     }
-    _orc_adapter = std::make_unique<OrcScannerAdapter>(_orc_slot_descriptors);
+    _orc_adapter = std::make_unique<OrcScannerAdapter>(_state, _orc_slot_descriptors);
     _orc_adapter->set_broker_load_mode(_strict_mode);
     _orc_adapter->set_timezone(_state->timezone());
     _orc_adapter->drop_nanoseconds_in_datetime();

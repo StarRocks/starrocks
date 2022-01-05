@@ -8,6 +8,7 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "runtime/primitive_type.h"
+#include "runtime/runtime_state.h"
 #include "runtime/timestamp_value.h"
 
 namespace starrocks::vectorized {
@@ -147,7 +148,7 @@ Status ScrollParser::parse(const std::string& scroll_result, bool exactly_once) 
     return Status::OK();
 }
 
-Status ScrollParser::fill_chunk(ChunkPtr* chunk, bool* line_eos) {
+Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line_eos) {
     if (current_eos()) {
         *line_eos = true;
         return Status::OK();
@@ -164,7 +165,7 @@ Status ScrollParser::fill_chunk(ChunkPtr* chunk, bool* line_eos) {
     }
 
     size_t left_sz = _size - _cur_line;
-    size_t fill_sz = std::min(left_sz, (size_t)config::vector_chunk_size);
+    size_t fill_sz = std::min(left_sz, (size_t)state->chunk_size());
 
     auto slots = _tuple_desc->slots();
 

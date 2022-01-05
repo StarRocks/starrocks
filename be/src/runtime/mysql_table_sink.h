@@ -62,7 +62,7 @@ private:
     ObjectPool* _pool;
     const RowDescriptor& _row_desc;
     const std::vector<TExpr>& _t_output_expr;
-    int _batch_size;
+    int _chunk_size;
 
     std::vector<ExprContext*> _output_expr_ctxs;
 

@@ -141,7 +141,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(const string&
     tuple_builder.build(&dtb);
     TDescriptorTable tdesc_tbl = dtb.desc_tbl();
     DescriptorTbl* desc_tbl = nullptr;
-    DescriptorTbl::create(&pool, tdesc_tbl, &desc_tbl);
+    DescriptorTbl::create(&pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     return &(desc_tbl->get_tuple_descriptor(0)->slots());
 }
 

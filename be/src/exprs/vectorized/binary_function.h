@@ -471,14 +471,14 @@ public:
             ln = p->null_column();
         } else if (v1->is_constant()) {
             ld = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
-            ln = ColumnHelper::s_all_not_null_column;
+            ln = NullColumn::create(v1->size(), 0);
         } else if (v1->is_nullable()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(v1);
             ld = p->data_column();
             ln = p->null_column();
         } else {
             ld = v1;
-            ln = ColumnHelper::s_all_not_null_column;
+            ln = NullColumn::create(v1->size(), 0);
         }
 
         if (v2->only_null()) {
@@ -489,14 +489,14 @@ public:
             rn = p->null_column();
         } else if (v2->is_constant()) {
             rd = ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column();
-            rn = ColumnHelper::s_all_not_null_column;
+            rn = NullColumn::create(v2->size(), 0);
         } else if (v2->is_nullable()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(v2);
             rd = p->data_column();
             rn = p->null_column();
         } else {
             rd = v2;
-            rn = ColumnHelper::s_all_not_null_column;
+            rn = NullColumn::create(v2->size(), 0);
         }
 
         // return must be nullable column

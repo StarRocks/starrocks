@@ -20,7 +20,7 @@ public:
      * @param limit          Number of top rows after those skipped to extract. Zero means no limit.
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
-    ChunksSorterTopn(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
+    ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                      const std::vector<bool>* is_null_first, size_t offset = 0, size_t limit = 0,
                      size_t size_of_chunk_batch = 1000);
     ~ChunksSorterTopn() override;
@@ -68,7 +68,7 @@ private:
                                           std::vector<std::vector<uint8_t>>& filter_array);
 
     Status _filter_and_sort_data_by_row_cmp(RuntimeState* state, std::pair<Permutation, Permutation>& permutation,
-                                            DataSegments& segments, size_t batch_size);
+                                            DataSegments& segments, size_t chunk_size);
 
     Status _merge_sort_data_as_merged_segment(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
                                               DataSegments& segments);

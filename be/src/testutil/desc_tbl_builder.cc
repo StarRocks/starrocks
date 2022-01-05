@@ -78,7 +78,7 @@ DescriptorTbl* DescriptorTblBuilder::build() {
         build_tuple(_tuples_desc->slot_types(), &thrift_desc_tbl, &tuple_id, &slot_id);
     }
 
-    Status status = DescriptorTbl::create(_obj_pool, thrift_desc_tbl, &desc_tbl);
+    Status status = DescriptorTbl::create(_obj_pool, thrift_desc_tbl, &desc_tbl, config::vector_chunk_size);
     DCHECK(status.ok());
     return desc_tbl;
 }

@@ -91,8 +91,8 @@ public:
 
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
-    int batch_size() const { return _query_options.batch_size; }
-    void set_batch_size(int batch_size) { _query_options.batch_size = batch_size; }
+    int chunk_size() const { return _query_options.batch_size; }
+    void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
     int64_t timestamp_ms() const { return _timestamp_ms; }
     const std::string& timezone() const { return _timezone; }
@@ -283,7 +283,7 @@ private:
 
     Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
 
-    static const int DEFAULT_BATCH_SIZE = 2048;
+    static const int DEFAULT_CHUNK_SIZE = 2048;
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some of object in _obj_pool will use profile when deconstructing.

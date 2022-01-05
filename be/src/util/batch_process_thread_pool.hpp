@@ -47,12 +47,12 @@ public:
     //     queue exceeds this size, subsequent calls to Offer will block until there is
     //     capacity available.
     //  -- work_function: the function to run every time an item is consumed from the queue
-    BatchProcessThreadPool(uint32_t num_threads, uint32_t queue_size, uint32_t batch_size,
+    BatchProcessThreadPool(uint32_t num_threads, uint32_t queue_size, uint32_t chunk_size,
         BatchProcessFunction work_func) :
             _thread_num(num_threads),
             _work_queue(queue_size),
             _shutdown(false),
-            _batch_size(batch_size),
+            _chunk_size(chunk_size),
             _work_func(work_func) {
         for (int i = 0; i < num_threads; ++i) {
             _threads.create_thread(
@@ -127,7 +127,7 @@ private:
             std::vector<T> tasks;
             T task;
             int32_t task_counter = 0;
-            while (task_counter < _batch_size) {
+            while (task_counter < _chunk_size) {
                 bool has_task = false;
                 if (task_counter == 0) {
                     // the first task should blocking, or the tasks queue is empty
@@ -177,7 +177,7 @@ private:
     // Signalled when the queue becomes empty
     std::condition_variable _empty_cv;
 
-    uint32_t _batch_size;
+    uint32_t _chunk_size;
 
     BatchProcessFunction _work_func;
 };

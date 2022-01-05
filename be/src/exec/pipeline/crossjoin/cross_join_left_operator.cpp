@@ -41,7 +41,7 @@ void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk, RuntimeStat
     }
 
     *chunk = std::move(new_chunk);
-    (*chunk)->reserve(state->batch_size());
+    (*chunk)->reserve(state->chunk_size());
 }
 
 void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_probe(vectorized::ChunkPtr& chunk, size_t row_count,
@@ -241,7 +241,7 @@ void CrossJoinLeftOperator::_select_build_chunk(const int32_t unprocessed_build_
         DCHECK(_curr_build_chunk != nullptr && _curr_build_chunk->num_rows() > 0);
 
         _curr_total_build_rows = _curr_build_chunk->num_rows();
-        _curr_build_rows_threshold = (_curr_total_build_rows / state->batch_size()) * state->batch_size();
+        _curr_build_rows_threshold = (_curr_total_build_rows / state->chunk_size()) * state->chunk_size();
         _curr_build_rows_remainder = _curr_total_build_rows - _curr_build_rows_threshold;
 
         _within_threshold_build_rows_index = 0;
@@ -262,7 +262,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 
     for (;;) {
         // need row_count to fill in chunk.
-        size_t row_count = state->batch_size() - chunk->num_rows();
+        size_t row_count = state->chunk_size() - chunk->num_rows();
 
         // means we have scan all chunks of right tables.
         // we should scan all remain rows of right table.
@@ -357,7 +357,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 
         // When the chunk is full or the current probe chunk is finished
         // crossing join with build chunks, we can output this chunk.
-        if (chunk->num_rows() >= state->batch_size() || _is_curr_probe_chunk_finished()) {
+        if (chunk->num_rows() >= state->chunk_size() || _is_curr_probe_chunk_finished()) {
             eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get());
             break;
         }

@@ -4,6 +4,7 @@
 #include <random>
 
 #include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "pipeline_test_base.h"
 #include "util/thrift_util.h"
 
@@ -344,7 +345,7 @@ TEST_F(TestPipelineControlFlow, test_two_operatories) {
     CounterPtr sourceCounter = std::make_shared<Counter>();
     CounterPtr sinkCounter = std::make_shared<Counter>();
 
-    _pipeline_builder = [&]() {
+    _pipeline_builder = [&](RuntimeState* state) {
         OpFactories op_factories;
 
         op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
@@ -372,7 +373,7 @@ TEST_F(TestPipelineControlFlow, test_three_operatories) {
     CounterPtr normalCounter = std::make_shared<Counter>();
     CounterPtr sinkCounter = std::make_shared<Counter>();
 
-    _pipeline_builder = [&]() {
+    _pipeline_builder = [&](RuntimeState* state) {
         OpFactories op_factories;
 
         op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
@@ -409,7 +410,7 @@ TEST_F(TestPipelineControlFlow, test_multi_operators) {
             normalCounters.push_back(std::make_shared<Counter>());
         }
 
-        _pipeline_builder = [&]() {
+        _pipeline_builder = [&](RuntimeState* state) {
             OpFactories op_factories;
 
             op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
@@ -445,7 +446,7 @@ TEST_F(TestPipelineControlFlow, test_full_chunk_size) {
     CounterPtr normalCounter = std::make_shared<Counter>();
     CounterPtr sinkCounter = std::make_shared<Counter>();
 
-    _pipeline_builder = [&]() {
+    _pipeline_builder = [&](RuntimeState* state) {
         OpFactories op_factories;
 
         op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
@@ -476,7 +477,7 @@ TEST_F(TestPipelineControlFlow, test_multi_chunks) {
     CounterPtr normalCounter = std::make_shared<Counter>();
     CounterPtr sinkCounter = std::make_shared<Counter>();
 
-    _pipeline_builder = [&]() {
+    _pipeline_builder = [&](RuntimeState* state) {
         OpFactories op_factories;
 
         op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
@@ -510,7 +511,7 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_non_full_chunk
         CounterPtr normalCounter = std::make_shared<Counter>();
         CounterPtr sinkCounter = std::make_shared<Counter>();
 
-        _pipeline_builder = [&]() {
+        _pipeline_builder = [&](RuntimeState* state) {
             OpFactories op_factories;
 
             auto source_op_factory = std::make_shared<TestSourceOperatorFactory>(
@@ -562,7 +563,7 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_full_chunk) {
         CounterPtr normalCounter = std::make_shared<Counter>();
         CounterPtr sinkCounter = std::make_shared<Counter>();
 
-        _pipeline_builder = [&]() {
+        _pipeline_builder = [&](RuntimeState* state) {
             OpFactories op_factories;
 
             auto source_op_factory = std::make_shared<TestSourceOperatorFactory>(

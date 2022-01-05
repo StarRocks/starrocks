@@ -23,8 +23,6 @@ namespace starrocks::vectorized {
 
 class ColumnHelper {
 public:
-    static void init_static_variable();
-
     // The input column is nullable or non-nullable uint8 column
     // The result column is not nullable uint8 column
     // For nullable uint8 column, we merge it's null column and data column
@@ -304,8 +302,6 @@ public:
     static NullColumnPtr one_size_not_null_column;
 
     static NullColumnPtr one_size_null_column;
-
-    static NullColumnPtr s_all_not_null_column;
 };
 
 } // namespace starrocks::vectorized

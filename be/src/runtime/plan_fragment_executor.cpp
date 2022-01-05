@@ -70,7 +70,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;
 
-    _runtime_state->set_batch_size(config::vector_chunk_size);
+    DCHECK(_runtime_state->chunk_size() > 0);
 
     _runtime_state->set_be_number(request.backend_num);
     if (request.__isset.import_label) {
@@ -118,7 +118,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl));
+    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl, _runtime_state->chunk_size()));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     // set up plan
@@ -145,14 +145,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         int num_senders = FindWithDefault(params.per_exch_num_senders, exch_node->id(), 0);
         DCHECK_GT(num_senders, 0);
         static_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
-    }
-
-    // when has adapter node, set the batch_size with the config::vector_chunk_size
-    // otherwise the adapter node will crash when convert
-    std::vector<ExecNode*> adaptor_nodes;
-    _plan->collect_nodes(TPlanNodeType::ADAPTER_NODE, &adaptor_nodes);
-    if (!adaptor_nodes.empty()) {
-        _runtime_state->set_batch_size(config::vector_chunk_size);
     }
 
     RETURN_IF_ERROR(_plan->prepare(_runtime_state));

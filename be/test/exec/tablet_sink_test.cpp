@@ -302,7 +302,7 @@ TEST_F(OlapTableSinkTest, init_fail1) {
 
     // crate desc_tabl
     DescriptorTbl* desc_tbl = nullptr;
-    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
+    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     ASSERT_TRUE(st.ok());
     state._desc_tbl = desc_tbl;
 
@@ -360,7 +360,7 @@ TEST_F(OlapTableSinkTest, init_fail3) {
 
     // crate desc_tabl
     DescriptorTbl* desc_tbl = nullptr;
-    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
+    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     ASSERT_TRUE(st.ok());
     state._desc_tbl = desc_tbl;
 
@@ -419,7 +419,7 @@ TEST_F(OlapTableSinkTest, init_fail4) {
 
     // crate desc_tabl
     DescriptorTbl* desc_tbl = nullptr;
-    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
+    auto st = DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     ASSERT_TRUE(st.ok());
     state._desc_tbl = desc_tbl;
 

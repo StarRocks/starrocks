@@ -151,6 +151,7 @@ OperatorFactory::OperatorFactory(int32_t id, const std::string& name, int32_t pl
 }
 
 Status OperatorFactory::prepare(RuntimeState* state) {
+    _state = state;
     if (_runtime_filter_collector) {
         RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _row_desc, _runtime_profile.get()));
     }

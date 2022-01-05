@@ -41,7 +41,6 @@ int main(int argc, char** argv) {
     starrocks::MemInfo::init();
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
-    starrocks::vectorized::ColumnHelper::init_static_variable();
     starrocks::vectorized::date::init_date_cache();
 
     std::vector<starrocks::StorePath> paths;

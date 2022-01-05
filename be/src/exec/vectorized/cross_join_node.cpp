@@ -305,7 +305,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
         }
 
         // need row_count to fill in chunk.
-        size_t row_count = config::vector_chunk_size - (*chunk)->num_rows();
+        size_t row_count = runtime_state()->chunk_size() - (*chunk)->num_rows();
 
         // means we have scan all chunks of right tables.
         // we should scan all remain rows of right table.
@@ -387,7 +387,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
             continue;
         }
 
-        if ((*chunk)->num_rows() < config::vector_chunk_size) {
+        if ((*chunk)->num_rows() < runtime_state()->chunk_size()) {
             continue;
         }
 
@@ -493,7 +493,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
     // Should not call num_rows on nullptr.
     if (_build_chunk != nullptr) {
         _number_of_build_rows = _build_chunk->num_rows();
-        _build_chunks_size = (_number_of_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
+        _build_chunks_size = (_number_of_build_rows / runtime_state()->chunk_size()) * runtime_state()->chunk_size();
     }
 
     RETURN_IF_ERROR(child(1)->close(state));
@@ -531,7 +531,7 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
     }
 
     *chunk = std::move(new_chunk);
-    (*chunk)->reserve(config::vector_chunk_size);
+    (*chunk)->reserve(runtime_state()->chunk_size());
 }
 
 pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {

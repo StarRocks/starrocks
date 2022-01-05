@@ -75,7 +75,7 @@ void PipelineTestBase::_prepare() {
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
 
-    _runtime_state->set_batch_size(config::vector_chunk_size);
+    _runtime_state->set_chunk_size(config::vector_chunk_size);
     _runtime_state->init_mem_trackers(query_id);
     _runtime_state->set_be_number(_request.backend_num);
 
@@ -83,7 +83,7 @@ void PipelineTestBase::_prepare() {
 
     ASSERT_TRUE(_pipeline_builder != nullptr);
     _pipelines.clear();
-    _pipeline_builder();
+    _pipeline_builder(_fragment_ctx->runtime_state());
     _pipelines[_pipelines.size() - 1]->set_root();
     _fragment_ctx->set_pipelines(std::move(_pipelines));
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
