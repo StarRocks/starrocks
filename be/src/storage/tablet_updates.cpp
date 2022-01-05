@@ -688,10 +688,6 @@ void TabletUpdates::_stop_and_wait_apply_done() {
 void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     // NOTE: after commit, apply must success or fatal crash
     int64_t t_start = MonotonicMillis();
-    int64_t t_load = 0;
-    int64_t t_apply = 0;
-    int64_t t_index = 0;
-
     auto tablet_id = _tablet.tablet_id();
     uint32_t rowset_id = version_info.deltas[0];
     auto& version = version_info.version;
@@ -714,59 +710,56 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         return;
     }
 
+    std::lock_guard lg(_index_lock);
+    // 2. load index
+    auto index_entry = manager->index_cache().get_or_create(tablet_id);
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    auto& index = index_entry->value();
+    st = index.load(&_tablet);
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+    if (!st.ok()) {
+        LOG(ERROR) << "_apply_rowset_commit error: load primary index failed: " << st << " " << debug_string();
+        manager->index_cache().remove(index_entry);
+        _set_error();
+        return;
+    }
+
+    int64_t t_load = MonotonicMillis();
+    st = state.apply(&_tablet, rowset.get(), rowset_id, index);
+    if (!st.ok()) {
+        LOG(ERROR) << "_apply_rowset_commit error: apply rowset update state failed: " << st << " " << debug_string();
+        manager->update_state_cache().remove(state_entry);
+        _set_error();
+        return;
+    }
+    int64_t t_apply = MonotonicMillis();
+
+    // 3. generate delvec
+    // add initial empty delvec for new segments
     PrimaryIndex::DeletesMap new_deletes;
     size_t delete_op = 0;
-    {
-        std::lock_guard lg(_index_lock);
-        // 2. load index
-        auto index_entry = manager->index_cache().get_or_create(tablet_id);
-        index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
-        auto& index = index_entry->value();
-        auto st = index.load(&_tablet);
-        manager->index_cache().update_object_size(index_entry, index.memory_usage());
-        if (!st.ok()) {
-            LOG(ERROR) << "_apply_rowset_commit error: load primary index failed: " << st << " " << debug_string();
-            manager->index_cache().remove(index_entry);
-            _set_error();
-            return;
-        }
-
-        t_load = MonotonicMillis();
-        st = state.apply(&_tablet, rowset.get(), rowset_id, index);
-        if (!st.ok()) {
-            LOG(ERROR) << "_apply_rowset_commit error: apply rowset update state failed: " << st << " "
-                       << debug_string();
-            manager->update_state_cache().remove(state_entry);
-            _set_error();
-            return;
-        }
-        t_apply = MonotonicMillis();
-
-        // 3. generate delvec
-        // add initial empty delvec for new segments
-        for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-            new_deletes[rowset_id + i] = {};
-        }
-        auto& upserts = state.upserts();
-        for (uint32_t i = 0; i < upserts.size(); i++) {
-            if (upserts[i] != nullptr) {
-                index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
-                manager->index_cache().update_object_size(index_entry, index.memory_usage());
-            }
-        }
-
-        for (const auto& one_delete : state.deletes()) {
-            delete_op += one_delete->size();
-            index.erase(*one_delete, &new_deletes);
-        }
-        manager->index_cache().update_object_size(index_entry, index.memory_usage());
-        // release resource
-        // update state only used once, so delete it
-        manager->update_state_cache().remove(state_entry);
-        // index may be used for later commits, so keep in cache
-        manager->index_cache().release(index_entry);
-        t_index = MonotonicMillis();
+    for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+        new_deletes[rowset_id + i] = {};
     }
+    auto& upserts = state.upserts();
+    for (uint32_t i = 0; i < upserts.size(); i++) {
+        if (upserts[i] != nullptr) {
+            index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
+            manager->index_cache().update_object_size(index_entry, index.memory_usage());
+        }
+    }
+
+    for (const auto& one_delete : state.deletes()) {
+        delete_op += one_delete->size();
+        index.erase(*one_delete, &new_deletes);
+    }
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+    // release resource
+    // update state only used once, so delete it
+    manager->update_state_cache().remove(state_entry);
+    // index may be used for later commits, so keep in cache
+    manager->index_cache().release(index_entry);
+    int64_t t_index = MonotonicMillis();
 
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -2449,12 +2442,13 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
 Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
                                                     EditVersion* read_version, uint32_t* next_rowset_id,
                                                     std::vector<std::vector<uint64_t>*>* rss_rowids) {
-    std::lock_guard wl(_lock);
     std::lock_guard lg(_index_lock);
-
-    // get next_rowset_id and read_version to identify conflict
-    *next_rowset_id = _next_rowset_id;
-    *read_version = _edit_version_infos[_apply_version_idx]->version;
+    {
+        // get next_rowset_id and read_version to identify conflict
+        std::lock_guard wl(_lock);
+        *next_rowset_id = _next_rowset_id;
+        *read_version = _edit_version_infos[_apply_version_idx]->version;
+    }
 
     auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
