@@ -90,6 +90,7 @@ private:
     TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
 
     bool _is_push_down = false;
+    bool _need_create_tuple_columns = true;
 
     JoinHashTable _ht;
 
