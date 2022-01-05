@@ -2446,12 +2446,11 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
     return Status::OK();
 }
 
-// this function should be mutually exclusive with function rowset_commit
-// make sure _lock is held before call this function
 Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, Rowset* rowset,
                                                     const std::vector<ColumnUniquePtr>& upserts,
                                                     EditVersion* read_version, uint32_t* next_rowset_id,
                                                     std::vector<std::vector<uint64_t>*>* rss_rowids) {
+    std::lock_guard wl(_lock);
     std::lock_guard lg(_index_lock);
 
     // get next_rowset_id and read_version to identify conflict
