@@ -92,6 +92,10 @@ public class AggregationNode extends PlanNode {
         updateplanNodeName();
     }
 
+    public boolean isNeedsFinalize() {
+        return needsFinalize;
+    }
+
     /**
      * Sets this node as a preaggregation. Only valid to call this if it is not marked
      * as a preaggregation
