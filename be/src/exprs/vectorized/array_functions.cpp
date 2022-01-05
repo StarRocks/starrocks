@@ -342,13 +342,13 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     return ArrayRemoveImpl::evaluate(*arg0, *arg1);
 }
 
-template<typename ReturnType>
+// If IndexEnabled=true in function array_indexof, it will return index of elemt if the array contain it or 0 if not contain.
+// If IndexEnabled=false in function array_contains, it will return 1 if contain or 0 if not contain.
+template<bool IndexEnabled, typename ReturnType>
 class ArrayContainsImpl {
 public:
-    // If retIndex=true in function array_indexof, it will return index of elemt if the array contain it or 0 if not contain.
-    // If retIndex=false in function array_contains, it will return 1 if contain or 0 if not contain.
-    static ColumnPtr evaluate(const Column& array, const Column& element, const bool retIndex) {
-        return _array_contains_generic(array, element, retIndex);
+    static ColumnPtr evaluate(const Column& array, const Column& element) {
+        return _array_contains_generic(array, element);
     }
 
 private:
@@ -356,7 +356,7 @@ private:
               typename TargetColumn>
     static ColumnPtr _process(const ElementColumn& elements, const UInt32Column& offsets, const TargetColumn& targets,
                               const NullColumn::Container* null_map_elements,
-                              const NullColumn::Container* null_map_targets, const bool retIndex) {
+                              const NullColumn::Container* null_map_targets) {
         const size_t num_array = offsets.size() - 1;
         
         auto result = ReturnType::create();
@@ -379,7 +379,7 @@ private:
         for (size_t i = 0; i < num_array; i++) {
             size_t offset = offsets_ptr[i];
             size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
-            uint8_t found = 0;
+            ReturnType found = 0;
             for (size_t j = 0; j < array_size; j++) {
                 if constexpr (NullableElement && !NullableTarget) {
                     if (is_null(null_map_elements, offset + j)) {
@@ -398,7 +398,7 @@ private:
                         continue;
                     }
                     if (null_element) {
-                        found = retIndex ? j + 1: 1;
+                        found = IndexEnabled ? j + 1: 1;
                         break;
                     }
                 }
@@ -410,7 +410,7 @@ private:
                     found = (elements_ptr[offset + j] == targets_ptr[i]);
                 }
                 if (found) {
-                    if (retIndex) {
+                    if (IndexEnabled) {
                         found = j + 1;
                     }
                     break;
@@ -423,7 +423,7 @@ private:
 
     template <bool NullableElement, bool NullableTarget, bool ConstTarget>
     static ColumnPtr _array_contains(const Column& array_elements, const UInt32Column& array_offsets,
-                                     const Column& argument, const bool retIndex) {
+                                     const Column& argument) {
         const Column* elements_ptr = &array_elements;
         const Column* targets_ptr = &argument;
 
@@ -448,7 +448,7 @@ private:
         if (typeid(*elements_ptr) == typeid(ElementType)) {                                                       \
             return _process<NullableElement, NullableTarget, ConstTarget>(                                        \
                     *down_cast<const ElementType*>(elements_ptr), array_offsets, *targets_ptr, null_map_elements, \
-                    null_map_targets, retIndex);                                                                            \
+                    null_map_targets);                                                                            \
         }                                                                                                         \
     } while (0)
 
@@ -476,7 +476,7 @@ private:
     }
 
     // array is non-nullable.
-    static ColumnPtr _array_contains_non_nullable(const ArrayColumn& array, const Column& arg, const bool retIndex) {
+    static ColumnPtr _array_contains_non_nullable(const ArrayColumn& array, const Column& arg) {
         bool nullable_element = false;
         bool nullable_target = false;
         bool const_target = false;
@@ -514,19 +514,19 @@ private:
         CHECK(!(const_target && nullable_target));
 
         if (nullable_element && nullable_target) {
-            return _array_contains<true, true, false>(*elements, offsets, *targets, retIndex);
+            return _array_contains<true, true, false>(*elements, offsets, *targets);
         } else if (nullable_element) {
-            return const_target ? _array_contains<true, false, true>(*elements, offsets, *targets, retIndex)
-                                : _array_contains<true, false, false>(*elements, offsets, *targets, retIndex);
+            return const_target ? _array_contains<true, false, true>(*elements, offsets, *targets)
+                                : _array_contains<true, false, false>(*elements, offsets, *targets);
         } else if (nullable_target) {
-            return _array_contains<false, true, false>(*elements, offsets, *targets, retIndex);
+            return _array_contains<false, true, false>(*elements, offsets, *targets);
         } else {
-            return const_target ? _array_contains<false, false, true>(*elements, offsets, *targets, retIndex)
-                                : _array_contains<false, false, false>(*elements, offsets, *targets, retIndex);
+            return const_target ? _array_contains<false, false, true>(*elements, offsets, *targets)
+                                : _array_contains<false, false, false>(*elements, offsets, *targets);
         }
     }
 
-    static ColumnPtr _array_contains_generic(const Column& array, const Column& target, const bool retIndex) {
+    static ColumnPtr _array_contains_generic(const Column& array, const Column& target) {
         // array_contains(NULL, xxx) -> NULL
         if (array.only_null()) {
             auto result = NullableColumn::create(Int8Column::create(), NullColumn::create());
@@ -535,14 +535,14 @@ private:
         }
         if (auto nullable = dynamic_cast<const NullableColumn*>(&array); nullable != nullptr) {
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
-            auto result = _array_contains_non_nullable(*array_col, target, retIndex);
+            auto result = _array_contains_non_nullable(*array_col, target);
             DCHECK_EQ(nullable->size(), result->size());
             if (!nullable->has_null()) {
                 return result;
             }
             return NullableColumn::create(std::move(result), nullable->null_column());
         }
-        return _array_contains_non_nullable(down_cast<const ArrayColumn&>(array), target, retIndex);
+        return _array_contains_non_nullable(down_cast<const ArrayColumn&>(array), target);
     }
 };
 
@@ -550,14 +550,14 @@ ColumnPtr ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* conte
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayContainsImpl<UInt8Column>::evaluate(*arg0, *arg1, false);
+    return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
 }
 
 ColumnPtr ArrayFunctions::array_indexof([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayContainsImpl<UInt32Column>::evaluate(*arg0, *arg1, true);
+    return ArrayContainsImpl<true, UInt32Column>::evaluate(*arg0, *arg1);
 }
 
 class ArrayArithmeticImpl {
