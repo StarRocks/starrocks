@@ -5177,7 +5177,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  limit: 5"));
         connectContext.getSessionVariable().setSqlSelectLimit(limit);
     }
-  
+
     @Test
     public void testProjectReuse() throws Exception {
         String sql = "select nullif(v1, v1) + (0) as a , nullif(v1, v1) + (1 - 1) as b from t0;";
@@ -5192,5 +5192,17 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
                 "id:0, fid:50303, could_apply_dict_optimize:false), has_nullable_child:false, is_nullable:true"));
+    }
+
+    @Test
+    public void testJoinReorderWithPredicate() throws Exception {
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(2);
+        String sql = "select t0.v1 from t0, t1, t2, t3 where t0.v1 + t3.v1 = 2";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("11:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 1: v1 + 10: v1 = 2"));
     }
 }
