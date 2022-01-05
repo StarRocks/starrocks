@@ -212,6 +212,7 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
     auto schema = vectorized::ChunkHelper::convert_schema(*partial_schema.get());
+
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
     ASSERT_EQ(2, chunk->num_columns());
     auto& cols = chunk->columns();

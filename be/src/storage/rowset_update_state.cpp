@@ -110,9 +110,8 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     if (!rowset_meta_pb.has_txn_meta()) {
         return Status::OK();
     }
-    // TODO: prepare partial update states
-    RETURN_IF_ERROR(_prepare_partial_update_states(tablet, rowset));
-    return Status::OK();
+
+    return _prepare_partial_update_states(tablet, rowset);
 }
 
 struct RowidSortEntry {
