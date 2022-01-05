@@ -24,12 +24,15 @@ using CpuWorkGroupQueue = WorkGroupQueue<CpuPriorityComparator>;
 using IoWorkQroupQueue = WorkGroupQueue<IoPriorityComparator>;
 
 class WorkGroupManager;
-enum WorkGroupType {
-    WG_NORMAL = 0,
-    WG_DEFAULT = 1,
-    WG_REALTIME = 2,
-};
 
+enum WorkGroupType {
+    WG_NORMAL = 0, // normal work group, maybe added to the BE dynamically
+    WG_DEFAULT = 1, // default work group
+    WG_REALTIME = 2, // realtime work group, maybe reserved beforehand
+};
+// WorkGroup is the unit of resource isolation, it has {CPU, Memory, Concurrency} quotas which limit the
+// resource usage of the queries belonging to the WorkGroup. Each user has be bound to a WorkGroup, when
+// the user issues a query, then the corresponding WorkGroup is chosen to manage the query.
 class WorkGroup {
 public:
     WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t memory_limit, size_t concurrency,
@@ -91,6 +94,8 @@ public:
     }
 };
 
+// WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
+// pick next workgroup for computation and launching io tasks.
 class WorkGroupManager {
     DECLARE_SINGLETON(WorkGroupManager);
 
