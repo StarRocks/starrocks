@@ -71,6 +71,11 @@ public class UserPrivTable extends PrivTable {
         return null;
     }
 
+    /**
+     * Sometimes a password is required in the handshake process using plugin authentication,
+     * such as kerberos authentication. This interface is mainly used to obtain password information approximately
+     * before {@link Auth#checkPassword}. for sending handshake request.
+     */
     public Password getPasswordByApproximate(String remoteUser, String remoteHost) {
         for (PrivEntry entry : entries) {
             GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) entry;

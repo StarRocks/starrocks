@@ -33,6 +33,8 @@ public class FeNameFormat {
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
     private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,64}$";
+
+    // The user name  by kerberos authentication may include the host name, so additional adaptation is required.
     private static final String MYSQL_USER_NAME_REGEX = "^[a-zA-Z][a-zA-Z0-9_]{1,63}/?[.a-zA-Z0-9_-]{0,63}$";
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";

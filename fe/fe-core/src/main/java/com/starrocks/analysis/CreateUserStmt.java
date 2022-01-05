@@ -149,9 +149,9 @@ public class CreateUserStmt extends DdlStmt {
          */
         if (!Strings.isNullOrEmpty(authPlugin)) {
             authPlugin = authPlugin.toUpperCase();
-            if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(authPlugin)) {
+            if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equalsIgnoreCase(authPlugin)) {
                 this.userForAuthPlugin = this.authString;
-            } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(authPlugin)) {
+            } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equalsIgnoreCase(authPlugin)) {
                 // in this case, authString is password
                 // convert password to hashed password
                 if (!Strings.isNullOrEmpty(authString)) {
@@ -164,7 +164,11 @@ public class CreateUserStmt extends DdlStmt {
                 } else {
                     scramblePassword = new byte[0];
                 }
-            } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equals(authPlugin) && Auth.isSupportKerberosAuth()) {
+            } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(authPlugin) &&
+                    Auth.isSupportKerberosAuth()) {
+                // In kerberos authentication, userForAuthPlugin represents the user principal realm.
+                // If user realm is not specified when creating user, the service principal realm will be used as
+                // the user principal realm by default.
                 if (userForAuthPlugin != null) {
                     userForAuthPlugin = this.authString;
                 } else {

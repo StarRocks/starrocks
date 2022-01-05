@@ -75,7 +75,7 @@ public class Auth implements Writable {
     public static final String ROOT_USER = "root";
     public static final String ADMIN_USER = "admin";
 
-    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.auth.KerberosAuthentication";
+    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
     public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
 
     private UserPrivTable userPrivTable = new UserPrivTable();
@@ -1401,7 +1401,7 @@ public class Auth implements Writable {
     }
 
     public static boolean isSupportKerberosAuth() {
-        if (!Config.authentication_kerberos_enabled ||
+        if (!Config.enable_authentication_kerberos ||
                 Config.authentication_kerberos_service_key_tab.isEmpty() ||
                 Config.authentication_kerberos_service_principal.isEmpty()) {
             return false;
