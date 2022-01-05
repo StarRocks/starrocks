@@ -17,14 +17,10 @@ class CrossJoinLeftOperator final : public OperatorWithDependency {
 public:
     CrossJoinLeftOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                           const std::vector<ExprContext*>& conjunct_ctxs,
-                          const vectorized::Buffer<SlotDescriptor*>& col_types,
-                          const vectorized::Buffer<TupleId>& output_build_tuple_ids,
-                          const vectorized::Buffer<TupleId>& output_probe_tuple_ids, const size_t& probe_column_count,
+                          const vectorized::Buffer<SlotDescriptor*>& col_types, const size_t& probe_column_count,
                           const size_t& build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context)
             : OperatorWithDependency(factory, id, "cross_join_left", plan_node_id),
               _col_types(col_types),
-              _output_build_tuple_ids(output_build_tuple_ids),
-              _output_probe_tuple_ids(output_probe_tuple_ids),
               _probe_column_count(probe_column_count),
               _build_column_count(build_column_count),
               _conjunct_ctxs(conjunct_ctxs),
@@ -107,8 +103,6 @@ private:
                                                 size_t start_row, size_t row_count);
 
     const vectorized::Buffer<SlotDescriptor*>& _col_types;
-    const vectorized::Buffer<TupleId>& _output_build_tuple_ids;
-    const vectorized::Buffer<TupleId>& _output_probe_tuple_ids;
     const size_t& _probe_column_count;
     const size_t& _build_column_count;
 
@@ -166,7 +160,6 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<CrossJoinLeftOperator>(this, _id, _plan_node_id, _conjunct_ctxs, _col_types,
-                                                       _output_build_tuple_ids, _output_probe_tuple_ids,
                                                        _probe_column_count, _build_column_count, _cross_join_context);
     }
 
@@ -181,8 +174,6 @@ private:
     const RowDescriptor& _right_row_desc;
 
     vectorized::Buffer<SlotDescriptor*> _col_types;
-    vectorized::Buffer<TupleId> _output_build_tuple_ids;
-    vectorized::Buffer<TupleId> _output_probe_tuple_ids;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 

@@ -19,6 +19,9 @@ CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const Des
 
 Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    if (tnode.__isset.need_create_tuple_columns) {
+        _need_create_tuple_columns = tnode.need_create_tuple_columns;
+    }
     return Status::OK();
 }
 
@@ -444,8 +447,10 @@ void CrossJoinNode::_init_row_desc() {
             _col_types.emplace_back(slot);
             _probe_column_count++;
         }
-        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _output_probe_tuple_ids.emplace_back(tuple_desc->id());
+        if (_need_create_tuple_columns) {
+            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
+                _output_probe_tuple_ids.emplace_back(tuple_desc->id());
+            }
         }
     }
     for (auto& tuple_desc : child(1)->row_desc().tuple_descriptors()) {
@@ -453,8 +458,10 @@ void CrossJoinNode::_init_row_desc() {
             _col_types.emplace_back(slot);
             _build_column_count++;
         }
-        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _output_build_tuple_ids.emplace_back(tuple_desc->id());
+        if (_need_create_tuple_columns) {
+            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
+                _output_build_tuple_ids.emplace_back(tuple_desc->id());
+            }
         }
     }
 }

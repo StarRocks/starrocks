@@ -209,6 +209,7 @@ void JoinHashTable::close() {
 }
 
 void JoinHashTable::create(const HashTableParam& param) {
+    _need_create_tuple_columns = param.need_create_tuple_columns;
     _table_items = std::make_unique<JoinHashTableItems>();
     _probe_state = std::make_unique<HashTableProbeState>();
 
@@ -352,20 +353,22 @@ Status JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         }
     }
 
-    const auto& tuple_id_map = chunk->get_tuple_id_to_index_map();
-    for (auto iter = tuple_id_map.begin(); iter != tuple_id_map.end(); iter++) {
-        if (_table_items->row_desc->get_tuple_idx(iter->first) != RowDescriptor::INVALID_IDX) {
-            if (_table_items->build_chunk->is_tuple_exist(iter->first)) {
-                ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
-                ColumnPtr& dest_column = _table_items->build_chunk->get_tuple_column_by_id(iter->first);
-                dest_column->append(*src_column, 0, src_column->size());
-                chunk_memory_size += src_column->memory_usage();
-            } else {
-                ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
-                ColumnPtr dest_column = BooleanColumn::create(_table_items->row_count + 1, 1);
-                dest_column->append(*src_column, 0, src_column->size());
-                _table_items->build_chunk->append_tuple_column(dest_column, iter->first);
-                chunk_memory_size += src_column->memory_usage();
+    if (_need_create_tuple_columns) {
+        const auto& tuple_id_map = chunk->get_tuple_id_to_index_map();
+        for (auto iter = tuple_id_map.begin(); iter != tuple_id_map.end(); iter++) {
+            if (_table_items->row_desc->get_tuple_idx(iter->first) != RowDescriptor::INVALID_IDX) {
+                if (_table_items->build_chunk->is_tuple_exist(iter->first)) {
+                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
+                    ColumnPtr& dest_column = _table_items->build_chunk->get_tuple_column_by_id(iter->first);
+                    dest_column->append(*src_column, 0, src_column->size());
+                    chunk_memory_size += src_column->memory_usage();
+                } else {
+                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
+                    ColumnPtr dest_column = BooleanColumn::create(_table_items->row_count + 1, 1);
+                    dest_column->append(*src_column, 0, src_column->size());
+                    _table_items->build_chunk->append_tuple_column(dest_column, iter->first);
+                    chunk_memory_size += src_column->memory_usage();
+                }
             }
         }
     }
