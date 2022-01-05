@@ -1258,10 +1258,11 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEquivalenceLoopDependency() throws Exception {
         String sql = "select * from t0 join t1 on t0.v1 = t1.v4 and cast(t0.v1 as STRING) = t0.v1";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("|  equal join conjunct: 1: v1 = 4: v4"));
         Assert.assertTrue(plan.contains("     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(CAST(1: v1 AS VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH
+                + "     PREDICATES: CAST(CAST(1: v1 AS VARCHAR(" + ScalarType.MAX_VARCHAR_LENGTH
                 + ")) AS DOUBLE) = CAST(1: v1 AS DOUBLE)\n"
                 + "     partitions=0/1"));
     }
@@ -5199,7 +5200,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testOnlyCrossJoin() throws Exception {
         String sql = "select * from t0 as x0 join t1 as x1 on (1 = 2) is not null;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("   3:CROSS JOIN\n" +
+        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL"));
     }
