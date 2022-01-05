@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/join_hash_map.h"
 
@@ -1418,7 +1418,8 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmpty) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_join_with_other_conjunct<true>(_runtime_state.get(), build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_left_outer_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                probe_data);
 
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
     this->check_match_index(probe_state.probe_match_index, 0, config::vector_chunk_size, match_count);
@@ -1446,12 +1447,14 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightSemiJoinWithOtherConjunct) {
 
     // first probe
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<true>(_runtime_state.get(), build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
 
     // second probe
     join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<false>(_runtime_state.get(), build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<false>(_runtime_state.get(), build_data,
+                                                                                 probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count, false);
 }
 
@@ -1477,12 +1480,14 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightOuterJoinWithOtherConjunct) {
 
     // first probe
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<true>(_runtime_state.get(), build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                 probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
 
     // second probe
     join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<false>(_runtime_state.get(), build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<false>(_runtime_state.get(), build_data,
+                                                                                  probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count, false);
 }
 
@@ -1508,12 +1513,14 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightAntiJoinWithOtherConjunct) {
 
     // first probe
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<true>(_runtime_state.get(), build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
 
     // second probe
     join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<false>(_runtime_state.get(), build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<false>(_runtime_state.get(), build_data,
+                                                                                 probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count, false);
 }
 
