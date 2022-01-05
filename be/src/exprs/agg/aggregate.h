@@ -52,14 +52,14 @@ public:
     virtual void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const = 0;
 
     // batch serialize aggregate state to reduce virtual function call
-    virtual void batch_serialize(size_t batch_size, const Buffer<AggDataPtr>& agg_states, size_t state_offsets,
+    virtual void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offsets,
                                  Column* to) const = 0;
 
     // Change the aggregation state to final result if necessary
     virtual void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const = 0;
 
     // batch finalize aggregate state to reduce virtual function call
-    virtual void batch_finalize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
+    virtual void batch_finalize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                                 size_t state_offsets, Column* to) const = 0;
 
     // For streaming aggregation, we directly convert column data to serialize format
@@ -81,16 +81,16 @@ public:
     // Contains a loop with calls to "update" function.
     // You can collect arguments into array "states"
     // and do a single call to "update_batch" for devirtualization and inlining.
-    virtual void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+    virtual void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                               AggDataPtr* states) const = 0;
 
     // filter[i] = 0, will be update
-    virtual void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset,
+    virtual void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
                                           const Column** columns, AggDataPtr* states,
                                           const std::vector<uint8_t>& filter) const = 0;
 
     // update result to single state
-    virtual void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    virtual void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                            AggDataPtr __restrict state) const = 0;
 
     // For window functions
@@ -103,16 +103,16 @@ public:
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"
     // and do a single call to "merge_batch" for devirtualization and inlining.
-    virtual void merge_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+    virtual void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                              AggDataPtr* states) const = 0;
 
     // filter[i] = 0, will be merged
-    virtual void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset,
+    virtual void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
                                          const Column* column, AggDataPtr* states,
                                          const std::vector<uint8_t>& filter) const = 0;
 
     // merge result to single state
-    virtual void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
+    virtual void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
                                           AggDataPtr __restrict state) const = 0;
 };
 
@@ -134,16 +134,16 @@ public:
 
 template <typename State, typename Derived>
 class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> {
-    void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+    void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
         }
     }
 
-    void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+    void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             // TODO: optimize with simd ?
             if (filter[i] == 0) {
                 static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
@@ -151,23 +151,23 @@ class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> 
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             static_cast<const Derived*>(this)->update(ctx, columns, state, i);
         }
     }
 
-    void merge_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+    void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                      AggDataPtr* states) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
         }
     }
 
-    void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+    void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             // TODO: optimize with simd ?
             if (filter[i] == 0) {
                 static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
@@ -175,23 +175,23 @@ class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> 
         }
     }
 
-    void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
+    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
                                   AggDataPtr __restrict state) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             static_cast<const Derived*>(this)->merge(ctx, column, state, i);
         }
     }
 
-    void batch_serialize(size_t batch_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
+    void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
                          Column* to) const override {
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             static_cast<const Derived*>(this)->serialize_to_column(nullptr, agg_states[i] + state_offset, to);
         }
     }
 
-    void batch_finalize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
+    void batch_finalize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                         size_t state_offset, Column* to) const override {
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             static_cast<const Derived*>(this)->finalize_to_column(ctx, agg_states[i] + state_offset, to);
         }
     }

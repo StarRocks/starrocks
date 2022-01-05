@@ -365,10 +365,10 @@ const uint8_t* BinaryColumn::deserialize_and_append(const uint8_t* pos) {
     return pos + string_size;
 }
 
-void BinaryColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
+void BinaryColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
     uint32_t string_size = *((uint32_t*)srcs[0].data);
-    _bytes.reserve(batch_size * string_size * 2);
-    for (size_t i = 0; i < batch_size; ++i) {
+    _bytes.reserve(chunk_size * string_size * 2);
+    for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
 }

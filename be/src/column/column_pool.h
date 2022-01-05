@@ -135,8 +135,8 @@ class CACHELINE_ALIGNED ColumnPool {
             return obj;
         }
 
-        inline void return_object(T* ptr) {
-            if (UNLIKELY(column_reserved_size(ptr) > config::vector_chunk_size)) {
+        inline void return_object(T* ptr, size_t chunk_size) {
+            if (UNLIKELY(column_reserved_size(ptr) > chunk_size)) {
                 delete ptr;
                 return;
             }
@@ -204,11 +204,11 @@ public:
         return ptr;
     }
 
-    inline void return_column(T* ptr) {
+    inline void return_column(T* ptr, size_t chunk_size) {
         LocalPool* lp = _get_or_new_local_pool();
         if (LIKELY(lp != nullptr)) {
             reset_column(ptr);
-            lp->return_object(ptr);
+            lp->return_object(ptr, chunk_size);
         } else {
             delete ptr;
         }
@@ -391,9 +391,9 @@ inline T* get_column() {
 }
 
 template <typename T>
-inline void return_column(T* ptr) {
+inline void return_column(T* ptr, size_t chunk_size) {
     static_assert(InList<ColumnPool<T>, ColumnPoolList>::value, "Cannot use column pool");
-    ColumnPool<T>::singleton()->return_column(ptr);
+    ColumnPool<T>::singleton()->return_column(ptr, chunk_size);
 }
 
 template <typename T>

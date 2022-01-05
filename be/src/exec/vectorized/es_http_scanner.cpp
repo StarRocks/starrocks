@@ -71,7 +71,7 @@ Status EsHttpScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk, boo
 
         COUNTER_UPDATE(_rows_read_counter, 1);
         SCOPED_TIMER(_materialize_timer);
-        RETURN_IF_ERROR(_es_scroll_parser->fill_chunk(chunk, &_line_eof));
+        RETURN_IF_ERROR(_es_scroll_parser->fill_chunk(runtime_state, chunk, &_line_eof));
 
         if (chunk->get() != nullptr) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk->get());

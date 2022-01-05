@@ -240,7 +240,7 @@ public:
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
 
-    virtual void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) = 0;
+    virtual void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) = 0;
 
     // One element serialize_size
     virtual uint32_t serialize_size(size_t idx) const = 0;

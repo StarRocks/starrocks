@@ -65,7 +65,7 @@ class ParquetScannerTest : public ::testing::Test {
             generate_desc_tuple(dst_slot_infos, &desc_tbl_builder);
         }
         DescriptorTbl* desc_tbl = nullptr;
-        DescriptorTbl::create(&_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl);
+        DescriptorTbl::create(&_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size);
         return desc_tbl;
     }
 

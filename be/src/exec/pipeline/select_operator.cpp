@@ -17,18 +17,18 @@ Status SelectOperator::close(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
-    auto batch_size = state->batch_size();
+    auto chunk_size = state->chunk_size();
 
     /*
      *  case pre chunk is empty:
-     *  if input chunk is big enough( > batch_size/2)
+     *  if input chunk is big enough( > chunk_size/2)
      *      return it;
      *  else 
      *      merge it into _pre_output_chunk.
      */
     if (!_pre_output_chunk) {
         auto cur_size = _curr_chunk->num_rows();
-        if (cur_size >= batch_size / 2) {
+        if (cur_size >= chunk_size / 2) {
             return std::move(_curr_chunk);
         } else {
             _pre_output_chunk = std::move(_curr_chunk);
@@ -40,13 +40,13 @@ StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
         } else {
             /*
              *  case pre chunk is not-empty:
-             *  if _pre_output_chunk is big enough(+input_chunk > batch_size)
+             *  if _pre_output_chunk is big enough(+input_chunk > chunk_size)
              *      return it and merge input chunk into _pre_output_chunk;
              *  else 
              *      merge input chunk into _pre_output_chunk.
              */
             auto cur_size = _curr_chunk->num_rows();
-            if (cur_size + _pre_output_chunk->num_rows() > batch_size) {
+            if (cur_size + _pre_output_chunk->num_rows() > chunk_size) {
                 auto output_chunk = _pre_output_chunk;
                 _pre_output_chunk = std::move(_curr_chunk);
                 return output_chunk;

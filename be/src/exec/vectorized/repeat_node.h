@@ -55,11 +55,11 @@ private:
     // accessing chunk.
     ChunkPtr _curr_chunk;
 
-    // only null columns for reusing, It has config::vector_chunk_size rows.
+    // only null columns for reusing, It has chunk_size rows.
     ColumnPtr _column_null;
 
     // column for grouping_id and virtual columns for grouping()/grouping_id() for reusing.
-    // It has config::vector_chunk_size rows.
+    // It has chunk_size rows.
     std::vector<std::vector<ColumnPtr>> _grouping_columns;
 
     // _grouping_list for gourping_id'value and grouping()/grouping_id()'s value.

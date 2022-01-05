@@ -71,7 +71,7 @@ void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vecto
 #define HASH_MAP_METHOD(NAME)                                                                                     \
     else if (_aggregator->hash_set_variant().type == vectorized::HashSetVariant::Type::NAME)                      \
             _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, state->batch_size(), chunk);
+                    *_aggregator->hash_set_variant().NAME, state->chunk_size(), chunk);
     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {

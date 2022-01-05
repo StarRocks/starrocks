@@ -155,7 +155,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) override;
+    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override {
         if (_null_column->get_data()[idx]) {

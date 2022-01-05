@@ -137,7 +137,8 @@ Status PartRange::from_thrift(ObjectPool* pool, const TPartitionRange& t_part_ra
     return Status::OK();
 }
 
-Status PartitionInfo::from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition) {
+Status PartitionInfo::from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition,
+                                  int32_t chunk_size) {
     partition->_id = t_partition.partition_id;
     RETURN_IF_ERROR(PartRange::from_thrift(pool, t_partition.range, &partition->_range));
     if (t_partition.__isset.distributed_exprs) {

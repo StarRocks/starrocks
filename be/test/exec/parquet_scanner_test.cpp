@@ -261,7 +261,7 @@ void ParquetSannerTest::init_desc_table() {
 
     next_slot_id = create_src_tuple(t_desc_table, next_slot_id);
 
-    DescriptorTbl::create(&_obj_pool, t_desc_table, &_desc_tbl);
+    DescriptorTbl::create(&_obj_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
 
     _runtime_state.set_desc_tbl(_desc_tbl);
 }

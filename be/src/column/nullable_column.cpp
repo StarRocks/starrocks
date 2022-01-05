@@ -232,8 +232,8 @@ const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
     return pos;
 }
 
-void NullableColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
-    for (size_t i = 0; i < batch_size; ++i) {
+void NullableColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+    for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
 }

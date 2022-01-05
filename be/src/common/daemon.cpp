@@ -262,7 +262,6 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
 
     UserFunctionCache::instance()->init(config::user_function_dir);
 
-    vectorized::ColumnHelper::init_static_variable();
     vectorized::date::init_date_cache();
 
     std::thread tcmalloc_gc_thread(gc_tcmalloc_memory, this);

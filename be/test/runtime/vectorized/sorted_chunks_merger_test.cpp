@@ -8,6 +8,7 @@
 #include "column/datum_tuple.h"
 #include "exprs/expr_context.h"
 #include "exprs/slot_ref.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
@@ -106,6 +107,8 @@ public:
         _is_null_first.push_back(true);
         _is_null_first.push_back(true);
         _is_null_first.push_back(true);
+
+        _runtime_state = _create_runtime_state();
     }
 
     void TearDown() {
@@ -122,6 +125,18 @@ protected:
     std::vector<Expr*> _exprs;
     std::vector<ExprContext*> _sort_exprs;
     std::vector<bool> _is_asc, _is_null_first;
+
+    std::shared_ptr<RuntimeState> _create_runtime_state() {
+        TUniqueId fragment_id;
+        TQueryOptions query_options;
+        query_options.batch_size = config::vector_chunk_size;
+        TQueryGlobals query_globals;
+        auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
+        runtime_state->init_instance_mem_tracker();
+        return runtime_state;
+    }
+
+    std::shared_ptr<RuntimeState> _runtime_state;
 };
 
 [[maybe_unused]] static void print_chunk(const ChunkPtr& chunk) {
@@ -167,7 +182,7 @@ TEST_F(SortedChunksMergerTest, one_supplier) {
     ChunkSuppliers suppliers = {supplier};
     ChunkProbeSuppliers probe_suppliers = {probe_supplier};
     ChunkHasSuppliers has_suppliers = {has_supplier};
-    SortedChunksMerger merger(false);
+    SortedChunksMerger merger(_runtime_state.get(), false);
     merger.init(suppliers, probe_suppliers, has_suppliers, &_sort_exprs, &_is_asc, &_is_null_first);
 
     bool eos = false;
@@ -214,7 +229,7 @@ TEST_F(SortedChunksMergerTest, two_suppliers) {
         has_suppliers.push_back(has_supplier);
     }
 
-    SortedChunksMerger merger(false);
+    SortedChunksMerger merger(_runtime_state.get(), false);
     merger.init(suppliers, probe_suppliers, has_suppliers, &_sort_exprs, &_is_asc, &_is_null_first);
 
     bool eos = false;
@@ -264,7 +279,7 @@ TEST_F(SortedChunksMergerTest, three_suppliers) {
         has_suppliers.push_back(has_supplier);
     }
 
-    SortedChunksMerger merger(false);
+    SortedChunksMerger merger(_runtime_state.get(), false);
     merger.init(suppliers, probe_suppliers, has_suppliers, &_sort_exprs, &_is_asc, &_is_null_first);
 
     bool eos = false;

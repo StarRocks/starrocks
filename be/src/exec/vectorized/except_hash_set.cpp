@@ -12,13 +12,13 @@ template <typename HashSet>
 void ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chunk,
                                        const std::vector<ExprContext*>& exprs, MemPool* pool) {
     size_t chunk_size = chunk->num_rows();
-    _slice_sizes.assign(config::vector_chunk_size, 0);
+    _slice_sizes.assign(state->chunk_size(), 0);
 
     size_t cur_max_one_row_size = _get_max_serialize_size(chunk, exprs);
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
-        _buffer = _mem_pool->allocate(_max_one_row_size * config::vector_chunk_size);
+        _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
         THROW_BAD_ALLOC_IF_NULL(_buffer);
     }
 
@@ -36,16 +36,25 @@ void ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chun
 }
 
 template <typename HashSet>
+Status ExceptHashSet<HashSet>::init(RuntimeState* state) {
+    _hash_set = std::make_unique<HashSet>();
+    _mem_pool = std::make_unique<MemPool>();
+    _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
+    RETURN_IF_UNLIKELY_NULL(_buffer, Status::MemoryAllocFailed("alloc mem of except hash set failed"));
+    return Status::OK();
+}
+
+template <typename HashSet>
 Status ExceptHashSet<HashSet>::erase_duplicate_row(RuntimeState* state, const ChunkPtr& chunk,
                                                    const std::vector<ExprContext*>& exprs) {
     size_t chunk_size = chunk->num_rows();
-    _slice_sizes.assign(config::vector_chunk_size, 0);
+    _slice_sizes.assign(state->chunk_size(), 0);
 
     size_t cur_max_one_row_size = _get_max_serialize_size(chunk, exprs);
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
-        _buffer = _mem_pool->allocate(_max_one_row_size * config::vector_chunk_size);
+        _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
         if (UNLIKELY(_buffer == nullptr)) {
             return Status::InternalError("Mem usage has exceed the limit of BE");
         }
@@ -66,7 +75,7 @@ Status ExceptHashSet<HashSet>::erase_duplicate_row(RuntimeState* state, const Ch
 }
 
 template <typename HashSet>
-void ExceptHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t batch_size) {
+void ExceptHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size) {
     for (auto& key_column : key_columns) {
         DCHECK(!key_column->is_constant());
         // Because the serialized key is always nullable,
@@ -77,7 +86,7 @@ void ExceptHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Colum
             }
         }
 
-        key_column->deserialize_and_append_batch(keys, batch_size);
+        key_column->deserialize_and_append_batch(keys, chunk_size);
     }
 }
 

@@ -78,7 +78,7 @@ public:
         this->data(state).count++;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         DCHECK(!columns[0]->is_nullable());
         [[maybe_unused]] const InputColumnType* column = down_cast<const InputColumnType*>(columns[0]);
@@ -87,7 +87,7 @@ public:
         // So, we use integers to perform operations
         [[maybe_unused]] SumResultType local_sum_for_arithmetic{};
 
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (pt_is_datetime<PT>) {
                 this->data(state).sum += column->get_data()[i].to_unix_second();
             } else if constexpr (pt_is_date<PT>) {
@@ -106,7 +106,7 @@ public:
         if constexpr (pt_is_arithmetic<PT>) {
             this->data(state).sum += local_sum_for_arithmetic;
         }
-        this->data(state).count += batch_size;
+        this->data(state).count += chunk_size;
     }
 
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,

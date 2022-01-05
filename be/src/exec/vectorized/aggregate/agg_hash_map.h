@@ -97,6 +97,8 @@ struct AggHashMapWithOneNumberKey {
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
+    AggHashMapWithOneNumberKey(int32_t chunk_size) {}
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -137,9 +139,9 @@ struct AggHashMapWithOneNumberKey {
         }
     }
 
-    void insert_keys_to_columns(const ResultVector& keys, const Columns& key_columns, size_t batch_size) {
+    void insert_keys_to_columns(const ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
         auto* column = down_cast<ColumnType*>(key_columns[0].get());
-        column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + batch_size);
+        column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
     }
 
     static constexpr bool has_single_null_key = false;
@@ -157,6 +159,8 @@ struct AggHashMapWithOneNullableNumberKey {
     HashMap hash_map;
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
+
+    AggHashMapWithOneNullableNumberKey(int32_t chunk_size) {}
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -270,11 +274,11 @@ struct AggHashMapWithOneNullableNumberKey {
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t batch_size) {
+    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<ColumnType*>(nullable_column->mutable_data_column());
-        column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + batch_size);
-        nullable_column->null_column_data().resize(batch_size);
+        column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
+        nullable_column->null_column_data().resize(chunk_size);
     }
 
     static constexpr bool has_single_null_key = true;
@@ -287,6 +291,8 @@ struct AggHashMapWithOneStringKey {
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
+
+    AggHashMapWithOneStringKey(int32_t chunk_size) {}
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -334,9 +340,9 @@ struct AggHashMapWithOneStringKey {
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t batch_size) {
+    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
         auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
-        keys.resize(batch_size);
+        keys.resize(chunk_size);
         column->append_strings(keys);
     }
 
@@ -349,6 +355,8 @@ struct AggHashMapWithOneNullableStringKey {
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
+
+    AggHashMapWithOneNullableStringKey(int32_t chunk_size) {}
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -468,13 +476,13 @@ struct AggHashMapWithOneNullableStringKey {
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t batch_size) {
+    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
         DCHECK(key_columns[0]->is_nullable());
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
-        keys.resize(batch_size);
+        keys.resize(chunk_size);
         column->append_strings(keys);
-        nullable_column->null_column_data().resize(batch_size);
+        nullable_column->null_column_data().resize(chunk_size);
     }
 
     static constexpr bool has_single_null_key = true;
@@ -488,16 +496,17 @@ struct AggHashMapWithSerializedKey {
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
 
-    AggHashMapWithSerializedKey()
+    AggHashMapWithSerializedKey(int32_t chunk_size)
             : mem_pool(std::make_unique<MemPool>()),
-              buffer(mem_pool->allocate(max_one_row_size * config::vector_chunk_size)) {
+              buffer(mem_pool->allocate(max_one_row_size * chunk_size)),
+              _chunk_size(chunk_size) {
         THROW_BAD_ALLOC_IF_NULL(buffer);
     }
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
-        slice_sizes.assign(config::vector_chunk_size, 0);
+        slice_sizes.assign(_chunk_size, 0);
 
         uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
@@ -505,7 +514,7 @@ struct AggHashMapWithSerializedKey {
             mem_pool->clear();
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
-            buffer = mem_pool->allocate(max_one_row_size * config::vector_chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            buffer = mem_pool->allocate(max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
             THROW_BAD_ALLOC_IF_NULL(buffer);
         }
 
@@ -535,13 +544,13 @@ struct AggHashMapWithSerializedKey {
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
-        slice_sizes.assign(config::vector_chunk_size, 0);
+        slice_sizes.assign(_chunk_size, 0);
 
         uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
             max_one_row_size = cur_max_one_row_size;
             mem_pool->clear();
-            buffer = mem_pool->allocate(max_one_row_size * config::vector_chunk_size);
+            buffer = mem_pool->allocate(max_one_row_size * _chunk_size);
             THROW_BAD_ALLOC_IF_NULL(buffer);
         }
 
@@ -568,14 +577,14 @@ struct AggHashMapWithSerializedKey {
         return max_size;
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, int32_t batch_size) {
+    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, int32_t chunk_size) {
         // When GroupBy has multiple columns, the memory is serialized by row.
         // If the length of a row is relatively long and there are multiple columns,
         // deserialization by column will cause the memory locality to deteriorate,
         // resulting in poor performance
         if (keys.size() > 0 && keys[0].size > 64) {
             // deserialize by row
-            for (size_t i = 0; i < batch_size; i++) {
+            for (size_t i = 0; i < chunk_size; i++) {
                 for (const auto& key_column : key_columns) {
                     keys[i].data =
                             (char*)(key_column->deserialize_and_append(reinterpret_cast<const uint8_t*>(keys[i].data)));
@@ -584,7 +593,7 @@ struct AggHashMapWithSerializedKey {
         } else {
             // deserialize by column
             for (const auto& key_column : key_columns) {
-                key_column->deserialize_and_append_batch(keys, batch_size);
+                key_column->deserialize_and_append_batch(keys, chunk_size);
             }
         }
     }
@@ -597,6 +606,8 @@ struct AggHashMapWithSerializedKey {
     std::unique_ptr<MemPool> mem_pool;
     uint8_t* buffer;
     ResultVector results;
+
+    int32_t _chunk_size;
 };
 
 template <typename HashMap>
@@ -617,10 +628,11 @@ struct AggHashMapWithSerializedKeyFixedSize {
 
     std::vector<CacheEntry> caches;
 
-    AggHashMapWithSerializedKeyFixedSize() : mem_pool(std::make_unique<MemPool>()) {
-        caches.reserve(config::vector_chunk_size);
+    AggHashMapWithSerializedKeyFixedSize(int32_t chunk_size)
+            : mem_pool(std::make_unique<MemPool>()), _chunk_size(chunk_size) {
+        caches.reserve(chunk_size);
         uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
-        memset(buffer, 0x0, max_fixed_size * config::vector_chunk_size);
+        memset(buffer, 0x0, max_fixed_size * _chunk_size);
     }
 
     template <typename Func>
@@ -707,18 +719,18 @@ struct AggHashMapWithSerializedKeyFixedSize {
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, int32_t batch_size) {
+    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, int32_t chunk_size) {
         DCHECK(fixed_byte_size != -1);
-        tmp_slices.reserve(batch_size);
+        tmp_slices.reserve(chunk_size);
 
         if (!has_null_column) {
-            for (int i = 0; i < batch_size; i++) {
+            for (int i = 0; i < chunk_size; i++) {
                 FixedSizeSliceKey& key = keys[i];
                 tmp_slices[i].data = key.u.data;
                 tmp_slices[i].size = fixed_byte_size;
             }
         } else {
-            for (int i = 0; i < batch_size; i++) {
+            for (int i = 0; i < chunk_size; i++) {
                 FixedSizeSliceKey& key = keys[i];
                 tmp_slices[i].data = key.u.data;
                 tmp_slices[i].size = key.u.size;
@@ -727,7 +739,7 @@ struct AggHashMapWithSerializedKeyFixedSize {
 
         // deserialize by column
         for (const auto& key_column : key_columns) {
-            key_column->deserialize_and_append_batch(tmp_slices, batch_size);
+            key_column->deserialize_and_append_batch(tmp_slices, chunk_size);
         }
     }
 
@@ -737,6 +749,8 @@ struct AggHashMapWithSerializedKeyFixedSize {
     std::unique_ptr<MemPool> mem_pool;
     ResultVector results;
     std::vector<Slice> tmp_slices;
+
+    int32_t _chunk_size;
 };
 
 } // namespace starrocks::vectorized
