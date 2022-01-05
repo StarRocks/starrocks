@@ -1258,11 +1258,10 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEquivalenceLoopDependency() throws Exception {
         String sql = "select * from t0 join t1 on t0.v1 = t1.v4 and cast(t0.v1 as STRING) = t0.v1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("|  equal join conjunct: 1: v1 = 4: v4"));
         Assert.assertTrue(plan.contains("     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(CAST(1: v1 AS VARCHAR(" + ScalarType.MAX_VARCHAR_LENGTH
+                + "     PREDICATES: CAST(CAST(1: v1 AS VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH
                 + ")) AS DOUBLE) = CAST(1: v1 AS DOUBLE)\n"
                 + "     partitions=0/1"));
     }
