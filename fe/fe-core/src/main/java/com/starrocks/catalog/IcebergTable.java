@@ -179,6 +179,7 @@ public class IcebergTable extends Table {
         }
 
         // for type with length, like char(10), we only check the type and ignore the length
+        // TODO: fixed and binary should be considered as binary
         switch (icebergType) {
             case BOOLEAN:
                 return Sets.newHashSet(PrimitiveType.BOOLEAN);
@@ -196,11 +197,11 @@ public class IcebergTable extends Table {
                 return Sets.newHashSet(PrimitiveType.DATE, PrimitiveType.DATETIME);
             case STRING:
             case UUID:
-            case FIXED:
                 return Sets.newHashSet(PrimitiveType.VARCHAR, PrimitiveType.CHAR);
             case DECIMAL:
                 return Sets.newHashSet(PrimitiveType.DECIMALV2, PrimitiveType.DECIMAL32,
                         PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128);
+            case FIXED:
             case BINARY:
             case STRUCT:
             case LIST:
