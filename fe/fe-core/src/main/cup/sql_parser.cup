@@ -4562,7 +4562,8 @@ literal ::=
   | DECIMAL_LITERAL:l
   {: RESULT = new DecimalLiteral(l); :}
   | STRING_LITERAL:l
-  {: RESULT = new StringLiteral(l); :}
+  // for support mysql embedded quotation e.g. SELECT "Pat O""Hanrahan & <Matthew Eldridge]""";
+  {: RESULT = new StringLiteral(l.replaceAll("\"\"", "\"")); :}
   | KW_TRUE
   {: RESULT = new BoolLiteral(true); :}
   | KW_FALSE

@@ -23,26 +23,60 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class CreateRoutineLoadStmtTest {
 
     private static final Logger LOG = LogManager.getLogger(CreateRoutineLoadStmtTest.class);
+
+    private static String runningDir = "fe/mocked/CreateRoutineLoadStmtTest/" + UUID.randomUUID().toString() + "/";
+
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
+        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.dynamic_partition_enable = true;
+        Config.dynamic_partition_check_interval_seconds = 1;
+        UtFrameUtils.createMinStarRocksCluster(runningDir);
+
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+
+        starRocksAssert.withDatabase("test").useDatabase("test");
+    }
+
+    @AfterClass
+    public static void tearDown() throws Exception {
+        UtFrameUtils.cleanStarRocksFeDir(runningDir);
+    }
 
     @Test
     public void testAnalyzeWithDuplicateProperty(@Injectable Analyzer analyzer) throws UserException {
@@ -141,6 +175,26 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals(serverAddress, createRoutineLoadStmt.getKafkaBrokerList());
         Assert.assertEquals(topicName, createRoutineLoadStmt.getKafkaTopic());
         Assert.assertEquals("+08:00", createRoutineLoadStmt.getTimezone());
+    }
+
+    @Test
+    public void testAnalyzeJsonConfig() throws Exception {
+        String createSQL = "CREATE ROUTINE LOAD db0.routine_load_0 ON t1 " +
+                "PROPERTIES(\"format\" = \"json\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) UtFrameUtils
+                .parseAndAnalyzeStmt(createSQL, ctx);
+        Assert.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
+
+        String selectSQL = "SELECT \"Pat O\"\"Hanrahan & <Matthew Eldridge]\"\"\";";
+        SelectStmt selectStmt = (SelectStmt)UtFrameUtils.parseStmtWithNewAnalyzer(selectSQL, ctx);
+
+        Expr expr = selectStmt.getSelectList().getItems().get(0).getExpr();
+        Assert.assertTrue(expr instanceof StringLiteral);
+        StringLiteral stringLiteral = (StringLiteral)expr;
+        Assert.assertEquals(stringLiteral.getValue(), "Pat O\"Hanrahan & <Matthew Eldridge]\"");
+
     }
 
     @Test

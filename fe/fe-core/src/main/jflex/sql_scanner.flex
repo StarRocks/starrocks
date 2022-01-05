@@ -634,7 +634,7 @@ EndOfLineComment = "--" !({HintContent}|{ContainsLineTerminator}) {LineTerminato
 
 {DoubleQuoteStringLiteral} {
   return newToken(SqlParserSymbols.STRING_LITERAL,
-                  escapeBackSlash(yytext().substring(1, yytext().length()-1)).replaceAll("\"\"", "\""));
+                  escapeBackSlash(yytext().substring(1, yytext().length()-1)));
 }
 
 {CommentedHintBegin} {
