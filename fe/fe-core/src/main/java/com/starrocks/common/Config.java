@@ -305,6 +305,13 @@ public class Config extends ConfigBase {
     public static long max_bdbje_clock_delta_ms = 5000; // 5s
 
     /**
+     * bdb je log level
+     * If you want to print all levels of logs, set to ALL
+     */
+    @ConfField
+    public static String bdbje_log_level = "INFO";
+
+    /**
      * the max txn number which bdbje can rollback when trying to rejoin the group
      */
     @ConfField
