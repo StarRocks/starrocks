@@ -1397,19 +1397,27 @@ public class Auth implements Writable {
         }
     }
 
-    public  boolean isSupportKerberosAuth() {
-        if (!Config.enable_authentication_kerberos ||
-                Config.authentication_kerberos_service_key_tab.isEmpty() ||
-                Config.authentication_kerberos_service_principal.isEmpty()) {
+    public boolean isSupportKerberosAuth() {
+        if (!Config.enable_authentication_kerberos) {
+            LOG.error("enable_authentication_kerberos need to be set to true");
             return false;
         }
 
-        if (authClazz != null) {
-            return true;
-        } else {
+        if (Config.authentication_kerberos_service_principal.isEmpty()) {
+            LOG.error("authentication_kerberos_service_principal must be set in config");
+            return false;
+        }
+
+        if (Config.authentication_kerberos_service_key_tab.isEmpty()) {
+            LOG.error("authentication_kerberos_service_key_tab must be set in config");
+            return false;
+        }
+
+        if (authClazz == null) {
             try {
                 File jarFile = new File(KRB5_AUTH_JAR_PATH);
                 if (!jarFile.exists()) {
+                    LOG.error("Can not found jar file at {}", KRB5_AUTH_JAR_PATH);
                     return false;
                 } else {
                     ClassLoader loader = URLClassLoader.newInstance(
@@ -1417,13 +1425,14 @@ public class Auth implements Writable {
                             getClass().getClassLoader()
                     );
                     authClazz = Class.forName(Auth.KRB5_AUTH_CLASS_NAME, true, loader);
-                    return true;
                 }
             } catch (Exception e) {
                 LOG.error("Failed to load {}", Auth.KRB5_AUTH_CLASS_NAME, e);
                 return false;
             }
         }
+
+        return true;
     }
 
     public Class<?> getAuthClazz() {
