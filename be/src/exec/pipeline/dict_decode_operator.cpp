@@ -37,7 +37,8 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     // The order when traversing Chunk::_slot_id_to_index may be unstable of different instance of DictDecodeOperator
     // Subsequent operator may call Chunk::append_selective which requires Chunk::_slot_id_to_index to be exactly same
     // So here we keep the output chunks with the same order as original chunks
-    std::vector<std::pair<vectorized::ColumnPtr, int>> columns_with_original_order(chunk->columns().size());
+    // index -> (chunk, slot_id)
+    std::map<size_t, std::pair<vectorized::ColumnPtr, int>> columns_with_original_order;
     const auto& slot_id_to_index_map = chunk->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         if (std::find(_encode_column_cids.begin(), _encode_column_cids.end(), slot_id) == _encode_column_cids.end()) {
@@ -52,7 +53,7 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
         columns_with_original_order[index] = std::make_pair(std::move(decode_columns[i]), _decode_column_cids[i]);
     }
 
-    for (auto& item : columns_with_original_order) {
+    for (auto& [_, item] : columns_with_original_order) {
         _cur_chunk->append_column(std::move(item.first), item.second);
     }
 
