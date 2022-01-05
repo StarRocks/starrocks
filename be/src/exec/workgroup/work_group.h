@@ -16,18 +16,39 @@ namespace workgroup {
 
 class WorkGroup;
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
-template <typename Compare>
-using WorkGroupQueue = std::priority_queue<WorkGroupPtr, std::vector<WorkGroupPtr>, Compare>;
-class CpuPriorityComparator;
-class IoPriorityComparator;
-using CpuWorkGroupQueue = WorkGroupQueue<CpuPriorityComparator>;
-using IoWorkQroupQueue = WorkGroupQueue<IoPriorityComparator>;
+
+class WorkGroupQueue {
+public:
+    WorkGroupQueue() = default;
+    ~WorkGroupQueue() = default;
+    virtual void add(const WorkGroupPtr& wg);
+    virtual void remove(const WorkGroupPtr& wg);
+    virtual WorkGroupPtr pick_next();
+};
+
+class CpuWorkGroupQueue : public WorkGroupQueue {
+public:
+    CpuWorkGroupQueue() = default;
+    ~CpuWorkGroupQueue() = default;
+    void add(const WorkGroupPtr& wg) override {}
+    void remove(const WorkGroupPtr& wg) override {}
+    WorkGroupPtr pick_next() override { return nullptr; }
+};
+
+class IoWorkGroupQueue : public WorkGroupQueue {
+public:
+    IoWorkGroupQueue() = default;
+    ~IoWorkGroupQueue() = default;
+    void add(const WorkGroupPtr& wg) override {}
+    void remove(const WorkGroupPtr& wg) override {}
+    WorkGroupPtr pick_next() override { return nullptr; }
+};
 
 class WorkGroupManager;
 
 enum WorkGroupType {
-    WG_NORMAL = 0, // normal work group, maybe added to the BE dynamically
-    WG_DEFAULT = 1, // default work group
+    WG_NORMAL = 0,   // normal work group, maybe added to the BE dynamically
+    WG_DEFAULT = 1,  // default work group
     WG_REALTIME = 2, // realtime work group, maybe reserved beforehand
 };
 // WorkGroup is the unit of resource isolation, it has {CPU, Memory, Concurrency} quotas which limit the
@@ -43,8 +64,6 @@ public:
     starrocks::pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
 
     int id() const { return _id; }
-    bool is_mark_del() { return _mark_del.load(std::memory_order_acquire); }
-    void mark_del() { return _mark_del.store(true, std::memory_order_release); }
     int get_cpu_priority() {
         // TODO: implement cpu priority computation
         return 0;
@@ -61,37 +80,10 @@ private:
     size_t _memory_limit;
     size_t _concurrency;
     WorkGroupType _type;
-    std::atomic<bool> _mark_del{false};
     std::shared_ptr<starrocks::MemTracker> _mem_tracker;
     starrocks::pipeline::DriverQueuePtr _driver_queue;
     // it's proper to define Context as a Thrift or protobuf struct.
     // WorkGroupContext _context;
-};
-
-class CpuPriorityComparator {
-public:
-    bool operator()(const WorkGroupPtr& lhs, const WorkGroupPtr& rhs) const {
-        if (lhs->is_mark_del()) {
-            return true;
-        }
-        if (rhs->is_mark_del()) {
-            return false;
-        }
-        return lhs->get_cpu_priority() < rhs->get_cpu_priority();
-    }
-};
-
-class IoPriorityComparator {
-public:
-    bool operator()(const WorkGroupPtr& lhs, const WorkGroupPtr& rhs) const {
-        if (lhs->is_mark_del()) {
-            return true;
-        }
-        if (rhs->is_mark_del()) {
-            return false;
-        }
-        return lhs->get_io_priority() < rhs->get_io_priority();
-    }
 };
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
@@ -113,7 +105,7 @@ private:
     std::mutex _mutex;
     std::unordered_map<int, WorkGroupPtr> _workgroups;
     CpuWorkGroupQueue _wg_cpu_queue;
-    IoWorkQroupQueue _wg_io_queue;
+    IoWorkGroupQueue _wg_io_queue;
 };
 
 } // namespace workgroup

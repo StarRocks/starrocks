@@ -25,8 +25,8 @@ void WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     std::lock_guard<std::mutex> lock(_mutex);
     if (!_workgroups.count(wg->id())) {
         _workgroups[wg->id()] = wg;
-        _wg_cpu_queue.push(wg);
-        _wg_io_queue.push(wg);
+        _wg_cpu_queue.add(wg);
+        _wg_io_queue.add(wg);
     }
 }
 
@@ -35,30 +35,17 @@ void WorkGroupManager::remove_workgroup(int wg_id) {
     if (_workgroups.count(wg_id)) {
         auto wg = std::move(_workgroups[wg_id]);
         _workgroups.erase(wg_id);
-        wg->mark_del();
+        _wg_cpu_queue.remove(wg);
+        _wg_io_queue.remove(wg);
     }
 }
 
 WorkGroupPtr WorkGroupManager::pick_next_wg_for_cpu() {
-    std::lock_guard<std::mutex> lock(_mutex);
-    while (!_wg_cpu_queue.empty()) {
-        auto wg = std::move(_wg_cpu_queue.top());
-        if (!wg->is_mark_del()) {
-            return wg;
-        }
-    }
-    return nullptr;
+    return _wg_cpu_queue.pick_next();
 }
 
 WorkGroupPtr WorkGroupManager::pick_next_wg_for_io() {
-    std::lock_guard<std::mutex> lock(_mutex);
-    while (!_wg_io_queue.empty()) {
-        auto wg = std::move(_wg_io_queue.top());
-        if (!wg->is_mark_del()) {
-            return wg;
-        }
-    }
-    return nullptr;
+    return _wg_io_queue.pick_next();
 }
 
 class DefaultWorkGroupInitialization {
