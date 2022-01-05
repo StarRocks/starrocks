@@ -48,7 +48,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             continue;
         }
 
-        DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
+        DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
 
         _aggregator->evaluate_exprs(chunk.get());
 
@@ -131,7 +131,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = config::vector_chunk_size;
+    int32_t chunk_size = runtime_state()->chunk_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
         SCOPED_TIMER(_aggregator->get_results_timer());
@@ -170,10 +170,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
             std::vector<ExprContext*> group_by_expr_ctxs;
             Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-            operators_with_sink =
-                    context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, group_by_expr_ctxs);
+            operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(
+                    runtime_state(), operators_with_sink, group_by_expr_ctxs);
         } else {
-            operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
+            operators_with_sink =
+                    context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
         }
     }
     // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value

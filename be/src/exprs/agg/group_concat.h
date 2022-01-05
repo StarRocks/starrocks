@@ -98,7 +98,7 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         if (ctx->get_num_args() > 1) {
             const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
@@ -110,14 +110,14 @@ public:
             } else {
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
                 this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
-                                                              sep.get_size() * batch_size);
+                                                              sep.get_size() * chunk_size);
             }
         } else {
             const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
-            this->data(state).intermediate_string.reserve(column_val->get_bytes().size() + 2 * batch_size);
+            this->data(state).intermediate_string.reserve(column_val->get_bytes().size() + 2 * chunk_size);
         }
 
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             update(ctx, columns, state, i);
         }
     }

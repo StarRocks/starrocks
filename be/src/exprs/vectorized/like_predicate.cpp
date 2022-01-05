@@ -341,7 +341,7 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
     auto value_column = VECTORIZED_FN_ARGS(0);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result;
+    ColumnBuilder<TYPE_BOOLEAN> result(value_viewer.size());
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {
@@ -408,7 +408,7 @@ ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const sta
     auto value_column = VECTORIZED_FN_ARGS(0);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result;
+    ColumnBuilder<TYPE_BOOLEAN> result(value_viewer.size());
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {

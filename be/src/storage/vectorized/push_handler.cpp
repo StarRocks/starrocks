@@ -41,7 +41,8 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
                                            query_options, query_globals, ExecEnv::GetInstance());
 
     DescriptorTbl* desc_tbl = nullptr;
-    RETURN_IF_ERROR(DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &desc_tbl));
+    RETURN_IF_ERROR(
+            DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &desc_tbl, config::vector_chunk_size));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     _runtime_profile = _runtime_state->runtime_profile();
@@ -81,7 +82,7 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
 }
 
 ColumnPtr PushBrokerReader::_build_object_column(const ColumnPtr& column) {
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(config::vector_chunk_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -107,7 +108,7 @@ ColumnPtr PushBrokerReader::_build_object_column(const ColumnPtr& column) {
 }
 
 ColumnPtr PushBrokerReader::_build_hll_column(const ColumnPtr& column) {
-    ColumnBuilder<TYPE_HLL> builder;
+    ColumnBuilder<TYPE_HLL> builder(config::vector_chunk_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {

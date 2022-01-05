@@ -13,17 +13,17 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void merge_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+    void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                      AggDataPtr* states) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+    void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
+    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
                                   AggDataPtr __restrict state) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
@@ -33,17 +33,17 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+    void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** column,
+    void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** column,
                                   AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
@@ -56,12 +56,12 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void batch_serialize(size_t batch_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
+    void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
                          Column* to) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void batch_finalize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
+    void batch_finalize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                         size_t state_offset, Column* to) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }

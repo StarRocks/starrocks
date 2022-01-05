@@ -149,7 +149,7 @@ const uint8_t* ObjectColumn<T>::deserialize_and_append(const uint8_t* pos) {
 }
 
 template <typename T>
-void ObjectColumn<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
+void ObjectColumn<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
     DCHECK(false) << "Don't support object column deserialize and append";
 }
 

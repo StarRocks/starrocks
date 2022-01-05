@@ -383,8 +383,8 @@ ColumnPtr MathFunctions::conv_int(FunctionContext* context, const starrocks::vec
     auto src_base = ColumnViewer<TYPE_TINYINT>(columns[1]);
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (bigint.is_null(row) || src_base.is_null(row) || dest_base.is_null(row)) {
             result.append_null();
@@ -423,8 +423,8 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const starrocks::
     auto src_base = ColumnViewer<TYPE_TINYINT>(columns[1]);
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (string_viewer.is_null(row) || src_base.is_null(row) || dest_base.is_null(row)) {
             result.append_null();
@@ -503,7 +503,7 @@ ColumnPtr MathFunctions::rand(FunctionContext* context, const Columns& columns) 
     auto* seed = reinterpret_cast<uint32_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
     DCHECK(seed != nullptr);
 
-    ColumnBuilder<TYPE_DOUBLE> result;
+    ColumnBuilder<TYPE_DOUBLE> result(num_rows);
     generate_randoms(&result, num_rows, seed);
 
     return result.build(false);

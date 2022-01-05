@@ -79,7 +79,7 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
         : _unreported_error_idx(0), _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
-    _query_options.batch_size = DEFAULT_BATCH_SIZE;
+    _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
         _timestamp_ms = query_globals.timestamp_ms;
@@ -148,7 +148,7 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     }
 
     if (_query_options.batch_size <= 0) {
-        _query_options.batch_size = DEFAULT_BATCH_SIZE;
+        _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     }
 
     // Register with the thread mgr

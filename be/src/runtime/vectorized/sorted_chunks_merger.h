@@ -16,7 +16,7 @@ namespace vectorized {
 // Merge a group of sorted Chunks to one Chunk in order.
 class SortedChunksMerger {
 public:
-    SortedChunksMerger(bool is_pipeline);
+    SortedChunksMerger(RuntimeState* state, bool is_pipeline);
     ~SortedChunksMerger();
 
     Status init(const ChunkSuppliers& chunk_suppliers, const ChunkProbeSuppliers& chunk_probe_suppliers,
@@ -35,6 +35,7 @@ public:
     Status get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
 
 private:
+    RuntimeState* _state;
     void collect_merged_chunks(ChunkPtr* chunk);
     void move_cursor_and_adjust_min_heap(std::atomic<bool>* eos);
 
