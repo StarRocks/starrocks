@@ -566,7 +566,8 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
-    operators = context->maybe_interpolate_local_passthrough_exchange(operators, context->degree_of_parallelism());
+    operators = context->maybe_interpolate_local_passthrough_exchange(context->fragment_context()->runtime_state(),
+                                                                      operators, context->degree_of_parallelism());
     return operators;
 }
 

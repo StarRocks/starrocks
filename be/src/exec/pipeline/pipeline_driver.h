@@ -274,7 +274,21 @@ public:
 
     // return true if either dependencies_block or local_rf_block return true, which means that the current driver
     // should wait for both hash table and local runtime filters' readiness.
-    bool is_precondition_block() { return dependencies_block() || local_rf_block() || global_rf_block(); }
+    bool is_precondition_block() {
+        if (!_wait_global_rf_ready) {
+            if (dependencies_block() || local_rf_block()) {
+                return true;
+            }
+            _wait_global_rf_ready = true;
+            if (_global_rf_descriptors.empty()) {
+                return false;
+            }
+            _global_rf_wait_timeout_ns += _precondition_block_timer_sw->elapsed_time() + 5000000;
+            return global_rf_block();
+        } else {
+            return global_rf_block();
+        }
+    }
 
     bool is_not_blocked() {
         // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
@@ -347,6 +361,7 @@ private:
     bool _all_local_rf_ready = false;
 
     std::vector<vectorized::RuntimeFilterProbeDescriptor*> _global_rf_descriptors;
+    bool _wait_global_rf_ready = false;
     bool _all_global_rf_ready_or_timeout = false;
     int64_t _global_rf_wait_timeout_ns = -1;
 

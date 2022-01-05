@@ -926,7 +926,7 @@ public class Coordinator {
             return;
         }
         long maxRowCountPerScanOperator = ConnectContext.get().getSessionVariable().getPipelineMaxRowCountPerScanOperator();
-        int dop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism() * 2;
+        int dop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
         for (FragmentExecParams params : fragmentExecParamsMap.values()) {
             List<PlanNode> scanNodes = params.fragment.getOlapScanNodes(params.fragment.getPlanRoot());
             for (PlanNode node : scanNodes) {
@@ -942,16 +942,16 @@ public class Coordinator {
                     if (instanceExecParam.perNodeScanRanges.containsKey(scanNode.getId().asInt())) {
                         numScanRanges = instanceExecParam.perNodeScanRanges.get(scanNode.getId().asInt()).size();
                     }
-                    int scanDop = maxNumScanOperators * numScanRanges / totalNumScanRanges;
+                    // int scanDop = maxNumScanOperators * numScanRanges / totalNumScanRanges;
                     int scanDopLimit = Math.max(1, Math.min(dop, numScanRanges));
                     // numRows is 0 means that scanNode.getCardinality() return an inexact evaluated value, so in such
                     // scenarios, scanDopLimit is used in default.
-                    if (numRows > 0) {
-                        scanDop = Math.min(scanDopLimit, Math.max(1, scanDop));
-                    } else {
-                        scanDop = scanDopLimit;
-                    }
-                    instanceExecParam.perScanNodeDop.put(scanNode.getId().asInt(), scanDop);
+                    //if (numRows > 0) {
+                    //    scanDop = Math.min(scanDopLimit, Math.max(1, scanDop));
+                    //} else {
+                    //    scanDop = scanDopLimit;
+                    //}
+                    instanceExecParam.perScanNodeDop.put(scanNode.getId().asInt(), scanDopLimit);
                 }
             }
         }
@@ -1211,7 +1211,7 @@ public class Coordinator {
                     // If the maximum parallel child fragment send data to the current PlanFragment via UNPARTITIONED
                     // DataStreamSink, then fragment instance parallelization is leveraged, otherwise, pipeline parallelization
                     // is adopted.
-                    if (!sink.getOutputPartition().isPartitioned()) {
+                    if (sink.getOutputPartition().isPartitioned()) {
                         // fragment instance parallelization (numInstances=N, pipelineDop=1)
                         maxParallelism = Math.min(hostSet.size() * degreeOfParallelism, maxParallelism);
                         fragment.setPipelineDop(1);
@@ -1331,7 +1331,7 @@ public class Coordinator {
 
                     // Although 0 may be returned by scanNode.getCardinality(), scanNode still can produce rows for its
                     // following operator.
-                    if (numRows > 0) {
+                    if (numRows > 0 && numScanRangesPerInstance < pipelineDop) {
                         pipelineDop = Math.min(pipelineDop, numOperatorsPerInstance);
                     } else {
                         pipelineDop = Math.min(pipelineDop, numScanRangesPerInstance);
