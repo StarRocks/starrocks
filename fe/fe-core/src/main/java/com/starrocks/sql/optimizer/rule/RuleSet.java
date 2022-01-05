@@ -15,6 +15,7 @@ import com.starrocks.sql.optimizer.rule.implementation.FilterImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
@@ -108,6 +109,7 @@ public class RuleSet {
     private static final List<Rule> implementRules = ImmutableList.of(
             new OlapScanImplementationRule(),
             new HiveScanImplementationRule(),
+            new IcebergScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
@@ -144,6 +146,7 @@ public class RuleSet {
                 MergeLimitDirectRule.AGGREGATE,
                 MergeLimitDirectRule.OLAP_SCAN,
                 MergeLimitDirectRule.HIVE_SCAN,
+                MergeLimitDirectRule.ICEBERG_SCAN,
                 MergeLimitDirectRule.SCHEMA_SCAN,
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
@@ -188,6 +191,7 @@ public class RuleSet {
                 new CastToEmptyRule(),
                 new PushDownPredicateDirectRule(),
                 PushDownPredicateScanRule.OLAP_SCAN,
+                PushDownPredicateScanRule.ICEBERG_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),

@@ -38,6 +38,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SchemaTable;
@@ -864,7 +865,7 @@ public class QueryAnalyzer {
 
     private boolean isSupportedTable(Table table) {
         return table instanceof OlapTable || table instanceof HiveTable || table instanceof SchemaTable ||
-                table instanceof MysqlTable || table instanceof EsTable;
+                table instanceof MysqlTable || table instanceof EsTable || table instanceof IcebergTable;
     }
 
     Table resolveTable(TableRef tableRef) {

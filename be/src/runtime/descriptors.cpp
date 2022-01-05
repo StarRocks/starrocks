@@ -105,6 +105,9 @@ std::string TableDescriptor::debug_string() const {
     return out.str();
 }
 
+IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc)
+        : TableDescriptor(tdesc), _columns(tdesc.icebergTable.columns), _table_location(tdesc.icebergTable.location) {}
+
 HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : TableDescriptor(tdesc),
           _columns(tdesc.hdfsTable.columns),
@@ -485,6 +488,10 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
             auto* hdfs_desc = pool->add(new HdfsTableDescriptor(tdesc, pool));
             RETURN_IF_ERROR(hdfs_desc->create_key_exprs(pool, chunk_size));
             desc = hdfs_desc;
+            break;
+        }
+        case TTableType::ICEBERG_TABLE: {
+            desc = pool->add(new IcebergTableDescriptor(tdesc));
             break;
         }
         default:

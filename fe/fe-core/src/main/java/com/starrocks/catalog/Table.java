@@ -58,6 +58,7 @@ public class Table extends MetaObject implements Writable {
         BROKER,
         ELASTICSEARCH,
         HIVE,
+        ICEBERG,
         ODBC
     }
 
@@ -195,6 +196,8 @@ public class Table extends MetaObject implements Writable {
             table = new OdbcTable();
         } else if (type == TableType.OLAP_EXTERNAL) {
             table = new ExternalOlapTable();
+        } else if (type == TableType.ICEBERG) {
+            table = new IcebergTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }
