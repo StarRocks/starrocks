@@ -94,6 +94,8 @@ private:
 
     void _init_counter(RuntimeState* state);
 
+    Status _init_table();
+
     int _tuple_id = 0;
     const TupleDescriptor* _tuple_desc = nullptr;
 
@@ -131,6 +133,7 @@ private:
     std::vector<THdfsScanRange> _scan_ranges;
     std::vector<HdfsFileDesc*> _hdfs_files;
     const HdfsTableDescriptor* _hdfs_table = nullptr;
+    const IcebergTableDescriptor* _iceberg_table = nullptr;
     std::vector<std::string> _hive_column_names;
 
     std::unique_ptr<MemPool> _mem_pool;

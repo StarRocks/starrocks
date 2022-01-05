@@ -28,6 +28,17 @@ namespace starrocks::vectorized {
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {}
 
+Status HdfsScanNode::_init_table() {
+    if (dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc())) {
+        _hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc());
+    } else if (dynamic_cast<const IcebergTableDescriptor*>(_tuple_desc->table_desc())) {
+        _iceberg_table = dynamic_cast<const IcebergTableDescriptor*>(_tuple_desc->table_desc());
+    } else {
+        return Status::RuntimeError("invalid table type");
+    }
+    return Status::OK();
+}
+
 Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
 
@@ -44,7 +55,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     _tuple_id = tnode.hdfs_scan_node.tuple_id;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
-    _hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc());
+    RETURN_IF_ERROR(_init_table());
 
     if (tnode.hdfs_scan_node.__isset.min_max_tuple_id) {
         _min_max_tuple_id = tnode.hdfs_scan_node.min_max_tuple_id;
@@ -55,7 +66,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     const auto& slots = _tuple_desc->slots();
     for (size_t i = 0; i < slots.size(); i++) {
-        if (_hdfs_table->is_partition_col(slots[i])) {
+        if (_hdfs_table != nullptr && _hdfs_table->is_partition_col(slots[i])) {
             _partition_slots.push_back(slots[i]);
             _partition_index_in_chunk.push_back(i);
             _partition_index_in_hdfs_partition_columns.push_back(_hdfs_table->get_partition_col_index(slots[i]));
@@ -106,7 +117,7 @@ Status HdfsScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
 
     _pre_process_conjunct_ctxs();
-    _init_partition_expr_map();
+    if (_hdfs_table != nullptr) _init_partition_expr_map();
 
     for (auto& scan_range : _scan_ranges) {
         RETURN_IF_ERROR(_find_and_insert_hdfs_file(scan_range));
@@ -568,28 +579,37 @@ bool HdfsScanNode::_filter_partition(const std::vector<ExprContext*>& partition_
 }
 
 Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range) {
-    if (_partition_values_map.find(scan_range.partition_id) == _partition_values_map.end()) {
+    if (_iceberg_table == nullptr &&
+        (_partition_values_map.find(scan_range.partition_id) == _partition_values_map.end())) {
         // partition has been filtered
         return Status::OK();
+    }
+
+    std::string scan_range_path = scan_range.full_path;
+    if (_hdfs_table != nullptr) {
+        scan_range_path = scan_range.relative_path;
     }
 
     // search file in hdfs file array
     // if found, add file splits to hdfs file desc
     // if not found, create
     for (auto& item : _hdfs_files) {
-        if (item->partition_id == scan_range.partition_id && item->path == scan_range.relative_path) {
+        if (item->partition_id == scan_range.partition_id && item->path == scan_range_path) {
             item->splits.emplace_back(&scan_range);
             return Status::OK();
         }
     }
 
-    auto* partition_desc = _hdfs_table->get_partition(scan_range.partition_id);
+    std::string native_file_path = scan_range.full_path;
+    if (_hdfs_table != nullptr) {
+        auto* partition_desc = _hdfs_table->get_partition(scan_range.partition_id);
 
-    SCOPED_TIMER(_open_file_timer);
+        SCOPED_TIMER(_open_file_timer);
 
-    std::filesystem::path file_path(partition_desc->location());
-    file_path /= scan_range.relative_path;
-    const std::string& native_file_path = file_path.native();
+        std::filesystem::path file_path(partition_desc->location());
+        file_path /= scan_range.relative_path;
+        native_file_path = file_path.native();
+    }
     std::string namenode;
     RETURN_IF_ERROR(get_name_node_from_path(native_file_path, &namenode));
     _is_hdfs_fs = is_hdfs_path(namenode.c_str());
@@ -605,7 +625,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         hdfs_file_desc->hdfs_fs = nullptr;
         hdfs_file_desc->fs = std::move(file);
         hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->path = scan_range.relative_path;
+        hdfs_file_desc->path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;
@@ -619,7 +639,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         hdfs_file_desc->hdfs_fs = hdfs;
         hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, native_file_path, usePread);
         hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->path = scan_range.relative_path;
+        hdfs_file_desc->path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;

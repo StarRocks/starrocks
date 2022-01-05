@@ -3042,6 +3042,9 @@ public class Catalog {
         } else if (engineName.equalsIgnoreCase("hive")) {
             createHiveTable(db, stmt);
             return;
+        } else if (engineName.equalsIgnoreCase("iceberg")) {
+            createIcebergTable(db, stmt);
+            return;
         } else {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
         }
@@ -4093,7 +4096,7 @@ public class Catalog {
                     if (!stmt.isSetIfNotExists()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
                     } else {
-                        LOG.info("create table[{}] which already exists", tableName);
+                        LOG.info("Create table[{}] which already exists", tableName);
                         return;
                     }
                 }
@@ -4112,7 +4115,7 @@ public class Catalog {
                 editLog.logColocateAddTable(info);
                 addToColocateGroupSuccess = true;
             }
-            LOG.info("successfully create table[{};{}]", tableName, tableId);
+            LOG.info("Successfully create table[{};{}]", tableName, tableId);
             // register or remove table from DynamicPartition after table created
             DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), olapTable);
             dynamicPartitionScheduler.createOrUpdateRuntimeInfo(
@@ -4151,7 +4154,7 @@ public class Catalog {
                 if (!stmt.isSetIfNotExists()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
                 } else {
-                    LOG.info("create table[{}] which already exists", tableName);
+                    LOG.info("Create table[{}] which already exists", tableName);
                     return;
                 }
             }
@@ -4159,7 +4162,7 @@ public class Catalog {
             unlock();
         }
 
-        LOG.info("successfully create table[{}-{}]", tableName, tableId);
+        LOG.info("Successfully create table[{}-{}]", tableName, tableId);
     }
 
     private void createEsTable(Database db, CreateTableStmt stmt) throws DdlException {
@@ -4231,6 +4234,38 @@ public class Catalog {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(hiveTable, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                }
+            }
+        } finally {
+            unlock();
+        }
+
+        LOG.info("successfully create table[{}-{}]", tableName, tableId);
+    }
+
+    private void createIcebergTable(Database db, CreateTableStmt stmt) throws DdlException {
+        String tableName = stmt.getTableName();
+        List<Column> columns = stmt.getColumns();
+        long tableId = getNextId();
+        IcebergTable icebergTable = new IcebergTable(tableId, tableName, columns, stmt.getProperties());
+        if (!Strings.isNullOrEmpty(stmt.getComment())) {
+            icebergTable.setComment(stmt.getComment());
+        }
+
+        // check database exists again, because database can be dropped when creating table
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire catalog lock. Try again");
+        }
+        try {
+            if (getDb(db.getFullName()) == null) {
+                throw new DdlException("database has been dropped when creating table");
+            }
+            if (!db.createTableWithLock(icebergTable, false)) {
                 if (!stmt.isSetIfNotExists()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
                 } else {
