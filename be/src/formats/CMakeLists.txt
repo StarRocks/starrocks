@@ -8,6 +8,7 @@ add_library(Formats STATIC
         csv/binary_converter.cpp
         csv/boolean_converter.cpp
         csv/converter.cpp
+        csv/csv_reader.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp
         csv/decimalv2_converter.cpp

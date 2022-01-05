@@ -7,6 +7,7 @@
 
 #include "env/env_hdfs.h"
 #include "exec/vectorized/hdfs_scanner.h"
+#include "exec/vectorized/hdfs_scanner_text.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter.h"
@@ -202,6 +203,8 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
         scanner = _pool->add(new HdfsParquetScanner());
     } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::ORC) {
         scanner = _pool->add(new HdfsOrcScanner());
+    } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::TEXT) {
+        scanner = _pool->add(new HdfsTextScanner());
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", hdfs_file_desc.hdfs_file_format);
         LOG(WARNING) << msg;

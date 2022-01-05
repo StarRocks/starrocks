@@ -214,6 +214,9 @@ struct THdfsScanRange {
 
     // file format of hdfs file
     6: optional Descriptors.THdfsFileFormat file_format
+
+    // text file desc
+    7: optional Descriptors.TTextFileDesc text_file_desc
 }
 
 // Specification of an individual data range which is held in its entirety
