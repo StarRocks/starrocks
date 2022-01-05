@@ -330,3 +330,4 @@
   + [SSB Benchmark](/benchmarking/SSB_Benchmarking.md)
 + Release Notes
   + [v1.19](release_notes/release-1.19.md)
+  + [v2.0](release_notes/release-2.0.md)
