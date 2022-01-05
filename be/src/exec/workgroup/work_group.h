@@ -20,13 +20,13 @@ using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 class WorkGroupQueue {
 public:
     WorkGroupQueue() = default;
-    ~WorkGroupQueue() = default;
-    virtual void add(const WorkGroupPtr& wg);
-    virtual void remove(const WorkGroupPtr& wg);
-    virtual WorkGroupPtr pick_next();
+    virtual ~WorkGroupQueue() = default;
+    virtual void add(const WorkGroupPtr& wg) = 0;
+    virtual void remove(const WorkGroupPtr& wg) = 0;
+    virtual WorkGroupPtr pick_next() = 0;
 };
 
-class CpuWorkGroupQueue : public WorkGroupQueue {
+class CpuWorkGroupQueue final : public WorkGroupQueue {
 public:
     CpuWorkGroupQueue() = default;
     ~CpuWorkGroupQueue() = default;
@@ -35,7 +35,7 @@ public:
     WorkGroupPtr pick_next() override { return nullptr; }
 };
 
-class IoWorkGroupQueue : public WorkGroupQueue {
+class IoWorkGroupQueue final : public WorkGroupQueue {
 public:
     IoWorkGroupQueue() = default;
     ~IoWorkGroupQueue() = default;
@@ -59,6 +59,8 @@ public:
     WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t memory_limit, size_t concurrency,
               WorkGroupType type);
     ~WorkGroup() = default;
+
+    void init();
 
     starrocks::MemTracker* mem_tracker() { return _mem_tracker.get(); }
     starrocks::pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
