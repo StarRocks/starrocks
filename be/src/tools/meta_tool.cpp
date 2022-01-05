@@ -101,6 +101,7 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=delete_rowset_meta "
           "--root_path=/path/to/storage/path --tablet_uid=tablet_uid "
           "--rowset_id=rowset_id\n";
+    ss << "./meta_tool --operation=compact_meta --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=get_meta_stats --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=ls --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=show_meta --pb_meta_path=path\n";
@@ -188,6 +189,19 @@ void delete_rowset_meta(DataDir* data_dir) {
         return;
     }
     std::cout << "delete rowset meta successfully" << std::endl;
+}
+
+void compact_meta(DataDir* data_dir) {
+    uint64_t size_before = 0;
+    uint64_t size_after = 0;
+    Status s = data_dir->get_meta()->compact(&size_before, &size_after);
+    if (!s.ok()) {
+        std::cout << "compact meta failed:" << s << std::endl;
+        return;
+    }
+    std::cout << "compact meta successfully" << std::endl;
+    std::cout << data_dir->get_meta()->get_stats() << std::endl;
+    std::cout << "size before: " << size_before << " after: " << size_after << std::endl;
 }
 
 void get_meta_stats(DataDir* data_dir) {
@@ -443,8 +457,8 @@ int meta_tool_main(int argc, char** argv) {
         show_segment_footer(FLAGS_file);
     } else {
         // operations that need root path should be written here
-        std::set<std::string> valid_operations = {"get_meta",           "load_meta",      "delete_meta",
-                                                  "delete_rowset_meta", "get_meta_stats", "ls"};
+        std::set<std::string> valid_operations = {"get_meta",     "load_meta",      "delete_meta", "delete_rowset_meta",
+                                                  "compact_meta", "get_meta_stats", "ls"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
@@ -470,6 +484,8 @@ int meta_tool_main(int argc, char** argv) {
             delete_meta(data_dir.get());
         } else if (FLAGS_operation == "delete_rowset_meta") {
             delete_rowset_meta(data_dir.get());
+        } else if (FLAGS_operation == "compact_meta") {
+            compact_meta(data_dir.get());
         } else if (FLAGS_operation == "get_meta_stats") {
             get_meta_stats(data_dir.get());
         } else if (FLAGS_operation == "ls") {
