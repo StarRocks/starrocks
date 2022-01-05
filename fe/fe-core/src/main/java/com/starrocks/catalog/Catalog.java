@@ -7457,10 +7457,30 @@ public class Catalog {
     }
 
     public void clearExpiredJobs() {
-        loadManager.removeOldLoadJob();
-        exportMgr.removeOldExportJobs();
-        deleteHandler.removeOldDeleteInfo();
-        globalTransactionMgr.removeExpiredTxns();
-        routineLoadManager.cleanOldRoutineLoadJobs();
+        try {
+            loadManager.removeOldLoadJob();
+        } catch (Throwable t) {
+            LOG.warn("load manager remove old load jobs failed", t);
+        }
+        try {
+            exportMgr.removeOldExportJobs();
+        } catch (Throwable t) {
+            LOG.warn("export manager remove old export jobs failed", t);
+        }
+        try {
+            deleteHandler.removeOldDeleteInfo();
+        } catch (Throwable t) {
+            LOG.warn("delete handler remove old delete info failed", t);
+        }
+        try {
+            globalTransactionMgr.removeExpiredTxns();
+        } catch (Throwable t) {
+            LOG.warn("transaction manager remove expired txns failed", t);
+        }
+        try {
+            routineLoadManager.cleanOldRoutineLoadJobs();
+        } catch (Throwable t) {
+            LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
     }
 }
