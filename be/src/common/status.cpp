@@ -50,7 +50,7 @@ const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) cons
     strings::memcpy_inlined(&len1, state, sizeof(len1));
     strings::memcpy_inlined(&len2, state + sizeof(len1), sizeof(len2));
     uint32_t old_length = static_cast<uint32_t>(len1) + len2 + 5;
-    ctx.size = std::min<size_t>(ctx.size, std::numeric_limits<uint16_t>::max() - old_length);
+    ctx.size = std::min<size_t>(ctx.size, std::numeric_limits<uint16_t>::max() - len2);
     uint32_t new_length = old_length + ctx.size;
     auto result = new char[new_length];
     strings::memcpy_inlined(result, state, old_length);
