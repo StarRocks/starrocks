@@ -522,6 +522,13 @@ inline void ColumnValueRange<T>::convert_to_fixed_value() {
     }
 
     if (_low_op == FILTER_LARGER) {
+        // if _low_value was type::max(), _low_value + 1 will overflow to type::min(),
+        // there will be a very large number of elements added to the _fixed_values set.
+        // If there is a condition > type::max we simply return an empty scan range.
+        if (_low_value == _type_max) {
+            _fixed_values.clear();
+            return;
+        }
         helper::increase(_low_value);
     }
 
