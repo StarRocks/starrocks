@@ -868,6 +868,19 @@ public class PlanFragmentBuilder {
             }
         }
 
+        // return true if all leaf offspring are not ExchangeNode
+        public static boolean hasNoExchangeNodes(PlanNode root) {
+            if (root instanceof ExchangeNode) {
+                return false;
+            }
+            for (PlanNode childNode : root.getChildren()) {
+                if (!hasNoExchangeNodes(childNode)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
@@ -1033,6 +1046,15 @@ public class PlanFragmentBuilder {
                     getSessionVariable().getStreamingPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
+
+            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
+                    hasNoExchangeNodes(inputFragment.getPlanRoot());
+            boolean pipelineDopEnabled = ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
+            if (pipelineDopEnabled && notNeedLocalShuffle) {
+                inputFragment.setNeedsLocalShuffle(false);
+            }
+
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;
         }
