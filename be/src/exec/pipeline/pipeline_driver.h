@@ -15,9 +15,11 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/workgroup/work_group.h"
 #include "util/phmap/phmap.h"
 namespace starrocks {
+namespace workgroup {
+class WorkGroup;
+}
 namespace pipeline {
 
 class PipelineDriver;
