@@ -135,6 +135,16 @@ TEST(NormalizeRangeTest, ExtendScanKeyTest) {
         bool res = scan_keys.extend_scan_key(range, 1024).ok();
         ASSERT_TRUE(res);
     }
+    {
+        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
+                                        std::numeric_limits<CppType>::max());
+        range.add_range(SQLFilterOp::FILTER_LARGER, std::numeric_limits<CppType>::max());
+        OlapScanKeys scan_keys;
+        scan_keys._begin_scan_keys.emplace_back();
+        scan_keys._begin_scan_keys.emplace_back();
+        bool res = scan_keys.extend_scan_key(range, 1024).ok();
+        ASSERT_TRUE(res);
+    }
 }
 
 } // namespace starrocks::vectorized
