@@ -19,7 +19,7 @@ import org.apache.iceberg.expressions.UnboundPredicate;
 public class ExpressionConverter {
 
     public static UnboundPredicate toIcebergExpression(Expr expr) {
-        if (! (expr instanceof BinaryPredicate)) {
+        if (!(expr instanceof BinaryPredicate)) {
             return null;
         }
 

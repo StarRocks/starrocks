@@ -12,7 +12,15 @@ import com.starrocks.common.UserException;
 import com.starrocks.external.PredicateUtils;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.system.Backend;
-import com.starrocks.thrift.*;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsScanNode;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeLocation;
+import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
@@ -128,7 +136,7 @@ public class IcebergScanNode extends ScanNode {
                 srIcebergTable.getIcebergTable(), snapshot.get(),
                 icebergPredicates, true).planFiles()) {
             DataFile file = task.file();
-            LOG.info("Scan with file " + file.path() + ", file record count " + file.recordCount());
+            LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
 
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
@@ -239,9 +247,6 @@ public class IcebergScanNode extends ScanNode {
 
         if (msg.isSetConjuncts()) {
             msg.conjuncts.clear();
-        }
-        for (Expr expr : conjuncts) {
-            msg.addToConjuncts(expr.treeToThrift());
         }
 
         if (!minMaxConjuncts.isEmpty()) {
