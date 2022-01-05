@@ -26,7 +26,7 @@ void WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     if (!_workgroups.count(wg->id())) {
         _workgroups[wg->id()] = wg;
         _wg_cpu_queue.push(wg);
-        _wg_cpu_queue.push(wg);
+        _wg_io_queue.push(wg);
     }
 }
 
