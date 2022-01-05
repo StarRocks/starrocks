@@ -196,9 +196,8 @@ public class IcebergTable extends Table {
                 return Sets.newHashSet(PrimitiveType.DATE, PrimitiveType.DATETIME);
             case STRING:
             case UUID:
-                return Sets.newHashSet(PrimitiveType.VARCHAR, PrimitiveType.CHAR);
             case FIXED:
-                return Sets.newHashSet(PrimitiveType.BINARY);
+                return Sets.newHashSet(PrimitiveType.VARCHAR, PrimitiveType.CHAR);
             case DECIMAL:
                 return Sets.newHashSet(PrimitiveType.DECIMALV2, PrimitiveType.DECIMAL32,
                         PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128);

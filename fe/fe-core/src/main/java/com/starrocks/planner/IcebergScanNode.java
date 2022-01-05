@@ -245,10 +245,6 @@ public class IcebergScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
-        if (msg.isSetConjuncts()) {
-            msg.conjuncts.clear();
-        }
-
         if (!minMaxConjuncts.isEmpty()) {
             for (Expr expr : minMaxConjuncts) {
                 msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
