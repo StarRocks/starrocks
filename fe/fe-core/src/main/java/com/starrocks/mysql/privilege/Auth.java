@@ -62,6 +62,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -87,6 +89,7 @@ public class Auth implements Writable {
     private UserPropertyMgr propertyMgr = new UserPropertyMgr();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private Class<?> authClazz = null;
 
     private void readLock() {
         lock.readLock().lock();
@@ -1394,20 +1397,43 @@ public class Auth implements Writable {
         }
     }
 
-    public static Auth read(DataInput in) throws IOException {
-        Auth auth = new Auth();
-        auth.readFields(in);
-        return auth;
-    }
-
-    public static boolean isSupportKerberosAuth() {
+    public  boolean isSupportKerberosAuth() {
         if (!Config.enable_authentication_kerberos ||
                 Config.authentication_kerberos_service_key_tab.isEmpty() ||
                 Config.authentication_kerberos_service_principal.isEmpty()) {
             return false;
         }
 
-        return new File(KRB5_AUTH_JAR_PATH).exists();
+        if (authClazz != null) {
+            return true;
+        } else {
+            try {
+                File jarFile = new File(KRB5_AUTH_JAR_PATH);
+                if (!jarFile.exists()) {
+                    return false;
+                } else {
+                    ClassLoader loader = URLClassLoader.newInstance(
+                            new URL[] { jarFile.toURL() },
+                            getClass().getClassLoader()
+                    );
+                    authClazz = Class.forName(Auth.KRB5_AUTH_CLASS_NAME, true, loader);
+                    return true;
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to load {}", Auth.KRB5_AUTH_CLASS_NAME, e);
+                return false;
+            }
+        }
+    }
+
+    public Class<?> getAuthClazz() {
+        return authClazz;
+    }
+
+    public static Auth read(DataInput in) throws IOException {
+        Auth auth = new Auth();
+        auth.readFields(in);
+        return auth;
     }
 
     @Override

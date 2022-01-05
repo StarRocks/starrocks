@@ -29,7 +29,6 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.UserResource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.SystemInfoService;
@@ -180,7 +179,7 @@ public class MysqlProto {
             serializer.reset();
             // 2. build the auth switch request and send to the client
             if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
-                if (Auth.isSupportKerberosAuth()) {
+                if (Catalog.getCurrentCatalog().getAuth().isSupportKerberosAuth()) {
                     try {
                         handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
                     } catch (Exception e) {

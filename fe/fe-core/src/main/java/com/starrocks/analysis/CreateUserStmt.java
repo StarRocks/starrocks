@@ -165,7 +165,7 @@ public class CreateUserStmt extends DdlStmt {
                     scramblePassword = new byte[0];
                 }
             } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(authPlugin) &&
-                    Auth.isSupportKerberosAuth()) {
+                    Catalog.getCurrentCatalog().getAuth().isSupportKerberosAuth()) {
                 // In kerberos authentication, userForAuthPlugin represents the user principal realm.
                 // If user realm is not specified when creating user, the service principal realm will be used as
                 // the user principal realm by default.

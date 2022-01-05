@@ -24,18 +24,12 @@ package com.starrocks.mysql;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.lang.reflect.Method;
-import java.net.URL;
-import java.net.URLClassLoader;
-
-import static com.starrocks.mysql.privilege.Auth.KRB5_AUTH_JAR_PATH;
 
 // MySQL protocol handshake packet.
 public class MysqlHandshakePacket extends MysqlPacket {
@@ -135,13 +129,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
         }
 
         String userRealm = password.getUserForAuthPlugin();
-        File jarFile = new File(KRB5_AUTH_JAR_PATH);
-        ClassLoader loader = URLClassLoader.newInstance(
-                new URL[] { jarFile.toURL() },
-                getClass().getClassLoader()
-        );
-
-        Class<?> authClazz = Class.forName(Auth.KRB5_AUTH_CLASS_NAME, true, loader);
+        Class<?> authClazz = Catalog.getCurrentCatalog().getAuth().getAuthClazz();
         Method method = authClazz.getMethod("buildKrb5HandshakeRequest", String.class, String.class);
         byte[] packet = (byte[]) method.invoke(null, Config.authentication_kerberos_service_principal, userRealm);
         serializer.writeBytes(packet);
