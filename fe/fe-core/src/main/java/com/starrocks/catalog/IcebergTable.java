@@ -12,7 +12,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCatalogType;
@@ -58,9 +57,9 @@ public class IcebergTable extends Table {
     private String resourceName;
     private String tableLocation;
 
-    private List<String> columnNames = Lists.newArrayList();
+    private final List<String> columnNames = Lists.newArrayList();
 
-    private Map<String, String> icebergProperties = Maps.newHashMap();
+    private final Map<String, String> icebergProperties = Maps.newHashMap();
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -95,7 +94,7 @@ public class IcebergTable extends Table {
         this.tableLocation = location;
     }
 
-    // icbTbl used for caching
+    // icbTbl is used for caching
     public synchronized org.apache.iceberg.Table getIcebergTable() {
         try {
             if (this.icbTbl == null) {
@@ -115,11 +114,10 @@ public class IcebergTable extends Table {
         }
 
         Map<String, String> copiedProps = Maps.newHashMap(properties);
-        db = copiedProps.get(ICEBERG_DB);
+        db = copiedProps.remove(ICEBERG_DB);
         if (Strings.isNullOrEmpty(db)) {
             throw new DdlException(String.format(PROPERTY_MISSING_MSG, ICEBERG_DB, ICEBERG_DB));
         }
-        copiedProps.remove(ICEBERG_DB);
 
         table = copiedProps.get(ICEBERG_TABLE);
         if (Strings.isNullOrEmpty(table)) {
@@ -129,7 +127,7 @@ public class IcebergTable extends Table {
 
         String resourceName = copiedProps.get(ICEBERG_RESOURCE);
         if (Strings.isNullOrEmpty(resourceName)) {
-            throw new DdlException("property" + ICEBERG_RESOURCE + " must be set");
+            throw new DdlException("property " + ICEBERG_RESOURCE + " must be set");
         }
 
         copiedProps.remove(ICEBERG_RESOURCE);
@@ -155,6 +153,7 @@ public class IcebergTable extends Table {
 
         IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(type, icebergResource.getHiveMetastoreURIs());
         org.apache.iceberg.Table icebergTable = catalog.loadTable(IcebergUtil.getIcebergTableIdentifier(db, table));
+        // TODO: use TypeUtil#indexByName to handle nested field
         Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
                 .collect(Collectors.toMap(Types.NestedField::name, field -> field));
         for (Column column : this.fullSchema) {
@@ -198,12 +197,12 @@ public class IcebergTable extends Table {
             case STRING:
             case UUID:
                 return Sets.newHashSet(PrimitiveType.VARCHAR, PrimitiveType.CHAR);
-            case BINARY:
             case FIXED:
                 return Sets.newHashSet(PrimitiveType.BINARY);
             case DECIMAL:
                 return Sets.newHashSet(PrimitiveType.DECIMALV2, PrimitiveType.DECIMAL32,
                         PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128);
+            case BINARY:
             case STRUCT:
             case LIST:
             case MAP:
@@ -255,22 +254,20 @@ public class IcebergTable extends Table {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (Catalog.getCurrentCatalogStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_CURRENT) {
-            String json = Text.readString(in);
-            JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
-            db = jsonObject.getAsJsonPrimitive(JSON_KEY_ICEBERG_DB).getAsString();
-            table = jsonObject.getAsJsonPrimitive(JSON_KEY_ICEBERG_TABLE).getAsString();
-            resourceName = jsonObject.getAsJsonPrimitive(JSON_KEY_RESOURCE_NAME).getAsString();
-            if (jsonObject.has(JSON_KEY_ICEBERG_PROPERTIES)) {
-                JsonObject jIcebergProperties = jsonObject.getAsJsonObject(JSON_KEY_ICEBERG_PROPERTIES);
-                for (Map.Entry<String, JsonElement> entry : jIcebergProperties.entrySet()) {
-                    icebergProperties.put(entry.getKey(), entry.getValue().getAsString());
-                }
+        String json = Text.readString(in);
+        JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
+        db = jsonObject.getAsJsonPrimitive(JSON_KEY_ICEBERG_DB).getAsString();
+        table = jsonObject.getAsJsonPrimitive(JSON_KEY_ICEBERG_TABLE).getAsString();
+        resourceName = jsonObject.getAsJsonPrimitive(JSON_KEY_RESOURCE_NAME).getAsString();
+        if (jsonObject.has(JSON_KEY_ICEBERG_PROPERTIES)) {
+            JsonObject jIcebergProperties = jsonObject.getAsJsonObject(JSON_KEY_ICEBERG_PROPERTIES);
+            for (Map.Entry<String, JsonElement> entry : jIcebergProperties.entrySet()) {
+                icebergProperties.put(entry.getKey(), entry.getValue().getAsString());
             }
-            {
-                for (Column col : fullSchema) {
-                    columnNames.add(col.getName());
-                }
+        }
+        {
+            for (Column col : fullSchema) {
+                columnNames.add(col.getName());
             }
         }
     }

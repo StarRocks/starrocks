@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class IcebergHiveCatalog implements IcebergCatalog {
-    private static ConcurrentHashMap<String, IcebergHiveCatalog> metastoreUriToCatalog = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, IcebergHiveCatalog> metastoreUriToCatalog = new ConcurrentHashMap<>();
 
     public static synchronized IcebergHiveCatalog getInstance(String uri) {
         if (!metastoreUriToCatalog.containsKey(uri)) {

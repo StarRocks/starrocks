@@ -156,7 +156,7 @@ public class IcebergScanNode extends ScanNode {
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
         helper.addValue(super.debugString());
-        helper.addValue("icebergTable=" + srIcebergTable.getName());
+        helper.add("icebergTable=", srIcebergTable.getName());
         return helper.toString();
     }
 
@@ -216,18 +216,6 @@ public class IcebergScanNode extends ScanNode {
 
     @Override
     public void computeStats(Analyzer analyzer) {
-        Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(
-                srIcebergTable.getIcebergTable(), true);
-        if (snapshot.isPresent()) {
-            for (FileScanTask task : IcebergUtil.getTableScan(
-                    srIcebergTable.getIcebergTable(), snapshot.get(),
-                    icebergPredicates, true).planFiles()) {
-                totalBytes += task.length();
-                DataFile file = task.file();
-                cardinality += file.recordCount() * (task.length() / file.fileSizeInBytes());
-                LOG.info("Total bytes " + totalBytes + ", Cardinality " + cardinality);
-            }
-        }
         if (cardinality > 0) {
             avgRowSize = totalBytes / (float) cardinality;
             if (hasLimit()) {

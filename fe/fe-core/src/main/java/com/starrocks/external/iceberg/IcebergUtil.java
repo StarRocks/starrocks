@@ -13,7 +13,6 @@ import org.apache.iceberg.expressions.UnboundPredicate;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class IcebergUtil {
     /**
@@ -98,11 +97,11 @@ public class IcebergUtil {
         if (refresh) {
             table.refresh();
         }
-        AtomicReference<TableScan> tableScan = new AtomicReference<>(table.newScan()
-                .useSnapshot(snapshot.snapshotId()).includeColumnStats());
-        icebergPredicates.forEach(unboundPredicate -> {
-            tableScan.set(tableScan.get().filter(unboundPredicate));
-        });
-        return tableScan.get();
+
+        TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
+        for (UnboundPredicate predicate : icebergPredicates) {
+            tableScan = tableScan.filter(predicate);
+        }
+        return tableScan;
     }
 }
