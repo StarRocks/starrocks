@@ -6,7 +6,7 @@
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
-#include "column/column_visitor.h"
+#include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
@@ -208,129 +208,81 @@ public:
     }
 };
 
-class ColumnSerializedSizeVisitor : public ColumnVisitor {
+class ColumnSerializedSizeVisitor final : public ColumnVisitorAdapter<ColumnSerializedSizeVisitor> {
 public:
-    explicit ColumnSerializedSizeVisitor(int64_t init_size) : _size(init_size) {}
+    explicit ColumnSerializedSizeVisitor(int64_t init_size) : ColumnVisitorAdapter(this), _size(init_size) {}
 
-    Status visit(const vectorized::HyperLogLogColumn& column) override { return visit_object_column(column); }
-    Status visit(const vectorized::BitmapColumn& column) override { return visit_object_column(column); }
-    Status visit(const vectorized::PercentileColumn& column) override { return visit_object_column(column); }
-    Status visit(const vectorized::Int8Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::UInt8Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::Int16Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::UInt16Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::Int32Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::UInt32Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::Int64Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::UInt64Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::Int128Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::DoubleColumn& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::FloatColumn& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::DateColumn& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::TimestampColumn& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::DecimalColumn& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::Decimal32Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::Decimal64Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::Decimal128Column& column) override { return visit_fixed_length_column(column); }
-    Status visit(const vectorized::FixedLengthColumn<int96_t>& column) override {
-        return visit_fixed_length_column(column);
-    }
-    Status visit(const vectorized::FixedLengthColumn<uint24_t>& column) override {
-        return visit_fixed_length_column(column);
-    }
-    Status visit(const vectorized::FixedLengthColumn<decimal12_t>& column) override {
-        return visit_fixed_length_column(column);
-    }
-
-    Status visit(const vectorized::NullableColumn& column) override {
+    Status do_visit(const vectorized::NullableColumn& column) {
         _size += NullableColumnSerde::max_serialized_size(column);
         return Status::OK();
     }
 
-    Status visit(const vectorized::ConstColumn& column) override {
+    Status do_visit(const vectorized::ConstColumn& column) {
         _size += ConstColumnSerde::max_serialized_size(column);
         return Status::OK();
     }
 
-    Status visit(const vectorized::ArrayColumn& column) override {
+    Status do_visit(const vectorized::ArrayColumn& column) {
         _size += ArrayColumnSerde::max_serialized_size(column);
         return Status::OK();
     }
 
-    Status visit(const vectorized::BinaryColumn& column) override {
+    Status do_visit(const vectorized::BinaryColumn& column) {
         _size += BinaryColumnSerde::max_serialized_size(column);
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+        _size += FixedLengthColumnSerde<T>::max_serialized_size(column);
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+        _size += ObjectColumnSerde<T>::max_serialized_size(column);
         return Status::OK();
     }
 
     int64_t size() const { return _size; }
 
 private:
-    template <typename T>
-    Status visit_fixed_length_column(const vectorized::FixedLengthColumnBase<T>& column) {
-        _size += FixedLengthColumnSerde<T>::max_serialized_size(column);
-        return Status::OK();
-    }
-
-    template <typename T>
-    Status visit_object_column(const vectorized::ObjectColumn<T>& column) {
-        _size += ObjectColumnSerde<T>::max_serialized_size(column);
-        return Status::OK();
-    }
-
     int64_t _size;
 };
 
-class ColumnSerializingVisitor : public ColumnVisitor {
+class ColumnSerializingVisitor final : public ColumnVisitorAdapter<ColumnSerializingVisitor> {
 public:
-    explicit ColumnSerializingVisitor(uint8_t* buff) : _buff(buff), _cur(buff) {}
+    explicit ColumnSerializingVisitor(uint8_t* buff) : ColumnVisitorAdapter(this), _buff(buff), _cur(buff) {}
 
-    Status visit(const vectorized::HyperLogLogColumn& column) override { return serialize_object_column(column); }
-    Status visit(const vectorized::BitmapColumn& column) override { return serialize_object_column(column); }
-    Status visit(const vectorized::PercentileColumn& column) override { return serialize_object_column(column); }
-    Status visit(const vectorized::Int8Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::UInt8Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::Int16Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::UInt16Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::Int32Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::UInt32Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::Int64Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::UInt64Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::Int128Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::DoubleColumn& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::FloatColumn& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::DateColumn& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::TimestampColumn& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::DecimalColumn& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::Decimal32Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::Decimal64Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::Decimal128Column& column) override { return serialize_fixed_length_column(column); }
-    Status visit(const vectorized::FixedLengthColumn<int96_t>& column) override {
-        return serialize_fixed_length_column(column);
-    }
-    Status visit(const vectorized::FixedLengthColumn<uint24_t>& column) override {
-        return serialize_fixed_length_column(column);
-    }
-    Status visit(const vectorized::FixedLengthColumn<decimal12_t>& column) override {
-        return serialize_fixed_length_column(column);
-    }
-
-    Status visit(const vectorized::NullableColumn& column) override {
+    Status do_visit(const vectorized::NullableColumn& column) {
         _cur = NullableColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
 
-    Status visit(const vectorized::ConstColumn& column) override {
+    Status do_visit(const vectorized::ConstColumn& column) {
         _cur = ConstColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
 
-    Status visit(const vectorized::ArrayColumn& column) override {
+    Status do_visit(const vectorized::ArrayColumn& column) {
         _cur = ArrayColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
 
-    Status visit(const vectorized::BinaryColumn& column) override {
+    Status do_visit(const vectorized::BinaryColumn& column) {
         _cur = BinaryColumnSerde::serialize(column, _cur);
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+        _cur = FixedLengthColumnSerde<T>::serialize(column, _cur);
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+        _cur = ObjectColumnSerde<T>::serialize(column, _cur);
         return Status::OK();
     }
 
@@ -339,73 +291,44 @@ public:
     int64_t bytes() const { return _cur - _buff; }
 
 private:
-    template <typename T>
-    Status serialize_fixed_length_column(const vectorized::FixedLengthColumnBase<T>& column) {
-        _cur = FixedLengthColumnSerde<T>::serialize(column, _cur);
-        return Status::OK();
-    }
-
-    template <typename T>
-    Status serialize_object_column(const vectorized::ObjectColumn<T>& column) {
-        _cur = ObjectColumnSerde<T>::serialize(column, _cur);
-        return Status::OK();
-    }
-
     uint8_t* _buff;
     uint8_t* _cur;
 };
 
-class ColumnDeserializingVisitor : public ColumnVisitorMutable {
+class ColumnDeserializingVisitor final : public ColumnVisitorMutableAdapter<ColumnDeserializingVisitor> {
 public:
-    explicit ColumnDeserializingVisitor(const uint8_t* buff) : _buff(buff), _cur(buff) {}
+    explicit ColumnDeserializingVisitor(const uint8_t* buff)
+            : ColumnVisitorMutableAdapter(this), _buff(buff), _cur(buff) {}
 
-    Status visit(vectorized::HyperLogLogColumn* column) override { return deserialize_object_column(column); }
-    Status visit(vectorized::BitmapColumn* column) override { return deserialize_object_column(column); }
-    Status visit(vectorized::PercentileColumn* column) override { return deserialize_object_column(column); }
-    Status visit(vectorized::Int8Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::UInt8Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::Int16Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::UInt16Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::Int32Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::UInt32Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::Int64Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::UInt64Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::Int128Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::DoubleColumn* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::FloatColumn* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::DateColumn* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::TimestampColumn* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::DecimalColumn* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::Decimal32Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::Decimal64Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::Decimal128Column* column) override { return deserialize_fixed_length_column(column); }
-    Status visit(vectorized::FixedLengthColumn<int96_t>* column) override {
-        return deserialize_fixed_length_column(column);
-    }
-    Status visit(vectorized::FixedLengthColumn<uint24_t>* column) override {
-        return deserialize_fixed_length_column(column);
-    }
-    Status visit(vectorized::FixedLengthColumn<decimal12_t>* column) override {
-        return deserialize_fixed_length_column(column);
-    }
-
-    Status visit(vectorized::NullableColumn* column) override {
+    Status do_visit(vectorized::NullableColumn* column) {
         _cur = NullableColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }
 
-    Status visit(vectorized::ConstColumn* column) override {
+    Status do_visit(vectorized::ConstColumn* column) {
         _cur = ConstColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }
 
-    Status visit(vectorized::ArrayColumn* column) override {
+    Status do_visit(vectorized::ArrayColumn* column) {
         _cur = ArrayColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }
 
-    Status visit(vectorized::BinaryColumn* column) override {
+    Status do_visit(vectorized::BinaryColumn* column) {
         _cur = BinaryColumnSerde::deserialize(_cur, column);
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(vectorized::FixedLengthColumnBase<T>* column) {
+        _cur = FixedLengthColumnSerde<T>::deserialize(_cur, column);
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(vectorized::ObjectColumn<T>* column) {
+        _cur = ObjectColumnSerde<T>::deserialize(_cur, column);
         return Status::OK();
     }
 
@@ -414,18 +337,6 @@ public:
     int64_t bytes() const { return _cur - _buff; }
 
 private:
-    template <typename T>
-    Status deserialize_fixed_length_column(vectorized::FixedLengthColumnBase<T>* column) {
-        _cur = FixedLengthColumnSerde<T>::deserialize(_cur, column);
-        return Status::OK();
-    }
-
-    template <typename T>
-    Status deserialize_object_column(vectorized::ObjectColumn<T>* column) {
-        _cur = ObjectColumnSerde<T>::deserialize(_cur, column);
-        return Status::OK();
-    }
-
     const uint8_t* _buff;
     const uint8_t* _cur;
 };
