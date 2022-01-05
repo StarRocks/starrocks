@@ -30,6 +30,7 @@ import com.starrocks.external.hive.HdfsFileBlockDesc;
 import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HdfsFileFormat;
 import com.starrocks.external.hive.HivePartition;
+import com.starrocks.external.hive.text.TextFileFormatDesc;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
@@ -401,7 +402,8 @@ public class HdfsScanNode extends ScanNode {
         do {
             if (remainingBytes <= splitSize) {
                 createScanRangeLocationsForSplit(partitionId, fileDesc,
-                        blockDesc, fileFormat, offset + length - remainingBytes, remainingBytes);
+                        blockDesc, fileFormat, offset + length - remainingBytes,
+                        remainingBytes);
                 remainingBytes = 0;
             } else if (remainingBytes <= 2 * splitSize) {
                 long mid = (remainingBytes + 1) / 2;
@@ -413,7 +415,8 @@ public class HdfsScanNode extends ScanNode {
                 remainingBytes = 0;
             } else {
                 createScanRangeLocationsForSplit(partitionId, fileDesc,
-                        blockDesc, fileFormat, offset + length - remainingBytes, splitSize);
+                        blockDesc, fileFormat, offset + length - remainingBytes,
+                        splitSize);
                 remainingBytes -= splitSize;
             }
         } while (remainingBytes > 0);
@@ -433,6 +436,7 @@ public class HdfsScanNode extends ScanNode {
         hdfsScanRange.setPartition_id(partitionId);
         hdfsScanRange.setFile_length(fileDesc.getLength());
         hdfsScanRange.setFile_format(fileFormat.toThrift());
+        hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);

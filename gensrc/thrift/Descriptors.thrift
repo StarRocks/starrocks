@@ -56,6 +56,16 @@ enum THdfsFileFormat {
   ORC,
 }
 
+
+// Text file desc
+struct TTextFileDesc {
+    // property 'field.delim'
+    1: optional string  field_delim
+
+    // property 'line.delim'
+    2: optional string line_delim
+}
+
 enum TSchemaTableType {
     SCH_AUTHORS= 0,
     SCH_CHARSETS,
