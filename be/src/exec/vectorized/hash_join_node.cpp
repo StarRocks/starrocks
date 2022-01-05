@@ -82,6 +82,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _runtime_join_filter_pushdown_limit = state->query_options().runtime_join_filter_pushdown_limit;
     }
 
+    if (tnode.__isset.need_create_tuple_columns) {
+        _need_create_tuple_columns = tnode.need_create_tuple_columns;
+    }
     return Status::OK();
 }
 
@@ -130,6 +133,7 @@ Status HashJoinNode::prepare(RuntimeState* state) {
 
 void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
+    param->need_create_tuple_columns = _need_create_tuple_columns;
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
     param->build_row_desc = &child(1)->row_desc();

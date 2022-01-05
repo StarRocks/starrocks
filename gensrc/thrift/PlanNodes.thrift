@@ -876,6 +876,8 @@ struct TPlanNode {
   57: optional set<Types.TPlanNodeId> local_rf_waiting_set
   // Columns that null values can be filtered out
   58: optional list<Types.TSlotId> filter_null_value_columns;
+  // for outer join and cross join
+  59: optional bool need_create_tuple_columns;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
