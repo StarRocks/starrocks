@@ -39,6 +39,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
+
 // MySQL protocol util
 public class MysqlProto {
     private static final Logger LOG = LogManager.getLogger(MysqlProto.class);
@@ -176,7 +178,23 @@ public class MysqlProto {
             // 1. clear the serializer
             serializer.reset();
             // 2. build the auth switch request and send to the client
-            handshakePacket.buildAuthSwitchRequest(serializer);
+            if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
+                if (Catalog.getCurrentCatalog().getAuth().isSupportKerberosAuth()) {
+                    try {
+                        handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
+                    } catch (Exception e) {
+                        ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                        sendResponsePacket(context);
+                        return false;
+                    }
+                } else {
+                    ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
+                    sendResponsePacket(context);
+                    return false;
+                }
+            } else {
+                handshakePacket.buildAuthSwitchRequest(serializer);
+            }
             channel.sendAndFlush(serializer.toByteBuffer());
             // Server receive auth switch response packet from client.
             ByteBuffer authSwitchResponse = channel.fetchOnePacket();

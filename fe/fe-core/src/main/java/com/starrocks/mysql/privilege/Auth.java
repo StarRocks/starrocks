@@ -26,6 +26,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.StarRocksFE;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.CreateClusterStmt;
 import com.starrocks.analysis.CreateRoleStmt;
@@ -59,7 +60,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.File;
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -73,6 +77,9 @@ public class Auth implements Writable {
     public static final String ROOT_USER = "root";
     public static final String ADMIN_USER = "admin";
 
+    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
+    public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
+
     private UserPrivTable userPrivTable = new UserPrivTable();
     private DbPrivTable dbPrivTable = new DbPrivTable();
     private TablePrivTable tablePrivTable = new TablePrivTable();
@@ -82,6 +89,7 @@ public class Auth implements Writable {
     private UserPropertyMgr propertyMgr = new UserPropertyMgr();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private Class<?> authClazz = null;
 
     private void readLock() {
         lock.readLock().lock();
@@ -251,7 +259,6 @@ public class Auth implements Writable {
         //     }
         //     return true;
         // }
-
         readLock();
         try {
             return userPrivTable.checkPassword(remoteUser, remoteHost, remotePasswd, randomString, currentUser);
@@ -1388,6 +1395,48 @@ public class Auth implements Writable {
         } finally {
             readUnlock();
         }
+    }
+
+    public boolean isSupportKerberosAuth() {
+        if (!Config.enable_authentication_kerberos) {
+            LOG.error("enable_authentication_kerberos need to be set to true");
+            return false;
+        }
+
+        if (Config.authentication_kerberos_service_principal.isEmpty()) {
+            LOG.error("authentication_kerberos_service_principal must be set in config");
+            return false;
+        }
+
+        if (Config.authentication_kerberos_service_key_tab.isEmpty()) {
+            LOG.error("authentication_kerberos_service_key_tab must be set in config");
+            return false;
+        }
+
+        if (authClazz == null) {
+            try {
+                File jarFile = new File(KRB5_AUTH_JAR_PATH);
+                if (!jarFile.exists()) {
+                    LOG.error("Can not found jar file at {}", KRB5_AUTH_JAR_PATH);
+                    return false;
+                } else {
+                    ClassLoader loader = URLClassLoader.newInstance(
+                            new URL[] { jarFile.toURL() },
+                            getClass().getClassLoader()
+                    );
+                    authClazz = Class.forName(Auth.KRB5_AUTH_CLASS_NAME, true, loader);
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to load {}", Auth.KRB5_AUTH_CLASS_NAME, e);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public Class<?> getAuthClazz() {
+        return authClazz;
     }
 
     public static Auth read(DataInput in) throws IOException {
