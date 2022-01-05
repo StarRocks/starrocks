@@ -3,20 +3,16 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -26,11 +22,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.external.PredicateUtils;
 import com.starrocks.external.hive.HdfsFileBlockDesc;
 import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HdfsFileFormat;
 import com.starrocks.external.hive.HivePartition;
-import com.starrocks.external.hive.text.TextFileFormatDesc;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
@@ -137,7 +133,9 @@ public class HdfsScanNode extends ScanNode {
         }
 
         // Min max tuple must be computed after analyzer.materializeSlots()
-        computeMinMaxTupleAndConjuncts(analyzer);
+        DescriptorTable descTbl = analyzer.getDescTbl();
+        minMaxTuple = descTbl.createTupleDescriptor();
+        PredicateUtils.computeMinMaxTupleAndConjuncts(analyzer, minMaxTuple, minMaxConjuncts, nonPartitionConjuncts);
 
         computeStats(analyzer);
         isFinalized = true;
@@ -247,102 +245,6 @@ public class HdfsScanNode extends ScanNode {
 
     public void setMinMaxTuple(TupleDescriptor tuple) {
         minMaxTuple = tuple;
-    }
-
-    /**
-     * Analyzes 'conjuncts', populates 'minMaxTuple' with slots for statistics values,
-     * and populates 'minMaxConjuncts' with conjuncts pointing into the 'minMaxTuple'.
-     * Only conjuncts of the form <slot> <op> <constant> are supported,
-     * and <op> must be one of LT, LE, GE, GT, or EQ.
-     */
-    private void computeMinMaxTupleAndConjuncts(Analyzer analyzer) {
-        DescriptorTable descTbl = analyzer.getDescTbl();
-        minMaxTuple = descTbl.createTupleDescriptor();
-        // Adds predicates for scalar
-        for (Expr pred : nonPartitionConjuncts) {
-            computeMinMaxPredicate(analyzer, pred);
-        }
-        minMaxTuple.computeMemLayout();
-    }
-
-    private void computeMinMaxPredicate(Analyzer analyzer, Expr pred) {
-        if (pred instanceof BinaryPredicate) {
-            computeBinaryMinMaxPredicate(analyzer, (BinaryPredicate) pred);
-        } else if (pred instanceof InPredicate) {
-            computeInListMinMaxPredicate(analyzer, (InPredicate) pred);
-        }
-    }
-
-    private void computeBinaryMinMaxPredicate(Analyzer analyzer, BinaryPredicate binaryPred) {
-        SlotRef slotRef = binaryPred.getChild(0).unwrapSlotRef(true);
-        if (slotRef == null) {
-            return;
-        }
-
-        Expr literal = binaryPred.getChild(1);
-        if (!literal.isConstant()) {
-            return;
-        }
-        if (Expr.IS_NULL_LITERAL.apply(literal)) {
-            return;
-        }
-
-        if (BinaryPredicate.IS_RANGE_PREDICATE.apply(binaryPred)) {
-            buildStatsPredicate(analyzer, slotRef, binaryPred, binaryPred.getOp());
-        } else if (BinaryPredicate.IS_EQ_PREDICATE.apply(binaryPred)) {
-            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryPredicate.Operator.GE);
-            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryPredicate.Operator.LE);
-        }
-    }
-
-    private void computeInListMinMaxPredicate(Analyzer analyzer, InPredicate inPred) {
-        SlotRef slotRef = inPred.getChild(0).unwrapSlotRef(true);
-        if (slotRef == null) {
-            return;
-        }
-
-        if (inPred.isNotIn()) {
-            return;
-        }
-        List<Expr> children = inPred.getChildren();
-        LiteralExpr min = null;
-        LiteralExpr max = null;
-        for (int i = 1; i < children.size(); i++) {
-            Expr child = children.get(i);
-            if (!Expr.IS_LITERAL.apply(child) || Expr.IS_NULL_LITERAL.apply(child)) {
-                return;
-            }
-
-            LiteralExpr literal = (LiteralExpr) child;
-            if (min == null || literal.compareLiteral(min) < 0) {
-                min = literal;
-            }
-            if (max == null || literal.compareLiteral(max) > 0) {
-                max = literal;
-            }
-        }
-
-        Preconditions.checkState(min != null);
-        Preconditions.checkState(max != null);
-        BinaryPredicate minBound = new BinaryPredicate(BinaryPredicate.Operator.GE,
-                children.get(0).clone(), min.clone());
-        BinaryPredicate maxBound = new BinaryPredicate(BinaryPredicate.Operator.LE,
-                children.get(0).clone(), max.clone());
-        buildStatsPredicate(analyzer, slotRef, minBound, minBound.getOp());
-        buildStatsPredicate(analyzer, slotRef, maxBound, maxBound.getOp());
-    }
-
-    private void buildStatsPredicate(Analyzer analyzer, SlotRef slotRef, BinaryPredicate binaryPred,
-                                     BinaryPredicate.Operator op) {
-        Expr literal = binaryPred.getChild(1);
-        Preconditions.checkState(literal.isConstant());
-
-        // Make a new slot descriptor, which adds it to the tuple descriptor.
-        SlotDescriptor slotDesc = analyzer.getDescTbl().copySlotDescriptor(minMaxTuple, slotRef.getDesc());
-        SlotRef slot = new SlotRef(slotDesc);
-        BinaryPredicate statsPred = new BinaryPredicate(op, slot, literal);
-        statsPred.analyzeNoThrow(analyzer);
-        minMaxConjuncts.add(statsPred);
     }
 
     public void getScanRangeLocations(DescriptorTable descTbl) throws UserException {

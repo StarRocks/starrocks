@@ -348,6 +348,7 @@ enum TTableType {
     BROKER_TABLE,
     ES_TABLE,
     HDFS_TABLE,
+    ICEBERG_TABLE,
     VIEW = 20
 }
 
