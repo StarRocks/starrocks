@@ -17,7 +17,7 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
 }
 
 bool ExchangeSourceOperator::has_output() const {
-    return _stream_recvr->has_output();
+    return _stream_recvr->has_output_for_pipeline(_driver_sequence);
 }
 
 bool ExchangeSourceOperator::is_finished() const {
@@ -30,8 +30,8 @@ void ExchangeSourceOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {
-    std::unique_ptr<vectorized::Chunk> chunk = std::make_unique<vectorized::Chunk>();
-    RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk));
+    auto chunk = std::make_unique<vectorized::Chunk>();
+    RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk, _driver_sequence));
     eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
 }
