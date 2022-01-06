@@ -56,7 +56,8 @@ public class MasterOpExecutor {
         this(null, originStmt, ctx, status, isQuery);
     }
 
-    public MasterOpExecutor(StatementBase parsedStmt, OriginStatement originStmt, ConnectContext ctx, RedirectStatus status, boolean isQuery) {
+    public MasterOpExecutor(StatementBase parsedStmt, OriginStatement originStmt,
+                            ConnectContext ctx, RedirectStatus status, boolean isQuery) {
         this.originStmt = originStmt;
         this.ctx = ctx;
         if (status.isNeedToWaitJournalSync()) {

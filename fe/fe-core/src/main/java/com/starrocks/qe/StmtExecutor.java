@@ -641,7 +641,7 @@ public class StmtExecutor {
         try {
             SetStmt setStmt = (SetStmt) parsedStmt;
             SetExecutor executor = new SetExecutor(context, setStmt);
-            executor.execute();
+            executor.execute(false);
         } catch (DdlException e) {
             // Return error message to client.
             context.getState().setError(e.getMessage());

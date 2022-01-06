@@ -447,7 +447,7 @@ public class StmtExecutorTest {
                 result = symbol;
 
                 // Mock set
-                executor.execute();
+                executor.execute(anyBoolean);
                 minTimes = 0;
             }
         };
@@ -476,7 +476,7 @@ public class StmtExecutorTest {
                 result = symbol;
 
                 // Mock set
-                executor.execute();
+                executor.execute(anyBoolean);
                 minTimes = 0;
                 result = new DdlException("failed");
             }
