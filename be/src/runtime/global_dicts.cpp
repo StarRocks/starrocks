@@ -197,6 +197,8 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
                 ctor(slice, id_allocator);
             });
             values.emplace_back(res->first);
+        } else {
+            dict_opt_ctx->result_nullable = true;
         }
     }
 
@@ -214,7 +216,6 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
     for (int i = 0; i < values.size(); ++i) {
         if (viewer.is_null(i)) {
             code_convert_map[codes[i]] = 0;
-            dict_opt_ctx->result_nullable = true;
         } else {
             code_convert_map[codes[i]] = result_map.find(viewer.value(i))->second;
         }
