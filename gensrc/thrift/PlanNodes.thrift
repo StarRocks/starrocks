@@ -237,6 +237,7 @@ struct TMySQLScanNode {
   2: required string table_name
   3: required list<string> columns
   4: required list<string> filters
+  5: required i64 limit
 }
 
 struct TFileScanNode {

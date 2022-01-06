@@ -143,7 +143,7 @@ public class MysqlScanNode extends ScanNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.MYSQL_SCAN_NODE;
-        msg.mysql_scan_node = new TMySQLScanNode(desc.getId().asInt(), tblName, columns, filters);
+        msg.mysql_scan_node = new TMySQLScanNode(desc.getId().asInt(), tblName, columns, filters, limit);
     }
 
     /**
