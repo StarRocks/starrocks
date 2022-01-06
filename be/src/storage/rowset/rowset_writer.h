@@ -139,6 +139,10 @@ public:
         return _global_dict_columns_valid_info;
     }
 
+    // only use for ut of partial update
+    // will be delete after write RowsetTxnMetaPB in rowset meta is finished
+    virtual Status add_txn_meta(RowsetTxnMetaPB rowset_txn_meta_pb) { return Status::OK(); }
+
 protected:
     vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
 };
