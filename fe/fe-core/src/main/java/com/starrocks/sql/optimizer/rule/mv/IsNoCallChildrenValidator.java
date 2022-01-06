@@ -46,7 +46,7 @@ public class IsNoCallChildrenValidator extends ScalarOperatorVisitor<Boolean, Vo
         }
 
         // cast big type to small type, forbidden
-        if (operator.getType().getSlotSize() >= operator.getChild(0).getType().getSlotSize()) {
+        if (operator.getType().getTypeSize() >= operator.getChild(0).getType().getTypeSize()) {
             return operator.getChild(0).accept(this, context);
         }
 
