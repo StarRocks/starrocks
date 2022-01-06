@@ -5241,4 +5241,13 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(
                 "CAST(CAST(8: id_datetime AS DATE) AS DATETIME) >= '1970-01-01 12:00:00', CAST(CAST(8: id_datetime AS DATE) AS DATETIME) <= '1970-01-01 18:00:00'"));
     }
+
+    @Test
+    public void testCharCompareWithVarchar() throws Exception {
+        String sql = "select t2.tb from tall t1 join tall t2 " +
+                "on t1.tc = t2.tb and t2.tt = 123 and (t2.tt != 'ax') = t2.td;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: 20: tt = '123', " +
+                "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1"));
+    }
 }
