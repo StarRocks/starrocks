@@ -115,8 +115,8 @@ protected:
         }
         ASSERT_OK(writer.append_chunk(*chunk));
 
-        uint64_t file_size, index_size;
-        ASSERT_OK(writer.finalize(&file_size, &index_size));
+        uint64_t file_size, index_size, footer_position;
+        ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
         *res = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, filename, 0, &query_schema);
         ASSERT_EQ(nrows, (*res)->num_rows());
@@ -175,7 +175,8 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
 
     uint64_t file_size = 0;
     uint64_t index_size;
-    ASSERT_OK(writer.finalize(&file_size, &index_size));
+    uint64_t footer_position;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
     ASSERT_OK(_env->get_file_size(fname, &file_size));
     LOG(INFO) << "segment file size=" << file_size;
@@ -236,7 +237,8 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
 
     uint64_t file_size = 0;
     uint64_t index_size;
-    ASSERT_OK(writer.finalize(&file_size, &index_size));
+    uint64_t footer_position;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
     auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);

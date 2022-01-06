@@ -35,7 +35,6 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/segment_writer.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/aggregate_iterator.h"
@@ -91,6 +90,15 @@ Status BetaRowsetWriter::init() {
         _rowset_meta->set_version(_context.version);
     }
     _rowset_meta->set_tablet_uid(_context.tablet_uid);
+
+    _writer_options.storage_format_version = _context.storage_format_version;
+    _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
+    _writer_options.referenced_column_ids = _context.referenced_column_ids;
+
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+        _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
+    }
+
     return Status::OK();
 }
 
@@ -113,6 +121,15 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         _rowset_meta->set_num_delete_files(!_segment_has_deletes.empty() && _segment_has_deletes[0]);
         _rowset_meta->set_segments_overlap(NONOVERLAPPING);
+        if (_context.partial_update_tablet_schema) {
+            DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
+            for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
+                const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
+                _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
+                _rowset_txn_meta_pb->add_partial_update_column_unique_ids(tablet_column.unique_id());
+            }
+            _rowset_meta->set_txn_meta(*_rowset_txn_meta_pb);
+        }
     } else {
         if (_num_segment <= 1) {
             _rowset_meta->set_segments_overlap(NONOVERLAPPING);
@@ -123,7 +140,6 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     } else {
         _rowset_meta->set_rowset_state(VISIBLE);
     }
-
     RowsetSharedPtr rowset;
     RETURN_IF_ERROR(
             RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, _rowset_meta, &rowset));
@@ -227,12 +243,8 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_seg
     fs::CreateBlockOptions opts({path});
     RETURN_IF_ERROR(_context.block_mgr->create_block(opts, &wblock));
     DCHECK(wblock != nullptr);
-
-    SegmentWriterOptions writer_options;
-    writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
-    writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     ++_num_segment;
     return std::move(segment_writer);
@@ -490,7 +502,14 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
 Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer) {
     uint64_t segment_size;
     uint64_t index_size;
-    RETURN_IF_ERROR((*segment_writer)->finalize(&segment_size, &index_size));
+    uint64_t footer_position;
+    RETURN_IF_ERROR((*segment_writer)->finalize(&segment_size, &index_size, &footer_position));
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+        uint64_t footer_size = segment_size - footer_position;
+        auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
+        partial_rowset_footer->set_position(footer_position);
+        partial_rowset_footer->set_size(footer_size);
+    }
     {
         std::lock_guard<std::mutex> l(_lock);
         _total_data_size += static_cast<int64_t>(segment_size);
@@ -671,11 +690,8 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalBetaRowsetWriter::_create_segme
     RETURN_IF_ERROR(_context.block_mgr->create_block(opts, &wblock));
 
     DCHECK(wblock != nullptr);
-    SegmentWriterOptions writer_options;
-    writer_options.storage_format_version = _context.storage_format_version;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
-    writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
     ++_num_segment;
     return std::move(segment_writer);
