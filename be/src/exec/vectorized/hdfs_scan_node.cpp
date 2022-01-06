@@ -26,7 +26,7 @@
 namespace starrocks::vectorized {
 
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs) {}
+        : ScanNode(pool, tnode, descs), _hdfs_scan_node(tnode.hdfs_scan_node) {}
 
 Status HdfsScanNode::_init_table() {
     if (dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc())) {
@@ -84,10 +84,6 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hdfs_scan_node.__isset.hive_column_names) {
         _hive_column_names = tnode.hdfs_scan_node.hive_column_names;
     }
-    if (tnode.hdfs_scan_node.__isset.hive_table_name) {
-        _hive_table_name = tnode.hdfs_scan_node.hive_table_name;
-    }
-
     _mem_pool = std::make_unique<MemPool>();
 
     return Status::OK();
@@ -104,7 +100,20 @@ Status HdfsScanNode::prepare(RuntimeState* state) {
 
     RETURN_IF_ERROR(ScanNode::prepare(state));
 
-    _runtime_profile->add_info_string("Table", _hive_table_name);
+    if (_hdfs_scan_node.__isset.hive_table_name) {
+        _runtime_profile->add_info_string("Table", _hdfs_scan_node.hive_table_name);
+    }
+    if (_hdfs_scan_node.__isset.sql_predicates) {
+        _runtime_profile->add_info_string("Predicates", _hdfs_scan_node.sql_predicates);
+    }
+    if (_hdfs_scan_node.__isset.min_max_sql_predicates) {
+        _runtime_profile->add_info_string("PredicatesMinMax", _hdfs_scan_node.min_max_sql_predicates);
+    }
+    if (_hdfs_scan_node.__isset.partition_sql_predicates) {
+        _runtime_profile->add_info_string("PredicatesPartition", _hdfs_scan_node.partition_sql_predicates);
+    }
+
+    _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 
     RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc));
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc()));
@@ -526,6 +535,7 @@ Status HdfsScanNode::close(RuntimeState* state) {
 Status HdfsScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     for (const auto& scan_range : scan_ranges) {
         _scan_ranges.emplace_back(scan_range.scan_range.hdfs_scan_range);
+        COUNTER_UPDATE(_scan_files_counter, 1);
     }
 
     return Status::OK();

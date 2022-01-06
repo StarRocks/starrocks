@@ -96,6 +96,7 @@ private:
 
     Status _init_table();
 
+    THdfsScanNode _hdfs_scan_node;
     int _tuple_id = 0;
     const TupleDescriptor* _tuple_desc = nullptr;
 
@@ -135,7 +136,6 @@ private:
     const HdfsTableDescriptor* _hdfs_table = nullptr;
     const IcebergTableDescriptor* _iceberg_table = nullptr;
     std::vector<std::string> _hive_column_names;
-    std::string _hive_table_name;
 
     std::unique_ptr<MemPool> _mem_pool;
 
@@ -161,6 +161,7 @@ private:
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
 
     RuntimeProfile::Counter* _scan_timer = nullptr;
+    RuntimeProfile::Counter* _scan_files_counter = nullptr;
     RuntimeProfile::Counter* _reader_init_timer = nullptr;
     RuntimeProfile::Counter* _open_file_timer = nullptr;
     RuntimeProfile::Counter* _raw_rows_counter = nullptr;
