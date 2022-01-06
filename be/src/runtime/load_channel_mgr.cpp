@@ -82,7 +82,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
         auto it = _load_channels.find(load_id);
         if (it != _load_channels.end()) {
             channel = it->second;
-        } else {
+        } else if (!(_mem_tracker->limit_exceeded() && config::disable_new_load_on_memory_limit_exceeded)) {
             int64_t mem_limit_in_req = request.has_load_mem_limit() ? request.load_mem_limit() : -1;
             int64_t job_max_memory = calc_job_max_load_memory(mem_limit_in_req, _mem_tracker->limit());
 
@@ -92,6 +92,11 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
 
             channel.reset(new LoadChannel(this, load_id, job_timeout_s, std::move(job_mem_tracker)));
             _load_channels.insert({load_id, channel});
+        } else {
+            response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);
+            response->mutable_status()->add_error_msgs(
+                    "memory limit exceeded, please reduce load frequency or increase config "
+                    "`load_process_max_memory_limit_percent` or add more BE nodes");
         }
     }
     channel->open(cntl, request, response, done_guard.release());
