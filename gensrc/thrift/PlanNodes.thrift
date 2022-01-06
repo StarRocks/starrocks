@@ -757,6 +757,9 @@ struct THdfsScanNode {
 
     // hive colunm names in ordinal order.
     7: optional list<string> hive_column_names;
+
+    // hive table name it scans
+    8: optional string hive_table_name;
 }
 
 struct TProjectNode {
