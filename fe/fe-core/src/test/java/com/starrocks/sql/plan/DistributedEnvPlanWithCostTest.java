@@ -970,4 +970,31 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains("cardinality: 3000000"));
         Assert.assertTrue(plan.contains(" * L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
     }
+
+    @Test
+    public void testCastDistributionPrune() throws Exception {
+        String sql = "select * from test_all_type_distributed_by_datetime where cast(id_datetime as date) >= '1970-01-01' " +
+                "and cast(id_datetime as date) <= '1970-01-01'";
+        String plan = getFragmentPlan(sql);
+        // check not prune tablet
+        Assert.assertTrue(plan.contains("tabletRatio=3/3"));
+
+        sql = "select * from test_all_type_distributed_by_datetime where cast(id_datetime as datetime) >= '1970-01-01' " +
+                "and cast(id_datetime as datetime) <= '1970-01-01'";
+        plan = getFragmentPlan(sql);
+        // check prune tablet
+        Assert.assertTrue(plan.contains("tabletRatio=1/3"));
+
+        sql = "select * from test_all_type_distributed_by_date where cast(id_date as datetime) >= '1970-01-01' " +
+                "and cast(id_date as datetime) <= '1970-01-01'";
+        plan = getFragmentPlan(sql);
+        // check not prune tablet
+        Assert.assertTrue(plan.contains("tabletRatio=3/3"));
+
+        sql = "select * from test_all_type_distributed_by_date where cast(id_date as date) >= '1970-01-01' " +
+                "and cast(id_date as date) <= '1970-01-01'";
+        plan = getFragmentPlan(sql);
+        // check prune tablet
+        Assert.assertTrue(plan.contains("tabletRatio=1/3"));
+    }
 }
