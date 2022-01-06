@@ -71,6 +71,8 @@ private:
     std::vector<std::string> _columns;
     // where clause
     std::vector<std::string> _filters;
+    // limit for query with external table.
+    int64_t _limit;
 
     // Descriptor of tuples read from MySQL table.
     const TupleDescriptor* _tuple_desc;

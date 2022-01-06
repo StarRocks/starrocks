@@ -63,7 +63,7 @@ public:
 
     // query for STARROCKS
     Status query(const std::string& table, const std::vector<std::string>& fields,
-                 const std::vector<std::string>& filters);
+                 const std::vector<std::string>& filters, int64_t limit);
     Status get_next_row(char*** buf, unsigned long** lengths, bool* eos);
 
     int field_num() const { return _field_num; }
