@@ -138,10 +138,8 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
     auto context = std::move(res).value();
     auto channel_size = request.has_chunk() ? _tablet_id_to_sorted_indexes.size() : 0;
     auto tablet_ids = request.tablet_ids().data();
-    auto tablet_ids_size = request.tablet_ids_size();
     auto channel_row_idx_start_points = context->_channel_row_idx_start_points.get(); // May be a nullptr
     auto row_indexes = context->_row_indexes.get();                                   // May be a nullptr
-    auto& chunk = context->_chunk;
 
     auto count_down_latch = BThreadCountDownLatch(1);
 
@@ -226,7 +224,6 @@ Status TabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
 
 // NOTE: Assume sender->lock has been acquired.
 int TabletsChannel::_close_sender(Sender* sender, const int64_t* partitions, size_t partitions_size) {
-    bool ret = false;
     DCHECK(!sender->closed);
     sender->closed = true;
     int n = _num_remaining_senders.fetch_sub(1);
