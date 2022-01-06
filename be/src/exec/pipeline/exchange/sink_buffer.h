@@ -41,7 +41,7 @@ struct ClosureContext {
 class SinkBuffer {
 public:
     SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations, bool is_dest_merge,
-               size_t num_sinkers);
+               size_t num_sinkers, bool is_pipeline_level_shuffle, int32_t dest_dop);
     ~SinkBuffer();
 
     void add_request(const TransmitChunkInfo& request);
@@ -64,19 +64,27 @@ private:
     const int32_t _brpc_timeout_ms;
     const bool _is_dest_merge;
 
-    // Taking into account of efficiency, all the following maps
-    // use int64_t as key, which is the field type of TUniqueId::lo
-    // because TUniqueId::hi is exactly the same in one query
+    // If the pipeline of dest be is ExchangeSourceOperator -> AggregateBlockingSinkOperator(with group by)
+    // then we shuffle for different parallelism at sender side(ExchangeSinkOperator) if _is_pipeline_level_shuffle is true
+    // so each sinker may send eos _dest_dop times
+    const bool _is_pipeline_level_shuffle;
+    // Set to dop if _need_shuffle_for_paralleliasm is true
+    // Set to 1 if _need_shuffle_for_paralleliasm is false
+    const int32_t _num_eos_per_sinker;
 
-    phmap::flat_hash_map<int64_t, int64_t> _num_sinkers;
+    /// Taking into account of efficiency, all the following maps
+    /// use int64_t as key, which is the field type of TUniqueId::lo
+    /// because TUniqueId::hi is exactly the same in one query
+
+    // num eos per instance, num_sinker_per_instance * _num_eos_per_sinker
+    phmap::flat_hash_map<int64_t, int64_t> _num_eoses;
     phmap::flat_hash_map<int64_t, int64_t> _request_seqs;
     // Considering the following situation
-    // 1. sending request 1, 2, 3 in order
-    // 2. one possible order of response is 1, 3, 2
-    // 3. field transformation
+    // Sending request 1, 2, 3 in order with one possible order of response 1, 3, 2,
+    // and field transformation are as following
     //      a. receive response-1, _max_continuous_acked_seqs[x]->1, _discontinuous_acked_seqs[x]->()
-    //      b. receive response-2, _max_continuous_acked_seqs[x]->1, _discontinuous_acked_seqs[x]->(2)
-    //      c. receive response-3, _max_continuous_acked_seqs[x]->3, _discontinuous_acked_seqs[x]->()
+    //      b. receive response-3, _max_continuous_acked_seqs[x]->1, _discontinuous_acked_seqs[x]->(3)
+    //      c. receive response-2, _max_continuous_acked_seqs[x]->3, _discontinuous_acked_seqs[x]->()
     phmap::flat_hash_map<int64_t, int64_t> _max_continuous_acked_seqs;
     phmap::flat_hash_map<int64_t, std::unordered_set<int64_t>> _discontinuous_acked_seqs;
     std::atomic<int32_t> _total_in_flight_rpc = 0;

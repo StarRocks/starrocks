@@ -41,12 +41,13 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, size_t channel_id, bool enable_exchange_pass_through,
+            PlanNodeId dest_node_id, int32_t shuffle_id, int32_t channel_id, bool enable_exchange_pass_through,
             PassThroughChunkBuffer* pass_through_chunk_buffer)
             : _parent(parent),
+              _brpc_dest_addr(brpc_dest),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
-              _brpc_dest_addr(brpc_dest),
+              _shuffle_id(shuffle_id),
               _channel_id(channel_id),
               _enable_exchange_pass_through(enable_exchange_pass_through),
               _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id) {}
@@ -98,26 +99,22 @@ private:
 
     ExchangeSinkOperator* _parent;
 
-    TUniqueId _fragment_instance_id;
-    PlanNodeId _dest_node_id;
+    const TNetworkAddress _brpc_dest_addr;
+    const TUniqueId _fragment_instance_id;
+    const PlanNodeId _dest_node_id;
+    const int32_t _shuffle_id;
+    const int32_t _channel_id;
+
+    const bool _enable_exchange_pass_through;
+    PassThroughContext _pass_through_context;
 
     std::unique_ptr<vectorized::Chunk> _chunk;
     bool _is_first_chunk = true;
-
-    TNetworkAddress _brpc_dest_addr;
-
     PTransmitChunkParamsPtr _chunk_request;
-
     doris::PBackendService_Stub* _brpc_stub = nullptr;
-
     size_t _current_request_bytes = 0;
-
     bool _is_inited = false;
-    size_t _channel_id;
-
-    bool _enable_exchange_pass_through = false;
     bool _use_pass_through = false;
-    PassThroughContext _pass_through_context;
 };
 
 bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
@@ -190,6 +187,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
         _chunk_request->set_node_id(_dest_node_id);
         _chunk_request->set_sender_id(_parent->_sender_id);
         _chunk_request->set_be_number(_parent->_be_number);
+        if (_parent->_is_pipeline_level_shuffle) {
+            _chunk_request->set_shuffle_id(_shuffle_id);
+        }
     }
 
     // If chunk is not null, append it to request
@@ -230,6 +230,9 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
+    if (_parent->_is_pipeline_level_shuffle) {
+        chunk_request->set_shuffle_id(_shuffle_id);
+    }
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment};
     _parent->_buffer->add_request(info);
@@ -250,15 +253,14 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     return Status::OK();
 }
 
-// TODO(lzh): Remove fragment_ctx from parameters.
-//  Cancel flag should probably be owned by RuntimeState instead of FragmentContext.
 void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
     state->log_error(_close_internal(state, fragment_ctx).get_error_msg());
 }
 
 ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                            const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
-                                           const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
+                                           const std::vector<TPlanFragmentDestination>& destinations,
+                                           bool is_pipeline_level_shuffle, const int32_t dest_dop, int32_t sender_id,
                                            PlanNodeId dest_node_id,
                                            const std::vector<ExprContext*>& partition_expr_ctxs,
                                            bool enable_exchange_pass_through, FragmentContext* const fragment_ctx)
@@ -266,6 +268,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
           _buffer(buffer),
           _part_type(part_type),
           _destinations(destinations),
+          _is_pipeline_level_shuffle(is_pipeline_level_shuffle),
+          _dest_dop(dest_dop),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(partition_expr_ctxs),
@@ -277,16 +281,23 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
 
     // fragment_instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
     std::optional<std::shared_ptr<Channel>> pseudo_channel;
+    size_t max_shuffle_id = 1;
+    if (_is_pipeline_level_shuffle) {
+        max_shuffle_id = _dest_dop;
+    }
     for (const auto& destination : destinations) {
         const auto& fragment_instance_id = destination.fragment_instance_id;
-        if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
-            _channels.emplace_back(pseudo_channel.value());
-        } else {
-            const auto channel_id = _channels.size();
-            _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id,
-                                               channel_id, enable_exchange_pass_through, pass_through_chunk_buffer));
-            if (fragment_instance_id.lo == -1) {
-                pseudo_channel = _channels.back();
+        for (auto shuffle_id = 0; shuffle_id < max_shuffle_id; ++shuffle_id) {
+            if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
+                _channels.emplace_back(pseudo_channel.value());
+            } else {
+                const auto channel_id = _channels.size();
+                _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id,
+                                                   shuffle_id, channel_id, enable_exchange_pass_through,
+                                                   pass_through_chunk_buffer));
+                if (fragment_instance_id.lo == -1) {
+                    pseudo_channel = _channels.back();
+                }
             }
         }
     }
@@ -309,17 +320,16 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     }
     RETURN_IF_ERROR(get_block_compression_codec(_compress_type, &_compress_codec));
 
-    std::string instances;
+    std::set<std::string> instances;
     for (const auto& channel : _channels) {
-        if (instances.empty()) {
-            instances = channel->get_fragment_instance_id_str();
-        } else {
-            instances += ", ";
-            instances += channel->get_fragment_instance_id_str();
-        }
+        instances.insert(channel->get_fragment_instance_id_str());
     }
     _runtime_profile->add_info_string("DestID", std::to_string(_dest_node_id));
-    _runtime_profile->add_info_string("DestFragments", instances);
+    _runtime_profile->add_info_string("DestFragments",
+                                      std::accumulate(std::begin(instances), std::end(instances), std::string(),
+                                                      [](const std::string& s1, const std::string& s2) {
+                                                          return s1.empty() ? s2 : s1 + ", " + s2;
+                                                      }));
     _runtime_profile->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
@@ -338,6 +348,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _uncompressed_bytes_counter = ADD_COUNTER(_runtime_profile, "UncompressedBytes", TUnit::BYTES);
     _ignore_rows = ADD_COUNTER(_runtime_profile, "IgnoreRows", TUnit::UNIT);
     _serialize_batch_timer = ADD_TIMER(_runtime_profile, "SerializeBatchTime");
+    _shuffle_hash_timer = ADD_TIMER(_runtime_profile, "ShuffleHashTimer");
     _compress_timer = ADD_TIMER(_runtime_profile, "CompressTime");
     _send_request_timer = ADD_TIMER(_runtime_profile, "SendRequestTime");
     _wait_response_timer = ADD_TIMER(_runtime_profile, "WaitResponseTime");
@@ -433,14 +444,15 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         // hash-partition batch's rows across channels
-        int num_channels = _channels.size();
+        const auto num_channels = _channels.size();
         {
-            // SCOPED_TIMER(_shuffle_hash_timer);
+            SCOPED_TIMER(_shuffle_hash_timer);
             for (size_t i = 0; i < _partitions_columns.size(); ++i) {
                 _partitions_columns[i] = _partition_expr_ctxs[i]->evaluate(chunk.get());
                 DCHECK(_partitions_columns[i] != nullptr);
             }
 
+            // Compute hash for each partition column
             if (_part_type == TPartitionType::HASH_PARTITIONED) {
                 _hash_values.assign(num_rows, HashUtil::FNV_SEED);
                 for (const vectorized::ColumnPtr& column : _partitions_columns) {
@@ -585,13 +597,15 @@ void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chu
 
 ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer, TPartitionType::type part_type,
-        const std::vector<TPlanFragmentDestination>& destinations, int sender_id, PlanNodeId dest_node_id,
-        std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through,
-        FragmentContext* const fragment_ctx)
+        const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle, int32_t dest_dop,
+        int32_t sender_id, PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
+        bool enable_exchange_pass_through, FragmentContext* const fragment_ctx)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
           _buffer(std::move(buffer)),
           _part_type(part_type),
           _destinations(destinations),
+          _is_pipeline_level_shuffle(is_pipeline_level_shuffle),
+          _dest_dop(dest_dop),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(std::move(partition_expr_ctxs)),
@@ -600,8 +614,8 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<ExchangeSinkOperator>(this, _id, _plan_node_id, _buffer, _part_type, _destinations,
-                                                  _sender_id, _dest_node_id, _partition_expr_ctxs,
-                                                  _enable_exchange_pass_through, _fragment_ctx);
+                                                  _is_pipeline_level_shuffle, _dest_dop, _sender_id, _dest_node_id,
+                                                  _partition_expr_ctxs, _enable_exchange_pass_through, _fragment_ctx);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
