@@ -56,6 +56,7 @@ struct SegmentWriterOptions {
     uint32_t storage_format_version = 1;
     uint32_t num_rows_per_block = 1024;
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
+    std::vector<int32_t> referenced_column_ids;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
@@ -105,7 +106,7 @@ public:
     uint32_t num_rows() const { return _num_rows; }
 
     // finalize columns data, index and footer
-    Status finalize(uint64_t* segment_file_size, uint64_t* index_size);
+    Status finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position);
 
     // Used for vertical compaction
     // finalize columns data and index
