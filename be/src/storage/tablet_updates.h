@@ -60,6 +60,8 @@ struct CompactionInfo {
 // maintain all states for updatable tablets
 class TabletUpdates {
 public:
+    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+
     explicit TabletUpdates(Tablet& tablet);
     ~TabletUpdates();
 
@@ -218,6 +220,10 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<vectorized::Column>>* columns);
 
+    Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
+                                         EditVersion* read_version, uint32_t* next_rowset_id,
+                                         std::vector<std::vector<uint64_t>*>* rss_rowids);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -342,6 +348,8 @@ private:
 
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
+    // make sure at most 1 thread is read or write primary index
+    mutable std::mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
 
