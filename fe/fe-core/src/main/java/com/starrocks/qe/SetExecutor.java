@@ -54,13 +54,25 @@ public class SetExecutor {
             // do nothing
             return;
         } else {
-            VariableMgr.setVar(ctx.getSessionVariable(), var);
+            VariableMgr.setVar(ctx.getSessionVariable(), var, false);
         }
     }
 
-    public void execute() throws DdlException {
+    private boolean isSessionVar(SetVar var) {
+        return !(var instanceof SetPassVar
+                || var instanceof SetNamesVar
+                || var instanceof SetTransaction);
+    }
+
+    public void execute(boolean onlySessionVar) throws DdlException {
         for (SetVar var : stmt.getSetVars()) {
-            setVariable(var);
+            if (onlySessionVar) {
+                if (isSessionVar(var)) {
+                    VariableMgr.setVar(ctx.getSessionVariable(), var, true);
+                }
+            } else {
+                setVariable(var);
+            }
         }
     }
 }
