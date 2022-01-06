@@ -232,7 +232,7 @@ echo 'performance' | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_gover
 
 * **Overcommit**
 
-不建议使用Overcommit，
+建议使用Overcommit，
 建议把 cat /proc/sys/vm/overcommit_memory 设成  1。
 
 ~~~shell
