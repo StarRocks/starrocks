@@ -51,8 +51,7 @@ void GlobalDriverDispatcher::run() {
             break;
         }
 
-        size_t queue_index;
-        auto maybe_driver = this->_driver_queue->take(&queue_index);
+        auto maybe_driver = this->_driver_queue->take();
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -87,7 +86,7 @@ void GlobalDriverDispatcher::run() {
             // query context has ready drivers to run, so extend its lifetime.
             query_ctx->extend_lifetime();
             auto status = driver->process(runtime_state);
-            this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
+            this->_driver_queue->yield_driver(driver);
 
             if (!status.ok()) {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())

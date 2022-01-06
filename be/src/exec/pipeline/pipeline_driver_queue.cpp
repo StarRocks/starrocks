@@ -32,7 +32,7 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
     }
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
+StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
@@ -64,9 +64,9 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
             }
             _cv.wait(lock);
         }
-        // record queue's index to accumulate time for it.
-        *queue_index = queue_idx;
+
         driver_ptr = _queues[queue_idx].queue.front();
+        driver_ptr->set_dispatch_queue_index(queue_idx);
         _queues[queue_idx].queue.pop();
     }
 
@@ -74,8 +74,8 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
     return driver_ptr;
 }
 
-SubQuerySharedDriverQueue* QuerySharedDriverQueue::get_sub_queue(size_t index) {
-    return _queues + index;
+void QuerySharedDriverQueue::yield_driver(const DriverRawPtr driver) {
+    _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
 }
 
 } // namespace starrocks::pipeline

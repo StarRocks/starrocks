@@ -6,10 +6,24 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 #include "util/factory_method.h"
+
 namespace starrocks {
 namespace pipeline {
+
 class DriverQueue;
 using DriverQueuePtr = std::unique_ptr<DriverQueue>;
+
+class DriverQueue {
+public:
+    virtual ~DriverQueue() = default;
+    virtual void close() = 0;
+
+    virtual void put_back(const DriverRawPtr driver) = 0;
+    virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
+    virtual StatusOr<DriverRawPtr> take() = 0;
+
+    virtual void yield_driver(const DriverRawPtr driver) = 0;
+};
 
 class SubQuerySharedDriverQueue {
 public:
@@ -25,16 +39,6 @@ public:
 
 private:
     std::atomic<int64_t> _accu_consume_time = 0;
-};
-
-class DriverQueue {
-public:
-    virtual void put_back(const DriverRawPtr driver) = 0;
-    virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
-    virtual StatusOr<DriverRawPtr> take(size_t* queue_index) = 0;
-    virtual ~DriverQueue() = default;
-    virtual void close() = 0;
-    virtual SubQuerySharedDriverQueue* get_sub_queue(size_t) = 0;
 };
 
 class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriverQueue> {
@@ -54,16 +58,17 @@ public:
     ~QuerySharedDriverQueue() override = default;
     void close() override;
 
-    static const size_t QUEUE_SIZE = 8;
-    // maybe other value for ratio.
-    static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
     void put_back(const DriverRawPtr driver) override;
     void put_back(const std::vector<DriverRawPtr>& drivers) override;
     // return nullptr if queue is closed;
-    StatusOr<DriverRawPtr> take(size_t* queue_index) override;
-    SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
+    StatusOr<DriverRawPtr> take() override;
+
+    void yield_driver(const DriverRawPtr driver) override;
 
 private:
+    static constexpr size_t QUEUE_SIZE = 8;
+    static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
+
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     std::mutex _global_mutex;
     std::condition_variable _cv;
