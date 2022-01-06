@@ -409,6 +409,9 @@ public class ScalarOperatorFunctions {
     @FEFunction(name = "concat_ws", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "VARCHAR")
     public static ConstantOperator concat_ws(ConstantOperator split, ConstantOperator... values) {
         Preconditions.checkArgument(values.length > 0);
+        if (split.isNull()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
         final StringBuilder resultBuilder = new StringBuilder();
         for (int i = 0; i < values.length - 1; i++) {
             if (values[i].isNull()) {

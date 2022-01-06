@@ -667,16 +667,21 @@ public class ScalarOperatorFunctionsTest {
 
     @Test
     public void concat_ws_with_null() {
-        ConstantOperator[] arg = {ConstantOperator.createVarchar("star"),
+        ConstantOperator[] arg_with_null = {ConstantOperator.createVarchar("star"),
                 ConstantOperator.createNull(Type.VARCHAR),
                 ConstantOperator.createVarchar("cks")};
-        ConstantOperator result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), arg);
+        ConstantOperator result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), arg_with_null);
         assertEquals(Type.VARCHAR, result.getType());
         assertEquals("starrocks", result.getVarchar());
 
         result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","),
                 ConstantOperator.createNull(Type.VARCHAR));
         assertEquals("", result.getVarchar());
+
+        ConstantOperator[] arg_without_null = {ConstantOperator.createVarchar("star"),
+                ConstantOperator.createVarchar("cks")};
+        result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createNull(Type.VARCHAR), arg_without_null);
+        assertTrue(result.isNull());
     }
 
     @Test
