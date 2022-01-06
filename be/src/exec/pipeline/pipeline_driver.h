@@ -323,8 +323,10 @@ public:
     std::string to_readable_string() const;
 
     starrocks::workgroup::WorkGroup* workgroup();
-
     void set_workgroup(starrocks::workgroup::WorkGroup* wg);
+
+    size_t get_dispatch_queue_index() const { return _dispatch_queue_index; }
+    void set_dispatch_queue_index(size_t dispatch_queue_index) { _dispatch_queue_index = dispatch_queue_index; }
 
 private:
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
@@ -368,7 +370,8 @@ private:
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
-    starrocks::workgroup::WorkGroup* _workgroup = nullptr;
+    workgroup::WorkGroup* _workgroup = nullptr;
+    size_t _dispatch_queue_index = 0;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
