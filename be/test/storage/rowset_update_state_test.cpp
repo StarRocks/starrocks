@@ -202,7 +202,7 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     writer_context.rowset_type = BETA_ROWSET;
     writer_context.rowset_path_prefix = _tablet->schema_hash_path();
     writer_context.rowset_state = COMMITTED;
-    std::vector<size_t> column_indexes = {0, 1};
+    std::vector<int32_t> column_indexes = {0, 1};
     std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
     writer_context.partial_update_tablet_schema = partial_schema;
     writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
