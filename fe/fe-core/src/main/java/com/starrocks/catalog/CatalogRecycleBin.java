@@ -207,6 +207,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     private synchronized void eraseDatabase(long currentTimeMs) {
         Iterator<Map.Entry<Long, RecycleDatabaseInfo>> dbIter = idToDatabase.entrySet().iterator();
+        int currentEraseOpCnt = 0;
         while (dbIter.hasNext()) {
             Map.Entry<Long, RecycleDatabaseInfo> entry = dbIter.next();
             RecycleDatabaseInfo dbInfo = entry.getValue();
@@ -219,6 +220,10 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 Catalog.getCurrentCatalog().onEraseDatabase(db.getId());
                 Catalog.getCurrentCatalog().getEditLog().logEraseDb(db.getId());
                 LOG.info("erase db[{}-{}] finished", db.getId(), db.getFullName());
+                currentEraseOpCnt++;
+                if (currentEraseOpCnt >= Config.catalog_max_erase_operation_per_task) {
+                    break;
+                }
             }
         }
     }
@@ -250,6 +255,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private synchronized void eraseTable(long currentTimeMs) {
         Iterator<Map.Entry<Long, RecycleTableInfo>> tableIter = idToTable.entrySet().iterator();
         List<Long> tableIdList = Lists.newArrayList();
+        int currentEraseOpCnt = 0;
         while (tableIter.hasNext()) {
             Map.Entry<Long, RecycleTableInfo> entry = tableIter.next();
             RecycleTableInfo tableInfo = entry.getValue();
@@ -267,11 +273,15 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 tableIdList.add(tableId);
                 // log
                 LOG.info("erase table[{}-{}] in memory finished", tableId, table.getName());
+                currentEraseOpCnt++;
+                if (currentEraseOpCnt >= Config.catalog_max_erase_operation_per_task) {
+                    break;
+                }
             }
         } // end for tables
         if (!tableIdList.isEmpty()) {
             Catalog.getCurrentCatalog().getEditLog().logEraseMultiTables(tableIdList);
-            LOG.info("multi erase write log finished");
+            LOG.info("multi erase write log finished. erased {} table(s)", currentEraseOpCnt);
         }
     }
 
@@ -311,6 +321,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     private synchronized void erasePartition(long currentTimeMs) {
         Iterator<Map.Entry<Long, RecyclePartitionInfo>> iterator = idToPartition.entrySet().iterator();
+        int currentEraseOpCnt = 0;
         while (iterator.hasNext()) {
             Map.Entry<Long, RecyclePartitionInfo> entry = iterator.next();
             RecyclePartitionInfo partitionInfo = entry.getValue();
@@ -326,6 +337,10 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 // log
                 Catalog.getCurrentCatalog().getEditLog().logErasePartition(partitionId);
                 LOG.info("erase partition[{}-{}] finished", partitionId, partition.getName());
+                currentEraseOpCnt++;
+                if (currentEraseOpCnt >= Config.catalog_max_erase_operation_per_task) {
+                    break;
+                }
             }
         } // end for partitions
     }
@@ -654,9 +669,17 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         long currentTimeMs = System.currentTimeMillis();
         // should follow the partition/table/db order
         // in case of partition(table) is still in recycle bin but table(db) is missing
-        erasePartition(currentTimeMs);
-        eraseTable(currentTimeMs);
-        eraseDatabase(currentTimeMs);
+        try {
+            erasePartition(currentTimeMs);
+            // synchronized is unfair lock, sleep here allows other high-priority operations to obtain a lock
+            Thread.sleep(100);
+            eraseTable(currentTimeMs);
+            Thread.sleep(100);
+            eraseDatabase(currentTimeMs);
+        } catch (InterruptedException e) {
+            LOG.warn(e);
+        }
+
     }
 
     @Override
