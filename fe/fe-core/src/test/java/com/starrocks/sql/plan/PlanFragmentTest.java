@@ -5266,4 +5266,16 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: TRUE"));
     }
+
+    @Test
+    public void testJoinReorderWithPredicate() throws Exception {
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(2);
+        String sql = "select t0.v1 from t0, t1, t2, t3 where t0.v1 + t3.v1 = 2";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("11:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 1: v1 + 10: v1 = 2"));
+    }
 }
