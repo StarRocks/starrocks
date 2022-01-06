@@ -17,6 +17,11 @@ class Tablet;
 class TabletMeta;
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
+struct PartialUpdateState {
+    std::vector<uint64_t> src_rss_rowids;
+    std::vector<std::unique_ptr<vectorized::Column>> write_columns;
+};
+
 class RowsetUpdateState {
 public:
     using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
@@ -35,8 +40,12 @@ public:
 
     std::string to_string() const;
 
+    const std::vector<PartialUpdateState>& parital_update_states() { return _parital_update_states; }
+
 private:
     Status _do_load(Tablet* tablet, Rowset* rowset);
+
+    Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset);
 
     std::once_flag _load_once_flag;
     Status _status;
@@ -50,10 +59,7 @@ private:
     // states for partial update
     EditVersion _read_version;
     uint32_t _next_rowset_id = 0;
-    struct PartialUpdateState {
-        vector<uint64_t> src_rss_rowids;
-        vector<std::unique_ptr<vectorized::Column>> write_columns;
-    };
+
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _parital_update_states;
 
