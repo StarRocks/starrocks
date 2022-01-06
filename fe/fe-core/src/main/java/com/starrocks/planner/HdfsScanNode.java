@@ -480,9 +480,12 @@ public class HdfsScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
+        String partitionSqlPredicate = getExplainString(noEvalPartitionConjuncts);
         for (Expr expr : noEvalPartitionConjuncts) {
             msg.hdfs_scan_node.addToPartition_conjuncts(expr.treeToThrift());
         }
+        msg.hdfs_scan_node.setPartition_sql_predicates(partitionSqlPredicate);
+
         // put non-partition conjuncts into conjuncts
         if (msg.isSetConjuncts()) {
             msg.conjuncts.clear();
@@ -490,12 +493,16 @@ public class HdfsScanNode extends ScanNode {
         for (Expr expr : nonPartitionConjuncts) {
             msg.addToConjuncts(expr.treeToThrift());
         }
+        String sqlPredicate = getExplainString(nonPartitionConjuncts);
+        msg.hdfs_scan_node.setSql_predicates(sqlPredicate);
 
         if (!minMaxConjuncts.isEmpty()) {
+            String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
             for (Expr expr : minMaxConjuncts) {
                 msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
             }
             msg.hdfs_scan_node.setMin_max_tuple_id(minMaxTuple.getId().asInt());
+            msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
         }
 
         if (hiveTable != null) {
