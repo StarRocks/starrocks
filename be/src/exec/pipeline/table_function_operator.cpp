@@ -62,7 +62,7 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
-    RETURN_IF_ERROR(_table_function->init(&_table_function_state));
+    RETURN_IF_ERROR(_table_function->init(table_fn, &_table_function_state));
 
     _input_chunk_index = 0;
     _table_function_result_eos = false;

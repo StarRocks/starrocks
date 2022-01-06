@@ -75,6 +75,7 @@ IF (WITH_HDFS)
     set(EXPR_FILES ${EXPR_FILES}
       agg/java_udaf_function.cpp
       agg/java_window_function.cpp
+      table_function/java_udtf_function.cpp
       vectorized/java_function_call_expr.cpp
     )
 endif()
