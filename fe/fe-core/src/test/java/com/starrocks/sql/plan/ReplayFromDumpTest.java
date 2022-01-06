@@ -229,7 +229,8 @@ public class ReplayFromDumpTest {
         // This test has column statistics and accurate table row count
         SessionVariable sessionVariable = VariableMgr.newSessionVariable();
         sessionVariable.setNewPlanerAggStage(1);
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"), sessionVariable);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"), sessionVariable);
         Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
     }
 
@@ -330,7 +331,8 @@ public class ReplayFromDumpTest {
     public void test() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
+                        TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("  12:Decode\n" +
                 "  |  <dict id 42> : <string id 18>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;

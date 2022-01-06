@@ -743,6 +743,18 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testDateFunctionBinaryPredicate() throws Exception {
+        // check cardinality is not 0
+        String sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) = 6";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("cardinality=300000000"));
+
+        sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) in (6)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("cardinality=300000000"));
+    }
+
+    @Test
     public void testColumnNotEqualsConstant() throws Exception {
         // check cardinality not 0
         String sql =

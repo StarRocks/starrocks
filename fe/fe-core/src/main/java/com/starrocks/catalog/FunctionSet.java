@@ -113,6 +113,9 @@ public class FunctionSet {
     public static final String MINUTE = "minute";
     public static final String SECOND = "second";
 
+    // string functions
+    public static final String SUBSTRING = "substring";
+
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
     private static final Map<Type, Type> MULTI_DISTINCT_SUM_RETURN_TYPE =

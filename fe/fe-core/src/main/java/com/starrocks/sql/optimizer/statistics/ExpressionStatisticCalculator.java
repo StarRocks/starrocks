@@ -201,9 +201,15 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.COUNT:
                     return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
                             callOperator.getType().getSlotSize(), rowCount);
-                default:
-                    // return child column statistic default
+                case FunctionSet.MULTI_DISTINCT_COUNT:
+                    return new ColumnStatistic(0, columnStatistic.getDistinctValuesCount(), 0,
+                            callOperator.getType().getSlotSize(), rowCount);
+                // use child column statistics for now
+                case FunctionSet.SUM:
+                case FunctionSet.AVG:
                     return columnStatistic;
+                default:
+                    return ColumnStatistic.unknown();
             }
         }
 
@@ -247,9 +253,11 @@ public class ExpressionStatisticCalculator {
                     return new ColumnStatistic(divideMinValue, divideMaxValue, nullsFraction,
                             callOperator.getType().getSlotSize(),
                             distinctValues);
-                default:
-                    // return child column statistic default
+                // use child column statistics for now
+                case FunctionSet.SUBSTRING:
                     return left;
+                default:
+                    return ColumnStatistic.unknown();
             }
         }
 
@@ -261,8 +269,11 @@ public class ExpressionStatisticCalculator {
                             childColumnStatisticList.get(2).getDistinctValuesCount();
                     return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
                             callOperator.getType().getSlotSize(), distinctValues);
-                default:
+                // use child column statistics for now
+                case FunctionSet.SUBSTRING:
                     return childColumnStatisticList.get(0);
+                default:
+                    return ColumnStatistic.unknown();
             }
         }
 
