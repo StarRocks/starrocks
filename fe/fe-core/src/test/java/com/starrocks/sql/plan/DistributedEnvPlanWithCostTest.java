@@ -997,4 +997,18 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         // check prune tablet
         Assert.assertTrue(plan.contains("tabletRatio=1/3"));
     }
+
+    @Test
+    public void testCastPartitionPrune() throws Exception {
+        String sql = "select * from test_all_type_partition_by_datetime where cast(id_datetime as date) = '1991-01-01'";
+        String plan = getFragmentPlan(sql);
+        // check not prune partition
+        Assert.assertTrue(plan.contains("partitions=3/3"));
+
+        sql = "select * from test_all_type_partition_by_date where cast(id_date as datetime) >= '1991-01-01 00:00:00' " +
+                "and cast(id_date as datetime) < '1992-01-01 12:00:00'";
+        plan = getFragmentPlan(sql);
+        // check not prune partition
+        Assert.assertTrue(plan.contains("partitions=3/3"));
+    }
 }
