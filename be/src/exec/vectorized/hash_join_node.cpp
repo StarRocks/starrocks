@@ -9,6 +9,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
@@ -374,12 +375,23 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
         } else {
             num_partitions = context->degree_of_parallelism();
 
-            // both HashJoin{Build, Probe}Operator are parallelized, so add LocalExchangeOperator
+            // Both HashJoin{Build, Probe}Operator are parallelized
+            // There are two ways of shuffle
+            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED
+            // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
+            // there is no need to perform local shuffle again at receiver side
+            // 2. Otherwise, add LocalExchangeOperator
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-            rhs_operators =
-                    context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators, _build_expr_ctxs);
-            lhs_operators =
-                    context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators, _probe_expr_ctxs);
+            if (!(rhs_operators.size() == 1 &&
+                  typeid(*rhs_operators[0]) == typeid(pipeline::ExchangeSourceOperatorFactory))) {
+                rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators,
+                                                                                  _build_expr_ctxs);
+            }
+            if (!(lhs_operators.size() == 1 &&
+                  typeid(*lhs_operators[0]) == typeid(pipeline::ExchangeSourceOperatorFactory))) {
+                lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators,
+                                                                                  _probe_expr_ctxs);
+            }
         }
     }
 
