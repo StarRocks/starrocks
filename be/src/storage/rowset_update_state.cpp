@@ -239,7 +239,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         // get column values by rowid, also get default values if needed
         RETURN_IF_ERROR(
                 tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid, &read_columns));
-        for (size_t col_idx = 0; col_idx < read_column_ids.size(); i++) {
+        for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
             write_columns[col_idx]->reset_column();
             write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0, idxes.size());
         }
