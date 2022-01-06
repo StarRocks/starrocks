@@ -135,6 +135,7 @@ private:
     const HdfsTableDescriptor* _hdfs_table = nullptr;
     const IcebergTableDescriptor* _iceberg_table = nullptr;
     std::vector<std::string> _hive_column_names;
+    std::string _hive_table_name;
 
     std::unique_ptr<MemPool> _mem_pool;
 

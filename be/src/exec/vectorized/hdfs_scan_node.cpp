@@ -84,6 +84,9 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hdfs_scan_node.__isset.hive_column_names) {
         _hive_column_names = tnode.hdfs_scan_node.hive_column_names;
     }
+    if (tnode.hdfs_scan_node.__isset.hive_table_name) {
+        _hive_table_name = tnode.hdfs_scan_node.hive_table_name;
+    }
 
     _mem_pool = std::make_unique<MemPool>();
 
@@ -100,10 +103,12 @@ Status HdfsScanNode::prepare(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(ScanNode::prepare(state));
+
+    _runtime_profile->add_info_string("Table", _hive_table_name);
+
     RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc));
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc()));
     _init_counter(state);
-
     _runtime_state = state;
     return Status::OK();
 }
