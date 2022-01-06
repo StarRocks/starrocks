@@ -38,7 +38,7 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from (select v1, v2 from t0 inner join t1 on t0.v1 = t1.v4) a");
         analyzeSuccess("select a.v1 from (select v1, v2, v5, v4 from t0 inner join t1 on t0.v1 = t1.v4) a");
 
-        /**
+        /*
          * Test alias
          */
         analyzeSuccess("select * from t0 a join t1 b on a.v1=b.v4");

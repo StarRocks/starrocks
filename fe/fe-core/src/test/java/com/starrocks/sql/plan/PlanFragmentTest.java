@@ -5177,7 +5177,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  limit: 5"));
         connectContext.getSessionVariable().setSqlSelectLimit(limit);
     }
-  
+
     @Test
     public void testProjectReuse() throws Exception {
         String sql = "select nullif(v1, v1) + (0) as a , nullif(v1, v1) + (1 - 1) as b from t0;";
@@ -5190,7 +5190,34 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testFunctionNullable() throws Exception {
         String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
-                "id:0, fid:50303, could_apply_dict_optimize:false), has_nullable_child:false, is_nullable:true"));
+        Assert.assertTrue(
+                plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
+                        "id:0, fid:50303, could_apply_dict_optimize:false), has_nullable_child:false, is_nullable:true"));
+    }
+
+    @Test
+    public void testOnlyCrossJoin() throws Exception {
+        String sql = "select * from t0 as x0 join t1 as x1 on (1 = 2) is not null;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL"));
+    }
+
+    @Test
+    public void testFailedLeftJoin() {
+        String sql = "select * from t0 as x0 left outer join t1 as x1 on (1 = 2) is not null";
+        Assert.assertThrows("No equal on predicate in LEFT OUTER JOIN is not supported", SemanticException.class,
+                () -> getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testDecimalConstRewrite() throws Exception {
+        String sql = "select * from t0 WHERE CAST( - 8 AS DECIMAL ) * + 52 + 87 < - 86";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: TRUE"));
     }
 }

@@ -135,7 +135,16 @@ public enum ScalarOperatorEvaluator {
         FunctionInvoker invoker = functions.get(signature);
 
         try {
-            return invoker.invoke(root.getChildren());
+            ConstantOperator operator = invoker.invoke(root.getChildren());
+
+            // check return result type, decimal will change return type
+            if (operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
+                Preconditions.checkState(operator.getType().isDecimalOfAnyVersion());
+                Preconditions.checkState(fn.getReturnType().isDecimalOfAnyVersion());
+                operator.setType(fn.getReturnType());
+            }
+
+            return operator;
         } catch (AnalysisException e) {
             LOG.debug("failed to invoke", e);
         }
@@ -255,7 +264,8 @@ public enum ScalarOperatorEvaluator {
 
         @Override
         public int hashCode() {
-            List<PrimitiveType> primitiveTypes = argTypes.stream().map(Type::getPrimitiveType).collect(Collectors.toList());
+            List<PrimitiveType> primitiveTypes =
+                    argTypes.stream().map(Type::getPrimitiveType).collect(Collectors.toList());
             return Objects.hash(name, primitiveTypes, returnType.getPrimitiveType());
         }
     }
