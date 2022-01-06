@@ -233,7 +233,7 @@ memory
 
 * **Overcommit**
 
-It is not recommended to use `Overcommit`.
+It is recommended to use `Overcommit`.
 It is recommended to set `cat /proc/sys/vm/overcommit_memory` to 1.
 
 ~~~shell
