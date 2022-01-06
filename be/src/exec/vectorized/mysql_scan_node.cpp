@@ -27,8 +27,12 @@ MysqlScanNode::MysqlScanNode(ObjectPool* pool, const TPlanNode& tnode, const Des
           _tuple_id(tnode.mysql_scan_node.tuple_id),
           _columns(tnode.mysql_scan_node.columns),
           _filters(tnode.mysql_scan_node.filters),
-          _limit(tnode.mysql_scan_node.limit),
-          _tuple_desc(nullptr) {}
+          _tuple_desc(nullptr) {
+    _limit = -1;
+    if (tnode.mysql_scan_node.__isset.limit) {
+        _limit = tnode.mysql_scan_node.limit;
+    }
+}
 
 Status MysqlScanNode::prepare(RuntimeState* state) {
     VLOG(1) << "MysqlScanNode::Prepare";
