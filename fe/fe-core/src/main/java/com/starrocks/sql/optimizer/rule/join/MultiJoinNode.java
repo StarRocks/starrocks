@@ -72,6 +72,18 @@ public class MultiJoinNode {
             return;
         }
 
+        ScalarOperator joinPredicate = joinOperator.getPredicate();
+
+        /*
+         * If the predicate is equal binary predicate and wasn't push down to child, it's
+         * means the predicate can't bind to any child, join reorder can't handle the predicate
+         *
+         * */
+        if (JoinPredicateUtils.isEqualBinaryPredicate(joinPredicate)) {
+            atoms.add(node);
+            return;
+        }
+
         if (joinOperator.getProjection() != null) {
             Projection projection = joinOperator.getProjection();
 
@@ -92,7 +104,6 @@ public class MultiJoinNode {
         flattenJoinNode(node.inputAt(0), atoms, predicates, expressionMap);
         flattenJoinNode(node.inputAt(1), atoms, predicates, expressionMap);
         predicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
-        ScalarOperator joinPredicate = joinOperator.getPredicate();
         Preconditions.checkState(!JoinPredicateUtils.isEqualBinaryPredicate(joinPredicate));
         predicates.addAll(Utils.extractConjuncts(joinPredicate));
     }
