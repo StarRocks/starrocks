@@ -207,8 +207,8 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-    private UDFInternalClass udfClass;
-    private UDFInternalClass udfStateClass;
+    private UDFInternalClass mainClass;
+    private UDFInternalClass udafStateClass;
 
     public CreateFunctionStmt(boolean isAggregate, FunctionName functionName, FunctionArgsDef argsDef,
                               TypeDef returnType, TypeDef intermediateType, Map<String, String> properties) {
@@ -222,9 +222,9 @@ public class CreateFunctionStmt extends DdlStmt {
         } else {
             this.properties = ImmutableSortedMap.copyOf(properties, String.CASE_INSENSITIVE_ORDER);
         }
-        this.udfClass = new UDFInternalClass();
+        this.mainClass = new UDFInternalClass();
         if (isAggregate) {
-            this.udfStateClass = new UDFInternalClass();
+            this.udafStateClass = new UDFInternalClass();
         }
     }
 
@@ -298,11 +298,11 @@ public class CreateFunctionStmt extends DdlStmt {
         try {
             URL[] urls = {new URL("jar:" + objectFile + "!/")};
             try (URLClassLoader classLoader = URLClassLoader.newInstance(urls)) {
-                udfClass.setClazz(classLoader.loadClass(class_name));
+                mainClass.setClazz(classLoader.loadClass(class_name));
 
                 if (isAggregate) {
                     String state_class_name = class_name + "$" + STATE_CLASS_NAME;
-                    udfStateClass.setClazz(classLoader.loadClass(state_class_name));
+                    udafStateClass.setClazz(classLoader.loadClass(state_class_name));
                 }
 
             } catch (IOException e) {
@@ -314,9 +314,9 @@ public class CreateFunctionStmt extends DdlStmt {
             throw new AnalysisException("Object file is invalid: " + objectFile);
         }
 
-        udfClass.collectMethods();
+        mainClass.collectMethods();
         if (isAggregate) {
-            udfStateClass.collectMethods();
+            udafStateClass.collectMethods();
         }
     }
 
@@ -347,13 +347,13 @@ public class CreateFunctionStmt extends DdlStmt {
     private void checkStarrocksJarUdfClass() throws AnalysisException {
         {
             // RETURN_TYPE evaluate(...)
-            Method method = udfClass.getMethod(EVAL_METHOD_NAME, true);
-            udfClass.checkMethodNonStaticAndPublic(method);
-            udfClass.checkArgumentCount(method, argsDef.getArgTypes().length);
-            udfClass.checkReturnUdfType(method, returnType.getType());
+            Method method = mainClass.getMethod(EVAL_METHOD_NAME, true);
+            mainClass.checkMethodNonStaticAndPublic(method);
+            mainClass.checkArgumentCount(method, argsDef.getArgTypes().length);
+            mainClass.checkReturnUdfType(method, returnType.getType());
             for (int i = 0; i < method.getParameters().length; i++) {
                 Parameter p = method.getParameters()[i];
-                udfClass.checkUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
+                mainClass.checkUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
             }
         }
     }
@@ -363,81 +363,81 @@ public class CreateFunctionStmt extends DdlStmt {
         function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                objectFile, udfClass.getCanonicalName(), "", "");
+                objectFile, mainClass.getCanonicalName(), "", "");
         function.setChecksum(checksum);
     }
 
     private void checkStarrocksJarUdafStateClass() throws AnalysisException {
         // Check internal State class
         // should be public & static.
-        Class stateClass = udfStateClass.clazz;
+        Class stateClass = udafStateClass.clazz;
         if (!Modifier.isPublic(stateClass.getModifiers()) ||
                 !Modifier.isStatic(stateClass.getModifiers())) {
             throw new AnalysisException(
                     String.format("UDAF '%s' should have one public & static 'State' class",
-                            udfClass.getCanonicalName()));
+                            mainClass.getCanonicalName()));
         }
         {
             // long serializeLength();
-            Method method = udfStateClass.getMethod(SERIALIZE_LENGTH_METHOD_NAME, true);
-            udfStateClass.checkMethodNonStaticAndPublic(method);
-            udfStateClass.checkReturnJavaType(method, long.class);
-            udfStateClass.checkArgumentCount(method, 0);
+            Method method = udafStateClass.getMethod(SERIALIZE_LENGTH_METHOD_NAME, true);
+            udafStateClass.checkMethodNonStaticAndPublic(method);
+            udafStateClass.checkReturnJavaType(method, long.class);
+            udafStateClass.checkArgumentCount(method, 0);
         }
     }
 
     private void checkStarrocksJarUdafClass() throws AnalysisException {
         {
             // State create()
-            Method method = udfClass.getMethod(CREATE_METHOD_NAME, true);
-            udfClass.checkMethodNonStaticAndPublic(method);
-            udfClass.checkReturnJavaType(method, udfStateClass.clazz);
-            udfClass.checkArgumentCount(method, 0);
+            Method method = mainClass.getMethod(CREATE_METHOD_NAME, true);
+            mainClass.checkMethodNonStaticAndPublic(method);
+            mainClass.checkReturnJavaType(method, udafStateClass.clazz);
+            mainClass.checkArgumentCount(method, 0);
         }
         {
             // void destroy(State);
-            Method method = udfClass.getMethod(DESTROY_METHOD_NAME, true);
-            udfClass.checkMethodNonStaticAndPublic(method);
-            udfClass.checkReturnJavaType(method, void.class);
-            udfClass.checkArgumentCount(method, 1);
-            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
+            Method method = mainClass.getMethod(DESTROY_METHOD_NAME, true);
+            mainClass.checkMethodNonStaticAndPublic(method);
+            mainClass.checkReturnJavaType(method, void.class);
+            mainClass.checkArgumentCount(method, 1);
+            mainClass.checkParamJavaType(method, udafStateClass.clazz, method.getParameters()[0]);
         }
         {
             // void update(State, ....)
-            Method method = udfClass.getMethod(UPDATE_METHOD_NAME, true);
-            udfClass.checkMethodNonStaticAndPublic(method);
-            udfClass.checkReturnJavaType(method, void.class);
-            udfClass.checkArgumentCount(method, argsDef.getArgTypes().length + 1);
-            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
+            Method method = mainClass.getMethod(UPDATE_METHOD_NAME, true);
+            mainClass.checkMethodNonStaticAndPublic(method);
+            mainClass.checkReturnJavaType(method, void.class);
+            mainClass.checkArgumentCount(method, argsDef.getArgTypes().length + 1);
+            mainClass.checkParamJavaType(method, udafStateClass.clazz, method.getParameters()[0]);
             for (int i = 0; i < argsDef.getArgTypes().length; i++) {
-                udfClass.checkParamUdfType(method, argsDef.getArgTypes()[i], method.getParameters()[i + 1]);
+                mainClass.checkParamUdfType(method, argsDef.getArgTypes()[i], method.getParameters()[i + 1]);
             }
         }
         {
             // void serialize(State, java.nio.ByteBuffer)
-            Method method = udfClass.getMethod(SERIALIZE_METHOD_NAME, true);
-            udfClass.checkMethodNonStaticAndPublic(method);
-            udfClass.checkReturnJavaType(method, void.class);
-            udfClass.checkArgumentCount(method, 2);
-            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
-            udfClass.checkParamJavaType(method, java.nio.ByteBuffer.class, method.getParameters()[1]);
+            Method method = mainClass.getMethod(SERIALIZE_METHOD_NAME, true);
+            mainClass.checkMethodNonStaticAndPublic(method);
+            mainClass.checkReturnJavaType(method, void.class);
+            mainClass.checkArgumentCount(method, 2);
+            mainClass.checkParamJavaType(method, udafStateClass.clazz, method.getParameters()[0]);
+            mainClass.checkParamJavaType(method, java.nio.ByteBuffer.class, method.getParameters()[1]);
         }
         {
             // void merge(State, java.nio.ByteBuffer)
-            Method method = udfClass.getMethod(MERGE_METHOD_NAME, true);
-            udfClass.checkMethodNonStaticAndPublic(method);
-            udfClass.checkReturnJavaType(method, void.class);
-            udfClass.checkArgumentCount(method, 2);
-            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
-            udfClass.checkParamJavaType(method, java.nio.ByteBuffer.class, method.getParameters()[1]);
+            Method method = mainClass.getMethod(MERGE_METHOD_NAME, true);
+            mainClass.checkMethodNonStaticAndPublic(method);
+            mainClass.checkReturnJavaType(method, void.class);
+            mainClass.checkArgumentCount(method, 2);
+            mainClass.checkParamJavaType(method, udafStateClass.clazz, method.getParameters()[0]);
+            mainClass.checkParamJavaType(method, java.nio.ByteBuffer.class, method.getParameters()[1]);
         }
         {
             // RETURN_TYPE finalize(State);
-            Method method = udfClass.getMethod(FINALIZE_METHOD_NAME, true);
-            udfClass.checkMethodNonStaticAndPublic(method);
-            udfClass.checkReturnUdfType(method, returnType.getType());
-            udfClass.checkArgumentCount(method, 1);
-            udfClass.checkParamJavaType(method, udfStateClass.clazz, method.getParameters()[0]);
+            Method method = mainClass.getMethod(FINALIZE_METHOD_NAME, true);
+            mainClass.checkMethodNonStaticAndPublic(method);
+            mainClass.checkReturnUdfType(method, returnType.getType());
+            mainClass.checkArgumentCount(method, 1);
+            mainClass.checkParamJavaType(method, udafStateClass.clazz, method.getParameters()[0]);
         }
     }
 
@@ -448,7 +448,7 @@ public class CreateFunctionStmt extends DdlStmt {
                 AggregateFunction.AggregateFunctionBuilder.createUdfBuilder(TFunctionBinaryType.SRJAR);
         builder.name(functionName).argsType(argsDef.getArgTypes()).retType(returnType.getType()).
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType.getType()).objectFile(objectFile)
-                .symbolName(udfClass.getCanonicalName());
+                .symbolName(mainClass.getCanonicalName());
         function = builder.build();
         function.setChecksum(checksum);
     }
