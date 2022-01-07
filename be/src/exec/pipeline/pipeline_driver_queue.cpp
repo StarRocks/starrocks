@@ -93,7 +93,7 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take() {
         }
     }
 
-    auto wg = _get_min_wg();
+    auto wg = _find_min_wg();
     if (wg->driver_queue()->size() == 1) {
         _sum_cpu_limit -= wg->get_cpu_limit();
         _wgs.erase(wg);
@@ -104,8 +104,8 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take() {
 
 void DriverQueueWithWorkGroup::yield_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(_global_mutex);
-    auto* wg = driver->workgroup();
 
+    auto* wg = driver->workgroup();
     wg->driver_queue()->yield_driver(driver);
     wg->increment_real_runtime(driver->driver_acct().get_last_time_spent());
 }
@@ -126,7 +126,7 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver, bool from_di
     if (_wgs.find(wg) == _wgs.end()) {
         _sum_cpu_limit += wg->get_cpu_limit();
         if (!from_dispatcher) {
-            auto* min_wg = _get_min_wg();
+            auto* min_wg = _find_min_wg();
             if (min_wg != nullptr) {
                 wg->set_vruntime_ns(
                         std::max(wg->get_vruntime_ns(), min_wg->get_vruntime_ns() - _ideal_runtime_ns(wg) / 2));
@@ -140,7 +140,7 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver, bool from_di
     _cv.notify_one();
 }
 
-workgroup::WorkGroup* DriverQueueWithWorkGroup::_get_min_wg() {
+workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_wg() {
     workgroup::WorkGroup* min_wg = nullptr;
     int64_t min_vruntime_ns = 0;
     for (auto wg : _wgs) {
@@ -153,7 +153,7 @@ workgroup::WorkGroup* DriverQueueWithWorkGroup::_get_min_wg() {
 }
 
 int64_t DriverQueueWithWorkGroup::_ideal_runtime_ns(workgroup::WorkGroup* wg) {
-    return DISPATCH_LATENCY_NS * _wgs.size() * wg->get_cpu_limit() / _sum_cpu_limit;
+    return DISPATCH_PERIOD_PER_WG_NS * _wgs.size() * wg->get_cpu_limit() / _sum_cpu_limit;
 }
 
 } // namespace starrocks::pipeline

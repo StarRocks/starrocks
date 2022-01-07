@@ -49,6 +49,7 @@ private:
     std::atomic<int64_t> _accu_consume_time = 0;
 };
 
+// All the QuerySharedDriverQueue's methods MUST be guarded by the outside lock.
 class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriverQueue> {
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
@@ -84,6 +85,8 @@ private:
     size_t _size;
 };
 
+// DriverQueueWithWorkGroup contains two levels of queues.
+// The first level is the work group queue, and the second level is the driver queue in a work group.
 class DriverQueueWithWorkGroup : public FactoryMethod<DriverQueue, DriverQueueWithWorkGroup> {
     friend class FactoryMethod<DriverQueue, DriverQueueWithWorkGroup>;
 
@@ -91,19 +94,29 @@ public:
     ~DriverQueueWithWorkGroup() override = default;
     void close() override;
 
+    // When the driver's workgroup is not in the workgroup queue
+    // and the driver isn't from a dispatcher thread (that is, from the poller or new driver),
+    // the workgroup's vruntime is adjusted to workgroup_queue.min_vruntime-ideal_runtime/2,
+    // to avoid slope this workgroup too much time.
     void put_back(const DriverRawPtr driver, bool from_dispatcher) override;
     void put_back(const std::vector<DriverRawPtr>& drivers, bool from_dispatcher) override;
+
+    // Firstly, select the work group with the minimum vruntime.
+    // Secondly, select the proper driver from the driver queue of this work group.
     StatusOr<DriverRawPtr> take() override;
 
+    // Update statistics information of the queue.
     void yield_driver(const DriverRawPtr driver) override;
 
     size_t size() override;
 
 private:
-    static constexpr int64_t DISPATCH_LATENCY_NS = 200'1000'1000;
+    // The schedule period is equal to DISPATCH_PERIOD_PER_WG_NS * num_workgroups.
+    static constexpr int64_t DISPATCH_PERIOD_PER_WG_NS = 200'1000'1000;
 
     void _put_back(const DriverRawPtr driver, bool from_dispatcher);
-    workgroup::WorkGroup* _get_min_wg();
+    workgroup::WorkGroup* _find_min_wg();
+    // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroup* wg);
 
     std::mutex _global_mutex;
