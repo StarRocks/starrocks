@@ -202,9 +202,10 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     writer_context.rowset_type = BETA_ROWSET;
     writer_context.rowset_path_prefix = _tablet->schema_hash_path();
     writer_context.rowset_state = COMMITTED;
-    std::vector<size_t> column_indexes = {0, 1};
+    std::vector<int32_t> column_indexes = {0, 1};
     std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
     writer_context.partial_update_tablet_schema = partial_schema;
+    writer_context.referenced_column_ids = column_indexes;
     writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
     writer_context.version.first = 0;
     writer_context.version.second = 0;
@@ -221,14 +222,6 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
         cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
     }
     CHECK_OK(writer->flush_chunk(*chunk));
-
-    // add RowsetTxnMetaPB into rowset meta
-    RowsetTxnMetaPB txn_meta;
-    txn_meta.add_partial_update_column_ids(0);
-    txn_meta.add_partial_update_column_ids(1);
-    txn_meta.add_partial_update_column_unique_ids(0);
-    txn_meta.add_partial_update_column_unique_ids(1);
-    writer->add_txn_meta(txn_meta);
     RowsetSharedPtr partial_rowset = *writer->build();
 
     // check data of write column
