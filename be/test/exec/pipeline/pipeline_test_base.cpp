@@ -7,6 +7,7 @@
 #include "column/nullable_column.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_dispatcher.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/date_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -113,6 +114,11 @@ void PipelineTestBase::_prepare() {
                 drivers.emplace_back(driver);
             }
         }
+    }
+
+    auto wg = workgroup::WorkGroupManager::instance()->get_workgroup(0);
+    for (auto driver : drivers) {
+        driver->set_workgroup(wg);
     }
 
     _fragment_ctx->set_drivers(std::move(drivers));
