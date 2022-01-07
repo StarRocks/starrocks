@@ -249,6 +249,21 @@ enum InternalServiceVersion {
   V1
 }
 
+enum TWorkGroupType {
+    WG_NORMAL,
+    WG_DEFAULT,
+    WG_REALTIME
+}
+
+struct TWorkGroup {
+    1: required i32 id
+    2: required string name
+    3: optional i64 cpu_limit
+    4: optional i64 memory_limit
+    5: optional i64 concurrency
+    6: optional TWorkGroupType type
+}
+
 // ExecPlanFragment
 
 struct TExecPlanFragmentParams {
@@ -295,6 +310,8 @@ struct TExecPlanFragmentParams {
 
   50: optional bool is_pipeline
   51: optional i32 pipeline_dop
+  52: optional map<Types.TPlanNodeId, i32> per_scan_node_dop
+  53: optional TWorkGroup workgroup
 }
 
 struct TExecPlanFragmentResult {
@@ -440,3 +457,4 @@ struct TExportStatusResult {
     2: required Types.TExportState state
     3: optional list<string> files
 }
+
