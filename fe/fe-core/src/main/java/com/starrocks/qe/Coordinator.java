@@ -95,6 +95,7 @@ import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -1995,6 +1996,10 @@ public class Coordinator {
                         params.setIs_pipeline(
                                 fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
                         params.setPipeline_dop(fragment.getPipelineDop());
+                        TWorkGroup wg = new TWorkGroup();
+                        wg.name = "";
+                        wg.id = ConnectContext.get().getSessionVariable().getWorkgroupId();
+                        params.setWorkgroup(wg);
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {

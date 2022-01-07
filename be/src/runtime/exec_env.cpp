@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -252,6 +253,8 @@ Status ExecEnv::init_mem_tracker() {
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
 
+    //TODO(by satanson): for verification of Resource Isolation.
+    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
     return Status::OK();
 }
 
