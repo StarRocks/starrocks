@@ -258,12 +258,6 @@ public:
 
     const RowsetMetaPB& get_meta_pb() const { return _rowset_meta_pb; }
 
-    // only used for ut of partial update
-    void set_txn_meta(RowsetTxnMetaPB rowset_txn_meta_pb) {
-        RowsetTxnMetaPB* txn_meta_pb = _rowset_meta_pb.mutable_txn_meta();
-        *txn_meta_pb = rowset_txn_meta_pb;
-    }
-
 private:
     bool _deserialize_from_pb(const std::string_view& value) {
         return _rowset_meta_pb.ParseFromArray(value.data(), value.size());
