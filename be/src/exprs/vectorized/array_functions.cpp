@@ -342,8 +342,8 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     return ArrayRemoveImpl::evaluate(*arg0, *arg1);
 }
 
-// If IndexEnabled=true in function array_indexof, it will return index of elemt if the array contain it or 0 if not contain.
-// If IndexEnabled=false in function array_contains, it will return 1 if contain or 0 if not contain.
+// If IndexEnabled=true and ReturnType=UInt32, it is function array_indexof and it will return index of elemt if the array contain it or 0 if not contain.
+// If IndexEnabled=false and ReturnType=UInt8, it is function array_contains and it will return 1 if contain or 0 if not contain.
 template<bool IndexEnabled, typename ReturnType>
 class ArrayContainsImpl {
 public:
@@ -495,7 +495,7 @@ private:
             targets = nullable->has_null() ? targets : nullable->data_column().get();
         }
         if (targets->only_null() && !nullable_element) {
-             auto result = ReturnType::create();
+            auto result = ReturnType::create();
             result->resize(array.size());
             return result;
         }
