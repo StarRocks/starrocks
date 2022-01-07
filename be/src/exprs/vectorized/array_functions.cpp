@@ -344,7 +344,7 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
 
 // If PositionEnabled=true and ReturnType=UInt32, it is function array_position and it will return index of elemt if the array contain it or 0 if not contain.
 // If PositionEnabled=false and ReturnType=UInt8, it is function array_contains and it will return 1 if contain or 0 if not contain.
-template<bool PositionEnabled, typename ReturnType>
+template <bool PositionEnabled, typename ReturnType>
 class ArrayContainsImpl {
 public:
     static ColumnPtr evaluate(const Column& array, const Column& element) {
