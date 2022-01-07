@@ -71,9 +71,13 @@ public:
 
     int64_t get_real_runtime_ns() const { return _vruntime_ns * _cpu_limit; }
 
-    void increment_real_runtime(int64_t real_runtime_ns) { _vruntime_ns += real_runtime_ns / _cpu_limit; }
+    void increment_real_runtime(int64_t real_runtime_ns) {
+        // Accumulate virtual runtime divided by _cpu_limit, so that the larger _cpu_limit,
+        // the more cpu time can be consumed proportionally.
+        _vruntime_ns += real_runtime_ns / _cpu_limit;
+    }
 
-    void set_vruntime_ns(double vruntime_ns) { _vruntime_ns = vruntime_ns; }
+    void set_vruntime_ns(int64_t vruntime_ns) { _vruntime_ns = vruntime_ns; }
 
 private:
     std::string _name;
