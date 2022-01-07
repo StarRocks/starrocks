@@ -74,6 +74,8 @@ public class CTASAnalyzer {
                 for (String alias : aliases) {
                     tableRefToTable.put(alias, table);
                 }
+            } else {
+                tableRefToTable.put(table.getName(), table);
             }
         }
 
