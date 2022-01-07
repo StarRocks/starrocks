@@ -97,7 +97,7 @@ public:
     // When the driver's workgroup is not in the workgroup queue
     // and the driver isn't from a dispatcher thread (that is, from the poller or new driver),
     // the workgroup's vruntime is adjusted to workgroup_queue.min_vruntime-ideal_runtime/2,
-    // to avoid slope this workgroup too much time.
+    // to avoid sloping too much time to this workgroup .
     void put_back(const DriverRawPtr driver, bool from_dispatcher) override;
     void put_back(const std::vector<DriverRawPtr>& drivers, bool from_dispatcher) override;
 
@@ -105,7 +105,8 @@ public:
     // Secondly, select the proper driver from the driver queue of this work group.
     StatusOr<DriverRawPtr> take() override;
 
-    // Update statistics information of the queue.
+    // Update statistics information of the driver's workgroup
+    // when yielding the driver in the dispatcher thread.
     void yield_driver(const DriverRawPtr driver) override;
 
     size_t size() override;
@@ -114,7 +115,9 @@ private:
     // The schedule period is equal to DISPATCH_PERIOD_PER_WG_NS * num_workgroups.
     static constexpr int64_t DISPATCH_PERIOD_PER_WG_NS = 200'1000'1000;
 
+    // This method should be guarded by the outside _global_mutex.
     void _put_back(const DriverRawPtr driver, bool from_dispatcher);
+    // This method should be guarded by the outside _global_mutex.
     workgroup::WorkGroup* _find_min_wg();
     // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroup* wg);
