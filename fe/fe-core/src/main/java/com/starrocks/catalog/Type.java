@@ -413,6 +413,15 @@ public abstract class Type implements Cloneable {
         throw new IllegalStateException("getSlotSize() not implemented for type " + toSql());
     }
 
+    // Return type data size, used for compute optimizer column statistics
+    public int getTypeSize() {
+        // TODO(ywb): compute the collection type size later.
+        if (isCollectionType()) {
+            return 16;
+        }
+        throw new IllegalStateException("getTypeSize() not implemented for type " + toSql());
+    }
+
     public TTypeDesc toThrift() {
         TTypeDesc container = new TTypeDesc();
         container.setTypes(new ArrayList<TTypeNode>());

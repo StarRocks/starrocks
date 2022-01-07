@@ -680,6 +680,11 @@ public class ScalarType extends Type implements Cloneable {
         return type.getSlotSize();
     }
 
+    @Override
+    public int getTypeSize() {
+        return type.getTypeSize();
+    }
+
     /**
      * Returns true if this object is of type t.
      * Handles wildcard types. That is, if t is the wildcard type variant

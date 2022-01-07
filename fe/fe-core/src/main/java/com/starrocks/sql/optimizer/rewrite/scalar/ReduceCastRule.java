@@ -83,14 +83,13 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
     }
 
     public boolean checkCastTypeReduceAble(Type parent, Type child, Type grandChild) {
-        int parentSlotSize = parent.getSlotSize();
-        int childSlotSize = child.getSlotSize();
-        int grandChildSlotSize = grandChild.getSlotSize();
+        int parentSlotSize = parent.getTypeSize();
+        int childSlotSize = child.getTypeSize();
+        int grandChildSlotSize = grandChild.getTypeSize();
 
         if (parent.isDecimalOfAnyVersion() || child.isDecimalOfAnyVersion() || grandChild.isDecimalOfAnyVersion()) {
             return false;
         }
-
         if (parentSlotSize > childSlotSize && grandChildSlotSize > childSlotSize) {
             return false;
         }
