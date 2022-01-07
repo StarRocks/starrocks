@@ -59,7 +59,7 @@ public class PruneHiveScanColumnRule extends TransformationRule {
                 }
                 Type columnType = outputColumns.get(index).getType();
                 if (columnType.isScalarType()) {
-                    int columnLength = columnType.getSlotSize();
+                    int columnLength = columnType.getTypeSize();
                     if (columnLength < smallestColumnLength) {
                         smallestIndex = index;
                         smallestColumnLength = columnLength;

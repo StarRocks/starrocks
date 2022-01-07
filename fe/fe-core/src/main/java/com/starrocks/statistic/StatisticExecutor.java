@@ -549,44 +549,7 @@ public class StatisticExecutor {
             return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`)), 0)";
         }
 
-        long typeSize = 0;
-        switch (column.getPrimitiveType()) {
-            case NULL_TYPE:
-            case BOOLEAN:
-            case TINYINT:
-                typeSize = 1;
-                break;
-            case SMALLINT:
-                typeSize = 2;
-                break;
-            case INT:
-            case DECIMAL32:
-            case DATE:
-                typeSize = 4;
-                break;
-            case BIGINT:
-            case DECIMAL64:
-            case DOUBLE:
-            case FLOAT:
-            case TIME:
-            case DATETIME:
-                typeSize = 8;
-                break;
-            case LARGEINT:
-            case DECIMALV2:
-            case DECIMAL128:
-                typeSize = 16;
-                break;
-            case HLL:
-                // 16KB
-                typeSize = 16 * 1024;
-                break;
-            case BITMAP:
-            case PERCENTILE:
-                // 1MB
-                typeSize = 1024 * 1024;
-                break;
-        }
+        long typeSize = column.getType().getTypeSize();
 
         if (isSample && !column.getType().isOnlyMetricType()) {
             return "IFNULL(SUM(t1.count), 0) * " + typeSize;

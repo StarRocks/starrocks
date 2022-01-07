@@ -808,6 +808,53 @@ public enum PrimitiveType {
         return slotSize;
     }
 
+    public int getTypeSize() {
+        int typeSize = 0;
+        switch (this) {
+            case NULL_TYPE:
+            case BOOLEAN:
+            case TINYINT:
+                typeSize = 1;
+                break;
+            case SMALLINT:
+                typeSize = 2;
+                break;
+            case INT:
+            case DECIMAL32:
+            case DATE:
+                typeSize = 4;
+                break;
+            case BIGINT:
+            case DECIMAL64:
+            case DOUBLE:
+            case FLOAT:
+            case TIME:
+            case DATETIME:
+                typeSize = 8;
+                break;
+            case LARGEINT:
+            case DECIMALV2:
+            case DECIMAL128:
+                typeSize = 16;
+                break;
+            case CHAR:
+            case VARCHAR:
+                // use 16 as char type estimate size
+                typeSize = 16;
+                break;
+            case HLL:
+                // 16KB
+                typeSize = 16 * 1024;
+                break;
+            case BITMAP:
+            case PERCENTILE:
+                // 1MB
+                typeSize = 1024 * 1024;
+                break;
+        }
+        return typeSize;
+    }
+
     public boolean isFixedPointType() {
         return this == TINYINT
                 || this == SMALLINT
