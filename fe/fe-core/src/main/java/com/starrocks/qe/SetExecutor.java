@@ -42,7 +42,7 @@ public class SetExecutor {
         this.stmt = stmt;
     }
 
-    private void setVariable(SetVar var) throws DdlException {
+    private void setVariablesOfAllType(SetVar var) throws DdlException {
         if (var instanceof SetPassVar) {
             // Set password
             SetPassVar setPassVar = (SetPassVar) var;
@@ -64,6 +64,11 @@ public class SetExecutor {
                 || var instanceof SetTransaction);
     }
 
+    /**
+     * SetExecutor will set the session variables and password
+     * @param onlySessionVar true means only set session variables
+     * @throws DdlException
+     */
     public void execute(boolean onlySessionVar) throws DdlException {
         for (SetVar var : stmt.getSetVars()) {
             if (onlySessionVar) {
@@ -71,7 +76,7 @@ public class SetExecutor {
                     VariableMgr.setVar(ctx.getSessionVariable(), var, true);
                 }
             } else {
-                setVariable(var);
+                setVariablesOfAllType(var);
             }
         }
     }
