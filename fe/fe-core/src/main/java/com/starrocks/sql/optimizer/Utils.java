@@ -356,7 +356,7 @@ public class Utils {
         for (ColumnRefOperator columnRefOperator : columnRefOperatorList) {
             Type columnType = columnRefOperator.getType();
             if (columnType.isScalarType()) {
-                int columnLength = columnType.getSlotSize();
+                int columnLength = columnType.getTypeSize();
                 if (columnLength < smallestColumnLength) {
                     smallestColumnRef = columnRefOperator;
                     smallestColumnLength = columnLength;
