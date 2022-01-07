@@ -20,9 +20,7 @@ namespace starrocks::vectorized {
 
 class OrcScannerAdapterTest : public testing::Test {
 public:
-    void SetUp() override {
-        _runtime_state = _create_runtime_state();
-    }
+    void SetUp() override { _runtime_state = _create_runtime_state(); }
 
     OrcScannerAdapterTest();
 
@@ -430,7 +428,8 @@ TEST_F(OrcScannerAdapterTest, SkipRowGroups) {
 }
 
 template <int ORC_PRECISION, int ORC_SCALE, typename ValueType>
-std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, ObjectPool* pool, const std::vector<ValueType>& values) {
+std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, ObjectPool* pool,
+                                                               const std::vector<ValueType>& values) {
     std::cout << "orc precision=" << ORC_PRECISION << " scale=" << ORC_SCALE << std::endl;
     if constexpr (std::is_same_v<ValueType, int64_t>) {
         static_assert(ORC_PRECISION <= 18);
@@ -772,7 +771,8 @@ TEST_F(OrcScannerAdapterTest, TestDecimal128) {
     }
 }
 
-std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool, const std::string& reader_tz,
+std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
+                                                               const std::string& reader_tz,
                                                                const std::string& write_tz,
                                                                const std::vector<int64_t>& values) {
     const char* filename = "orc_scanner_test_timestamp.orc";
