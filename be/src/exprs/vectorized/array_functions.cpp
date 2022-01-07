@@ -342,9 +342,9 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     return ArrayRemoveImpl::evaluate(*arg0, *arg1);
 }
 
-// If IndexEnabled=true and ReturnType=UInt32, it is function array_indexof and it will return index of elemt if the array contain it or 0 if not contain.
-// If IndexEnabled=false and ReturnType=UInt8, it is function array_contains and it will return 1 if contain or 0 if not contain.
-template<bool IndexEnabled, typename ReturnType>
+// If PositionEnabled=true and ReturnType=UInt32, it is function array_position and it will return index of elemt if the array contain it or 0 if not contain.
+// If PositionEnabled=false and ReturnType=UInt8, it is function array_contains and it will return 1 if contain or 0 if not contain.
+template<bool PositionEnabled, typename ReturnType>
 class ArrayContainsImpl {
 public:
     static ColumnPtr evaluate(const Column& array, const Column& element) {
@@ -358,7 +358,6 @@ private:
                               const NullColumn::Container* null_map_elements,
                               const NullColumn::Container* null_map_targets) {
         const size_t num_array = offsets.size() - 1;
-        
         auto result = ReturnType::create();
         result->resize(num_array);
 
@@ -398,7 +397,7 @@ private:
                         continue;
                     }
                     if (null_element) {
-                        found = IndexEnabled ? j + 1: 1;
+                        found = PositionEnabled ? j + 1 : 1;
                         break;
                     }
                 }
@@ -410,7 +409,7 @@ private:
                     found = (elements_ptr[offset + j] == targets_ptr[i]);
                 }
                 if (found) {
-                    if (IndexEnabled) {
+                    if (PositionEnabled) {
                         found = j + 1;
                     }
                     break;
@@ -553,7 +552,7 @@ ColumnPtr ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* conte
     return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
 }
 
-ColumnPtr ArrayFunctions::array_indexof([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+ColumnPtr ArrayFunctions::array_position([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 

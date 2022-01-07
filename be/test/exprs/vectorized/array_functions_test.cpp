@@ -582,8 +582,8 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
 
 
 // NOLINTNEXTLINE
-TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
-    // array_indexof([], 1) : 0
+TEST_F(ArrayFunctionsTest, array_position_empty_array) {
+    // array_position([], 1) : 0
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
@@ -591,11 +591,11 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
         target->append_datum(Datum{(int32_t)1});
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
     }
-    // array_indexof([], "abc"): 0
+    // array_position([], "abc"): 0
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
@@ -603,11 +603,11 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
         target->append_datum(Datum{"abc"});
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
     }
-    // array_indexof(ARRAY<ARRAY<int>>[], [1]): 0
+    // array_position(ARRAY<ARRAY<int>>[], [1]): 0
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
@@ -615,11 +615,11 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
         target->append_datum(Datum(DatumArray{Datum{(int32_t)1}}));
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
     }
-    // array_indexof(ARRAY<ARRAY<int>>[], ARRAY<int>[]): 0
+    // array_position(ARRAY<ARRAY<int>>[], ARRAY<int>[]): 0
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
@@ -627,15 +627,15 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
         target->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
     }
     // multiple lines with const target:
-    //  array_indexof([], 1): 0;
-    //  array_indexof([], 1): 0;
-    //  array_indexof([], 1): 0;
-    //  array_indexof([], 1): 0;
+    //  array_position([], 1): 0;
+    //  array_position([], 1): 0;
+    //  array_position([], 1): 0;
+    //  array_position([], 1): 0;
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
@@ -648,7 +648,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_EQ(0, result->get(1).get_int32());
@@ -656,10 +656,10 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         EXPECT_EQ(0, result->get(3).get_int32());
     }
     // multiple lines with different target:
-    //  array_indexof([], 1): 0;
-    //  array_indexof([], 2): 0;
-    //  array_indexof([], NULL): 0;
-    //  array_indexof([], 3): 0;
+    //  array_position([], 1): 0;
+    //  array_position([], 2): 0;
+    //  array_position([], NULL): 0;
+    //  array_position([], 3): 0;
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
@@ -673,7 +673,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         target->append_datum(Datum{});
         target->append_datum(Datum((int32_t)3));
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_EQ(0, result->get(1).get_int32());
@@ -681,10 +681,10 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         EXPECT_EQ(0, result->get(3).get_int32());
     }
     // multiple lines with Only-NULL target:
-    //  array_indexof([], NULL): 0;
-    //  array_indexof([], NULL): 0;
-    //  array_indexof([], NULL): 0;
-    //  array_indexof([], NULL): 0;
+    //  array_position([], NULL): 0;
+    //  array_position([], NULL): 0;
+    //  array_position([], NULL): 0;
+    //  array_position([], NULL): 0;
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
@@ -695,7 +695,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         auto target = ColumnHelper::create_const_null_column(1);
         target->resize(4);
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_EQ(0, result->get(1).get_int32());
@@ -707,7 +707,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
-        result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_EQ(0, result->get(1).get_int32());
@@ -719,7 +719,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
-        result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(4, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_EQ(0, result->get(1).get_int32());
@@ -729,18 +729,18 @@ TEST_F(ArrayFunctionsTest, array_indexof_empty_array) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
+TEST_F(ArrayFunctionsTest, array_position_no_null) {
     /// Test class:
     ///  - Both the array elements and targets has NO NULL.
 
-    // array_indexof(array<boolean>[], 0) : 0
-    // array_indexof(array<boolean>[], 1) : 0
-    // array_indexof(array<boolean>[0], 0) : 1
-    // array_indexof(array<boolean>[0], 1) : 0
-    // array_indexof(array<boolean>[1], 0) : 0
-    // array_indexof(array<boolean>[1], 1) : 1
-    // array_indexof(array<boolean>[1,0], 0) : 2
-    // array_indexof(array<boolean>[1,0], 1) : 1
+    // array_position(array<boolean>[], 0) : 0
+    // array_position(array<boolean>[], 1) : 0
+    // array_position(array<boolean>[0], 0) : 1
+    // array_position(array<boolean>[0], 1) : 0
+    // array_position(array<boolean>[1], 0) : 0
+    // array_position(array<boolean>[1], 1) : 1
+    // array_position(array<boolean>[1,0], 0) : 2
+    // array_position(array<boolean>[1,0], 1) : 1
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
@@ -762,7 +762,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
         target->append_datum(Datum{(int8_t)0});
         target->append_datum(Datum{(int8_t)1});
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(8, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_EQ(0, result->get(1).get_int32());
@@ -773,11 +773,11 @@ TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
         EXPECT_EQ(2, result->get(6).get_int32());
         EXPECT_EQ(1, result->get(7).get_int32());
     }
-    // array_indexof([], 3) : 0
-    // array_indexof([2], 3) : 0
-    // array_indexof([1, 2, 3], 3) : 3
-    // array_indexof([3, 2, 1], 3) : 1
-    // array_indexof([2, 1, 3], 3) : 3
+    // array_position([], 3) : 0
+    // array_position([2], 3) : 0
+    // array_position([1, 2, 3], 3) : 3
+    // array_position([3, 2, 1], 3) : 1
+    // array_position([2, 1, 3], 3) : 3
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
@@ -790,7 +790,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
         target->append_datum(Datum{3});
         target->resize(5);
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(5, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_EQ(0, result->get(1).get_int32());
@@ -798,16 +798,16 @@ TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
         EXPECT_EQ(1, result->get(3).get_int32());
         EXPECT_EQ(3, result->get(4).get_int32());
     }
-    // array_indexof([], []) : 0
-    // array_indexof([[]], []) : 1
-    // array_indexof([["d", "o"], ["r"], ["i", "s"]], []) : 0
-    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["d"]) : 0
-    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["d", "o"]) : 1
-    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["o", "d"]) : 0
-    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["r"]) : 2
-    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["ri"]) : 0
-    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["r", "i"]) : 0
-    // array_indexof([["d", "o"], ["r"], ["i", "s"]], ["i", "s"]) : 3
+    // array_position([], []) : 0
+    // array_position([[]], []) : 1
+    // array_position([["d", "o"], ["r"], ["i", "s"]], []) : 0
+    // array_position([["d", "o"], ["r"], ["i", "s"]], ["d"]) : 0
+    // array_position([["d", "o"], ["r"], ["i", "s"]], ["d", "o"]) : 1
+    // array_position([["d", "o"], ["r"], ["i", "s"]], ["o", "d"]) : 0
+    // array_position([["d", "o"], ["r"], ["i", "s"]], ["r"]) : 2
+    // array_position([["d", "o"], ["r"], ["i", "s"]], ["ri"]) : 0
+    // array_position([["d", "o"], ["r"], ["i", "s"]], ["r", "i"]) : 0
+    // array_position([["d", "o"], ["r"], ["i", "s"]], ["i", "s"]) : 3
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
@@ -833,7 +833,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
         target->append_datum(DatumArray{"r", "i"});
         target->append_datum(DatumArray{"i", "s"});
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(10, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_EQ(1, result->get(1).get_int32());
@@ -849,10 +849,10 @@ TEST_F(ArrayFunctionsTest, array_indexof_no_null) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ArrayFunctionsTest, array_indexof_has_null_element) {
-    // array_indexof([NULL], "abc"): 0
-    // array_indexof(["abc", NULL], "abc"): 1
-    // array_indexof([NULL, "abc"], "abc"): 2
+TEST_F(ArrayFunctionsTest, array_position_has_null_element) {
+    // array_position([NULL], "abc"): 0
+    // array_position(["abc", NULL], "abc"): 1
+    // array_position([NULL, "abc"], "abc"): 2
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum{}});
@@ -864,7 +864,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_element) {
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_EQ(1, result->get(1).get_int32());
@@ -873,8 +873,8 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_element) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ArrayFunctionsTest, array_indexof_has_null_target) {
-    // array_indexof(["abc", "def"], NULL): 0
+TEST_F(ArrayFunctionsTest, array_position_has_null_target) {
+    // array_position(["abc", "def"], NULL): 0
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{"abc", "def"});
@@ -882,13 +882,13 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_target) {
         // const-null column.
         auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
     }
-    // array_indexof(ARRAY<TINYINT>[1, 2, 3], 2): 2
-    // array_indexof(ARRAY<TINYINT>[1, 2, 3], 4): 0 
-    // array_indexof(ARRAY<TINYINT>[1, 2, 3], NULL): 0
+    // array_position(ARRAY<TINYINT>[1, 2, 3], 2): 2
+    // array_position(ARRAY<TINYINT>[1, 2, 3], 4): 0 
+    // array_position(ARRAY<TINYINT>[1, 2, 3], NULL): 0
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
@@ -900,7 +900,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_target) {
         target->append_datum(Datum((int8_t)4));
         target->append_datum(Datum());
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(2, result->get(0).get_int32());
         EXPECT_EQ(0, result->get(1).get_int32());
@@ -909,9 +909,9 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_target) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ArrayFunctionsTest, array_indexof_has_null_element_and_target) {
-    // array_indexof([NULL], NULL): 1
-    // array_indexof([NULL, "abc"], NULL): 1
+TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target) {
+    // array_position([NULL], NULL): 1
+    // array_position([NULL, "abc"], NULL): 1
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum()});
@@ -920,16 +920,16 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_element_and_target) {
         // const-null column.
         auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(2, result->size());
         EXPECT_EQ(1, result->get(0).get_int32());
         EXPECT_EQ(1, result->get(1).get_int32());
     }
-    // array_indexof([NULL], NULL): 1
-    // array_indexof([NULL, [1,2]], NULL): 1
-    // array_indexof([NULL, [1,2]], [1,2]): 2
-    // array_indexof([[1,2], NULL], [1,2]): 1
-    // array_indexof([[1,2], NULL], NULL): 2
+    // array_position([NULL], NULL): 1
+    // array_position([NULL, [1,2]], NULL): 1
+    // array_position([NULL, [1,2]], [1,2]): 2
+    // array_position([[1,2], NULL], [1,2]): 1
+    // array_position([[1,2], NULL], NULL): 2
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(DatumArray{Datum()});
@@ -945,7 +945,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_element_and_target) {
         target->append_datum(DatumArray{1, 2});
         target->append_datum(Datum());
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(5, result->size());
         EXPECT_EQ(1, result->get(0).get_int32());
         EXPECT_EQ(1, result->get(1).get_int32());
@@ -956,10 +956,10 @@ TEST_F(ArrayFunctionsTest, array_indexof_has_null_element_and_target) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ArrayFunctionsTest, array_indexof_nullable_array) {
-    // array_indexof(["a", "b"], "c"): 0
-    // array_indexof(NULL, "c"): null
-    // array_indexof(["a", "b", "c"], "c"): 3
+TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
+    // array_position(["a", "b"], "c"): 0
+    // array_position(NULL, "c"): null
+    // array_position(["a", "b", "c"], "c"): 3
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{"a", "b"});
@@ -971,15 +971,15 @@ TEST_F(ArrayFunctionsTest, array_indexof_nullable_array) {
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_TRUE(result->get(1).is_null());
         EXPECT_EQ(3, result->get(2).get_int32());
     }
-    // array_indexof([["a"], ["b"]], ["c"]): 0
-    // array_indexof(NULL, ["c"]): null
-    // array_indexof([["a", "b"], ["c"]], ["c"]): 2
+    // array_position([["a"], ["b"]], ["c"]): 0
+    // array_position(NULL, ["c"]): null
+    // array_position([["a", "b"], ["c"]], ["c"]): 2
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{DatumArray{"a"}, DatumArray{"b"}});
@@ -991,15 +991,15 @@ TEST_F(ArrayFunctionsTest, array_indexof_nullable_array) {
         target->append_datum(DatumArray{"c"});
         target->append_datum(DatumArray{"c"});
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(0, result->get(0).get_int32());
         EXPECT_TRUE(result->get(1).is_null());
         EXPECT_EQ(2, result->get(2).get_int32());
     }
-    // array_indexof(NULL, NULL): null
-    // array_indexof(NULL, ["a"]): null
-    // array_indexof(NULL, [NULL]): null
+    // array_position(NULL, NULL): null
+    // array_position(NULL, ["a"]): null
+    // array_position(NULL, [NULL]): null
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(Datum());
@@ -1011,7 +1011,7 @@ TEST_F(ArrayFunctionsTest, array_indexof_nullable_array) {
         target->append_datum(DatumArray{"a"});
         target->append_datum(DatumArray{Datum()});
 
-        auto result = ArrayFunctions::array_indexof(nullptr, {array, target});
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(3, result->size());
         EXPECT_TRUE(result->get(0).is_null());
         EXPECT_TRUE(result->get(1).is_null());
