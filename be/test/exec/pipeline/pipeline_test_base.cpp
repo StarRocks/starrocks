@@ -118,7 +118,7 @@ void PipelineTestBase::_prepare() {
 
     auto wg = workgroup::WorkGroupManager::instance()->get_workgroup(0);
     for (auto driver : drivers) {
-        driver->set_workgroup(wg);
+        driver->set_workgroup(wg.get());
     }
 
     _fragment_ctx->set_drivers(std::move(drivers));
