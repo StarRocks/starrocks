@@ -5273,9 +5273,18 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select t0.v1 from t0, t1, t2, t3 where t0.v1 + t3.v1 = 2";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("11:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates: 1: v1 + 10: v1 = 2"));
+    }
+
+    @Test
+    public void testDateTypeReduceCast() throws Exception {
+        String sql =
+                "select * from test_all_type_distributed_by_datetime where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
+                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-01 18:00:00'";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "CAST(CAST(8: id_datetime AS DATE) AS DATETIME) >= '1970-01-01 12:00:00', CAST(CAST(8: id_datetime AS DATE) AS DATETIME) <= '1970-01-01 18:00:00'"));
     }
 }

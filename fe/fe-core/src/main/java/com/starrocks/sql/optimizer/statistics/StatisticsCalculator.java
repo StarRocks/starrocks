@@ -282,7 +282,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // Hive column statistics may be -1 in avgSize, numNulls and distinct values, default values need to be reassigned
     private HiveColumnStats computeHiveColumnStatistics(ColumnRefOperator column, HiveColumnStats hiveColumnStats) {
         double avgSize =
-                hiveColumnStats.getAvgSize() != -1 ? hiveColumnStats.getAvgSize() : column.getType().getSlotSize();
+                hiveColumnStats.getAvgSize() != -1 ? hiveColumnStats.getAvgSize() : column.getType().getTypeSize();
         long numNulls = hiveColumnStats.getNumNulls() != -1 ? hiveColumnStats.getNumNulls() : 0;
         long distinctValues = hiveColumnStats.getNumDistinctValues() != -1 ? hiveColumnStats.getNumDistinctValues() : 1;
 
@@ -524,7 +524,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         }
         numRows = totalBytes /
-                hiveTable.getBaseSchema().stream().mapToInt(column -> column.getType().getSlotSize()).sum();
+                hiveTable.getBaseSchema().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
         return numRows;
     }
 
