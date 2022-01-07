@@ -96,7 +96,6 @@ private:
 
     Status _init_table();
 
-    THdfsScanNode _hdfs_scan_node;
     int _tuple_id = 0;
     const TupleDescriptor* _tuple_desc = nullptr;
 

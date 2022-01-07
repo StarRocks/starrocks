@@ -26,7 +26,7 @@
 namespace starrocks::vectorized {
 
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs), _hdfs_scan_node(tnode.hdfs_scan_node) {}
+        : ScanNode(pool, tnode, descs) {}
 
 Status HdfsScanNode::_init_table() {
     if (dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc())) {
@@ -41,24 +41,23 @@ Status HdfsScanNode::_init_table() {
 
 Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    const auto& hdfs_scan_node = tnode.hdfs_scan_node;
 
-    if (tnode.hdfs_scan_node.__isset.min_max_conjuncts) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs));
+    if (hdfs_scan_node.__isset.min_max_conjuncts) {
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs));
     }
 
-    if (tnode.hdfs_scan_node.__isset.partition_conjuncts) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs));
+    if (hdfs_scan_node.__isset.partition_conjuncts) {
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs));
         _has_partition_conjuncts = true;
     }
 
-    _tuple_id = tnode.hdfs_scan_node.tuple_id;
+    _tuple_id = hdfs_scan_node.tuple_id;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
     RETURN_IF_ERROR(_init_table());
 
-    if (tnode.hdfs_scan_node.__isset.min_max_tuple_id) {
-        _min_max_tuple_id = tnode.hdfs_scan_node.min_max_tuple_id;
+    if (hdfs_scan_node.__isset.min_max_tuple_id) {
+        _min_max_tuple_id = hdfs_scan_node.min_max_tuple_id;
         _min_max_tuple_desc = state->desc_tbl().get_tuple_descriptor(_min_max_tuple_id);
         _min_max_row_desc = _pool->add(new RowDescriptor(state->desc_tbl(), std::vector<TTupleId>{_min_max_tuple_id},
                                                          std::vector<bool>{true}));
@@ -81,9 +80,23 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
     }
 
-    if (tnode.hdfs_scan_node.__isset.hive_column_names) {
-        _hive_column_names = tnode.hdfs_scan_node.hive_column_names;
+    if (hdfs_scan_node.__isset.hive_column_names) {
+        _hive_column_names = hdfs_scan_node.hive_column_names;
     }
+    if (hdfs_scan_node.__isset.hive_table_name) {
+        _runtime_profile->add_info_string("Table", hdfs_scan_node.hive_table_name);
+    }
+    if (hdfs_scan_node.__isset.sql_predicates) {
+        _runtime_profile->add_info_string("Predicates", hdfs_scan_node.sql_predicates);
+    }
+    if (hdfs_scan_node.__isset.min_max_sql_predicates) {
+        _runtime_profile->add_info_string("PredicatesMinMax", hdfs_scan_node.min_max_sql_predicates);
+    }
+    if (hdfs_scan_node.__isset.partition_sql_predicates) {
+        _runtime_profile->add_info_string("PredicatesPartition", hdfs_scan_node.partition_sql_predicates);
+    }
+    _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
+
     _mem_pool = std::make_unique<MemPool>();
 
     return Status::OK();
@@ -99,22 +112,6 @@ Status HdfsScanNode::prepare(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(ScanNode::prepare(state));
-
-    if (_hdfs_scan_node.__isset.hive_table_name) {
-        _runtime_profile->add_info_string("Table", _hdfs_scan_node.hive_table_name);
-    }
-    if (_hdfs_scan_node.__isset.sql_predicates) {
-        _runtime_profile->add_info_string("Predicates", _hdfs_scan_node.sql_predicates);
-    }
-    if (_hdfs_scan_node.__isset.min_max_sql_predicates) {
-        _runtime_profile->add_info_string("PredicatesMinMax", _hdfs_scan_node.min_max_sql_predicates);
-    }
-    if (_hdfs_scan_node.__isset.partition_sql_predicates) {
-        _runtime_profile->add_info_string("PredicatesPartition", _hdfs_scan_node.partition_sql_predicates);
-    }
-
-    _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
-
     RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc));
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc()));
     _init_counter(state);
