@@ -698,12 +698,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long catalog_trash_expire_second = 86400L; // 1day
     /**
-     * Maximum value of a batch of operations for actually delete database(table/partition)
-     * The erase operation will be locked, so one batch can not be too many.
-     */
-    @ConfField(mutable = true)
-    public static long catalog_max_erase_operation_per_task = 500;
-    /**
      * Parallel load fragment instance num in single host
      */
     @ConfField(mutable = true)

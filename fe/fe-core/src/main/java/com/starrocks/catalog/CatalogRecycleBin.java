@@ -56,6 +56,9 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     // erase meta at least after minEraseLatency milliseconds
     // to avoid erase log ahead of drop log
     private static final long minEraseLatency = 10 * 60 * 1000;  // 10 min
+    // Maximum value of a batch of operations for actually delete database(table/partition)
+    // The erase operation will be locked, so one batch can not be too many.
+    private static final int max_erase_operation_per_cycle = 500;
 
     private Map<Long, RecycleDatabaseInfo> idToDatabase;
     private Map<Long, RecycleTableInfo> idToTable;
@@ -221,7 +224,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 Catalog.getCurrentCatalog().getEditLog().logEraseDb(db.getId());
                 LOG.info("erase db[{}-{}] finished", db.getId(), db.getFullName());
                 currentEraseOpCnt++;
-                if (currentEraseOpCnt >= Config.catalog_max_erase_operation_per_task) {
+                if (currentEraseOpCnt >= max_erase_operation_per_cycle) {
                     break;
                 }
             }
@@ -274,7 +277,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 // log
                 LOG.info("erase table[{}-{}] in memory finished", tableId, table.getName());
                 currentEraseOpCnt++;
-                if (currentEraseOpCnt >= Config.catalog_max_erase_operation_per_task) {
+                if (currentEraseOpCnt >= max_erase_operation_per_cycle) {
                     break;
                 }
             }
@@ -338,7 +341,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 Catalog.getCurrentCatalog().getEditLog().logErasePartition(partitionId);
                 LOG.info("erase partition[{}-{}] finished", partitionId, partition.getName());
                 currentEraseOpCnt++;
-                if (currentEraseOpCnt >= Config.catalog_max_erase_operation_per_task) {
+                if (currentEraseOpCnt >= max_erase_operation_per_cycle) {
                     break;
                 }
             }
