@@ -100,6 +100,8 @@ Status HashJoiner::prepare(RuntimeState* state) {
 }
 
 void HashJoiner::_init_hash_table_param(HashTableParam* param) {
+    // Pipeline query engine always needn't create tuple columns
+    param->need_create_tuple_columns = false;
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
