@@ -278,6 +278,7 @@ struct TAggregateFunction {
   8: optional string get_value_fn_symbol
   9: optional string remove_fn_symbol
   10: optional bool is_analytic_only_fn = false
+  11: optional string symbol
 }
 
 struct TTableFunction {

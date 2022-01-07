@@ -237,7 +237,7 @@ public class ScalarFunction extends Function {
     }
 
     public String getSymbolName() {
-        return symbolName;
+        return symbolName == null ? Strings.EMPTY : symbolName;
     }
 
     public String getPrepareFnSymbol() {
@@ -264,18 +264,15 @@ public class ScalarFunction extends Function {
     @Override
     public TFunction toThrift() {
         TFunction fn = super.toThrift();
-        if (symbolName == null) {
-            // For vector engine, the symbol field is required
-            symbolName = Strings.EMPTY;
-        }
-        fn.setScalar_fn(new TScalarFunction());
-        fn.getScalar_fn().setSymbol(symbolName);
+        TScalarFunction scalarFunction = new TScalarFunction();
+        scalarFunction.setSymbol(getSymbolName());
         if (prepareFnSymbol != null) {
-            fn.getScalar_fn().setPrepare_fn_symbol(prepareFnSymbol);
+            scalarFunction.setPrepare_fn_symbol(prepareFnSymbol);
         }
         if (closeFnSymbol != null) {
-            fn.getScalar_fn().setClose_fn_symbol(closeFnSymbol);
+            scalarFunction.setClose_fn_symbol(closeFnSymbol);
         }
+        fn.setScalar_fn(scalarFunction);
         return fn;
     }
 
@@ -307,7 +304,7 @@ public class ScalarFunction extends Function {
         Map<String, String> properties = Maps.newHashMap();
         properties.put(CreateFunctionStmt.FILE_KEY, getLocation() == null ? "" : getLocation().toString());
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
-        properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName);
+        properties.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
         return new Gson().toJson(properties);
     }
