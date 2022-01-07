@@ -676,12 +676,10 @@ void HdfsScanNode::_init_counter(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
-    _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
     _io_timer = ADD_TIMER(_runtime_profile, "IoTime");
     _io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
-    _bytes_read_from_disk_counter = ADD_COUNTER(_runtime_profile, "BytesReadFromDisk", TUnit::BYTES);
     _column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _level_decode_timer = ADD_TIMER(_runtime_profile, "LevelDecodeTime");
     _value_decode_timer = ADD_TIMER(_runtime_profile, "ValueDecodeTime");
