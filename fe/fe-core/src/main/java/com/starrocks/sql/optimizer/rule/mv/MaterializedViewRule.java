@@ -729,7 +729,7 @@ public class MaterializedViewRule extends Rule {
         // overflow, but x2(100) isn't overflow
         if (queryFnChild0 instanceof CastOperator && (queryFnChild0.getType().isDecimalOfAnyVersion() ||
                 queryFnChild0.getType().isFloatingPointType() || (queryFnChild0.getChild(0).getType().isNumericType() &&
-                queryFnChild0.getType().getSlotSize() >= queryFnChild0.getChild(0).getType().getSlotSize()))) {
+                queryFnChild0.getType().getTypeSize() >= queryFnChild0.getChild(0).getType().getTypeSize()))) {
             queryFnChild0 = queryFnChild0.getChild(0);
         }
         ScalarOperator mvColumnFnChild0 = mvColumnFn.getChild(0);
