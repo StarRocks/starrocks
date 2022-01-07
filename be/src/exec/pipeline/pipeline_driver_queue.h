@@ -82,7 +82,7 @@ private:
 
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
 
-    size_t _size;
+    size_t _size = 0;
 };
 
 // DriverQueueWithWorkGroup contains two levels of queues.
