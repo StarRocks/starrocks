@@ -73,6 +73,10 @@ public:
         wg = std::make_shared<WorkGroup>("wg#2", 2, 2, 1, 1, WorkGroupType::WG_NORMAL);
         wg->init();
         WorkGroupManager::instance()->add_workgroup(wg);
+
+        wg = std::make_shared<WorkGroup>("wg#3", 3, 4, 1, 1, WorkGroupType::WG_NORMAL);
+        wg->init();
+        WorkGroupManager::instance()->add_workgroup(wg);
     }
 } _;
 } // namespace
