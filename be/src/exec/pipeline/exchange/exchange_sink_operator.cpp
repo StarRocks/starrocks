@@ -285,9 +285,21 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
     if (_is_pipeline_level_shuffle) {
         max_shuffle_id = _dest_dop;
     }
-    for (const auto& destination : destinations) {
-        const auto& fragment_instance_id = destination.fragment_instance_id;
-        for (auto shuffle_id = 0; shuffle_id < max_shuffle_id; ++shuffle_id) {
+
+    // Pipeline level shuffle shouldn't change distribution of be level shuffle
+    // because global runtime filter depend on this distribution
+    // For example
+    // a. without pipeline shuffle
+    //      0,3,... -> destination1
+    //      1,4,... -> destination2
+    //      2,5,... -> destination3
+    // b. with pipeline shuffle
+    //      0,3,... -> destination1
+    //      1,4,... -> destination2
+    //      2,5,... -> destination3
+    for (auto shuffle_id = 0; shuffle_id < max_shuffle_id; ++shuffle_id) {
+        for (const auto& destination : destinations) {
+            const auto& fragment_instance_id = destination.fragment_instance_id;
             if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
                 _channels.emplace_back(pseudo_channel.value());
             } else {
