@@ -310,8 +310,13 @@ struct TExecPlanFragmentParams {
 
   50: optional bool is_pipeline
   51: optional i32 pipeline_dop
+<<<<<<< HEAD
   52: optional map<Types.TPlanNodeId, i32> per_scan_node_dop
   53: optional TWorkGroup workgroup
+=======
+
+  52: optional i32 workgroup_id
+>>>>>>> 788bd208 (add and use DriverQueueWithWorkGroup)
 }
 
 struct TExecPlanFragmentResult {

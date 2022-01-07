@@ -17,9 +17,11 @@
 #include "exec/pipeline/source_operator.h"
 #include "util/phmap/phmap.h"
 namespace starrocks {
+
 namespace workgroup {
 class WorkGroup;
 }
+
 namespace pipeline {
 
 class PipelineDriver;
@@ -74,9 +76,7 @@ static inline std::string ds_to_string(DriverState ds) {
 // for schedule.
 class DriverAcct {
 public:
-    DriverAcct()
-
-    {}
+    DriverAcct() {}
     //TODO:
     // get_level return a non-negative value that is a hint used by DriverQueue to choose
     // the target internal queue for put_back.
@@ -91,7 +91,7 @@ public:
     }
     void update_last_chunks_moved(int64_t chunks_moved) {
         this->last_chunks_moved = chunks_moved;
-        this->accumulated_chunk_moved += chunks_moved;
+        this->accumulated_chunks_moved += chunks_moved;
         this->schedule_effective_times += (chunks_moved > 0) ? 1 : 0;
     }
     void update_accumulated_rows_moved(int64_t rows_moved) { this->accumulated_rows_moved += rows_moved; }
@@ -102,14 +102,14 @@ public:
     int64_t get_schedule_effective_times() { return schedule_effective_times; }
 
     int64_t get_rows_per_chunk() {
-        if (accumulated_chunk_moved > 0) {
-            return accumulated_rows_moved / accumulated_chunk_moved;
+        if (accumulated_chunks_moved > 0) {
+            return accumulated_rows_moved / accumulated_chunks_moved;
         } else {
             return 0;
         }
     }
 
-    int64_t get_accumulated_chunk_moved() { return accumulated_chunk_moved; }
+    int64_t get_accumulated_chunks_moved() { return accumulated_chunks_moved; }
 
 private:
     int64_t schedule_times{0};
@@ -117,7 +117,7 @@ private:
     int64_t last_time_spent{0};
     int64_t last_chunks_moved{0};
     int64_t accumulated_time_spent{0};
-    int64_t accumulated_chunk_moved{0};
+    int64_t accumulated_chunks_moved{0};
     int64_t accumulated_rows_moved{0};
 };
 
@@ -322,8 +322,8 @@ public:
 
     std::string to_readable_string() const;
 
-    starrocks::workgroup::WorkGroup* workgroup();
-    void set_workgroup(starrocks::workgroup::WorkGroup* wg);
+    workgroup::WorkGroup* workgroup();
+    void set_workgroup(workgroup::WorkGroup* wg);
 
     size_t get_dispatch_queue_index() const { return _dispatch_queue_index; }
     void set_dispatch_queue_index(size_t dispatch_queue_index) { _dispatch_queue_index = dispatch_queue_index; }
@@ -336,6 +336,13 @@ private:
     void _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
     void _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
+
+    void _yield(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+        driver_acct().increment_schedule_times();
+        driver_acct().update_last_chunks_moved(total_chunks_moved);
+        driver_acct().update_accumulated_rows_moved(total_rows_moved);
+        driver_acct().update_last_time_spent(time_spent);
+    }
 
     RuntimeState* _runtime_state = nullptr;
     void _update_overhead_timer();
@@ -389,7 +396,7 @@ private:
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
     RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
-    RuntimeProfile::Counter* _schedule_accumulated_chunk_moved = nullptr;
+    RuntimeProfile::Counter* _schedule_accumulated_chunks_moved = nullptr;
 
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;

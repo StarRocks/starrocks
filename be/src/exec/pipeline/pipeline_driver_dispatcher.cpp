@@ -7,8 +7,9 @@
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
+
 GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool)
-        : _driver_queue(new QuerySharedDriverQueue()),
+        : _driver_queue(std::make_unique<DriverQueueWithWorkGroup>()),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()) {}
@@ -106,7 +107,7 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                this->_driver_queue->put_back(driver);
+                this->_driver_queue->put_back(driver, true);
                 break;
             }
             case FINISH:
@@ -142,7 +143,7 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
             driver->set_driver_state(DriverState::INPUT_EMPTY);
             this->_blocked_driver_poller->add_blocked_driver(driver);
         } else {
-            this->_driver_queue->put_back(driver);
+            this->_driver_queue->put_back(driver, false);
         }
     }
 }
@@ -213,4 +214,5 @@ void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ct
         pipeline_profile->add_info_string("ContainsAllPipelineDrivers", "false");
     }
 }
+
 } // namespace starrocks::pipeline

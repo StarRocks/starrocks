@@ -6,14 +6,15 @@
 #include "runtime/exec_env.h"
 namespace starrocks {
 namespace workgroup {
+
 WorkGroup::WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t memory_limit, size_t concurrency,
                      WorkGroupType type)
         : _name(name),
           _id(id),
+          _type(type),
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
-          _concurrency(concurrency),
-          _type(type) {}
+          _concurrency(concurrency) {}
 
 WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.cpu_limit) {
@@ -65,7 +66,6 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     std::lock_guard<std::mutex> lock(_mutex);
     if (!_workgroups.count(wg->id())) {
         _workgroups[wg->id()] = wg;
-        _wg_cpu_queue.add(wg);
         _wg_io_queue.add(wg);
         return wg;
     } else {
@@ -84,21 +84,12 @@ void WorkGroupManager::remove_workgroup(int wg_id) {
     if (_workgroups.count(wg_id)) {
         auto wg = std::move(_workgroups[wg_id]);
         _workgroups.erase(wg_id);
-        _wg_cpu_queue.remove(wg);
         _wg_io_queue.remove(wg);
     }
 }
 
-WorkGroupPtr WorkGroupManager::pick_next_wg_for_cpu() {
-    return _wg_cpu_queue.pick_next();
-}
-
 WorkGroupPtr WorkGroupManager::pick_next_wg_for_io() {
     return _wg_io_queue.pick_next();
-}
-
-WorkGroupQueue& WorkGroupManager::get_cpu_queue() {
-    return _wg_cpu_queue;
 }
 
 WorkGroupQueue& WorkGroupManager::get_io_queue() {
