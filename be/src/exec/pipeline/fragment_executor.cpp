@@ -16,6 +16,7 @@
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/scan_node.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
@@ -155,6 +156,15 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
     }
 
+    int wg_id = 0;
+    if (request.__isset.workgroup_id && request.workgroup_id > 0) {
+        wg_id = request.workgroup_id;
+    }
+    auto workgroup = workgroup::WorkGroupManager::instance()->get_workgroup(wg_id);
+    if (workgroup == nullptr) {
+        return Status::InvalidArgument("workgroup_id doesn't exist");
+    }
+
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
@@ -238,6 +248,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         runtime_state->runtime_profile()->reverse_childs();
     }
     _fragment_ctx->set_num_root_drivers(num_root_drivers);
+    for (auto driver : drivers) {
+        driver->set_workgroup(workgroup.get());
+    }
     _fragment_ctx->set_drivers(std::move(drivers));
 
     _query_ctx->fragment_mgr()->register_ctx(fragment_instance_id, std::move(fragment_ctx));

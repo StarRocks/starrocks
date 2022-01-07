@@ -1995,6 +1995,7 @@ public class Coordinator {
                         params.setIs_pipeline(
                                 fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
                         params.setPipeline_dop(fragment.getPipelineDop());
+                        params.setWorkgroup_id(sessionVariable.getWorkGroupID());
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {

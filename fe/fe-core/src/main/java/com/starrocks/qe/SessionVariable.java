@@ -117,6 +117,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
+    public static final String WORKGROUP_ID = "workgroup_id";
+
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
 
@@ -170,6 +172,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
+
+    @VariableMgr.VarAttr(name = WORKGROUP_ID)
+    private int workGroupID = 0;
 
     // max memory used on every backend.
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
@@ -715,6 +720,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
+    }
+
+    public int getWorkGroupID() {
+        return workGroupID;
+    }
+
+    public void setWorkGroupID(int workGroupID) {
+        this.workGroupID = workGroupID;
     }
 
     public boolean isEnableReplicationJoin() {

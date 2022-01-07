@@ -6,14 +6,15 @@
 
 namespace starrocks {
 namespace workgroup {
+
 WorkGroup::WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t memory_limit, size_t concurrency,
                      WorkGroupType type)
         : _name(name),
           _id(id),
+          _type(type),
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
-          _concurrency(concurrency),
-          _type(type) {}
+          _concurrency(concurrency) {}
 
 void WorkGroup::init() {
     _mem_tracker = std::make_shared<starrocks::MemTracker>(_memory_limit, _name,
@@ -28,7 +29,6 @@ void WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     std::lock_guard<std::mutex> lock(_mutex);
     if (!_workgroups.count(wg->id())) {
         _workgroups[wg->id()] = wg;
-        _wg_cpu_queue.add(wg);
         _wg_io_queue.add(wg);
     }
 }
@@ -38,21 +38,20 @@ void WorkGroupManager::remove_workgroup(int wg_id) {
     if (_workgroups.count(wg_id)) {
         auto wg = std::move(_workgroups[wg_id]);
         _workgroups.erase(wg_id);
-        _wg_cpu_queue.remove(wg);
         _wg_io_queue.remove(wg);
     }
 }
 
-WorkGroupPtr WorkGroupManager::pick_next_wg_for_cpu() {
-    return _wg_cpu_queue.pick_next();
+WorkGroupPtr WorkGroupManager::get_workgroup(int wg_id) {
+    auto it = _workgroups.find(wg_id);
+    if (it == _workgroups.end()) {
+        return nullptr;
+    }
+    return it->second;
 }
 
 WorkGroupPtr WorkGroupManager::pick_next_wg_for_io() {
     return _wg_io_queue.pick_next();
-}
-
-WorkGroupQueue& WorkGroupManager::get_cpu_queue() {
-    return _wg_cpu_queue;
 }
 
 WorkGroupQueue& WorkGroupManager::get_io_queue() {
@@ -63,9 +62,17 @@ namespace {
 class DefaultWorkGroupInitialization {
 public:
     DefaultWorkGroupInitialization() {
-        auto default_wg = std::make_shared<WorkGroup>("default_wg", 1, 10, 10, 10, WorkGroupType::WG_DEFAULT);
+        auto default_wg = std::make_shared<WorkGroup>("default_wg", 0, 1, 1, 1, WorkGroupType::WG_DEFAULT);
         default_wg->init();
         WorkGroupManager::instance()->add_workgroup(default_wg);
+
+        auto wg = std::make_shared<WorkGroup>("wg#1", 1, 1, 1, 1, WorkGroupType::WG_NORMAL);
+        wg->init();
+        WorkGroupManager::instance()->add_workgroup(wg);
+
+        wg = std::make_shared<WorkGroup>("wg#2", 2, 2, 1, 1, WorkGroupType::WG_NORMAL);
+        wg->init();
+        WorkGroupManager::instance()->add_workgroup(wg);
     }
 } _;
 } // namespace

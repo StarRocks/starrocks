@@ -295,6 +295,8 @@ struct TExecPlanFragmentParams {
 
   50: optional bool is_pipeline
   51: optional i32 pipeline_dop
+
+  52: optional i32 workgroup_id
 }
 
 struct TExecPlanFragmentResult {

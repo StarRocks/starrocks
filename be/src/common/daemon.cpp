@@ -28,6 +28,7 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
@@ -133,6 +134,8 @@ void calculate_metrics(void* arg_this) {
     Daemon* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
         StarRocksMetrics::instance()->metrics()->trigger_hook();
+
+        workgroup::WorkGroupManager::instance()->log_cpu();
 
         if (last_ts == -1L) {
             last_ts = MonotonicSeconds();
