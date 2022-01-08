@@ -868,6 +868,11 @@ public class Coordinator {
             // hash-partitioned
             // output at the moment
 
+            if (sink instanceof DataStreamSink) {
+                DataStreamSink dataStreamSink = (DataStreamSink) sink;
+                dataStreamSink.setExchDop(destParams.fragment.getPipelineDop());
+            }
+
             PlanNodeId exchId = sink.getExchNodeId();
             // we might have multiple fragments sending to this exchange node
             // (distributed MERGE), which is why we need to add up the #senders

@@ -426,9 +426,6 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     int32_t shuffle_id = request.has_shuffle_id() ? request.shuffle_id() : -1;
-    if (_short_circuit_shuffle_ids.find(shuffle_id) != _short_circuit_shuffle_ids.end()) {
-        return Status::OK();
-    }
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -464,6 +461,10 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         // _is_cancelled may be modified after checking _is_cancelled above,
         // because lock is release temporarily when deserializing chunk.
         if (_is_cancelled) {
+            return Status::OK();
+        }
+
+        if (_short_circuit_shuffle_ids.find(shuffle_id) != _short_circuit_shuffle_ids.end()) {
             return Status::OK();
         }
 
@@ -534,9 +535,6 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
     int32_t shuffle_id = request.has_shuffle_id() ? request.shuffle_id() : -1;
-    if (_short_circuit_shuffle_ids.find(shuffle_id) != _short_circuit_shuffle_ids.end()) {
-        return Status::OK();
-    }
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -575,6 +573,10 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
         // _is_cancelled may be modified after checking _is_cancelled above,
         // because lock is release temporarily when deserializing chunk.
         if (_is_cancelled) {
+            return Status::OK();
+        }
+
+        if (_short_circuit_shuffle_ids.find(shuffle_id) != _short_circuit_shuffle_ids.end()) {
             return Status::OK();
         }
 

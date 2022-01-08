@@ -44,7 +44,7 @@ public:
 
     ~ExchangeSourceOperatorFactory() override = default;
 
-    const TExchangeNode texchange_node() { return _texchange_node; }
+    const TExchangeNode& texchange_node() { return _texchange_node; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         ++_stream_recvr_cnt;
