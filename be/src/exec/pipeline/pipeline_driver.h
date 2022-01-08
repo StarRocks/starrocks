@@ -379,6 +379,7 @@ private:
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
     workgroup::WorkGroup* _workgroup = nullptr;
+    // The index of QuerySharedDriverQueue._queues which this driver belongs to.
     size_t _dispatch_queue_index = 0;
 
     // metrics

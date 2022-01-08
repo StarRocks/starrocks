@@ -8,21 +8,13 @@
 namespace starrocks::pipeline {
 
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver, bool from_dispatcher) {
-    int level = driver->driver_acct().get_level();
-    _queues[level % QUEUE_SIZE].queue.emplace(driver);
-    ++_size;
+    _put_back(driver, from_dispatcher);
 }
 
 void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers, bool from_dispatcher) {
-    std::vector<int> levels(drivers.size());
-    for (int i = 0; i < drivers.size(); i++) {
-        levels[i] = drivers[i]->driver_acct().get_level();
+    for (auto driver : drivers) {
+        _put_back(driver, from_dispatcher);
     }
-
-    for (int i = 0; i < drivers.size(); i++) {
-        _queues[levels[i] % QUEUE_SIZE].queue.emplace(drivers[i]);
-    }
-    _size += drivers.size();
 }
 
 StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
@@ -48,7 +40,6 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
     DCHECK(queue_idx >= 0);
 
     driver_ptr = _queues[queue_idx].queue.front();
-    driver_ptr->set_dispatch_queue_index(queue_idx);
     _queues[queue_idx].queue.pop();
 
     --_size;
@@ -58,6 +49,13 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
 
 void QuerySharedDriverQueue::yield_driver(const DriverRawPtr driver) {
     _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
+}
+
+void QuerySharedDriverQueue::_put_back(const DriverRawPtr driver, bool from_dispatcher) {
+    int level = driver->driver_acct().get_level();
+    driver->set_dispatch_queue_index(level);
+    _queues[level % QUEUE_SIZE].queue.emplace(driver);
+    ++_size;
 }
 
 void DriverQueueWithWorkGroup::close() {
