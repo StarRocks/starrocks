@@ -338,7 +338,7 @@ private:
     void _close_operators(RuntimeState* runtime_state);
 
     // Update metrics when the driver yields.
-    void _update_metrics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+    void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
         driver_acct().increment_schedule_times();
         driver_acct().update_last_chunks_moved(total_chunks_moved);
         driver_acct().update_accumulated_rows_moved(total_rows_moved);
