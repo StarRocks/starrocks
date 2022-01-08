@@ -25,6 +25,7 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.ClientPool;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.thrift.FrontendService;
@@ -87,11 +88,19 @@ public class MasterOpExecutor {
         }
     }
 
-    private void afterForward() throws Exception {
+    private void afterForward() throws DdlException {
         if (parsedStmt != null) {
             if (parsedStmt instanceof SetStmt) {
                 SetExecutor executor = new SetExecutor(ctx, (SetStmt) parsedStmt);
-                executor.execute(true);
+                try {
+                    executor.setSessionVars();
+                } catch (DdlException e) {
+                    LOG.warn("set session variables after forward failed", e);
+                    throw new DdlException("Global level variables are set successfully, " +
+                            "but session level variables are set failed with error: " + e.getMessage() + ". " +
+                            "Please check if the version of fe currently connected is the same as the version of master, " +
+                            "or re-establish the connection and you will see the new variables");
+                }
             }
         }
     }

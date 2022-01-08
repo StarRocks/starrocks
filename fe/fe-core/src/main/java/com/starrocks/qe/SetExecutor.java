@@ -66,17 +66,18 @@ public class SetExecutor {
 
     /**
      * SetExecutor will set the session variables and password
-     * @param onlySessionVar true means only set session variables
      * @throws DdlException
      */
-    public void execute(boolean onlySessionVar) throws DdlException {
+    public void execute() throws DdlException {
         for (SetVar var : stmt.getSetVars()) {
-            if (onlySessionVar) {
-                if (isSessionVar(var)) {
-                    VariableMgr.setVar(ctx.getSessionVariable(), var, true);
-                }
-            } else {
-                setVariablesOfAllType(var);
+            setVariablesOfAllType(var);
+        }
+    }
+
+    public void setSessionVars() throws DdlException {
+        for (SetVar var : stmt.getSetVars()) {
+            if (isSessionVar(var)) {
+                VariableMgr.setVar(ctx.getSessionVariable(), var, true);
             }
         }
     }

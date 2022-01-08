@@ -92,6 +92,6 @@ public class SetExecutorTest {
         stmt.analyze(analyzer);
         SetExecutor executor = new SetExecutor(ctx, stmt);
 
-        executor.execute(false);
+        executor.execute();
     }
 }
