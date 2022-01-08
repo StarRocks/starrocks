@@ -35,7 +35,7 @@ public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
-    private static final String DEFAULT_CREATE_TABLE_TEMPLATE = ""
+    public static final String DEFAULT_CREATE_TABLE_TEMPLATE = ""
             + "CREATE TABLE IF NOT EXISTS `table_statistic_v1` (\n"
             + "  `table_id` bigint NOT NULL,\n"
             + "  `column_name` varchar(65530) NOT NULL,\n"
