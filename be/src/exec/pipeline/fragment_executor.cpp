@@ -16,6 +16,7 @@
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/scan_node.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
@@ -29,6 +30,10 @@
 #include "util/uid_util.h"
 
 namespace starrocks::pipeline {
+
+using WorkGroupManager = starrocks::workgroup::WorkGroupManager;
+using WorkGroup = starrocks::workgroup::WorkGroup;
+using WorkGroupPtr = starrocks::workgroup::WorkGroupPtr;
 
 static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelinePtr& pipeline) {
     runtime_state->runtime_profile()->add_child(pipeline->runtime_profile(), true, nullptr);
@@ -104,11 +109,20 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
+    WorkGroupPtr wg;
+    if (request.__isset.workgroup && request.workgroup.id != WorkGroup::DEFAULT_WG_ID) {
+        wg = std::make_shared<WorkGroup>(request.workgroup);
+        wg = WorkGroupManager::instance()->add_workgroup(wg);
+    } else {
+        wg = WorkGroupManager::instance()->get_default_workgroup();
+    }
+    DCHECK(wg != nullptr);
 
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->init_mem_trackers(query_id);
+    runtime_state->set_chunk_size(query_options.batch_size);
+    runtime_state->init_mem_trackers(query_id, wg->mem_tracker());
     runtime_state->set_be_number(backend_num);
 
     // RuntimeFilterWorker::open_query is idempotent
@@ -240,7 +254,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_drivers(std::move(drivers));
 
     _query_ctx->fragment_mgr()->register_ctx(fragment_instance_id, std::move(fragment_ctx));
-
+    for (auto& driver : _fragment_ctx->drivers()) {
+        driver->set_workgroup(wg.get());
+    }
     return Status::OK();
 }
 

@@ -163,14 +163,18 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     return Status::OK();
 }
 
-void RuntimeState::init_mem_trackers(const TUniqueId& query_id) {
+void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
     bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
     int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;
     auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
     mem_tracker_counter->set(bytes_limit);
 
-    _query_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, runtime_profile()->name(),
-                                                      _exec_env->query_pool_mem_tracker());
+    if (parent == nullptr) {
+        parent = _exec_env->query_pool_mem_tracker();
+    }
+
+    _query_mem_tracker =
+            std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, runtime_profile()->name(), parent);
     _instance_mem_tracker =
             std::make_shared<MemTracker>(_profile.get(), -1, runtime_profile()->name(), _query_mem_tracker.get());
     _instance_mem_pool = std::make_unique<MemPool>();
