@@ -134,7 +134,11 @@ static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
-                        adapter->report_error_message("integer overflows", std::to_string(value));
+                        auto slot = adapter->get_current_slot();
+                        std::string error_msg = strings::Substitute(
+                                "Value '$0' is out of range. The type of '$1' is $2'", std::to_string(value),
+                                slot->col_name(), slot->type().debug_string());
+                        adapter->report_error_message(error_msg);
                     }
                 }
             }
@@ -183,7 +187,11 @@ static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, Colum
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
-                        adapter->report_error_message("integer overflows", std::to_string(value));
+                        auto slot = adapter->get_current_slot();
+                        std::string error_msg = strings::Substitute(
+                                "Value '$0' is out of range. The type of '$1' is $2'", std::to_string(value),
+                                slot->col_name(), slot->type().debug_string());
+                        adapter->report_error_message(error_msg);
                     }
                 }
             }
@@ -578,9 +586,11 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
                 if (!reported) {
                     reported = true;
                     std::string raw_data(data->data[i], data->length[i]);
-                    std::string reason = strings::Substitute("string length $0 exceeds max length $1", data->length[i],
-                                                             type_desc.len);
-                    adapter->report_error_message(reason, raw_data);
+                    auto slot = adapter->get_current_slot();
+                    std::string error_msg =
+                            strings::Substitute("String '$0' is too long. The type of '$1' is $2'", raw_data,
+                                                slot->col_name(), slot->type().debug_string());
+                    adapter->report_error_message(error_msg);
                 }
             }
         }
@@ -668,9 +678,11 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
                     if (!reported) {
                         reported = true;
                         std::string raw_data(data->data[i], data->length[i]);
-                        std::string reason = strings::Substitute("string length $0 exceeds max length $1",
-                                                                 data->length[i], type_desc.len);
-                        adapter->report_error_message(reason, raw_data);
+                        auto slot = adapter->get_current_slot();
+                        std::string error_msg =
+                                strings::Substitute("String '$0' is too long. The type of '$1' is $2'", raw_data,
+                                                    slot->col_name(), slot->type().debug_string());
+                        adapter->report_error_message(error_msg);
                     }
                 }
             }
@@ -1325,7 +1337,9 @@ Status OrcScannerAdapter::fill_chunk(ChunkPtr* chunk) {
         orc::ColumnVectorBatch* cvb = batch_vec[_position_in_orc[column_pos]];
         if (!slot_desc->is_nullable() && cvb->hasNulls) {
             if (_broker_load_mode) {
-                report_error_message("not-null column has NULL values", "NULL");
+                std::string error_msg =
+                        strings::Substitute("NULL value in non-nullable column '$0'", _current_slot->col_name());
+                report_error_message(error_msg);
                 bool all_zero = false;
                 ColumnHelper::merge_two_filters(_broker_load_filter.get(),
                                                 reinterpret_cast<uint8_t*>(cvb->notNull.data()), &all_zero);
@@ -2051,14 +2065,11 @@ Status OrcScannerAdapter::set_timezone(const std::string& tz) {
 }
 
 static const int MAX_ERROR_MESSAGE_COUNTER = 100;
-void OrcScannerAdapter::report_error_message(const std::string& reason, const std::string& raw_data) {
+void OrcScannerAdapter::report_error_message(const std::string& error_msg) {
     if (_state == nullptr) return;
     if (_error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     _error_message_counter += 1;
-    std::string error_msg =
-            strings::Substitute("file = $0, column = $1, raw data = $2", _current_file_name,
-                                (_current_slot == nullptr) ? "null" : _current_slot->col_name(), raw_data);
-    _state->append_error_msg_to_file(error_msg, reason);
+    _state->append_error_msg_to_file("", error_msg);
 }
 
 int OrcScannerAdapter::get_column_id_by_name(const std::string& name) const {

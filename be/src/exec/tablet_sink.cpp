@@ -690,10 +690,9 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         _validate_select_idx.resize(selected_size);
 
         if (num_rows_after_validate - _validate_select_idx.size() > 0) {
-            size_t filtered_size = num_rows_after_validate - _validate_select_idx.size();
             std::string debug_row = chunk->debug_row(invalid_row_index);
-            state->append_error_msg_to_file(
-                    debug_row, strings::Substitute("there are $0 rows couldn't find a partition", filtered_size));
+            state->append_error_msg_to_file(debug_row,
+                                            "The row is out of partition ranges. Please add a new partition.");
         }
 
         _number_filtered_rows += (num_rows - _validate_select_idx.size());
@@ -848,27 +847,27 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
 }
 
 void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc) {
-    std::stringstream ss;
-    ss << "the length of input is too long than schema. "
-       << "column_name: " << desc->col_name() << "; "
-       << "input_str: [" << str.to_string() << "] "
-       << "schema length: " << desc->type().len << "; "
-       << "actual length: " << str.size << "; ";
+    std::string error_str = str.to_string();
+    if (error_str.length() > 100) {
+        error_str = error_str.substr(0, 100);
+        error_str.append("...");
+    }
+    std::string error_msg = strings::Substitute("String '$0'(length=$1) is too long. The max length of '$2' is $3",
+                                                error_str, str.size, desc->col_name(), desc->type().len);
 #if BE_TEST
-    LOG(INFO) << ss.str();
+    LOG(INFO) << error_msg;
 #else
-    state->append_error_msg_to_file("", ss.str());
+    state->append_error_msg_to_file("", error_msg);
 #endif
 }
 
 void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc) {
-    std::stringstream ss;
-    ss << "decimal value is not valid for definition, column=" << desc->col_name() << ", value=" << decimal.to_string()
-       << ", precision=" << desc->type().precision << ", scale=" << desc->type().scale;
+    std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
+                                                decimal.to_string(), desc->col_name(), desc->type().debug_string());
 #if BE_TEST
-    LOG(INFO) << ss.str();
+    LOG(INFO) << error_msg;
 #else
-    state->append_error_msg_to_file("", ss.str());
+    state->append_error_msg_to_file("", error_msg);
 #endif
 }
 
@@ -876,12 +875,12 @@ template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
     std::stringstream ss;
     auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
-    ss << "decimal value is not valid for definition, column=" << desc->col_name() << ", value=" << decimal_str
-       << ", precision=" << desc->type().precision << ", scale=" << desc->type().scale;
+    std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
+                                                desc->col_name(), desc->type().debug_string());
 #if BE_TEST
-    LOG(INFO) << ss.str();
+    LOG(INFO) << error_msg;
 #else
-    state->append_error_msg_to_file("", ss.str());
+    state->append_error_msg_to_file("", error_msg);
 #endif
 }
 
@@ -939,7 +938,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                     if (nulls[j]) {
                         _validate_selection[j] = VALID_SEL_FAILED;
                         std::stringstream ss;
-                        ss << "null value for not null column, column=" << desc->col_name();
+                        ss << "NULL value in non-nullable column '" << desc->col_name() << "'";
 #if BE_TEST
                         LOG(INFO) << ss.str();
 #else
