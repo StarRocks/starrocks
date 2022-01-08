@@ -256,8 +256,8 @@ enum TWorkGroupType {
 }
 
 struct TWorkGroup {
-    1: required i32 id
-    2: required string name
+    1: optional i32 id
+    2: optional string name
     3: optional i64 cpu_limit
     4: optional i64 memory_limit
     5: optional i64 concurrency

@@ -1996,6 +1996,7 @@ public class Coordinator {
                         params.setIs_pipeline(
                                 fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
                         params.setPipeline_dop(fragment.getPipelineDop());
+                        // TODO (by satanson): just for verification of resource isolation.
                         TWorkGroup wg = new TWorkGroup();
                         wg.name = "";
                         wg.id = ConnectContext.get().getSessionVariable().getWorkgroupId();
