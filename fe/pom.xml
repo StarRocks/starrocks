@@ -497,7 +497,7 @@ under the License.
             <dependency>
                 <groupId>com.github.oshi</groupId>
                 <artifactId>oshi-core</artifactId>
-                <version>4.0.0</version>
+                <version>4.9.5</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.jboss.xnio/xnio-nio -->
