@@ -110,7 +110,6 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_set(con
     for (const auto& s : strings) {
         CppType v;
         auto st = type_info->from_string(&v, s);
-        CHECK_EQ(OLAP_SUCCESS, st);
         result.push_back(v);
     }
     return result;
@@ -140,7 +139,6 @@ inline ItemHashSet<typename CppTypeTraits<field_type>::CppType> strings_to_hashs
     for (const auto& s : strings) {
         CppType v;
         auto st = type_info->from_string(&v, s);
-        CHECK_EQ(OLAP_SUCCESS, st);
         result.emplace(v);
     }
     return result;

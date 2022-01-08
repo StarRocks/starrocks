@@ -191,7 +191,7 @@ public:
     void shallow_copy_content(char* dst, const char* src) const { _type_info->shallow_copy(dst, src); }
 
     //convert and copy field from src to desc
-    OLAPStatus convert_from(char* dest, const char* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const {
+    Status convert_from(char* dest, const char* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const {
         return _type_info->convert_from(dest, src, src_type, mem_pool);
     }
 
@@ -201,7 +201,7 @@ public:
 
     // used by init scan key stored in string format
     // value_string should end with '\0'
-    OLAPStatus from_string(char* buf, const std::string& value_string) const {
+    Status from_string(char* buf, const std::string& value_string) const {
         return _type_info->from_string(buf, value_string);
     }
 

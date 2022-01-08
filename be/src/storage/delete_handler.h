@@ -41,12 +41,11 @@ public:
     ~DeleteConditionHandler() = default;
 
     // generated DeletePredicatePB by TCondition
-    OLAPStatus generate_delete_predicate(const TabletSchema& schema, const std::vector<TCondition>& conditions,
-                                         DeletePredicatePB* del_pred);
+    Status generate_delete_predicate(const TabletSchema& schema, const std::vector<TCondition>& conditions,
+                                     DeletePredicatePB* del_pred);
 
     // Check if cond is a valid delete condition
-    // If ok return OLAP_SUCCESS, otherwise return OLAP_ERR_DELETE_INVALID_CONDITION
-    OLAPStatus check_condition_valid(const TabletSchema& tablet_schema, const TCondition& cond);
+    Status check_condition_valid(const TabletSchema& tablet_schema, const TCondition& cond);
 
     // construct sub condition from TCondition
     std::string construct_sub_predicates(const TCondition& condition);
@@ -66,7 +65,7 @@ private:
 
 // Used to check if one row is deleted
 // 1. Initialize with a version
-//    OLAPStatus res;
+//    Status res;
 //    DeleteHandler delete_handler;
 //    res = delete_handler.init(tablet, condition_version);
 // 2. check if data is deleted

@@ -40,7 +40,7 @@ public:
 
     ~EngineCloneTask() override = default;
 
-    OLAPStatus execute() override;
+    Status execute() override;
 
 private:
     Status _do_clone(Tablet* tablet);

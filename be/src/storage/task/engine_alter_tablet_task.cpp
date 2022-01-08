@@ -41,7 +41,7 @@ EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlt
     _mem_tracker = std::make_unique<MemTracker>(mem_limit, "schema change task", mem_tracker);
 }
 
-OLAPStatus EngineAlterTabletTask::execute() {
+Status EngineAlterTabletTask::execute() {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
@@ -56,11 +56,11 @@ OLAPStatus EngineAlterTabletTask::execute() {
                      << ", new_tablet_id=" << _alter_tablet_req.new_tablet_id
                      << ", new_schema_hash=" << _alter_tablet_req.new_schema_hash;
         StarRocksMetrics::instance()->create_rollup_requests_failed.increment(1);
-        return OLAP_ERR_OTHER_ERROR;
+        return res;
     }
 
     LOG(INFO) << "success to do alter task. base_tablet_id=" << _alter_tablet_req.base_tablet_id;
-    return OLAP_SUCCESS;
+    return Status::OK();
 } // execute
 
 } // namespace starrocks

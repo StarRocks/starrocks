@@ -167,7 +167,7 @@ public:
 
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?
-    virtual OLAPStatus remove() = 0;
+    virtual Status remove() = 0;
 
     // close to clear the resource owned by rowset
     // including: open files, indexes and so on
@@ -203,7 +203,7 @@ public:
     virtual Status link_files_to(const std::string& dir, RowsetId new_rowset_id) = 0;
 
     // copy all files to `dir`
-    virtual OLAPStatus copy_files_to(const std::string& dir) = 0;
+    virtual Status copy_files_to(const std::string& dir) = 0;
 
     // return whether `path` is one of the files in this rowset
     virtual bool check_path(const std::string& path) = 0;
@@ -256,7 +256,7 @@ protected:
     Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
 
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
-    virtual OLAPStatus init() = 0;
+    virtual Status init() = 0;
 
     // The actual implementation of load(). Guaranteed by to called exactly once.
     virtual Status do_load() = 0;

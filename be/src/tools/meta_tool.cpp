@@ -49,9 +49,7 @@
 #include "util/file_utils.h"
 
 using starrocks::DataDir;
-using starrocks::OLAP_SUCCESS;
 using starrocks::KVStore;
-using starrocks::OLAPStatus;
 using starrocks::Status;
 using starrocks::TabletMeta;
 using starrocks::TabletMetaManager;
@@ -251,9 +249,9 @@ Status init_data_dir(const std::string& dir, std::unique_ptr<DataDir>* ret, bool
     }
     starrocks::StorePath path;
     auto res = parse_root_path(root_path, &path);
-    if (res != OLAP_SUCCESS) {
+    if (!res.ok()) {
         std::cout << "parse root path failed:" << root_path << std::endl;
-        return Status::InternalError("parse root path failed");
+        return res;
     }
 
     std::unique_ptr<DataDir> p(new (std::nothrow) DataDir(path.path, path.storage_medium));

@@ -11,9 +11,7 @@ using strings::Substitute;
 template <FieldType TYPE>
 Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str) {
     typename CppTypeTraits<TYPE>::CppType value;
-    if (type_info->from_string(&value, str) != OLAP_SUCCESS) {
-        return Status::InvalidArgument(Substitute("Failed to convert $0 to type $1", str, TYPE));
-    }
+    RETURN_IF_ERROR(type_info->from_string(&value, str));
     dst->set(value);
     return Status::OK();
 }
@@ -23,10 +21,7 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
     switch (type) {
     case OLAP_FIELD_TYPE_BOOL: {
         bool v;
-        auto st = type_info->from_string(&v, str);
-        if (st != OLAP_SUCCESS) {
-            return Status::InvalidArgument(Substitute("Failed to convert $0 to Bool type", str));
-        }
+        RETURN_IF_ERROR(type_info->from_string(&v, str));
         dst->set_int8(v);
         return Status::OK();
     }

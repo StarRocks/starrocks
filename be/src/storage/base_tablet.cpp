@@ -31,17 +31,17 @@ BaseTablet::BaseTablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir
     _gen_tablet_path();
 }
 
-OLAPStatus BaseTablet::set_tablet_state(TabletState state) {
+Status BaseTablet::set_tablet_state(TabletState state) {
     if (_tablet_meta->tablet_state() == TABLET_SHUTDOWN && state != TABLET_SHUTDOWN) {
         LOG(WARNING) << "could not change tablet state from shutdown to " << state;
-        return OLAP_ERR_META_INVALID_ARGUMENT;
+        return Status::InternalError(fmt::format("Change tablet state from SHUTODWN to {} is forbidden", state));
     }
     _tablet_meta->set_tablet_state(state);
     _state = state;
     if (state == TABLET_SHUTDOWN) {
         on_shutdown();
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 void BaseTablet::_gen_tablet_path() {

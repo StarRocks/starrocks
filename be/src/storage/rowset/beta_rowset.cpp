@@ -63,12 +63,11 @@ std::string BetaRowset::segment_srcrssid_file_path(const std::string& dir, const
 BetaRowset::BetaRowset(const TabletSchema* schema, string rowset_path, RowsetMetaSharedPtr rowset_meta)
         : Rowset(schema, std::move(rowset_path), std::move(rowset_meta)) {}
 
-OLAPStatus BetaRowset::init() {
-    return OLAP_SUCCESS;
+Status BetaRowset::init() {
+    return Status::OK();
 }
 
 Status BetaRowset::do_load() {
-    // TODO: `BlockManager` should be passed in as an argument.
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
 
     _segments.clear();
@@ -87,8 +86,7 @@ Status BetaRowset::do_load() {
     return Status::OK();
 }
 
-OLAPStatus BetaRowset::remove() {
-    // TODO should we close and remove all segment reader first?
+Status BetaRowset::remove() {
     VLOG(1) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     bool success = true;
@@ -121,9 +119,9 @@ OLAPStatus BetaRowset::remove() {
     }
     if (!success) {
         LOG(WARNING) << "Fail to remove files in rowset id=" << unique_id();
-        return OLAP_ERR_ROWSET_DELETE_FILE_FAILED;
+        return Status::IOError(fmt::format("Fail to remove files. rowset_id: {}", unique_id()));
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 void BetaRowset::do_close() {
@@ -150,35 +148,37 @@ Status BetaRowset::link_files_to(const std::string& dir, RowsetId new_rowset_id)
     return Status::OK();
 }
 
-OLAPStatus BetaRowset::copy_files_to(const std::string& dir) {
+Status BetaRowset::copy_files_to(const std::string& dir) {
     for (int i = 0; i < num_segments(); ++i) {
         std::string dst_path = segment_file_path(dir, rowset_id(), i);
         if (FileUtils::check_exist(dst_path)) {
-            LOG(WARNING) << "Fail to copy file, dest path=" << dst_path << " already exist";
-            return OLAP_ERR_FILE_ALREADY_EXIST;
+            LOG(WARNING) << "Path already exist: " << dst_path;
+            return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
         }
         std::string src_path = segment_file_path(_rowset_path, rowset_id(), i);
-        if (copy_file(src_path, dst_path) != OLAP_SUCCESS) {
-            LOG(WARNING) << "Fail to copy source " << src_path << " to " << dst_path << ", errno=" << Errno::no();
-            return OLAP_ERR_OS_ERROR;
+        if (!copy_file(src_path, dst_path).ok()) {
+            LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path << ", errno=" << Errno::no();
+            return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path, dst_path,
+                                               std::strerror(Errno::no())));
         }
     }
     for (int i = 0; i < num_delete_files(); ++i) {
         std::string src_path = segment_del_file_path(_rowset_path, rowset_id(), i);
         if (FileUtils::check_exist(src_path)) {
-            // TODO(cbl): deleted file may be GCed already
             std::string dst_path = segment_del_file_path(dir, rowset_id(), i);
             if (FileUtils::check_exist(dst_path)) {
-                LOG(WARNING) << "Fail to copy file, dest path=" << dst_path << " already exist";
-                return OLAP_ERR_FILE_ALREADY_EXIST;
+                LOG(WARNING) << "Path already exist: " << dst_path;
+                return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
             }
-            if (copy_file(src_path, dst_path) != OLAP_SUCCESS) {
-                LOG(WARNING) << "Fail to copy source " << src_path << " to " << dst_path << ", errno=" << Errno::no();
-                return OLAP_ERR_OS_ERROR;
+            if (!copy_file(src_path, dst_path).ok()) {
+                LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
+                             << ", errno=" << Errno::no();
+                return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
+                                                   dst_path, std::strerror(Errno::no())));
             }
         }
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 bool BetaRowset::check_path(const std::string& path) {
