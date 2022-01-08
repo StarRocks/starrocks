@@ -51,8 +51,7 @@
 // agrees to be bound by the terms and conditions of this License
 // Agreement.
 
-#ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_STRING_SEARCH_H
-#define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_STRING_SEARCH_H
+#pragma once
 
 #include <vector>
 #include <cstring>
@@ -172,5 +171,3 @@ private:
 };
 
 }
-
-#endif

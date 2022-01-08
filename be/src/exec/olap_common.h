@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_OLAP_COMMON_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_OLAP_COMMON_H
+#pragma once
 
 #include <column/type_traits.h>
 
@@ -522,6 +521,13 @@ inline void ColumnValueRange<T>::convert_to_fixed_value() {
     }
 
     if (_low_op == FILTER_LARGER) {
+        // if _low_value was type::max(), _low_value + 1 will overflow to type::min(),
+        // there will be a very large number of elements added to the _fixed_values set.
+        // If there is a condition > type::max we simply return an empty scan range.
+        if (_low_value == _type_max) {
+            _fixed_values.clear();
+            return;
+        }
         helper::increase(_low_value);
     }
 
@@ -817,7 +823,5 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
 }
 
 } // namespace starrocks
-
-#endif
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

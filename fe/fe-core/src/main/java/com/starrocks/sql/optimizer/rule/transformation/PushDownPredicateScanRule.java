@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -28,6 +29,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class PushDownPredicateScanRule extends TransformationRule {
+    public static final PushDownPredicateScanRule ICEBERG_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final PushDownPredicateScanRule OLAP_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_OLAP_SCAN);
     public static final PushDownPredicateScanRule ES_SCAN =
@@ -83,6 +86,22 @@ public class PushDownPredicateScanRule extends TransformationRule {
                     esScanOperator.getLimit(),
                     predicates,
                     esScanOperator.getProjection());
+
+            Map<ColumnRefOperator, ScalarOperator> projectMap =
+                    newScanOperator.getOutputColumns().stream()
+                            .collect(Collectors.toMap(Function.identity(), Function.identity()));
+            LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectMap);
+            OptExpression project = OptExpression.create(logicalProjectOperator, OptExpression.create(newScanOperator));
+            return Lists.newArrayList(project);
+        } else if (logicalScanOperator instanceof LogicalIcebergScanOperator) {
+            LogicalIcebergScanOperator icebergScanOperator = (LogicalIcebergScanOperator) logicalScanOperator;
+            LogicalIcebergScanOperator newScanOperator = new LogicalIcebergScanOperator(
+                    icebergScanOperator.getTable(),
+                    icebergScanOperator.getTableType(),
+                    icebergScanOperator.getColRefToColumnMetaMap(),
+                    icebergScanOperator.getColumnMetaToColRefMap(),
+                    icebergScanOperator.getLimit(),
+                    predicates);
 
             Map<ColumnRefOperator, ScalarOperator> projectMap =
                     newScanOperator.getOutputColumns().stream()

@@ -51,6 +51,7 @@ import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.OlapScanNode;
@@ -1085,7 +1086,6 @@ public class Coordinator {
 
         boolean dopAdaptionEnabled = ConnectContext.get() != null &&
                 ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
-        int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
         for (int i = fragments.size() - 1; i >= 0; --i) {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
@@ -1160,6 +1160,7 @@ public class Coordinator {
                 }
 
                 if (dopAdaptionEnabled) {
+                    int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
                     DataSink sink = getDataStreamSink(maxParallelismFragmentExecParams.fragment, fragment);
                     Preconditions.checkArgument(sink != null);
@@ -1265,7 +1266,8 @@ public class Coordinator {
                     }
                 }
                 // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-                if (dopAdaptionEnabled) {
+                if (dopAdaptionEnabled && fragment.isNeedsLocalShuffle()) {
+                    int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
                     int numInstances = param.instanceExecParams.size();
@@ -1468,7 +1470,7 @@ public class Coordinator {
         boolean dopAdaptionEnabled = ConnectContext.get() != null &&
                 ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
         // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-        if (dopAdaptionEnabled) {
+        if (dopAdaptionEnabled && params.fragment.isNeedsLocalShuffle()) {
             int numInstances = params.instanceExecParams.size();
             int numBackends = addressToScanRanges.size();
             int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
@@ -1491,7 +1493,7 @@ public class Coordinator {
 
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
-            if (scanNode instanceof HdfsScanNode) {
+            if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode)) {
                 HDFSBackendSelector selector = new HDFSBackendSelector(scanNode, locations, assignment,
                         ScanRangeAssignType.SCAN_DATA_SIZE);
                 List<Long> scanRangesBytes = Lists.newArrayList();

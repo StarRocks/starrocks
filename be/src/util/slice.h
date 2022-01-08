@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_STRING_SLICE_H
-#define STARROCKS_BE_SRC_OLAP_STRING_SLICE_H
+#pragma once
 
 #include <cassert>
 #include <cstddef>
@@ -327,4 +326,3 @@ inline void swap(OwnedSlice& s1, OwnedSlice& s2) {
 }
 
 } // namespace starrocks
-#endif // STARROCKS_BE_SRC_OLAP_STRING_SLICE_H

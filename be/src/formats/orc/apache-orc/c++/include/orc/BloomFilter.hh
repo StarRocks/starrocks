@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_BLOOMFILTER_HH
-#define ORC_BLOOMFILTER_HH
+#pragma once
 
 #include <memory>
 #include <vector>
@@ -45,5 +44,3 @@ struct BloomFilterIndex {
 };
 
 } // namespace orc
-
-#endif //ORC_BLOOMFILTER_HH

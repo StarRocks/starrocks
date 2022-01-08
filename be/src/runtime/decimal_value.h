@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_RUNTIME_DECIMAL_VALUE_H
-#define STARROCKS_BE_SRC_QUERY_RUNTIME_DECIMAL_VALUE_H
+#pragma once
 
 #include <cctype>
 #include <climits>
@@ -537,5 +536,3 @@ struct hash<starrocks::DecimalValue> {
     size_t operator()(const starrocks::DecimalValue& v) const { return starrocks::hash_value(v); }
 };
 } // namespace std
-
-#endif // STARROCKS_BE_SRC_QUERY_RUNTIME_DECIMAL_VALUE_H

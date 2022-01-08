@@ -427,6 +427,7 @@ set(STARROCKS_LINK_LIBS
     Exprs
     Formats
     Gutil
+    Serde
     Storage
     Rowset
     OlapFs
@@ -574,6 +575,7 @@ add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/udf)

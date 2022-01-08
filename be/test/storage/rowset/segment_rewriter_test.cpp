@@ -108,7 +108,8 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
 
     uint64_t file_size = 0;
     uint64_t index_size;
-    ASSERT_OK(writer.finalize(&file_size, &index_size));
+    uint64_t footer_position;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
     auto partial_segment =
             *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &partial_tablet_schema);

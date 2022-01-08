@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_MYSQL_TABLE_SINK_H
-#define STARROCKS_BE_RUNTIME_MYSQL_TABLE_SINK_H
+#pragma once
 
 #include <memory>
 #include <vector>
@@ -63,7 +62,7 @@ private:
     ObjectPool* _pool;
     const RowDescriptor& _row_desc;
     const std::vector<TExpr>& _t_output_expr;
-    int _batch_size;
+    int _chunk_size;
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -75,5 +74,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

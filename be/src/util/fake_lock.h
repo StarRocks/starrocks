@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_FAKE_LOCK_H
-#define STARROCKS_BE_SRC_UTIL_FAKE_LOCK_H
+#pragma once
 
 #include "gutil/macros.h"
 
@@ -41,5 +40,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_UTIL_FAKE_LOCK_H

@@ -43,6 +43,7 @@ import com.starrocks.planner.ExceptNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.MultiCastPlanFragment;
@@ -86,6 +87,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -688,6 +690,80 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalIcebergScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalIcebergScanOperator node = (PhysicalIcebergScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+            }
+
+            IcebergScanNode icebergScanNode =
+                    new IcebergScanNode(context.getPlanCtx().getNextNodeId(), tupleDescriptor, "IcebergScanNode");
+            icebergScanNode.computeStatistics(optExpression.getStatistics());
+            try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    icebergScanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                icebergScanNode.getScanRangeLocations();
+                /*
+                 * populates 'minMaxTuple' with slots for statistics values,
+                 * and populates 'minMaxConjuncts' with conjuncts pointing into the 'minMaxTuple'
+                 */
+                List<ScalarOperator> minMaxConjuncts = node.getMinMaxConjuncts();
+                TupleDescriptor minMaxTuple = context.getDescTbl().createTupleDescriptor();
+                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
+                    for (ColumnRefOperator columnRefOperator : Utils.extractColumnRef(minMaxConjunct)) {
+                        SlotDescriptor slotDescriptor =
+                                context.getDescTbl()
+                                        .addSlotDescriptor(minMaxTuple, new SlotId(columnRefOperator.getId()));
+                        Column column = node.getMinMaxColumnRefMap().get(columnRefOperator);
+                        slotDescriptor.setColumn(column);
+                        slotDescriptor.setIsNullable(column.isAllowNull());
+                        slotDescriptor.setIsMaterialized(true);
+                        context.getColRefToExpr()
+                                .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+                    }
+                }
+                minMaxTuple.computeMemLayout();
+                icebergScanNode.setMinMaxTuple(minMaxTuple);
+                ScalarOperatorToExpr.FormatterContext minMaxFormatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
+                    icebergScanNode.getMinMaxConjuncts().
+                            add(ScalarOperatorToExpr.buildExecExpression(minMaxConjunct, minMaxFormatterContext));
+                }
+            } catch (UserException e) {
+                LOG.warn("Iceberg scan node get scan range locations failed : " + e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            icebergScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(icebergScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getPlanCtx().getNextFragmentId(), icebergScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
         public PlanFragment visitPhysicalSchemaScan(OptExpression optExpression, ExecPlan context) {
             PhysicalSchemaScanOperator node = (PhysicalSchemaScanOperator) optExpression.getOp();
 
@@ -868,6 +944,19 @@ public class PlanFragmentBuilder {
             }
         }
 
+        // return true if all leaf offspring are not ExchangeNode
+        public static boolean hasNoExchangeNodes(PlanNode root) {
+            if (root instanceof ExchangeNode) {
+                return false;
+            }
+            for (PlanNode childNode : root.getChildren()) {
+                if (!hasNoExchangeNodes(childNode)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
@@ -1033,6 +1122,15 @@ public class PlanFragmentBuilder {
                     getSessionVariable().getStreamingPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
+
+            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
+                    hasNoExchangeNodes(inputFragment.getPlanRoot());
+            boolean pipelineDopEnabled = ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
+            if (pipelineDopEnabled && notNeedLocalShuffle) {
+                inputFragment.setNeedsLocalShuffle(false);
+            }
+
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;
         }

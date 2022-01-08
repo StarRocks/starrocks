@@ -16,8 +16,7 @@
  * limitations under the License.
  */
 
-#ifndef CODED_STREAM_WRAPPER_HH
-#define CODED_STREAM_WRAPPER_HH
+#pragma once
 
 #include "Adaptor.hh"
 
@@ -35,5 +34,3 @@ DIAGNOSTIC_IGNORE("-Wconversion")
 #include <google/protobuf/io/coded_stream.h>
 
 DIAGNOSTIC_POP
-
-#endif

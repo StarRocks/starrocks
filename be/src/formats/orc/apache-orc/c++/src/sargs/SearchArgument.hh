@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_SRC_SEARCHARGUMENT_HH
-#define ORC_SRC_SEARCHARGUMENT_HH
+#pragma once
 
 #include <deque>
 #include <stdexcept>
@@ -206,5 +205,3 @@ private:
 };
 
 } // namespace orc
-
-#endif //ORC_SRC_SEARCHARGUMENT_HH

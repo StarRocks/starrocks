@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_THRIFT_UTIL_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_THRIFT_UTIL_H
+#pragma once
 
 #include <thrift/TApplicationException.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -186,5 +185,3 @@ ThriftStruct from_json_string(const std::string& json_val) {
 }
 
 } // namespace starrocks
-
-#endif

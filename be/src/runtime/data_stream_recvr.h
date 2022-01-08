@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_RECVR_H
-#define STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_RECVR_H
+#pragma once
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -84,9 +83,9 @@ public:
     // Create a SortedRunMerger instance to merge rows from multiple sender according to the
     // specified row comparator. Fetches the first batches from the individual sender
     // queues. The exprs used in less_than must have already been prepared and opened.
-    Status create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+    Status create_merger(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                          const std::vector<bool>* is_null_first);
-    Status create_merger_for_pipeline(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+    Status create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first);
 
     // Fill output_batch with the next batch of rows obtained by merging the per-sender
@@ -128,9 +127,9 @@ private:
     // Empties the sender queues and notifies all waiting consumers of cancellation.
     void cancel_stream();
 
-    // Return true if the addition of a new batch of size 'batch_size' would exceed the
+    // Return true if the addition of a new batch of size 'chunk_size' would exceed the
     // total buffer limit.
-    bool exceeds_limit(int batch_size) { return _num_buffered_bytes + batch_size > _total_buffer_limit; }
+    bool exceeds_limit(int chunk_size) { return _num_buffered_bytes + chunk_size > _total_buffer_limit; }
 
     // DataStreamMgr instance used to create this recvr. (Not owned)
     DataStreamMgr* _mgr;
@@ -200,5 +199,3 @@ private:
 };
 
 } // end namespace starrocks
-
-#endif // end STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_RECVR_H

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_STRING_VALUE_H
-#define STARROCKS_BE_RUNTIME_STRING_VALUE_H
+#pragma once
 
 #include <cstring>
 
@@ -123,5 +122,3 @@ std::ostream& operator<<(std::ostream& os, const StringValue& string_value);
 std::size_t operator-(const StringValue& v1, const StringValue& v2);
 
 } // namespace starrocks
-
-#endif

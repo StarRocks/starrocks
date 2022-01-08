@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_MYSQL_TABLE_WRITER_H
-#define STARROCKS_BE_RUNTIME_MYSQL_TABLE_WRITER_H
+#pragma once
 
 #include <string>
 #include <string_view>
@@ -79,7 +78,7 @@ public:
 #undef M
                     vectorized::ColumnViewer<TYPE_NULL>>;
 
-    MysqlTableWriter(const std::vector<ExprContext*>& output_exprs, int batch_size);
+    MysqlTableWriter(const std::vector<ExprContext*>& output_exprs, int chunk_size);
     ~MysqlTableWriter();
 
     // connnect to mysql server
@@ -105,9 +104,7 @@ private:
 
     std::string _mysql_tbl;
     __StarRocksMysql* _mysql_conn;
-    int _batch_size;
+    int _chunk_size;
 };
 
 } // namespace starrocks
-
-#endif

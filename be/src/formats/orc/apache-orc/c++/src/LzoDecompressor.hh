@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_LZO_HH
-#define ORC_LZO_HH
+#pragma once
 
 #include "Adaptor.hh"
 #include "orc/OrcFile.hh"
@@ -38,5 +37,3 @@ namespace orc {
    */
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
 } // namespace orc
-
-#endif

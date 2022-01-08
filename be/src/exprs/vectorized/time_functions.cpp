@@ -155,8 +155,8 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
     auto from_str = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto to_str = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    ColumnBuilder<TYPE_DATETIME> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATETIME> result(size);
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row) || from_str.is_null(row) || to_str.is_null(row)) {
             result.append_null();
@@ -197,8 +197,8 @@ ColumnPtr TimeFunctions::convert_tz_const(FunctionContext* context, const Column
                                           const cctz::time_zone& to) {
     auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
 
-    ColumnBuilder<TYPE_DATETIME> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATETIME> result(size);
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row)) {
             result.append_null();
@@ -614,8 +614,8 @@ ColumnPtr TimeFunctions::to_unix_from_datetime(FunctionContext* context, const C
 
     auto date_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
 
-    ColumnBuilder<TYPE_INT> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
         if (date_viewer.is_null(row)) {
             result.append_null();
@@ -649,8 +649,8 @@ ColumnPtr TimeFunctions::to_unix_from_date(FunctionContext* context, const Colum
 
     auto date_viewer = ColumnViewer<TYPE_DATE>(columns[0]);
 
-    ColumnBuilder<TYPE_INT> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
         if (date_viewer.is_null(row)) {
             result.append_null();
@@ -683,8 +683,8 @@ ColumnPtr TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* cont
     auto date_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto formatViewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
-    ColumnBuilder<TYPE_INT> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
         if (date_viewer.is_null(row) || formatViewer.is_null(row)) {
             result.append_null();
@@ -736,8 +736,8 @@ ColumnPtr TimeFunctions::from_unix_to_datetime(FunctionContext* context, const C
 
     ColumnViewer<TYPE_INT> data_column(columns[0]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -833,11 +833,11 @@ ColumnPtr TimeFunctions::from_unix_with_format_general(FunctionContext* context,
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     ColumnViewer<TYPE_INT> data_column(columns[0]);
     ColumnViewer<TYPE_VARCHAR> format_column(columns[1]);
 
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row) || format_column.is_null(row)) {
             result.append_null();
@@ -881,10 +881,10 @@ ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     ColumnViewer<TYPE_INT> data_column(columns[0]);
 
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -1036,10 +1036,9 @@ Status TimeFunctions::str_to_date_prepare(starrocks_udf::FunctionContext* contex
 ColumnPtr TimeFunctions::str_to_date_from_date_format(FunctionContext* context,
                                                       const starrocks::vectorized::Columns& columns,
                                                       const char* str_format) {
-    ColumnBuilder<TYPE_DATETIME> result;
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_DATETIME> result(size);
 
-    result.reserve(size);
     TimestampValue ts;
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto fmt_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -1079,9 +1078,8 @@ ColumnPtr TimeFunctions::str_to_date_from_date_format(FunctionContext* context,
 ColumnPtr TimeFunctions::str_to_date_from_datetime_format(FunctionContext* context,
                                                           const starrocks::vectorized::Columns& columns,
                                                           const char* str_format) {
-    ColumnBuilder<TYPE_DATETIME> result;
     size_t size = columns[0]->size();
-    result.reserve(size);
+    ColumnBuilder<TYPE_DATETIME> result(size);
 
     TimestampValue ts;
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
@@ -1132,8 +1130,7 @@ ColumnPtr TimeFunctions::str_to_date_uncommon(FunctionContext* context, const Co
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     size_t size = columns[0]->size(); // minimum number of rows.
-    ColumnBuilder<TYPE_DATETIME> result;
-    result.reserve(size);
+    ColumnBuilder<TYPE_DATETIME> result(size);
 
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto fmt_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -1251,11 +1248,10 @@ Status TimeFunctions::format_close(starrocks_udf::FunctionContext* context,
 
 template <typename OP, PrimitiveType Type>
 ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
-    ColumnBuilder<TYPE_VARCHAR> builder;
     ColumnViewer<Type> viewer(cols[0]);
 
     size_t num_rows = viewer.size();
-
+    ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
     builder.data_column()->reserve(num_rows, num_rows * patten_size);
 
     for (int i = 0; i < num_rows; ++i) {
@@ -1383,10 +1379,10 @@ bool standard_format_one_row(const TimestampValue& timestamp_value, char* buf, c
 
 template <PrimitiveType Type>
 ColumnPtr standard_format(const std::string& fmt, int len, const starrocks::vectorized::Columns& columns) {
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto ts_viewer = ColumnViewer<Type>(columns[0]);
 
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
 
     char buf[len];
     for (size_t i = 0; i < size; ++i) {
@@ -1458,7 +1454,6 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
         return do_format<TYPE_DATETIME>(fc, columns);
     } else {
         bool all_const = ColumnHelper::is_all_const(columns);
-        ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<TYPE_DATETIME> viewer_date(columns[0]);
         ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
 
@@ -1466,8 +1461,7 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
         // which could reduce unnecessary calculations
         size_t num_rows = all_const ? viewer_date.size() : columns[0]->size();
 
-        builder.reserve(columns[0]->size());
-
+        ColumnBuilder<TYPE_VARCHAR> builder(columns[0]->size());
         for (int i = 0; i < num_rows; ++i) {
             if (viewer_date.is_null(i)) {
                 builder.append_null();
@@ -1491,11 +1485,10 @@ ColumnPtr TimeFunctions::date_format(FunctionContext* context, const Columns& co
         return do_format<TYPE_DATE>(fc, columns);
     } else {
         int num_rows = columns[0]->size();
-        ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<TYPE_DATE> viewer_date(columns[0]);
         ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
 
-        builder.reserve(columns[0]->size());
+        ColumnBuilder<TYPE_VARCHAR> builder(columns[0]->size());
 
         for (int i = 0; i < num_rows; ++i) {
             if (viewer_date.is_null(i)) {

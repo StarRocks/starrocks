@@ -11,30 +11,7 @@
 
 namespace starrocks::vectorized {
 
-/// CSVScanner::CSVReader
-Status CSVScanner::CSVReader::next_record(Record* record) {
-    if (_limit > 0 && _parsed_bytes > _limit) {
-        return Status::EndOfFile("Reached limit");
-    }
-    char* d;
-    size_t pos = 0;
-    while ((d = _buff.find(_record_delimiter, pos)) == nullptr) {
-        pos = _buff.available();
-        _buff.compact();
-        if (_buff.free_space() == 0) {
-            RETURN_IF_ERROR(_expand_buffer());
-        }
-        RETURN_IF_ERROR(_fill_buffer());
-    }
-    size_t l = d - _buff.position();
-    *record = Record(_buff.position(), l);
-    _buff.skip(l + 1);
-    //               ^^ skip record delimiter.
-    _parsed_bytes += l + 1;
-    return Status::OK();
-}
-
-Status CSVScanner::CSVReader::_fill_buffer() {
+Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
 
     DCHECK(_buff.free_space() > 0);
@@ -59,50 +36,6 @@ Status CSVScanner::CSVReader::_fill_buffer() {
         _buff.append(_record_delimiter);
     }
     return Status::OK();
-}
-
-Status CSVScanner::CSVReader::_expand_buffer() {
-    if (UNLIKELY(_storage.size() >= kMaxBufferSize)) {
-        return Status::InternalError("CSV line length exceed limit " + std::to_string(kMaxBufferSize));
-    }
-    size_t new_capacity = std::min(_storage.size() * 2, kMaxBufferSize);
-    DCHECK_EQ(_storage.data(), _buff.position()) << "should compact buffer before expand";
-    _storage.resize(new_capacity);
-    Buffer new_buff(_storage.data(), _storage.size());
-    new_buff.add_limit(_buff.available());
-    DCHECK_EQ(_storage.data(), new_buff.position());
-    DCHECK_EQ(_buff.available(), new_buff.available());
-    _buff = new_buff;
-    return Status::OK();
-}
-
-void CSVScanner::CSVReader::split_record(const Record& record, Fields* fields) const {
-    const char* value = record.data;
-    const char* ptr = record.data;
-    const size_t size = record.size;
-
-    if (_field_delimiter.size() == 1) {
-        for (size_t i = 0; i < size; ++i, ++ptr) {
-            if (*ptr == _field_delimiter[0]) {
-                fields->emplace_back(value, ptr - value);
-                value = ptr + 1;
-            }
-        }
-    } else {
-        const auto fd_size = _field_delimiter.size();
-        const auto* const base = ptr;
-
-        do {
-            ptr = static_cast<char*>(memmem(value, size - (value - base), _field_delimiter.data(), fd_size));
-            if (ptr != nullptr) {
-                fields->emplace_back(value, ptr - value);
-                value = ptr + fd_size;
-            }
-        } while (ptr != nullptr);
-
-        ptr = record.data + size;
-    }
-    fields->emplace_back(value, ptr - value);
 }
 
 CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
@@ -177,7 +110,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
 
     ChunkPtr chunk;
-    const int chunk_capacity = config::vector_chunk_size;
+    const int chunk_capacity = _state->chunk_size();
     auto src_chunk = _create_chunk(_src_slot_descriptors);
     src_chunk->reserve(chunk_capacity);
 
@@ -187,11 +120,11 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
             const TBrokerRangeDesc& range_desc = _scan_range.ranges[_curr_file_index];
             Status st = create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &file);
             if (!st.ok()) {
-                LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
+                LOG(WARNING) << "Failed to create sequential files. status: " << st.to_string();
                 return st;
             }
 
-            _curr_reader = std::make_unique<CSVReader>(file, _record_delimiter, _field_delimiter);
+            _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter);
             _curr_reader->set_counter(_counter);
             if (_scan_range.ranges[_curr_file_index].size > 0 &&
                 _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
@@ -225,7 +158,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
 }
 
 Status CSVScanner::_parse_csv(Chunk* chunk) {
-    const int capacity = config::vector_chunk_size;
+    const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
     CSVReader::Record record;
@@ -254,16 +187,17 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         _curr_reader->split_record(record, &fields);
 
         if (fields.size() != _num_fields_in_csv) {
-            std::stringstream error_msg;
-            error_msg << "column count mismatch, expect=" << _num_fields_in_csv << " real=" << fields.size();
             if (_counter->num_rows_filtered++ < 50) {
-                _report_error(record.to_string(), error_msg.str());
+                std::stringstream error_msg;
+                error_msg << "Value count does not match column count."
+                          << "Expect " << fields.size() << " but got" << _num_fields_in_csv;
+                _report_error("", error_msg.str());
             }
             continue;
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < 50) {
-                _report_error(record.to_string(), "Invalid UTF-8 data");
+                _report_error(record.to_string(), "Invalid UTF-8 row");
             }
             continue;
         }
@@ -271,15 +205,19 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
-            if (_src_slot_descriptors[j] == nullptr) {
+            auto slot = _src_slot_descriptors[j];
+            if (slot == nullptr) {
                 continue;
             }
             const Slice& field = fields[j];
-            options.type_desc = &(_src_slot_descriptors[j]->type());
+            options.type_desc = &(slot->type());
             if (!_converters[k]->read_string(_column_raw_ptrs[k], field, options)) {
                 chunk->set_num_rows(num_rows);
                 if (_counter->num_rows_filtered++ < 50) {
-                    _report_error(record.to_string(), "invalid value '" + field.to_string() + "'");
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << field.to_string() << "' is out of range."
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _report_error("", error_msg.str());
                 }
                 has_error = true;
                 break;

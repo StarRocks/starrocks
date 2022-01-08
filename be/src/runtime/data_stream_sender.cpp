@@ -43,6 +43,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
+#include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
 #include "service/brpc.h"
 #include "util/block_compression.h"
@@ -105,7 +106,8 @@ public:
     // This function will copy selective rows in chunks to batch.
     // indexes contains row index of chunk and this function will copy from input
     // 'from' and copy 'size' rows
-    Status add_rows_selective(vectorized::Chunk* chunk, const uint32_t* row_indexes, uint32_t from, uint32_t size);
+    Status add_rows_selective(RuntimeState* state, vectorized::Chunk* chunk, const uint32_t* row_indexes, uint32_t from,
+                              uint32_t size);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     // When the chunk is sent really rather than bachend, *is_real_sent will
@@ -300,14 +302,14 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     return Status::OK();
 }
 
-Status DataStreamSender::Channel::add_rows_selective(vectorized::Chunk* chunk, const uint32_t* indexes, uint32_t from,
-                                                     uint32_t size) {
+Status DataStreamSender::Channel::add_rows_selective(RuntimeState* state, vectorized::Chunk* chunk,
+                                                     const uint32_t* indexes, uint32_t from, uint32_t size) {
     // TODO(kks): find a way to remove this if condition
     if (UNLIKELY(_chunk == nullptr)) {
         _chunk = chunk->clone_empty_with_tuple();
     }
 
-    if (_chunk->num_rows() + size > config::vector_chunk_size) {
+    if (_chunk->num_rows() + size > state->chunk_size()) {
         // _chunk is full, let's send it; but first wait for an ongoing
         // transmission to finish before modifying _pb_chunk
         RETURN_IF_ERROR(_send_current_chunk(false));
@@ -438,7 +440,8 @@ Status DataStreamSender::init(const TDataSink& tsink) {
         }
         for (int i = 0; i < num_parts; ++i) {
             PartitionInfo* info = _pool->add(new PartitionInfo());
-            RETURN_IF_ERROR(PartitionInfo::from_thrift(_pool, t_stream_sink.output_partition.partition_infos[i], info));
+            RETURN_IF_ERROR(PartitionInfo::from_thrift(_pool, t_stream_sink.output_partition.partition_infos[i], info,
+                                                       _state->chunk_size()));
             _partition_infos.push_back(info);
         }
         // partitions should be in ascending order
@@ -519,7 +522,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     // It will be set to true when closing.
     _chunk_request.set_eos(false);
 
-    _row_indexes.resize(config::vector_chunk_size);
+    _row_indexes.resize(state->chunk_size());
 
     return Status::OK();
 }
@@ -631,7 +634,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
                 // dest bucket is no used, continue
                 continue;
             }
-            RETURN_IF_ERROR(_channels[i]->add_rows_selective(chunk, _row_indexes.data(), from, size));
+            RETURN_IF_ERROR(_channels[i]->add_rows_selective(state, chunk, _row_indexes.data(), from, size));
         }
     } else {
         DCHECK(false) << "shouldn't go to here";
@@ -683,31 +686,30 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
                                          int num_receivers) {
     VLOG_ROW << "serializing " << src->num_rows() << " rows";
 
-    size_t uncompressed_size = 0;
     {
         SCOPED_TIMER(_serialize_batch_timer);
-        dst->set_compress_type(CompressionTypePB::NO_COMPRESSION);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            uncompressed_size = src->serialize_with_meta(dst);
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+            if (!res.ok()) return res.status();
+            res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            dst->clear_is_nulls();
-            dst->clear_is_consts();
-            dst->clear_slot_id_map();
-            uncompressed_size = src->serialize_size();
-            // TODO(kks): resize without initializing the new bytes
-            dst->mutable_data()->resize(uncompressed_size);
-            src->serialize((uint8_t*)dst->mutable_data()->data());
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src);
+            if (!res.ok()) return res.status();
+            res->Swap(dst);
         }
     }
+    DCHECK(dst->has_uncompressed_size());
+    DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
+
+    size_t uncompressed_size = dst->uncompressed_size();
 
     if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
         return Status::InternalError(fmt::format("The input size for compression should be less than {}",
                                                  _compress_codec->max_input_size()));
     }
 
-    dst->set_uncompressed_size(uncompressed_size);
     // try compress the ChunkPB data
     if (_compress_codec != nullptr && uncompressed_size > 0) {
         SCOPED_TIMER(_compress_timer);

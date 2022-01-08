@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_STARROCKS_METRICS_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_STARROCKS_METRICS_H
+#pragma once
 
 #include <set>
 #include <string>
@@ -244,5 +243,3 @@ private:
 };
 
 }; // namespace starrocks
-
-#endif

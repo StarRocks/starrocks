@@ -16,8 +16,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_CONFIG_HH
-#define ORC_CONFIG_HH
+#pragma once
 
 #define ORC_VERSION "1.7.0-SNAPSHOT"
 
@@ -80,6 +79,4 @@ inline T move(T& x) {
     return x;
 }
 } // namespace std
-#endif
-
 #endif

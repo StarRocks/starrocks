@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_STORAGE_ENGINE_H
-#define STARROCKS_BE_SRC_OLAP_STORAGE_ENGINE_H
+#pragma once
 
 #include <pthread.h>
 #include <rapidjson/document.h>
@@ -342,5 +341,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_STORAGE_ENGINE_H

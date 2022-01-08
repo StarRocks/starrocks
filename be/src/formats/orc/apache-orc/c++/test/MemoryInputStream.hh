@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_MEMORYINPUTSTREAM_HH
-#define ORC_MEMORYINPUTSTREAM_HH
+#pragma once
 
 #include <iostream>
 
@@ -52,5 +51,3 @@ private:
     std::string name;
 };
 } // namespace orc
-
-#endif

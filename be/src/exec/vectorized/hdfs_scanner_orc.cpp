@@ -34,7 +34,7 @@ public:
             auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
             throw orc::ParseError(msg);
         }
-        _stats->bytes_read_from_disk += length;
+        _stats->bytes_read += length;
     }
 
     const std::string& getName() const override { return _file->file_name(); }
@@ -230,7 +230,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
         // create chunk
         orc::StringDictionary* dict = it->second;
-        if (dict->dictionaryOffset.size() > config::vector_chunk_size) {
+        if (dict->dictionaryOffset.size() > _adapter->runtime_state()->chunk_size()) {
             continue;
         }
         vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
@@ -318,11 +318,11 @@ void HdfsOrcScanner::update_counter() {
     HdfsScanner::update_counter();
 
 #ifndef BE_TEST
-    COUNTER_UPDATE(_scanner_params.parent->_raw_rows_counter, _stats.raw_rows_read);
+    COUNTER_UPDATE(_scanner_params.parent->_rows_read_counter, _stats.raw_rows_read);
     COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_from_disk_counter, _stats.bytes_read_from_disk);
+    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read);
     COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
     COUNTER_UPDATE(_scanner_params.parent->_value_decode_timer, _stats.value_decode_ns);
@@ -361,12 +361,12 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         }
     }
 
-    _orc_adapter = std::make_unique<OrcScannerAdapter>(_src_slot_descriptors);
+    _orc_adapter = std::make_unique<OrcScannerAdapter>(runtime_state, _src_slot_descriptors);
     _orc_row_reader_filter =
             std::make_shared<OrcRowReaderFilter>(_scanner_params, _file_read_param, _orc_adapter.get());
     _orc_adapter->disable_broker_load_mode();
     _orc_adapter->set_row_reader_filter(_orc_row_reader_filter);
-    _orc_adapter->set_read_chunk_size(config::vector_chunk_size);
+    _orc_adapter->set_read_chunk_size(runtime_state->chunk_size());
     _orc_adapter->set_runtime_state(runtime_state);
     _orc_adapter->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
     RETURN_IF_ERROR(_orc_adapter->set_timezone(_file_read_param.timezone));

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_LARGE_INT_VALUE_H
-#define STARROCKS_BE_RUNTIME_LARGE_INT_VALUE_H
+#pragma once
 
 #include <fmt/compile.h>
 #include <fmt/format.h>
@@ -75,5 +74,3 @@ std::istream& operator>>(std::istream& is, __int128& value);
 std::size_t hash_value(LargeIntValue const& value);
 
 } // namespace starrocks
-
-#endif

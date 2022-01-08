@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef SIMDUTF8CHECK_H
-#define SIMDUTF8CHECK_H
+#pragma once
 
 #include <x86intrin.h>
 
@@ -412,4 +411,3 @@ static struct avx_processed_utf_bytes avxcheckUTF8Bytes_asciipath(__m256i curren
 }
 
 #endif // __AVX2__
-#endif

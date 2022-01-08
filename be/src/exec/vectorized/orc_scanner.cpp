@@ -73,7 +73,7 @@ ORCScanner::ORCScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile
                        const TBrokerScanRange& scan_range, starrocks::vectorized::ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
-          _max_chunk_size(config::vector_chunk_size ? config::vector_chunk_size : 4096),
+          _max_chunk_size(_state->chunk_size() ? _state->chunk_size() : 4096),
           _next_range(0),
           _error_counter(0),
           _status_eof(false) {}
@@ -105,7 +105,7 @@ Status ORCScanner::open() {
     for (int i = 0; i < num_columns_from_orc; ++i) {
         _orc_slot_descriptors[i] = _src_slot_descriptors[i];
     }
-    _orc_adapter = std::make_unique<OrcScannerAdapter>(_orc_slot_descriptors);
+    _orc_adapter = std::make_unique<OrcScannerAdapter>(_state, _orc_slot_descriptors);
     _orc_adapter->set_broker_load_mode(_strict_mode);
     _orc_adapter->set_timezone(_state->timezone());
     _orc_adapter->drop_nanoseconds_in_datetime();
@@ -214,7 +214,7 @@ Status ORCScanner::_open_next_orc_reader() {
         Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
                                               CompressionTypePB::NO_COMPRESSION, &file);
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to create random-access files: " << st.to_string();
+            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
             return st;
         }
         const std::string& file_name = file->file_name();
@@ -224,7 +224,7 @@ Status ORCScanner::_open_next_orc_reader() {
         _orc_adapter->set_current_file_name(file_name);
         st = _orc_adapter->init(std::move(inStream));
         if (st.is_end_of_file()) {
-            LOG(WARNING) << "Failed to init orc adapter. file_name: " << file_name << ", st: " << st.to_string();
+            LOG(WARNING) << "Failed to init orc adapter. file_name: " << file_name << ", status: " << st.to_string();
             continue;
         }
         return st;

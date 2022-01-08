@@ -155,7 +155,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) override;
+    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override {
         if (_null_column->get_data()[idx]) {
@@ -163,12 +163,6 @@ public:
         }
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
-
-    size_t serialize_size() const override { return _data_column->serialize_size() + _null_column->serialize_size(); }
-
-    uint8_t* serialize_column(uint8_t* dst) override;
-
-    const uint8_t* deserialize_column(const uint8_t* src) override;
 
     MutableColumnPtr clone_empty() const override {
         return create_mutable(_data_column->clone_empty(), _null_column->clone_empty());

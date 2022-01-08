@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_STREAMING_SAMPLER_H
-#define STARROCKS_BE_SRC_UTIL_STREAMING_SAMPLER_H
+#pragma once
 
 #include <string.h>
 
@@ -153,5 +152,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

@@ -35,7 +35,8 @@ protected:
         tuple_desc_builder.build(&desc_tbl_builder);
 
         DescriptorTbl* desc_tbl = nullptr;
-        Status st = DescriptorTbl::create(&_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl);
+        Status st =
+                DescriptorTbl::create(&_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size);
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState

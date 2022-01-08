@@ -2,8 +2,7 @@
 // This file is based on code available under the Apache license here:
 //   https://github.com/greg7mdp/parallel-hashmap/blob/master/parallel_hashmap/phmap_dump.h
 
-#if !defined(phmap_dump_h_guard_)
-#define phmap_dump_h_guard_
+#pragma once
 
 // ---------------------------------------------------------------------------
 // Copyright (c) 2019, Gregory Popovitch - greg7mdp@gmail.com
@@ -316,5 +315,3 @@ private:
 };
 
 } // namespace phmap
-
-#endif // phmap_dump_h_guard_

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_EXEC_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_EXEC_NODE_H
+#pragma once
 
 #include <functional>
 #include <mutex>
@@ -304,5 +303,3 @@ private:
     bool _is_closed;
 };
 } // namespace starrocks
-
-#endif

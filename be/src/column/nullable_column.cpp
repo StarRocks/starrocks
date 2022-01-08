@@ -232,21 +232,10 @@ const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
     return pos;
 }
 
-void NullableColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
-    for (size_t i = 0; i < batch_size; ++i) {
+void NullableColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+    for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
-}
-
-uint8_t* NullableColumn::serialize_column(uint8_t* dst) {
-    dst = _null_column->serialize_column(dst);
-    return _data_column->serialize_column(dst);
-}
-
-const uint8_t* NullableColumn::deserialize_column(const uint8_t* src) {
-    src = _null_column->deserialize_column(src);
-    _has_null = SIMD::count_nonzero(_null_column->get_data());
-    return _data_column->deserialize_column(src);
 }
 
 // Note: the hash function should be same with RawValue::get_hash_value_fvn

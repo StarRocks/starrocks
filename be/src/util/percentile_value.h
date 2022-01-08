@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#ifndef STARROCKS_PERCENTILE_VALUE_H
-#define STARROCKS_PERCENTILE_VALUE_H
+#pragma once
 
 #include "tdigest.h"
 
@@ -53,4 +52,3 @@ private:
     PercentileDataType _type;
 };
 } // namespace starrocks
-#endif //STARROCKS_PERCENTILE_VALUE_H

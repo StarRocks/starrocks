@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_SCAN_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_SCAN_NODE_H
+#pragma once
 
 #include <string>
 
@@ -100,5 +99,3 @@ protected:
 };
 
 } // namespace starrocks
-
-#endif

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#ifndef BASE_CPU_H_
-#define BASE_CPU_H_
+#pragma once
+
 #include <string>
 #include <tuple>
 
@@ -115,4 +115,3 @@ private:
     std::string cpu_brand_;
 };
 } // namespace base
-#endif // BASE_CPU_H_

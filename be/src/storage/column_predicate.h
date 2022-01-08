@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_COLUMN_PREDICATE_H
-#define STARROCKS_BE_SRC_OLAP_COLUMN_PREDICATE_H
+#pragma once
 
 #include <roaring/roaring.hh>
 
@@ -56,5 +55,3 @@ protected:
 };
 
 } //namespace starrocks
-
-#endif //STARROCKS_BE_SRC_OLAP_COLUMN_PREDICATE_H

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_EXEC_QUERY_STATISTICS_H
-#define STARROCKS_BE_EXEC_QUERY_STATISTICS_H
+#pragma once
 
 #include <mutex>
 
@@ -106,5 +105,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

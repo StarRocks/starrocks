@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TASK_ENGINE_BATCH_LOAD_TASK_H
-#define STARROCKS_BE_SRC_OLAP_TASK_ENGINE_BATCH_LOAD_TASK_H
+#pragma once
 
 #include <utility>
 #include <vector>
@@ -80,4 +79,3 @@ private:
     AgentStatus* _res_status;
 }; // class Pusher
 } // namespace starrocks
-#endif // STARROCKS_BE_SRC_OLAP_TASK_ENGINE_BATCH_LOAD_TASK_H

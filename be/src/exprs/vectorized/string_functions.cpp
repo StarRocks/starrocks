@@ -909,11 +909,11 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
     } else {
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
-        size_t reserved = times * src_offsets.back();
+        size_t reserved = static_cast<size_t>(times) * src_offsets.back();
         if (reserved > OLAP_STRING_MAX_LENGTH * num_rows) {
             reserved = 0;
             for (int i = 0; i < num_rows; ++i) {
-                auto slice_sz = src_offsets[i + 1] - src_offsets[i];
+                size_t slice_sz = src_offsets[i + 1] - src_offsets[i];
                 if (slice_sz * times < OLAP_STRING_MAX_LENGTH) {
                     reserved += slice_sz * times;
                 }
@@ -1507,7 +1507,7 @@ ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* conte
         ColumnViewer<TYPE_VARCHAR> src_viewer(columns[0]);
         ColumnViewer<TYPE_VARCHAR> tailing_viewer(columns[1]);
 
-        ColumnBuilder<TYPE_VARCHAR> dst_builder;
+        ColumnBuilder<TYPE_VARCHAR> dst_builder(row_num);
 
         for (int row = 0; row < row_num; ++row) {
             if (src_viewer.is_null(row) || tailing_viewer.is_null(row) || tailing_viewer.value(row).size != 1) {
@@ -2452,8 +2452,8 @@ ColumnPtr StringFunctions::null_or_empty(FunctionContext* context, const starroc
     DCHECK_EQ(columns.size(), 1);
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
-    ColumnBuilder<TYPE_BOOLEAN> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; row++) {
         if (str_viewer.is_null(row)) {
             result.append(true);
@@ -2558,8 +2558,8 @@ ColumnPtr StringFunctions::regexp_extract_general(FunctionContext* context, re2:
     auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto field_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (content_viewer.is_null(row) || ptn_viewer.is_null(row) || field_viewer.is_null(row)) {
             result.append_null();
@@ -2606,8 +2606,8 @@ ColumnPtr StringFunctions::regexp_extract_const(re2::RE2* const_re, const Column
     auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto field_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (content_viewer.is_null(row) || field_viewer.is_null(row)) {
             result.append_null();
@@ -2660,8 +2660,8 @@ ColumnPtr StringFunctions::regexp_replace_general(FunctionContext* context, re2:
     auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || ptn_viewer.is_null(row) || rpl_viewer.is_null(row)) {
             result.append_null();
@@ -2691,8 +2691,8 @@ ColumnPtr StringFunctions::regexp_replace_const(re2::RE2* const_re, const Column
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || rpl_viewer.is_null(row)) {
             result.append_null();
@@ -2726,8 +2726,8 @@ ColumnPtr StringFunctions::money_format_double(FunctionContext* context,
                                                const starrocks::vectorized::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_DOUBLE>(columns[0]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (money_viewer.is_null(row)) {
             result.append_null();
@@ -2746,8 +2746,8 @@ ColumnPtr StringFunctions::money_format_bigint(FunctionContext* context,
                                                const starrocks::vectorized::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_BIGINT>(columns[0]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (money_viewer.is_null(row)) {
             result.append_null();
@@ -2766,8 +2766,8 @@ ColumnPtr StringFunctions::money_format_largeint(FunctionContext* context,
                                                  const starrocks::vectorized::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_LARGEINT>(columns[0]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (money_viewer.is_null(row)) {
             result.append_null();
@@ -2788,8 +2788,8 @@ ColumnPtr StringFunctions::money_format_decimalv2val(FunctionContext* context,
                                                      const starrocks::vectorized::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_DECIMALV2>(columns[0]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (money_viewer.is_null(row)) {
             result.append_null();
@@ -2857,8 +2857,8 @@ ColumnPtr StringFunctions::parse_url_general(FunctionContext* context, const sta
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto part_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || part_viewer.is_null(row)) {
             result.append_null();
@@ -2894,8 +2894,8 @@ ColumnPtr StringFunctions::parse_url_const(UrlParser::UrlPart* url_part, Functio
                                            const starrocks::vectorized::Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row)) {
             result.append_null();

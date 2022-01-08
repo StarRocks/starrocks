@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_OUTPUTSTREAM_HH
-#define ORC_OUTPUTSTREAM_HH
+#pragma once
 
 #include "Adaptor.hh"
 #include "orc/OrcFile.hh"
@@ -92,5 +91,3 @@ public:
     void recordPosition(PositionRecorder* recorder) const;
 };
 } // namespace orc
-
-#endif // ORC_OUTPUTSTREAM_HH

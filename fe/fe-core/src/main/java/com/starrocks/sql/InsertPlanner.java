@@ -30,6 +30,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.relation.InsertRelation;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.analyzer.relation.ValuesRelation;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -98,7 +99,9 @@ public class InsertPlanner {
         PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
 
         ExecPlan execPlan;
-        if (optimizedPlan.getOp().hasLimit() || insertRelation.getTargetTable() instanceof MysqlTable) {
+        if ((insertRelation.getQueryRelation() instanceof SelectRelation &&
+                ((SelectRelation) insertRelation.getQueryRelation()).hasLimit())
+                || insertRelation.getTargetTable() instanceof MysqlTable) {
             execPlan = new PlanFragmentBuilder().createPhysicalPlan(
                     optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     insertRelation.getQueryRelation().getColumnOutputNames());
@@ -188,11 +191,12 @@ public class InsertPlanner {
                     Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
                     if (defaultValueType == Column.DefaultValueType.NULL) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
-                    } else if (defaultValueType == Column.DefaultValueType.CONST)  {
+                    } else if (defaultValueType == Column.DefaultValueType.CONST) {
                         scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
-                                    + targetColumn.getDefaultExpr().getExpr());
+                        throw new SemanticException(
+                                "Column:" + targetColumn.getName() + " has unsupported default value:"
+                                        + targetColumn.getDefaultExpr().getExpr());
 
                     } else {
                         throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
@@ -212,7 +216,8 @@ public class InsertPlanner {
     }
 
     OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertRelation insertRelation,
-                                     List<ColumnRefOperator> outputColumns, OptExprBuilder root, ConnectContext session) {
+                                     List<ColumnRefOperator> outputColumns, OptExprBuilder root,
+                                     ConnectContext session) {
         List<Column> fullSchema = insertRelation.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 

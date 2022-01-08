@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TABLET_MANAGER_H
-#define STARROCKS_BE_SRC_OLAP_TABLET_MANAGER_H
+#pragma once
 
 #include <list>
 #include <map>
@@ -260,5 +259,3 @@ inline bool TabletManager::LockTable::unlock(int64_t tablet_id) {
 }
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_TABLET_MANAGER_H

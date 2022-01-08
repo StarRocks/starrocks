@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_OLAP_DEFINE_H
-#define STARROCKS_BE_SRC_OLAP_OLAP_DEFINE_H
+#pragma once
 
 #include <cstdint>
 #include <cstdlib>
@@ -39,7 +38,7 @@ static const size_t OLAP_PAGE_SIZE = 65536;
 static const uint64_t OLAP_FIX_HEADER_MAGIC_NUMBER = 0;
 
 // the max length supported for varchar type
-static const uint16_t OLAP_STRING_MAX_LENGTH = 65535;
+static const uint32_t OLAP_STRING_MAX_LENGTH = 1048576;
 
 // the max bytes for stored string length
 using StringLengthType = uint16_t;
@@ -314,5 +313,3 @@ private:                                 \
 #endif
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_DEFINE_H

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_DATA_SINK_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_DATA_SINK_H
+#pragma once
 
 #include <utility>
 #include <vector>
@@ -90,4 +89,3 @@ protected:
 };
 
 } // namespace starrocks
-#endif

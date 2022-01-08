@@ -100,6 +100,8 @@ Status HashJoiner::prepare(RuntimeState* state) {
 }
 
 void HashJoiner::_init_hash_table_param(HashTableParam* param) {
+    // Pipeline query engine always needn't create tuple columns
+    param->need_create_tuple_columns = false;
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
@@ -188,7 +190,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
     if (_phase == HashJoinPhase::PROBE || _probe_input_chunk != nullptr) {
         DCHECK(_ht_has_remain && _probe_input_chunk);
 
-        RETURN_IF_ERROR(_ht.probe(_key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain));
+        RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             _probe_input_chunk = nullptr;
         }
@@ -204,7 +206,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
             return chunk;
         }
 
-        RETURN_IF_ERROR(_ht.probe_remain(&chunk, &_ht_has_remain));
+        RETURN_IF_ERROR(_ht.probe_remain(state, &chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             enter_eos_phase();
         }

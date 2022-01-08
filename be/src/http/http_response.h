@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_HTTP_RESPONSE_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_HTTP_RESPONSE_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -60,5 +59,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

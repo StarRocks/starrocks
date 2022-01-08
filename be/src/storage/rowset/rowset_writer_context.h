@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_CONTEXT_H
-#define STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_CONTEXT_H
+#pragma once
 
 #include "env/env.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -51,6 +50,7 @@ public:
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
     const TabletSchema* tablet_schema = nullptr;
     std::shared_ptr<TabletSchema> partial_update_tablet_schema = nullptr;
+    std::vector<int32_t> referenced_column_ids;
 
     RowsetId rowset_id{};
     int64_t tablet_id = 0;
@@ -84,5 +84,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_CONTEXT_H

@@ -19,6 +19,9 @@ CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const Des
 
 Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    if (tnode.__isset.need_create_tuple_columns) {
+        _need_create_tuple_columns = tnode.need_create_tuple_columns;
+    }
     return Status::OK();
 }
 
@@ -305,7 +308,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
         }
 
         // need row_count to fill in chunk.
-        size_t row_count = config::vector_chunk_size - (*chunk)->num_rows();
+        size_t row_count = runtime_state()->chunk_size() - (*chunk)->num_rows();
 
         // means we have scan all chunks of right tables.
         // we should scan all remain rows of right table.
@@ -387,7 +390,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
             continue;
         }
 
-        if ((*chunk)->num_rows() < config::vector_chunk_size) {
+        if ((*chunk)->num_rows() < runtime_state()->chunk_size()) {
             continue;
         }
 
@@ -444,8 +447,10 @@ void CrossJoinNode::_init_row_desc() {
             _col_types.emplace_back(slot);
             _probe_column_count++;
         }
-        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _output_probe_tuple_ids.emplace_back(tuple_desc->id());
+        if (_need_create_tuple_columns) {
+            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
+                _output_probe_tuple_ids.emplace_back(tuple_desc->id());
+            }
         }
     }
     for (auto& tuple_desc : child(1)->row_desc().tuple_descriptors()) {
@@ -453,8 +458,10 @@ void CrossJoinNode::_init_row_desc() {
             _col_types.emplace_back(slot);
             _build_column_count++;
         }
-        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _output_build_tuple_ids.emplace_back(tuple_desc->id());
+        if (_need_create_tuple_columns) {
+            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
+                _output_build_tuple_ids.emplace_back(tuple_desc->id());
+            }
         }
     }
 }
@@ -493,7 +500,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
     // Should not call num_rows on nullptr.
     if (_build_chunk != nullptr) {
         _number_of_build_rows = _build_chunk->num_rows();
-        _build_chunks_size = (_number_of_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
+        _build_chunks_size = (_number_of_build_rows / runtime_state()->chunk_size()) * runtime_state()->chunk_size();
     }
 
     RETURN_IF_ERROR(child(1)->close(state));
@@ -531,7 +538,7 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
     }
 
     *chunk = std::move(new_chunk);
-    (*chunk)->reserve(config::vector_chunk_size);
+    (*chunk)->reserve(runtime_state()->chunk_size());
 }
 
 pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {

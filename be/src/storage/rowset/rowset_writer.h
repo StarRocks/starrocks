@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_H
-#define STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_H
+#pragma once
 
 #include "common/statusor.h"
 #include "gen_cpp/types.pb.h"
@@ -145,5 +144,3 @@ protected:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_H

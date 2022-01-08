@@ -56,6 +56,16 @@ enum THdfsFileFormat {
   ORC,
 }
 
+
+// Text file desc
+struct TTextFileDesc {
+    // property 'field.delim'
+    1: optional string  field_delim
+
+    // property 'line.delim'
+    2: optional string line_delim
+}
+
 enum TSchemaTableType {
     SCH_AUTHORS= 0,
     SCH_CHARSETS,
@@ -287,6 +297,14 @@ struct THdfsTable {
     5: optional list<string> partition_prefixes
 }
 
+struct TIcebergTable {
+    // table location
+    1: optional string location
+
+    // Schema columns, except partition columns
+    2: optional list<TColumn> columns
+}
+
 // "Union" of all table types.
 struct TTableDescriptor {
   1: required Types.TTableId id
@@ -307,6 +325,9 @@ struct TTableDescriptor {
 
   // Hdfs Table schema
   30: optional THdfsTable hdfsTable
+
+  // Iceberg Table schema
+  31: optional TIcebergTable icebergTable
 }
 
 struct TDescriptorTable {

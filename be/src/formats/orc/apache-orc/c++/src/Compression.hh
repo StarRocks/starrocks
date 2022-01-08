@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_COMPRESSION_HH
-#define ORC_COMPRESSION_HH
+#pragma once
 
 #include "io/InputStream.hh"
 #include "io/OutputStream.hh"
@@ -52,5 +51,3 @@ std::unique_ptr<BufferedOutputStream> createCompressor(CompressionKind kind, Out
                                                        CompressionStrategy strategy, uint64_t bufferCapacity,
                                                        uint64_t compressionBlockSize, MemoryPool& pool);
 } // namespace orc
-
-#endif

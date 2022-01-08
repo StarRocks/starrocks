@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_LOGGING_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_LOGGING_H
+#pragma once
 
 #include <string>
 
@@ -41,5 +40,3 @@ void shutdown_logging();
 std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch);
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_COMMON_UTIL_LOGGING_H

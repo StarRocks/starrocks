@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_SRC_OLAP_ROWSET_BETA_ROWSET_H_
-#define STARROCKS_SRC_OLAP_ROWSET_BETA_ROWSET_H_
+#pragma once
 
 #include "common/statusor.h"
 #include "storage/olap_common.h"
@@ -119,5 +118,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif //STARROCKS_SRC_OLAP_ROWSET_BETA_ROWSET_H_

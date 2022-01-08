@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TABLET_SCHEMA_H
-#define STARROCKS_BE_SRC_OLAP_TABLET_SCHEMA_H
+#pragma once
 
 #include <gtest/gtest_prod.h>
 
@@ -212,7 +211,7 @@ public:
     static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
                                                 TabletSchemaMap* schema_map);
     static std::shared_ptr<TabletSchema> create(const TabletSchema& tablet_schema,
-                                                const std::vector<std::size_t>& column_indexes);
+                                                const std::vector<int32_t>& column_indexes);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
@@ -298,5 +297,3 @@ bool operator==(const TabletSchema& a, const TabletSchema& b);
 bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_TABLET_SCHEMA_H

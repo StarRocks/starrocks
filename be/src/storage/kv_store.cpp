@@ -228,6 +228,24 @@ Status KVStore::iterate_range(ColumnFamilyIndex column_family_index, const std::
     return to_status(it->status());
 }
 
+Status KVStore::compact(uint64_t* size_before, uint64_t* size_after) {
+    rocksdb::ColumnFamilyHandle* handle = _handles[META_COLUMN_FAMILY_INDEX];
+    (void)_db->GetIntProperty(handle, "rocksdb.live-sst-files-size", size_before);
+    rocksdb::CompactRangeOptions opts;
+    auto st = _db->CompactRange(opts, handle, nullptr, nullptr);
+    (void)_db->GetIntProperty(handle, "rocksdb.live-sst-files-size", size_after);
+    return to_status(st);
+}
+
+std::string KVStore::get_stats() {
+    rocksdb::ColumnFamilyHandle* handle = _handles[META_COLUMN_FAMILY_INDEX];
+    std::string stats;
+    if (!_db->GetProperty(handle, "rocksdb.stats", &stats)) {
+        LOG(WARNING) << "rocksdb get stats failed" << std::endl;
+    }
+    return stats;
+}
+
 std::string KVStore::get_root_path() {
     return _root_path;
 }

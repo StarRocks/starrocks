@@ -54,8 +54,7 @@
       Macros are defined as calls to non-inlinable empty functions
       that are intercepted by Valgrind. */
 
-#ifndef __DYNAMIC_ANNOTATIONS_H__
-#define __DYNAMIC_ANNOTATIONS_H__
+#pragma once
 
 #ifndef DYNAMIC_ANNOTATIONS_ENABLED
 #define DYNAMIC_ANNOTATIONS_ENABLED 0
@@ -678,5 +677,3 @@ inline T ANNOTATE_UNPROTECTED_READ(const volatile T& x) {
 /* Undefine the macros intended only in this file. */
 #undef ANNOTALYSIS_STATIC_INLINE
 #undef ANNOTALYSIS_SEMICOLON_OR_EMPTY_BODY
-
-#endif /* __DYNAMIC_ANNOTATIONS_H__ */

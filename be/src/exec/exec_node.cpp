@@ -234,12 +234,12 @@ pipeline::OpFactories ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 }
 
 // specific_get_next to get chunks, It's implemented in subclass.
-// if pre chunk is nullptr current chunk size >= batch_size / 2, direct return the current chunk
+// if pre chunk is nullptr current chunk size >= chunk_size / 2, direct return the current chunk
 // if pre chunk is not nullptr and pre chunk size + cur chunk size <= 4096, merge the two chunk
 // if pre chunk is not nullptr and pre chunk size + cur chunk size > 4096, return pre chunk
 Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* eos, ChunkPtr& pre_output_chunk,
                                     const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next) {
-    size_t batch_size = state->batch_size();
+    size_t chunk_size = state->chunk_size();
 
     while (true) {
         bool cur_eos = false;
@@ -260,8 +260,8 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
             if (cur_size <= 0) {
                 continue;
             } else if (pre_output_chunk == nullptr) {
-                if (cur_size >= batch_size / 2) {
-                    // the probe chunk size of read from right child >= batch_size, direct return
+                if (cur_size >= chunk_size / 2) {
+                    // the probe chunk size of read from right child >= chunk_size, direct return
                     *eos = false;
                     *chunk = std::move(cur_chunk);
                     return Status::OK();
@@ -270,8 +270,8 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
                     continue;
                 }
             } else {
-                if (cur_size + pre_output_chunk->num_rows() > batch_size) {
-                    // the two chunk size > batch_size, return the first reserved chunk
+                if (cur_size + pre_output_chunk->num_rows() > chunk_size) {
+                    // the two chunk size > chunk_size, return the first reserved chunk
                     *eos = false;
                     *chunk = std::move(pre_output_chunk);
                     pre_output_chunk = std::move(cur_chunk);

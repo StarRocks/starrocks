@@ -16,8 +16,7 @@
  * limitations under the License.
  */
 
-#ifndef GMOCK_WRAPPER_H
-#define GMOCK_WRAPPER_H
+#pragma once
 
 // we need to disable a whole set of warnings as we include gtest.h
 // restore most of the warnings after the file is loaded.
@@ -45,5 +44,3 @@ DIAGNOSTIC_IGNORE("-Wweak-vtables")
 #include "gmock/gmock.h"
 
 DIAGNOSTIC_POP
-
-#endif

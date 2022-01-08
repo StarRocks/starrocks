@@ -14,16 +14,31 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
 class OrcScannerAdapterTest : public testing::Test {
 public:
+    void SetUp() override { _runtime_state = _create_runtime_state(); }
+
     OrcScannerAdapterTest();
 
 protected:
     std::vector<SlotDescriptor*> _src_slot_descs;
     ObjectPool _pool;
+
+    std::shared_ptr<RuntimeState> _create_runtime_state() {
+        TUniqueId fragment_id;
+        TQueryOptions query_options;
+        query_options.batch_size = config::vector_chunk_size;
+        TQueryGlobals query_globals;
+        auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
+        runtime_state->init_instance_mem_tracker();
+        return runtime_state;
+    }
+
+    std::shared_ptr<RuntimeState> _runtime_state;
 };
 
 struct SlotDesc {
@@ -43,7 +58,7 @@ void create_slot_descriptors(ObjectPool* pool, std::vector<SlotDescriptor*>* res
     }
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl);
+    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     for (int i = 0; i < size; i++) {
         res->push_back(tbl->get_slot_descriptor(i));
@@ -170,7 +185,7 @@ static uint64_t get_hit_rows(OrcScannerAdapter* adapter) {
 }
 
 TEST_F(OrcScannerAdapterTest, Normal) {
-    OrcScannerAdapter adapter(_src_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
     auto input_stream = orc::readLocalFile(input_orc_file);
     adapter.init(std::move(input_stream));
     uint64_t records = get_hit_rows(&adapter);
@@ -191,7 +206,7 @@ public:
 };
 
 TEST_F(OrcScannerAdapterTest, SkipStripe) {
-    OrcScannerAdapter adapter(_src_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
     auto filter = std::make_shared<SkipStripeRowFilter>();
     adapter.set_row_reader_filter(filter);
 
@@ -305,7 +320,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
 }
 
 TEST_F(OrcScannerAdapterTest, SkipFileByConjunctsEQ) {
-    OrcScannerAdapter adapter(_src_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
 
     // lo_custkey == 0, min/max is 1,7.
     std::vector<TExprNode> nodes;
@@ -324,7 +339,7 @@ TEST_F(OrcScannerAdapterTest, SkipFileByConjunctsEQ) {
 }
 
 TEST_F(OrcScannerAdapterTest, SkipStripeByConjunctsEQ) {
-    OrcScannerAdapter adapter(_src_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
 
     // lo_orderdate == 200000
     // stripe0 min/max = 9/199927 [5120]
@@ -350,7 +365,7 @@ TEST_F(OrcScannerAdapterTest, SkipStripeByConjunctsEQ) {
 }
 
 TEST_F(OrcScannerAdapterTest, SkipStripeByConjunctsInPred) {
-    OrcScannerAdapter adapter(_src_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
 
     // lo_orderdate min/max = 9/200000
     std::vector<TExprNode> nodes;
@@ -401,7 +416,7 @@ private:
 };
 
 TEST_F(OrcScannerAdapterTest, SkipRowGroups) {
-    OrcScannerAdapter adapter(_src_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
     auto filter = std::make_shared<SkipRowGroupRowFilter>();
     adapter.set_row_reader_filter(filter);
 
@@ -413,7 +428,8 @@ TEST_F(OrcScannerAdapterTest, SkipRowGroups) {
 }
 
 template <int ORC_PRECISION, int ORC_SCALE, typename ValueType>
-std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(ObjectPool* pool, const std::vector<ValueType>& values) {
+std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, ObjectPool* pool,
+                                                               const std::vector<ValueType>& values) {
     std::cout << "orc precision=" << ORC_PRECISION << " scale=" << ORC_SCALE << std::endl;
     if constexpr (std::is_same_v<ValueType, int64_t>) {
         static_assert(ORC_PRECISION <= 18);
@@ -467,11 +483,11 @@ std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(ObjectPool* pool,
     b3.add_slot(b2.build());
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl);
+    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 
-    OrcScannerAdapter adapter(slots);
+    OrcScannerAdapter adapter(state, slots);
     adapter.init(std::move(reader));
     Status st = adapter.read_next();
     CHECK(st.ok()) << st.to_string();
@@ -529,7 +545,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal64) {
                 "1",
                 "999999999",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<18, 9>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<18, 9>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -538,7 +554,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal64) {
                 "-9.99999999", "-9999999999.99999999", "9.99999999",  "9999999999.99999999", "10",
                 "9999999990",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<18, 8>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<18, 8>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -555,7 +571,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal64) {
                 "100",
                 "99999999900",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<18, 7>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<18, 7>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -572,7 +588,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal64) {
                 "1000000000",
                 "999999999000000000",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<18, 0>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<18, 0>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -589,7 +605,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal64) {
                 "0.1",
                 "99999999.9",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<18, 10>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<18, 10>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -606,7 +622,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal64) {
                 "0.01",
                 "9999999.99",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<18, 11>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<18, 11>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -614,7 +630,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal64) {
                 "0",           "0",           "0",          "0",          "0.00000123", "-0.000000009", "-9.999999999",
                 "0.000000009", "9.999999999", "0.00000001", "9.99999999",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<18, 17>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<18, 17>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
 }
@@ -658,7 +674,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal128) {
                 "1",
                 "999999999",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<27, 9>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<27, 9>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -675,7 +691,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal128) {
                 "10",
                 "9999999990",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<27, 8>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<27, 8>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -692,7 +708,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal128) {
                 "100",
                 "99999999900",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<27, 7>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<27, 7>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -709,7 +725,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal128) {
                 "1000000000",
                 "999999999000000000",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<27, 0>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<27, 0>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -726,7 +742,7 @@ TEST_F(OrcScannerAdapterTest, TestDecimal128) {
                 "0.1",
                 "99999999.9",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<27, 10>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<27, 10>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
@@ -743,19 +759,20 @@ TEST_F(OrcScannerAdapterTest, TestDecimal128) {
                 "0.01",
                 "9999999.99",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<27, 11>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<27, 11>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
     {
         std::vector<const char*> exp = {
                 "0", "0", "0", "0", "0", "0", "-9.999999999", "0", "9.999999999", "0", "0.000000009",
         };
-        auto real = convert_orc_to_starrocks_decimalv2<27, 26>(&pool, orc_values);
+        auto real = convert_orc_to_starrocks_decimalv2<27, 26>(_runtime_state.get(), &pool, orc_values);
         check_results(exp, real);
     }
 }
 
-std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(ObjectPool* pool, const std::string& reader_tz,
+std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
+                                                               const std::string& reader_tz,
                                                                const std::string& write_tz,
                                                                const std::vector<int64_t>& values) {
     const char* filename = "orc_scanner_test_timestamp.orc";
@@ -796,11 +813,11 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(ObjectPool* pool,
     b3.add_slot(b2.build());
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl);
+    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 
-    OrcScannerAdapter adapter(slots);
+    OrcScannerAdapter adapter(state, slots);
     adapter.set_timezone(reader_tz);
     adapter.init(std::move(reader));
     Status st = adapter.read_next();
@@ -846,7 +863,7 @@ TEST_F(OrcScannerAdapterTest, TestTimestamp) {
     };
     // clang-format on
     ObjectPool pool;
-    auto res = convert_orc_to_starrocks_timestamp(&pool, "Asia/Shanghai", "UTC", orc_values);
+    auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values);
     EXPECT_EQ(res.size(), orc_values.size());
     for (size_t i = 0; i < res.size(); i++) {
         std::string o = res[i].to_string();
@@ -892,7 +909,7 @@ TEST_F(OrcScannerAdapterTest, TestReadPositionalColumn) {
     create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs, n);
 
     {
-        OrcScannerAdapter adapter(src_slot_descriptors);
+        OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = adapter.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
@@ -919,7 +936,7 @@ TEST_F(OrcScannerAdapterTest, TestReadPositionalColumn) {
     }
 
     {
-        OrcScannerAdapter adapter(src_slot_descriptors);
+        OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descriptors);
         std::vector<std::string> hive_column_names = {"mm", "b", "a", "c"};
         adapter.set_hive_column_names(&hive_column_names);
         auto input_stream = orc::readLocalFile(input_orc_file);
@@ -994,7 +1011,7 @@ TEST_F(OrcScannerAdapterTest, TestReadArrayBasic) {
     create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs, n);
 
     {
-        OrcScannerAdapter adapter(src_slot_descriptors);
+        OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = adapter.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1062,7 +1079,7 @@ TEST_F(OrcScannerAdapterTest, TestReadPaddingChar) {
     create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs, n);
 
     {
-        OrcScannerAdapter adapter(src_slot_descriptors);
+        OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = adapter.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();

@@ -40,7 +40,7 @@ TEST_F(ColumnPoolTest, single_thread) {
     c1->append_datum(Datum((int32_t)1));
     c1->append_datum(Datum((int32_t)2));
     c1->set_delete_state(DEL_PARTIAL_SATISFIED);
-    return_column<Int32Column>(c1);
+    return_column<Int32Column>(c1, config::vector_chunk_size);
 
     auto c2 = get_column<Int32Column>();
     ASSERT_EQ(c1, c2);
@@ -60,8 +60,8 @@ TEST_F(ColumnPoolTest, single_thread) {
     auto c6 = get_column<Int32Column>();
     ASSERT_NE(c5, c6);
 
-    return_column<Int32Column>(c6);
-    return_column<Int32Column>(c5);
+    return_column<Int32Column>(c6, config::vector_chunk_size);
+    return_column<Int32Column>(c5, config::vector_chunk_size);
 
     auto c7 = get_column<Int32Column>();
     auto c8 = get_column<Int32Column>();
@@ -70,8 +70,8 @@ TEST_F(ColumnPoolTest, single_thread) {
     c5 = nullptr;
     c6 = nullptr;
 
-    return_column<Int32Column>(c8);
-    return_column<Int32Column>(c7);
+    return_column<Int32Column>(c8, config::vector_chunk_size);
+    return_column<Int32Column>(c7, config::vector_chunk_size);
 
     delete c2;
     delete c3;
