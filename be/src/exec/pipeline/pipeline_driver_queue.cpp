@@ -7,14 +7,24 @@
 
 namespace starrocks::pipeline {
 
-void QuerySharedDriverQueue::put_back(const DriverRawPtr driver, bool from_dispatcher) {
-    _put_back(driver, from_dispatcher);
+void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
+    _put_back(driver);
 }
 
-void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers, bool from_dispatcher) {
+void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
     for (auto driver : drivers) {
-        _put_back(driver, from_dispatcher);
+        _put_back(driver);
     }
+}
+
+void QuerySharedDriverQueue::put_back_from_dispatcher(const DriverRawPtr driver) {
+    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+    put_back(driver);
+}
+
+void QuerySharedDriverQueue::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
+    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+    put_back(drivers);
 }
 
 StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
@@ -37,6 +47,7 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
         }
     }
 
+    // Always return non-null driver, which is guaranteed be the callee, e.g. DriverQueueWithWorkGroup::take().
     DCHECK(queue_idx >= 0);
 
     driver_ptr = _queues[queue_idx].queue.front();
@@ -47,7 +58,7 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
     return driver_ptr;
 }
 
-void QuerySharedDriverQueue::yield_driver(const DriverRawPtr driver) {
+void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
     _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
 }
 
@@ -64,16 +75,29 @@ void DriverQueueWithWorkGroup::close() {
     _cv.notify_all();
 }
 
-void DriverQueueWithWorkGroup::put_back(const DriverRawPtr driver, bool from_dispatcher) {
+void DriverQueueWithWorkGroup::put_back(const DriverRawPtr driver) {
     std::lock_guard<std::mutex> lock(_global_mutex);
-    _put_back(driver, from_dispatcher);
+    _put_back<false>(driver);
 }
 
-void DriverQueueWithWorkGroup::put_back(const std::vector<DriverRawPtr>& drivers, bool from_dispatcher) {
+void DriverQueueWithWorkGroup::put_back(const std::vector<DriverRawPtr>& drivers) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
     for (const auto driver : drivers) {
-        _put_back(driver, from_dispatcher);
+        _put_back<false>(driver);
+    }
+}
+
+void DriverQueueWithWorkGroup::put_back_from_dispatcher(const DriverRawPtr driver) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+    _put_back<true>(driver);
+}
+
+void DriverQueueWithWorkGroup::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    for (const auto driver : drivers) {
+        _put_back<true>(driver);
     }
 }
 
@@ -100,12 +124,12 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take() {
     return wg->driver_queue()->take();
 }
 
-void DriverQueueWithWorkGroup::yield_driver(const DriverRawPtr driver) {
+void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
     int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
     auto* wg = driver->workgroup();
-    wg->driver_queue()->yield_driver(driver);
+    wg->driver_queue()->update_statistics(driver);
     wg->increment_real_runtime_ns(driver->driver_acct().get_last_time_spent());
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
 }
@@ -121,11 +145,12 @@ size_t DriverQueueWithWorkGroup::size() {
     return size;
 }
 
-void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver, bool from_dispatcher) {
+template <bool from_dispatcher>
+void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
     auto* wg = driver->workgroup();
     if (_wgs.find(wg) == _wgs.end()) {
         _sum_cpu_limit += wg->get_cpu_limit();
-        if (!from_dispatcher) {
+        if constexpr (!from_dispatcher) {
             auto* min_wg = _find_min_wg();
             if (min_wg != nullptr) {
                 wg->set_vruntime_ns(
@@ -136,7 +161,7 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver, bool from_di
         _wgs.emplace(wg);
     }
 
-    wg->driver_queue()->put_back(driver, from_dispatcher);
+    wg->driver_queue()->put_back(driver);
     _cv.notify_one();
 }
 

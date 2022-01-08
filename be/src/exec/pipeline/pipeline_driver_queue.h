@@ -23,14 +23,17 @@ public:
     virtual ~DriverQueue() = default;
     virtual void close() = 0;
 
-    // from_dispatcher is true, when the dispatcher thread puts back the driver.
-    virtual void put_back(const DriverRawPtr driver, bool from_dispatcher) = 0;
-    virtual void put_back(const std::vector<DriverRawPtr>& drivers, bool from_dispatcher) = 0;
+    virtual void put_back(const DriverRawPtr driver) = 0;
+    virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
+    // *from_dispatcher* means that the dispatcher thread puts the driver back to the queue.
+    virtual void put_back_from_dispatcher(const DriverRawPtr driver) = 0;
+    virtual void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) = 0;
+
     virtual StatusOr<DriverRawPtr> take() = 0;
 
-    // Update statistics information of the driver's workgroup
+    // Update statistics of the driver's workgroup,
     // when yielding the driver in the dispatcher thread.
-    virtual void yield_driver(const DriverRawPtr driver) = 0;
+    virtual void update_statistics(const DriverRawPtr driver) = 0;
 
     virtual size_t size() = 0;
     bool empty() { return size() == 0; }
@@ -70,12 +73,15 @@ public:
     ~QuerySharedDriverQueue() override = default;
     void close() override {}
 
-    void put_back(const DriverRawPtr driver, bool from_dispatcher) override;
-    void put_back(const std::vector<DriverRawPtr>& drivers, bool from_dispatcher) override;
+    void put_back(const DriverRawPtr driver) override;
+    void put_back(const std::vector<DriverRawPtr>& drivers) override;
+    void put_back_from_dispatcher(const DriverRawPtr driver) override;
+    void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
+
     // return nullptr if queue is closed;
     StatusOr<DriverRawPtr> take() override;
 
-    void yield_driver(const DriverRawPtr driver) override;
+    void update_statistics(const DriverRawPtr driver) override;
 
     size_t size() override { return _size; }
 
@@ -99,18 +105,20 @@ public:
     ~DriverQueueWithWorkGroup() override = default;
     void close() override;
 
+    void put_back(const DriverRawPtr driver) override;
+    void put_back(const std::vector<DriverRawPtr>& drivers) override;
     // When the driver's workgroup is not in the workgroup queue
     // and the driver isn't from a dispatcher thread (that is, from the poller or new driver),
     // the workgroup's vruntime is adjusted to workgroup_queue.min_vruntime-ideal_runtime/2,
-    // to avoid sloping too much time to this workgroup .
-    void put_back(const DriverRawPtr driver, bool from_dispatcher) override;
-    void put_back(const std::vector<DriverRawPtr>& drivers, bool from_dispatcher) override;
+    // to avoid sloping too much time to this workgroup.
+    void put_back_from_dispatcher(const DriverRawPtr driver) override;
+    void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
 
     // Firstly, select the work group with the minimum vruntime.
     // Secondly, select the proper driver from the driver queue of this work group.
     StatusOr<DriverRawPtr> take() override;
 
-    void yield_driver(const DriverRawPtr driver) override;
+    void update_statistics(const DriverRawPtr driver) override;
 
     size_t size() override;
 
@@ -119,7 +127,8 @@ private:
     static constexpr int64_t DISPATCH_PERIOD_PER_WG_NS = 200'1000'1000;
 
     // This method should be guarded by the outside _global_mutex.
-    void _put_back(const DriverRawPtr driver, bool from_dispatcher);
+    template <bool from_dispatcher>
+    void _put_back(const DriverRawPtr driver);
     // This method should be guarded by the outside _global_mutex.
     workgroup::WorkGroup* _find_min_wg();
     // The ideal runtime of a work group is the weighted average of the schedule period.

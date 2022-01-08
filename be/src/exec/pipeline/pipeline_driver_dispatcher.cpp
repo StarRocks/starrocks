@@ -87,7 +87,7 @@ void GlobalDriverDispatcher::run() {
             // query context has ready drivers to run, so extend its lifetime.
             query_ctx->extend_lifetime();
             auto status = driver->process(runtime_state);
-            this->_driver_queue->yield_driver(driver);
+            this->_driver_queue->update_statistics(driver);
 
             if (!status.ok()) {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
@@ -107,7 +107,7 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                this->_driver_queue->put_back(driver, true);
+                this->_driver_queue->put_back_from_dispatcher(driver);
                 break;
             }
             case FINISH:
@@ -143,7 +143,7 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
             driver->set_driver_state(DriverState::INPUT_EMPTY);
             this->_blocked_driver_poller->add_blocked_driver(driver);
         } else {
-            this->_driver_queue->put_back(driver, false);
+            this->_driver_queue->put_back(driver);
         }
     }
 }
