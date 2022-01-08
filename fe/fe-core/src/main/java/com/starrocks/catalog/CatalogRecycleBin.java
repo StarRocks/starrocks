@@ -58,7 +58,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private static final long minEraseLatency = 10 * 60 * 1000;  // 10 min
     // Maximum value of a batch of operations for actually delete database(table/partition)
     // The erase operation will be locked, so one batch can not be too many.
-    private static final int max_erase_operation_per_cycle = 500;
+    private static final int MAX_ERASE_OPERATIONS_PER_CYCLE = 500;
 
     private Map<Long, RecycleDatabaseInfo> idToDatabase;
     private Map<Long, RecycleTableInfo> idToTable;
