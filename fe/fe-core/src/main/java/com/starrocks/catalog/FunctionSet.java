@@ -74,6 +74,8 @@ public class FunctionSet {
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
     public static final String DICT_MERGE = "dict_merge";
     public static final String ANY_VALUE = "any_value";
+    public static final String GROUP_CONCAT = "group_concat";
+    public static final String ARRAY_AGG = "array_agg";
 
     // Window functions:
     public static final String LEAD = "lead";
@@ -173,7 +175,7 @@ public class FunctionSet {
            "concat_ws",
            "hex",
            "left",
-           "like", 
+           "like",
            "lower",
            "lpad",
            "ltrim",
@@ -185,8 +187,8 @@ public class FunctionSet {
            "rpad",
            "rtrim",
            "split_part",
-           "substr", 
-           "substring", 
+           "substr",
+           "substring",
            "trim",
            "upper");
 
@@ -529,21 +531,21 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.SMALLINT), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.INT), Type.BIGINT, Type.BIGINT,  false, true, false));
+                    Lists.newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL32), Type.DECIMAL64, Type.DECIMAL64, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT,false, true, false));
+                    Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL64), Type.DECIMAL64, Type.DECIMAL64, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.FLOAT), Type.DOUBLE, Type.DOUBLE, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.DOUBLE,  false, true, false));
+                    Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.DOUBLE, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.DECIMALV2,  false, true, false));
+                    Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.DECIMALV2, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.LARGEINT), Type.LARGEINT, Type.LARGEINT,  false, true, false));
+                    Lists.newArrayList(Type.LARGEINT), Type.LARGEINT, Type.LARGEINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL128), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
         }
@@ -632,6 +634,51 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin("avg",
                 Lists.newArrayList(Type.DATETIME), Type.DATETIME, Type.DATETIME,
                 false, true, false));
+
+        // array_agg
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.BOOLEAN), Type.ARRAY_BOOLEAN, Type.ARRAY_BOOLEAN,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.TINYINT), Type.ARRAY_TINYINT, Type.ARRAY_TINYINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.SMALLINT), Type.ARRAY_SMALLINT, Type.ARRAY_SMALLINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.INT), Type.ARRAY_INT, Type.ARRAY_INT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.BIGINT), Type.ARRAY_BIGINT, Type.ARRAY_BIGINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.LARGEINT), Type.ARRAY_LARGEINT, Type.ARRAY_LARGEINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.FLOAT), Type.ARRAY_FLOAT, Type.ARRAY_FLOAT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.DOUBLE), Type.ARRAY_DOUBLE, Type.ARRAY_DOUBLE,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.VARCHAR), Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.CHAR), Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.DATE), Type.ARRAY_DATE, Type.ARRAY_DATE,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.DATETIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.DECIMAL32), Type.ARRAY_DECIMALV2, Type.ARRAY_DECIMALV2,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("array_agg",
+                Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
+
         // Group_concat(string)
         addBuiltin(AggregateFunction.createBuiltin("group_concat",
                 Lists.newArrayList(Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,

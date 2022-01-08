@@ -65,7 +65,13 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("group_concat")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+            if (fnParams.isDistinct()) {
+                throw new SemanticException("array_agg does not support DISTINCT");
+            }
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
             if (functionCallExpr.getChildren().size() > 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
                         "group_concat requires one or two parameters: " + functionCallExpr.toSql());

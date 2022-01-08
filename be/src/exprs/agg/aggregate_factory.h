@@ -81,6 +81,9 @@ public:
 
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
 
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeArrayAggAggregateFunction();
+
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
 

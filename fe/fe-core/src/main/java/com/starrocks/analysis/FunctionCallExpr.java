@@ -396,7 +396,13 @@ public class FunctionCallExpr extends Expr {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("group_concat")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+            if (fnParams.isDistinct()) {
+                throw new AnalysisException("array_agg does not support DISTINCT");
+            }
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
             if (children.size() > 2 || children.isEmpty()) {
                 throw new AnalysisException(
                         "group_concat requires one or two parameters: " + this.toSql());
