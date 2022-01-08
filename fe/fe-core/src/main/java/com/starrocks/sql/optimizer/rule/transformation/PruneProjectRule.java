@@ -56,7 +56,8 @@ public class PruneProjectRule extends TransformationRule {
                     logicalOperator.getOutputColumns(new ExpressionContext(input.inputAt(0))).getStream().
                             mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList()));
             projectMap.put(smallestColumn, smallestColumn);
-            return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(projectMap), input.getInputs()));
+            return Lists.newArrayList(OptExpression
+                    .create(new LogicalProjectOperator(projectMap, logicalOperator.getLimit()), input.getInputs()));
         }
 
         return Collections.emptyList();
