@@ -236,4 +236,8 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     }
 }
 
+TEST_F(RowsetUpdateStateTest, check_conflict) {
+    
+}
+
 } // namespace starrocks
