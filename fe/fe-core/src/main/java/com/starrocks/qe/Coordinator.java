@@ -107,6 +107,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -925,32 +926,18 @@ public class Coordinator {
         if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
             return;
         }
-        long maxRowCountPerScanOperator = ConnectContext.get().getSessionVariable().getPipelineMaxRowCountPerScanOperator();
         int dop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
         for (FragmentExecParams params : fragmentExecParamsMap.values()) {
-            List<PlanNode> scanNodes = params.fragment.getOlapScanNodes(params.fragment.getPlanRoot());
+            List<PlanNode> scanNodes = new LinkedList<>();
+            params.fragment.getOlapScanNodes(params.fragment.getPlanRoot(), scanNodes);
             for (PlanNode node : scanNodes) {
                 OlapScanNode scanNode = (OlapScanNode) node;
-                int totalNumScanRanges = scanNode.getScanRangeLocations(0).size();
-                long numRows = scanNode.getCardinality();
-                if (scanNode.hasLimit()) {
-                    numRows = Math.min(scanNode.getLimit(), numRows);
-                }
-                int maxNumScanOperators = Math.max(1, (int) (numRows / maxRowCountPerScanOperator));
                 for (FInstanceExecParam instanceExecParam : params.instanceExecParams) {
                     int numScanRanges = 0;
                     if (instanceExecParam.perNodeScanRanges.containsKey(scanNode.getId().asInt())) {
                         numScanRanges = instanceExecParam.perNodeScanRanges.get(scanNode.getId().asInt()).size();
                     }
-                    // int scanDop = maxNumScanOperators * numScanRanges / totalNumScanRanges;
                     int scanDopLimit = Math.max(1, Math.min(dop, numScanRanges));
-                    // numRows is 0 means that scanNode.getCardinality() return an inexact evaluated value, so in such
-                    // scenarios, scanDopLimit is used in default.
-                    //if (numRows > 0) {
-                    //    scanDop = Math.min(scanDopLimit, Math.max(1, scanDop));
-                    //} else {
-                    //    scanDop = scanDopLimit;
-                    //}
                     instanceExecParam.perScanNodeDop.put(scanNode.getId().asInt(), scanDopLimit);
                 }
             }

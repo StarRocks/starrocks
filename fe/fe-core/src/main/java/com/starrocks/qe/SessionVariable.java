@@ -116,8 +116,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_MAX_ROW_COUNT_PER_SCAN_OPERATOR = "pipeline_max_row_count_per_scan_operator";
-
     public static final String PIPELINE_MAX_INPUT_BYTES_PER_OPERATOR = "pipeline_max_input_bytes_per_operator";
 
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
@@ -319,10 +317,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
-    @VariableMgr.VarAttr(name = PIPELINE_MAX_ROW_COUNT_PER_SCAN_OPERATOR)
-    private long pipelineMaxRowCountPerScanOperator = 262144;
-
-    @VariableMgr.VarAttr(name = PIPELINE_MAX_INPUT_BYTES_PER_OPERATOR)
+    @VariableMgr.VarAttr(name = PIPELINE_MAX_INPUT_BYTES_PER_OPERATOR, flag = VariableMgr.INVISIBLE)
     private long pipelineMaxInputBytesPerOperator = 1000000;
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
@@ -730,10 +725,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
-    }
-
-    public long getPipelineMaxRowCountPerScanOperator() {
-        return pipelineMaxRowCountPerScanOperator;
     }
 
     public long getPipelineMaxInputBytesPerOperator() {
