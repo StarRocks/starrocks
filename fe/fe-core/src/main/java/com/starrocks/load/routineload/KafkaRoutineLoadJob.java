@@ -540,7 +540,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     public void updateState(JobState jobState, ErrorReason reason, boolean isReplay) throws UserException {
         super.updateState(jobState, reason, isReplay);
-        convertedCustomProperties.clear();
     }
 
     private void modifyPropertiesInternal(Map<String, String> jobProperties,
