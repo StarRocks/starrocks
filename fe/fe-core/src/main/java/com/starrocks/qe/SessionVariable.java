@@ -119,6 +119,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
+    public static final String WORKGROUP_ID = "workgroup_id";
+
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
 
@@ -329,6 +331,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
     private String pipelineProfileMode = "brief";
+
+    @VariableMgr.VarAttr(name = WORKGROUP_ID)
+    private int workgroupId = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
@@ -758,6 +763,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
+    }
+
+    public int getWorkgroupId() {
+        return workgroupId;
     }
 
     public boolean isEnableReplicationJoin() {
