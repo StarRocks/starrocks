@@ -92,10 +92,10 @@ public:
 
 public:
     // should be call read chunk from disk
-    void grant_chunk_num(int32_t chunk_num);
+    void increase_chunk_num(int32_t chunk_num);
 
     // should be call while comsume chunk from calculate thread
-    void descend_chunk_num(int32_t chunk_num);
+    void decrease_chunk_num(int32_t chunk_num);
 
     void estimate_trend_factor_period();
     double get_expect_factor() const;
@@ -134,8 +134,8 @@ private:
 
     //  some variables for io schedule
     std::atomic<size_t> _cur_hold_total_chunk_num = 0; // total chunk num wait for consume
-    std::atomic<size_t> _grant_chunk_num_period = 0;
-    std::atomic<size_t> _descend_chunk_num_period = 0;
+    std::atomic<size_t> _increase_chunk_num_period = 0;
+    std::atomic<size_t> _decrease_chunk_num_period = 0;
 
     std::atomic<bool> _is_estimate = false;
 

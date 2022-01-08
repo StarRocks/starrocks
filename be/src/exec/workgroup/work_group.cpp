@@ -122,14 +122,14 @@ void WorkGroup::pick_and_run_io_task() {
 }
 
 // shuold be call when read chunk_num from disk
-void WorkGroup::grant_chunk_num(int32_t chunk_num) {
+void WorkGroup::increase_chunk_num(int32_t chunk_num) {
     _cur_hold_total_chunk_num += chunk_num;
-    _grant_chunk_num_period += chunk_num;
+    _increase_chunk_num_period += chunk_num;
 }
 
-void WorkGroup::descend_chunk_num(int32_t chunk_num) {
+void WorkGroup::decrease_chunk_num(int32_t chunk_num) {
     _cur_hold_total_chunk_num -= chunk_num;
-    _descend_chunk_num_period -= chunk_num;
+    _decrease_chunk_num_period -= chunk_num;
 }
 
 double WorkGroup::get_expect_factor() const {
@@ -158,16 +158,31 @@ void WorkGroup::update_cur_select_factor(double value) {
 
 void WorkGroup::estimate_trend_factor_period() {
     // maybe should add a guard
-    double descend_factor =
-            _descend_chunk_num_period / _cpu_actual_use_ratio * _cpu_expect_use_ratio / _cpu_actual_use_ratio;
-    double grant_factor = _descend_chunk_num_period / _cpu_expect_use_ratio;
 
-    _expect_factor = descend_factor / grant_factor * _cpu_expect_use_ratio;
+    // Exapmle
+    // during a schedule period, actually this WorkGroup consume 70 chunk and use cpu resource percent 80
+    // but this WorkGroup cpu limit to percent 80
+    // meanwhile, WorkGroup read 200 chunk from io_threads, so we calculate some factor bellow
+    // decrease_factor = 70 / 0.8 * (0.7 / 0.8)
+    // increase_factor = 200 / 0.7
+    // _expect_factor mean we except io resource ratio of this WorkGroup to suit to 70 percent cpu limit
+    // so _expect_factor = decrease_factor / increase_factor * 70
+
+    double decrease_factor =
+            _decrease_chunk_num_period / _cpu_actual_use_ratio * _cpu_expect_use_ratio / _cpu_actual_use_ratio;
+    double increase_factor = _increase_chunk_num_period / _cpu_expect_use_ratio;
+
+    _expect_factor = decrease_factor / increase_factor * _cpu_expect_use_ratio;
+
+    // diff_factor mean diff between actually need io resource percent and limit percent of cpu
+    // if it is nagative, it mean resouse less and need more
+    // if it is positive, it mean resouse is enough and can be reduce
     _diff_factor = _cpu_expect_use_ratio - _expect_factor;
 
-    // reset for next period  statistics
-    _descend_chunk_num_period = 0;
-    _grant_chunk_num_period = 0;
+    // it only use for this period to calculate factors
+    // over calculate, it must be reset to zero for next period
+    _decrease_chunk_num_period = 0;
+    _increase_chunk_num_period = 0;
 }
 
 void WorkGroupManager::adjust_weight_if_need() {
@@ -181,10 +196,13 @@ void WorkGroupManager::adjust_weight_if_need() {
         return;
     }
 
+    // calculate all wg factors
     for (auto const& wg : _io_wgs) {
         wg->estimate_trend_factor_period();
     }
 
+    // positive_total_diff_factor count all workgroup which is short of io resource
+    // negative_total_diff_factor count all workgroup which over pay in io resource
     double positive_total_diff_factor = 0.0;
     double negative_total_diff_factor = 0.0;
     for (auto const& wg : _io_wgs) {
@@ -195,14 +213,23 @@ void WorkGroupManager::adjust_weight_if_need() {
         }
     }
 
-    // all workgroup don't  satisfy enough resource
-    // keep init select_factor
+    // If positive_total_diff_factor <= 0, it mean not exist workgroup which over pay io resource
+    // so it don't need adjust, just keep
     if (positive_total_diff_factor <= 0) {
         return;
     }
-    if (positive_total_diff_factor + negative_total_diff_factor >
-        0) { // resource enough but allocate not suit for cpu ratio
-        // adjust select factor
+
+    // Example:
+    // there is two workgroup A and B
+    // A _expect_factor : 0.18757812499999998, and _cpu_expect_use_ratio : 0.7, _diff_factor : 0.512421875
+    // B _expect_factor : 0.6749999999999999, and _cpu_expect_use_ratio : 0.3, _diff_factor :  -0.37499999999999994
+    // so 0.18757812499999998 + 0.6749999999999999 < 1.0, it mean resource is enough, and available is  -0.37499999999999994 + 0.512421875
+
+    if (positive_total_diff_factor + negative_total_diff_factor > 0) { 
+        // if positive_total_diff_factor + negative_total_diff_factor > 0
+        // it mean available resource more than short of resource
+        // so we just reduce resource of the workgroup which it over pay by ratio
+        // and add resource of the workgroup which it short of
         for (auto const& wg : _io_wgs) {
             if (wg->get_diff_factor() < 0) {
                 wg->update_select_factor(0 - negative_total_diff_factor * wg->get_diff_factor() /
@@ -212,8 +239,11 @@ void WorkGroupManager::adjust_weight_if_need() {
                                                      positive_total_diff_factor);
             }
         }
-    } else { // resource maybe not enough for all , and allocate not suit for cpu ratio
-        // adjust select factor
+    } else { 
+        // if positive_total_diff_factor + negative_total_diff_factor <= 0
+        // it mean available resource less than short of resource, but exist some workgroup which over pay
+        // so we just reduce resource of the workgroup which it over pay by ratio
+        // and add resource of the workgroup which it short of
         for (auto const& wg : _io_wgs) {
             if (wg->get_diff_factor() < 0) {
                 wg->update_select_factor(positive_total_diff_factor * wg->get_diff_factor() /
@@ -247,6 +277,7 @@ WorkGroupPtr WorkGroupManager::get_next_wg() {
         return nullptr;
     }
 
+    // during schedule period, we pre calculate next period wg for speed up
     for (size_t i = 0; i < _schedule_num_period; i++) {
         size_t idx = get_next_wg_index();
         _cur_wait_run_wgs[i] = _workgroups[idx];
@@ -258,6 +289,7 @@ WorkGroupPtr WorkGroupManager::get_next_wg() {
 }
 
 size_t WorkGroupManager::get_next_wg_index() {
+    // we use Weighted round robin
     size_t index = -1;
     double total = 0;
     for (int i = 0; i < _io_wgs.size(); i++) {
