@@ -286,6 +286,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
 
         PrimitiveType t = type.getPrimitiveType();
+        // char is same with varchar, but equivalence expression deriver can't keep same in some expression
         if (t != o.getType().getPrimitiveType()
                 && (!t.isCharFamily() && !o.getType().getPrimitiveType().isCharFamily())
                 && (!t.isDecimalOfAnyVersion() && !o.getType().getPrimitiveType().isDecimalOfAnyVersion())) {

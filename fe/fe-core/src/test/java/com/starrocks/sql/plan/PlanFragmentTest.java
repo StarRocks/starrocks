@@ -4748,11 +4748,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
-                "  |  <slot 25> : CAST(49 AS DOUBLE)\n" +
+                "  |  <slot 26> : CAST(49 AS DOUBLE)\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
     }
