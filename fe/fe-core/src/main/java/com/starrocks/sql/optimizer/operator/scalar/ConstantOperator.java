@@ -286,7 +286,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
 
         PrimitiveType t = type.getPrimitiveType();
-        if (t != o.getType().getPrimitiveType()) {
+        // char is same with varchar, but equivalence expression deriver can't keep same in some expression
+        if (t != o.getType().getPrimitiveType()
+                && (!t.isCharFamily() && !o.getType().getPrimitiveType().isCharFamily())
+                && (!t.isDecimalOfAnyVersion() && !o.getType().getPrimitiveType().isDecimalOfAnyVersion())) {
             throw new StarRocksPlannerException(
                     "Constant " + this.toString() + " can't compare with Constant " + o.toString(),
                     ErrorType.INTERNAL_ERROR);
