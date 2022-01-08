@@ -286,6 +286,7 @@
       + [array_length](/sql-reference/sql-functions/array-functions/array_length.md)
       + [array_max](/sql-reference/sql-functions/array-functions/array_max.md)
       + [array_min](/sql-reference/sql-functions/array-functions/array_min.md)
+      + [array_position](/sql-reference/sql-functions/array-functions/array_position.md)
       + [array_sum](/sql-reference/sql-functions/array-functions/array_sum.md)
     + [cast function](/sql-reference/sql-functions/cast.md)
     + [hash function](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
