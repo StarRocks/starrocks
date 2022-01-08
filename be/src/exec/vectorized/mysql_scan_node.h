@@ -18,6 +18,18 @@ class MemPool;
 class Status;
 
 namespace vectorized {
+#define APPLY_FOR_NUMERICAL_TYPE(M, APPEND_TO_SQL) \
+    M(TYPE_TINYINT, APPEND_TO_SQL)                 \
+    M(TYPE_BOOLEAN, APPEND_TO_SQL)                 \
+    M(TYPE_SMALLINT, APPEND_TO_SQL)                \
+    M(TYPE_INT, APPEND_TO_SQL)                     \
+    M(TYPE_BIGINT, APPEND_TO_SQL)
+
+#define APPLY_FOR_VARCHAR_DATE_TYPE(M, APPEND_TO_SQL) \
+    M(TYPE_DATE, APPEND_TO_SQL)                       \
+    M(TYPE_DATETIME, APPEND_TO_SQL)                   \
+    M(TYPE_CHAR, APPEND_TO_SQL)                       \
+    M(TYPE_VARCHAR, APPEND_TO_SQL)
 
 class MysqlScanNode final : public ScanNode {
 public:
