@@ -221,7 +221,7 @@ public class Optimizer {
             OptExpression childPlan = extractBestPlan(inputProperties.get(i), groupExpression.inputAt(i));
             childPlans.add(childPlan);
         }
-
+        // record inputProperties at operator, used for planFragment builder to determine join type
         PhysicalOperator operator = (PhysicalOperator) groupExpression.getOp();
         operator.setRequiredProperties(inputProperties);
 

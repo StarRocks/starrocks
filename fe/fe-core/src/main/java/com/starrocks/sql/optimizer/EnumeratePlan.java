@@ -7,6 +7,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.OutputInputProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 
 import java.util.Collections;
 import java.util.List;
@@ -60,6 +61,9 @@ public class EnumeratePlan {
         for (Map.Entry<OutputInputProperty, Integer> entry : chooseGroupExpression
                 .getPropertiesPlanCountMap(requiredProperty).entrySet()) {
             List<PhysicalPropertySet> inputProperties = entry.getKey().getInputProperties();
+            // record inputProperties at operator, used for planFragment builder to determine join type
+            PhysicalOperator operator = (PhysicalOperator) chooseGroupExpression.getOp();
+            operator.setRequiredProperties(inputProperties);
 
             if (planCountOfKProperties + entry.getValue() >= localRankOfGroupExpression) {
                 // 4. compute the localProperty-rank in the property.
