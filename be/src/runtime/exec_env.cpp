@@ -396,6 +396,8 @@ void ExecEnv::_destroy() {
         delete _load_mem_tracker;
         _load_mem_tracker = nullptr;
     }
+    // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
+    starrocks::workgroup::WorkGroupManager::instance()->destroy();
     if (_query_pool_mem_tracker) {
         delete _query_pool_mem_tracker;
         _query_pool_mem_tracker = nullptr;

@@ -102,6 +102,8 @@ public:
     WorkGroupPtr add_workgroup(const WorkGroupPtr& wg);
     // return reserved beforehand default workgroup for query is not bound to any workgroup
     WorkGroupPtr get_default_workgroup();
+    // destruct workgroups
+    void destroy();
     // remove already-existing workgroup from WorkGroupManager
     void remove_workgroup(int wg_id);
     // get next workgroup for computation

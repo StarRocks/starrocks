@@ -56,6 +56,10 @@ void WorkGroup::init() {
 
 WorkGroupManager::WorkGroupManager() {}
 WorkGroupManager::~WorkGroupManager() {}
+void WorkGroupManager::destroy() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    this->_workgroups.clear();
+}
 
 WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -102,11 +106,11 @@ WorkGroupQueue& WorkGroupManager::get_io_queue() {
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
-    auto default_wg = std::make_shared<WorkGroup>("default_wg", 0, 1, 20L * (1L << 32), 10, WorkGroupType::WG_DEFAULT);
+    auto default_wg = std::make_shared<WorkGroup>("default_wg", 0, 1, 20L * (1L << 30), 10, WorkGroupType::WG_DEFAULT);
     default_wg->init();
-    auto wg1 = std::make_shared<WorkGroup>("wg1", 1, 2, 10L * (1L << 32), 10, WorkGroupType::WG_NORMAL);
+    auto wg1 = std::make_shared<WorkGroup>("wg1", 1, 2, 10L * (1L << 30), 10, WorkGroupType::WG_NORMAL);
     wg1->init();
-    auto wg2 = std::make_shared<WorkGroup>("wg2", 2, 4, 30L * (1L << 32), 10, WorkGroupType::WG_NORMAL);
+    auto wg2 = std::make_shared<WorkGroup>("wg2", 2, 4, 30L * (1L << 30), 10, WorkGroupType::WG_NORMAL);
     wg2->init();
     WorkGroupManager::instance()->add_workgroup(default_wg);
     WorkGroupManager::instance()->add_workgroup(wg1);
