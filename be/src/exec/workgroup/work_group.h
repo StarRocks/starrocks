@@ -12,6 +12,7 @@
 #include "storage/olap_define.h"
 
 namespace starrocks {
+class TWorkGroup;
 namespace workgroup {
 
 class WorkGroup;
@@ -58,6 +59,7 @@ class WorkGroup {
 public:
     WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t memory_limit, size_t concurrency,
               WorkGroupType type);
+    WorkGroup(const TWorkGroup& twg);
     ~WorkGroup() = default;
 
     void init();
@@ -74,6 +76,8 @@ public:
         // TODO: implement io priority computation
         return 0;
     }
+
+    static constexpr int DEFAULT_WG_ID = 0;
 
 private:
     std::string _name;
@@ -95,7 +99,11 @@ class WorkGroupManager {
 
 public:
     // add a new workgroup to WorkGroupManger
-    void add_workgroup(const WorkGroupPtr& wg);
+    WorkGroupPtr add_workgroup(const WorkGroupPtr& wg);
+    // return reserved beforehand default workgroup for query is not bound to any workgroup
+    WorkGroupPtr get_default_workgroup();
+    // destruct workgroups
+    void destroy();
     // remove already-existing workgroup from WorkGroupManager
     void remove_workgroup(int wg_id);
     // get next workgroup for computation
@@ -112,6 +120,11 @@ private:
     std::unordered_map<int, WorkGroupPtr> _workgroups;
     CpuWorkGroupQueue _wg_cpu_queue;
     IoWorkGroupQueue _wg_io_queue;
+};
+
+class DefaultWorkGroupInitialization {
+public:
+    DefaultWorkGroupInitialization();
 };
 
 } // namespace workgroup

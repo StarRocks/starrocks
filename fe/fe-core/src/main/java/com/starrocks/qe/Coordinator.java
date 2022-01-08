@@ -95,6 +95,7 @@ import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -1925,6 +1926,11 @@ public class Coordinator {
                             params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
                         params.setPipeline_dop(fragment.getPipelineDop());
+                        // TODO (by satanson): just for verification of resource isolation.
+                        TWorkGroup wg = new TWorkGroup();
+                        wg.name = "";
+                        wg.id = ConnectContext.get().getSessionVariable().getWorkgroupId();
+                        params.setWorkgroup(wg);
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {
