@@ -10,6 +10,17 @@ using namespace starrocks::vectorized;
 namespace starrocks::pipeline {
 Status AssertNumRowsOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
+
+    // assert num rows node only use for un-correlate scalar subquery, return empty chunk is error, least fill one rows
+    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+
+    for (const auto& desc : _factory->row_desc()->tuple_descriptors()) {
+        for (const auto& slot : desc->slots()) {
+            chunk->append_column(ColumnHelper::create_const_null_column(1), slot->id());
+        }
+    }
+
+    _cur_chunk = std::move(chunk);
     return Status::OK();
 }
 
@@ -18,7 +29,19 @@ Status AssertNumRowsOperator::close(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> AssertNumRowsOperator::pull_chunk(RuntimeState* state) {
-    _actual_num_rows += _cur_chunk->num_rows();
+    return std::move(_cur_chunk);
+}
+
+bool AssertNumRowsOperator::has_output() const {
+    return _input_finished && _cur_chunk;
+}
+
+bool AssertNumRowsOperator::need_input() const {
+    return !_input_finished;
+}
+
+Status AssertNumRowsOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    _actual_num_rows += chunk->num_rows();
     if (_actual_num_rows > 1) {
         auto iter = _TAssertion_VALUES_TO_NAMES.find(_assertion);
         std::string message;
@@ -32,28 +55,17 @@ StatusOr<vectorized::ChunkPtr> AssertNumRowsOperator::pull_chunk(RuntimeState* s
         return Status::Cancelled(strings::Substitute("Expected $0 $1 to be returned by expression $2", message,
                                                      _desired_num_rows, _subquery_string));
     }
-    return std::move(_cur_chunk);
-}
 
-bool AssertNumRowsOperator::has_output() const {
-    return _cur_chunk != nullptr;
-}
-
-bool AssertNumRowsOperator::need_input() const {
-    return _cur_chunk == nullptr;
-}
-
-Status AssertNumRowsOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     _cur_chunk = chunk;
     return Status::OK();
 }
 
 void AssertNumRowsOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
+    _input_finished = true;
 }
 
 bool AssertNumRowsOperator::is_finished() const {
-    return _is_finished && !_cur_chunk;
+    return !_cur_chunk;
 }
 
 Status AssertNumRowsOperatorFactory::prepare(RuntimeState* state) {
