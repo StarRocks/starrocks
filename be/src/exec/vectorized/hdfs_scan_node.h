@@ -160,14 +160,14 @@ private:
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
 
     RuntimeProfile::Counter* _scan_timer = nullptr;
+    RuntimeProfile::Counter* _scan_ranges_counter = nullptr;
+    RuntimeProfile::Counter* _scan_files_counter = nullptr;
     RuntimeProfile::Counter* _reader_init_timer = nullptr;
     RuntimeProfile::Counter* _open_file_timer = nullptr;
-    RuntimeProfile::Counter* _raw_rows_counter = nullptr;
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
 
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _io_counter = nullptr;
-    RuntimeProfile::Counter* _bytes_read_from_disk_counter = nullptr;
     RuntimeProfile::Counter* _column_read_timer = nullptr;
     RuntimeProfile::Counter* _level_decode_timer = nullptr;
     RuntimeProfile::Counter* _value_decode_timer = nullptr;
