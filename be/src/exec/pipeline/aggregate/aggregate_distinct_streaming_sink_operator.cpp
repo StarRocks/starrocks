@@ -71,12 +71,6 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregati
         DCHECK(false);
     }
 
-    if (_aggregator->group_by_expr_ctxs().empty()) {
-        _aggregator->compute_single_agg_state(chunk_size);
-    } else {
-        _aggregator->compute_batch_agg_states(chunk_size);
-    }
-
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
     _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
@@ -107,12 +101,6 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
 #undef HASH_MAP_METHOD
         else {
             DCHECK(false);
-        }
-
-        if (_aggregator->group_by_expr_ctxs().empty()) {
-            _aggregator->compute_single_agg_state(chunk_size);
-        } else {
-            _aggregator->compute_batch_agg_states(chunk_size);
         }
 
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());

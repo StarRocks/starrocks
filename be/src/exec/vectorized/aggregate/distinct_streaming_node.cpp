@@ -77,12 +77,6 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     DCHECK(false);
                 }
 
-                if (_aggregator->is_none_group_by_exprs()) {
-                    _aggregator->compute_single_agg_state(input_chunk_size);
-                } else {
-                    _aggregator->compute_batch_agg_states(input_chunk_size);
-                }
-
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
                 _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
@@ -115,12 +109,6 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 #undef HASH_MAP_METHOD
                     else {
                         DCHECK(false);
-                    }
-
-                    if (_aggregator->is_none_group_by_exprs()) {
-                        _aggregator->compute_single_agg_state(input_chunk_size);
-                    } else {
-                        _aggregator->compute_batch_agg_states(input_chunk_size);
                     }
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
