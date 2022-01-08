@@ -53,9 +53,9 @@ import java.util.stream.Collectors;
 
 public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
-    // erase meta at least after minEraseLatency milliseconds
+    // erase meta at least after MIN_ERASE_LATENCY milliseconds
     // to avoid erase log ahead of drop log
-    private static final long minEraseLatency = 10 * 60 * 1000;  // 10 min
+    private static final long MIN_ERASE_LATENCY = 10 * 60 * 1000;  // 10 min
     // Maximum value of a batch of operations for actually delete database(table/partition)
     // The erase operation will be locked, so one batch can not be too many.
     private static final int MAX_ERASE_OPERATIONS_PER_CYCLE = 500;
@@ -205,7 +205,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     private synchronized boolean isExpire(long id, long currentTimeMs) {
         long latency = currentTimeMs - idToRecycleTime.get(id);
-        return latency > minEraseLatency && latency > Config.catalog_trash_expire_second * 1000L;
+        return latency > MIN_ERASE_LATENCY && latency > Config.catalog_trash_expire_second * 1000L;
     }
 
     private synchronized void eraseDatabase(long currentTimeMs) {
@@ -224,7 +224,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 Catalog.getCurrentCatalog().getEditLog().logEraseDb(db.getId());
                 LOG.info("erase db[{}-{}] finished", db.getId(), db.getFullName());
                 currentEraseOpCnt++;
-                if (currentEraseOpCnt >= max_erase_operation_per_cycle) {
+                if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
                 }
             }
@@ -277,7 +277,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 // log
                 LOG.info("erase table[{}-{}] in memory finished", tableId, table.getName());
                 currentEraseOpCnt++;
-                if (currentEraseOpCnt >= max_erase_operation_per_cycle) {
+                if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
                 }
             }
@@ -341,7 +341,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 Catalog.getCurrentCatalog().getEditLog().logErasePartition(partitionId);
                 LOG.info("erase partition[{}-{}] finished", partitionId, partition.getName());
                 currentEraseOpCnt++;
-                if (currentEraseOpCnt >= max_erase_operation_per_cycle) {
+                if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
                 }
             }
