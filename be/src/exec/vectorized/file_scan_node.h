@@ -66,7 +66,7 @@ private:
 
     // Scan one range
     Status _scanner_scan(const TBrokerScanRange& scan_range, const std::vector<ExprContext*>& conjunct_ctxs,
-                        ScannerCounter* counter);
+                         ScannerCounter* counter);
 
     std::unique_ptr<FileScanner> _create_scanner(const TBrokerScanRange& scan_range, ScannerCounter* counter);
 
