@@ -55,6 +55,14 @@ void WorkGroup::init() {
     _driver_queue = std::make_unique<starrocks::pipeline::QuerySharedDriverQueue>();
 }
 
+double WorkGroup::get_cpu_expected_use_ratio() const {
+    return static_cast<double>(_cpu_limit) / WorkGroupManager::instance()->get_sum_cpu_limit();
+}
+
+double WorkGroup::get_cpu_actual_use_ratio() const {
+    return static_cast<double>(get_real_runtime_ns()) / WorkGroupManager::instance()->get_sum_cpu_runtime_ns();
+}
+
 WorkGroupManager::WorkGroupManager() {}
 WorkGroupManager::~WorkGroupManager() {}
 void WorkGroupManager::destroy() {
@@ -67,6 +75,7 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     if (!_workgroups.count(wg->id())) {
         _workgroups[wg->id()] = wg;
         _wg_io_queue.add(wg);
+        _sum_cpu_limit += wg->get_cpu_limit();
         return wg;
     } else {
         return _workgroups[wg->id()];
@@ -83,6 +92,7 @@ void WorkGroupManager::remove_workgroup(int wg_id) {
     std::lock_guard<std::mutex> lock(_mutex);
     if (_workgroups.count(wg_id)) {
         auto wg = std::move(_workgroups[wg_id]);
+        _sum_cpu_limit -= wg->get_cpu_limit();
         _workgroups.erase(wg_id);
         _wg_io_queue.remove(wg);
     }

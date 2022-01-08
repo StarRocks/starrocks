@@ -77,6 +77,9 @@ public:
     void increment_real_runtime_ns(int64_t real_runtime_ns) { _vruntime_ns += real_runtime_ns / _cpu_limit; }
     void set_vruntime_ns(int64_t vruntime_ns) { _vruntime_ns = vruntime_ns; }
 
+    double get_cpu_expected_use_ratio() const;
+    double get_cpu_actual_use_ratio() const;
+
     static constexpr int DEFAULT_WG_ID = 0;
 
 private:
@@ -116,10 +119,18 @@ public:
     WorkGroupPtr pick_next_wg_for_io();
     WorkGroupQueue& get_io_queue();
 
+    size_t get_sum_cpu_limit() const { return _sum_cpu_limit; }
+    void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
+    int64_t get_sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
+
 private:
     std::mutex _mutex;
+
     std::unordered_map<int, WorkGroupPtr> _workgroups;
     IoWorkGroupQueue _wg_io_queue;
+
+    std::atomic<size_t> _sum_cpu_limit = 0;
+    std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
 };
 
 class DefaultWorkGroupInitialization {

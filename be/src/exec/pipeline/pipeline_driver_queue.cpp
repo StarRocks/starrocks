@@ -105,9 +105,11 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take() {
 void DriverQueueWithWorkGroup::yield_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
+    int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
     auto* wg = driver->workgroup();
     wg->driver_queue()->yield_driver(driver);
     wg->increment_real_runtime_ns(driver->driver_acct().get_last_time_spent());
+    workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
 }
 
 size_t DriverQueueWithWorkGroup::size() {
