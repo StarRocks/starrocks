@@ -29,7 +29,7 @@ public:
             SCOPED_RAW_TIMER(&_stats->io_ns);
             _stats->io_count += 1;
             st = _file->read(offset, res);
-            _stats->bytes_read_from_disk += res->size;
+            _stats->bytes_read += res->size;
         }
         return st;
     }
@@ -40,7 +40,7 @@ public:
             SCOPED_RAW_TIMER(&_stats->io_ns);
             _stats->io_count += 1;
             st = _file->read_at(offset, result);
-            _stats->bytes_read_from_disk += result.size;
+            _stats->bytes_read += result.size;
         }
         return st;
     }
@@ -52,7 +52,7 @@ public:
             _stats->io_count += 1;
             st = _file->readv_at(offset, res, res_cnt);
             for (int i = 0; i < res_cnt; ++i) {
-                _stats->bytes_read_from_disk += res[i].size;
+                _stats->bytes_read += res[i].size;
             }
         }
         return st;

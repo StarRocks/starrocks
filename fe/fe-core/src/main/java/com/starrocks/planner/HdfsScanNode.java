@@ -507,7 +507,7 @@ public class HdfsScanNode extends ScanNode {
 
         if (hiveTable != null) {
             msg.hdfs_scan_node.setHive_column_names(hiveTable.getDataColumnNames());
-            msg.hdfs_scan_node.setHive_table_name(hiveTable.getName());
+            msg.hdfs_scan_node.setTable_name(hiveTable.getName());
         }
     }
 

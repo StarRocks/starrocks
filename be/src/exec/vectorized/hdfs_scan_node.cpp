@@ -83,8 +83,8 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (hdfs_scan_node.__isset.hive_column_names) {
         _hive_column_names = hdfs_scan_node.hive_column_names;
     }
-    if (hdfs_scan_node.__isset.hive_table_name) {
-        _runtime_profile->add_info_string("Table", hdfs_scan_node.hive_table_name);
+    if (hdfs_scan_node.__isset.table_name) {
+        _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
     }
     if (hdfs_scan_node.__isset.sql_predicates) {
         _runtime_profile->add_info_string("Predicates", hdfs_scan_node.sql_predicates);
@@ -95,6 +95,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (hdfs_scan_node.__isset.partition_sql_predicates) {
         _runtime_profile->add_info_string("PredicatesPartition", hdfs_scan_node.partition_sql_predicates);
     }
+    _scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 
     _mem_pool = std::make_unique<MemPool>();
@@ -532,7 +533,7 @@ Status HdfsScanNode::close(RuntimeState* state) {
 Status HdfsScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     for (const auto& scan_range : scan_ranges) {
         _scan_ranges.emplace_back(scan_range.scan_range.hdfs_scan_range);
-        COUNTER_UPDATE(_scan_files_counter, 1);
+        COUNTER_UPDATE(_scan_ranges_counter, 1);
     }
 
     return Status::OK();
@@ -612,6 +613,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         }
     }
 
+    COUNTER_UPDATE(_scan_files_counter, 1);
     std::string native_file_path = scan_range.full_path;
     if (_hdfs_table != nullptr) {
         auto* partition_desc = _hdfs_table->get_partition(scan_range.partition_id);

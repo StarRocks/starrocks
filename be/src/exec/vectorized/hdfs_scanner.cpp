@@ -233,7 +233,7 @@ void HdfsParquetScanner::update_counter() {
     COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read_from_disk);
+    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read);
     COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
     COUNTER_UPDATE(_scanner_params.parent->_value_decode_timer, _stats.value_decode_ns);
