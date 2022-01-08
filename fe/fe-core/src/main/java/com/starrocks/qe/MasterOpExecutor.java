@@ -96,6 +96,8 @@ public class MasterOpExecutor {
                     executor.setSessionVars();
                 } catch (DdlException e) {
                     LOG.warn("set session variables after forward failed", e);
+                    // set remote result to null, so that mysql protocol will show the error message
+                    result = null;
                     throw new DdlException("Global level variables are set successfully, " +
                             "but session level variables are set failed with error: " + e.getMessage() + ". " +
                             "Please check if the version of fe currently connected is the same as the version of master, " +
