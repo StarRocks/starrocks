@@ -378,7 +378,8 @@ private:
         for (size_t i = 0; i < num_array; i++) {
             size_t offset = offsets_ptr[i];
             size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
-            size_t found = 0;
+            uint8_t found = 0;
+            size_t position = 0;
             for (size_t j = 0; j < array_size; j++) {
                 if constexpr (NullableElement && !NullableTarget) {
                     if (is_null(null_map_elements, offset + j)) {
@@ -397,7 +398,8 @@ private:
                         continue;
                     }
                     if (null_element) {
-                        found = PositionEnabled ? j + 1 : 1;
+                        position = j + 1;
+                        found = 1;
                         break;
                     }
                 }
@@ -409,13 +411,11 @@ private:
                     found = (elements_ptr[offset + j] == targets_ptr[i]);
                 }
                 if (found) {
-                    if (PositionEnabled) {
-                        found = j + 1;
-                    }
+                    position = j + 1;
                     break;
                 }
             }
-            result_ptr[i] = found;
+            result_ptr[i] = PositionEnabled ? position : found;
         }
         return result;
     }
