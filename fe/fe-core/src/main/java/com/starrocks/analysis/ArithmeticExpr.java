@@ -39,12 +39,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class ArithmeticExpr extends Expr {
     private static final Logger LOG = LogManager.getLogger(ArithmeticExpr.class);
     private final Operator op;
@@ -376,15 +372,6 @@ public class ArithmeticExpr extends Expr {
         return ((ArithmeticExpr) obj).opcode == opcode;
     }
 
-    @Override
-    public void computeOutputColumn(Analyzer analyzer) {
-        super.computeOutputColumn(analyzer);
-
-        List<TupleId> tupleIds = Lists.newArrayList();
-        getIds(tupleIds, null);
-        Preconditions.checkArgument(tupleIds.size() == 1);
-    }
-
     public static Type findCommonType(Type t1, Type t2) {
         PrimitiveType pt1 = t1.getPrimitiveType();
         PrimitiveType pt2 = t2.getPrimitiveType();
@@ -407,6 +394,7 @@ public class ArithmeticExpr extends Expr {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+        Preconditions.checkState(false);
         // bitnot is the only unary op, deal with it here
         if (op == Operator.BITNOT) {
             type = Type.BIGINT;

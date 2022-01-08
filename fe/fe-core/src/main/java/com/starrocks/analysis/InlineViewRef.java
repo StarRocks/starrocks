@@ -43,9 +43,6 @@ import java.util.Set;
  * An inline view is a query statement with an alias. Inline views can be parsed directly
  * from a query string or represent a reference to a local or catalog view.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class InlineViewRef extends TableRef {
     private static final Logger LOG = LogManager.getLogger(InlineViewRef.class);
 
@@ -174,6 +171,7 @@ public class InlineViewRef extends TableRef {
      */
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
+        Preconditions.checkState(false);
         if (isAnalyzed) {
             return;
         }

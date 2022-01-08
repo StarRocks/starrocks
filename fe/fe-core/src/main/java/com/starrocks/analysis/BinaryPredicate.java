@@ -36,22 +36,13 @@ import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Objects;
 
-/**
- * Most predicates with two operands..
- */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class BinaryPredicate extends Predicate implements Writable {
-    private static final Logger LOG = LogManager.getLogger(BinaryPredicate.class);
 
     public static final com.google.common.base.Predicate<BinaryPredicate> IS_RANGE_PREDICATE =
             arg -> arg.getOp() == Operator.LT
@@ -189,10 +180,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         isInferred_ = other.isInferred_;
     }
 
-    public boolean isInferred() {
-        return isInferred_;
-    }
-
     public static void initBuiltins(FunctionSet functionSet) {
         for (Type t : Type.getSupportedTypes()) {
             if (t.isNull() || t.isPseudoType()) {
@@ -283,20 +270,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
     }
 
-    @Override
-    public void vectorizedAnalyze(Analyzer analyzer) {
-        super.vectorizedAnalyze(analyzer);
-        Function match = null;
-
-        try {
-            match = getBuiltinFunction(analyzer, op.name, collectChildReturnTypes(),
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        } catch (AnalysisException e) {
-            Preconditions.checkState(false);
-        }
-        Preconditions.checkState(match != null);
-        Preconditions.checkState(match.getReturnType().getPrimitiveType() == PrimitiveType.BOOLEAN);
-    }
 
     private static boolean canCompareDate(PrimitiveType t1, PrimitiveType t2) {
         if (t1.isDateType()) {
@@ -344,6 +317,7 @@ public class BinaryPredicate extends Predicate implements Writable {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+        Preconditions.checkState(false);
         super.analyzeImpl(analyzer);
 
         for (Expr expr : children) {
@@ -563,6 +537,7 @@ public class BinaryPredicate extends Predicate implements Writable {
 
     @Override
     public Expr getResultValue() throws AnalysisException {
+        Preconditions.checkState(false);
         recursiveResetChildrenResult();
         final Expr leftChildValue = getChild(0);
         final Expr rightChildValue = getChild(1);

@@ -35,8 +35,6 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TInPredicate;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,13 +44,7 @@ import java.util.List;
  * (first child) matches any value in a subquery (second child) or a list
  * of values (remaining children).
  */
-
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class InPredicate extends Predicate {
-    private static final Logger LOG = LogManager.getLogger(InPredicate.class);
-
     private static final String IN_SET_LOOKUP = "in_set_lookup";
     private static final String NOT_IN_SET_LOOKUP = "not_in_set_lookup";
     private static final String IN_ITERATE = "in_iterate";
@@ -154,13 +146,6 @@ public class InPredicate extends Predicate {
     }
 
     @Override
-    public void vectorizedAnalyze(Analyzer analyzer) {
-        super.vectorizedAnalyze(analyzer);
-
-        PrimitiveType type = getChild(0).getType().getPrimitiveType();
-    }
-
-    @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         super.analyzeImpl(analyzer);
 
@@ -187,7 +172,6 @@ public class InPredicate extends Predicate {
             analyzer.getCompatibleType(compareExpr.getType(), compareExpr, subqueryExpr);
         } else {
             analyzer.castAllToCompatibleType(children);
-            vectorizedAnalyze(analyzer);
         }
 
         boolean allConstant = true;
@@ -257,6 +241,7 @@ public class InPredicate extends Predicate {
 
     @Override
     public Expr getResultValue() throws AnalysisException {
+        Preconditions.checkState(false);
         recursiveResetChildrenResult();
         final Expr leftChildValue = getChild(0);
         if (!(leftChildValue instanceof LiteralExpr) || !isLiteralChildren()) {

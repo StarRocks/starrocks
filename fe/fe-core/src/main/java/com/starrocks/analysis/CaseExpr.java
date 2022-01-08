@@ -67,9 +67,6 @@ import java.util.List;
  * ELSE 4
  * END
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class CaseExpr extends Expr {
     private boolean hasCaseExpr;
     private boolean hasElseExpr;
@@ -165,6 +162,7 @@ public class CaseExpr extends Expr {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+        Preconditions.checkState(false);
         // Keep track of maximum compatible type of case expr and all when exprs.
         Type whenType = null;
         // Keep track of maximum compatible type of else expr and all then exprs.
@@ -276,23 +274,6 @@ public class CaseExpr extends Expr {
         while (childIdx + 2 <= children.size()) {
             exprs.add(children.get(childIdx++));
             childIdx++;
-        }
-        return exprs;
-    }
-
-    // then
-    public List<Expr> getReturnExprs() {
-        List<Expr> exprs = Lists.newArrayList();
-        int childIdx = 0;
-        if (hasCaseExpr) {
-            childIdx++;
-        }
-        while (childIdx + 2 <= children.size()) {
-            childIdx++;
-            exprs.add(children.get(childIdx++));
-        }
-        if (hasElseExpr) {
-            exprs.add(children.get(children.size() - 1));
         }
         return exprs;
     }

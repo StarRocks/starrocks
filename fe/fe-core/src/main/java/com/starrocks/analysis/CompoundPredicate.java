@@ -32,15 +32,11 @@ import com.starrocks.thrift.TExprOpcode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
 import java.util.Objects;
 
 /**
  * &&, ||, ! predicates.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class CompoundPredicate extends Predicate {
     private static final Logger LOG = LogManager.getLogger(CompoundPredicate.class);
     private final Operator op;
@@ -105,6 +101,7 @@ public class CompoundPredicate extends Predicate {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+        Preconditions.checkState(false);
         super.analyzeImpl(analyzer);
 
         // Check that children are predicates.
@@ -186,22 +183,6 @@ public class CompoundPredicate extends Predicate {
             return lhs;
         }
         return new CompoundPredicate(Operator.AND, rhs, lhs);
-    }
-
-    /**
-     * Creates a conjunctive predicate from a list of exprs.
-     */
-    public static Expr createConjunctivePredicate(List<Expr> conjuncts) {
-        Expr conjunctivePred = null;
-        for (Expr expr : conjuncts) {
-            if (conjunctivePred == null) {
-                conjunctivePred = expr;
-                continue;
-            }
-            conjunctivePred = new CompoundPredicate(CompoundPredicate.Operator.AND,
-                    expr, conjunctivePred);
-        }
-        return conjunctivePred;
     }
 
     @Override

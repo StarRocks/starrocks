@@ -104,7 +104,6 @@ public class VirtualSlotRef extends SlotRef {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        desc = analyzer.registerVirtualColumnRef(super.getColumnName(), type, tupleDescriptor);
         numDistinctValues = desc.getStats().getNumDistinctValues();
     }
 }

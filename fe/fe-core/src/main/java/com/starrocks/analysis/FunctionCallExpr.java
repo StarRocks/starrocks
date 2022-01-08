@@ -58,9 +58,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class FunctionCallExpr extends Expr {
     private static final Logger LOG = LogManager.getLogger(FunctionCallExpr.class);
     private FunctionName fnName;
@@ -309,16 +306,6 @@ public class FunctionCallExpr extends Expr {
         return fn instanceof BuiltinAggregateFunction && !isAnalyticFnCall;
     }
 
-    /**
-     * Returns true if this is a call to an aggregate function that returns
-     * non-null on an empty input (e.g. count).
-     */
-    public boolean returnsNonNullOnEmpty() {
-        Preconditions.checkNotNull(fn);
-        return fn instanceof AggregateFunction
-                && ((AggregateFunction) fn).returnsNonNullOnEmpty();
-    }
-
     public boolean isDistinct() {
         Preconditions.checkState(isAggregateFunction());
         return fnParams.isDistinct();
@@ -339,23 +326,6 @@ public class FunctionCallExpr extends Expr {
             }
         }
         return false;
-    }
-
-    public boolean isCountDistinctBitmapOrHLL() {
-        if (!fnParams.isDistinct()) {
-            return false;
-        }
-
-        if (!fnName.getFunction().equalsIgnoreCase(FunctionSet.COUNT)) {
-            return false;
-        }
-
-        if (children.size() != 1) {
-            return false;
-        }
-
-        Type type = getChild(0).getType();
-        return type.isBitmapType() || type.isHllType();
     }
 
     @Override
@@ -620,6 +590,7 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+        Preconditions.checkState(false);
         if (isMergeAggFn) {
             // This is the function call expr after splitting up to a merge aggregation.
             // The function has already been analyzed so just do the minimal sanity

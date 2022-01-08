@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
@@ -29,9 +30,6 @@ import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class ArrayElementExpr extends Expr {
     public ArrayElementExpr(Expr expr, Expr subscript) {
         this.children.add(expr);
@@ -50,6 +48,7 @@ public class ArrayElementExpr extends Expr {
 
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+        Preconditions.checkState(false);
         Expr expr = this.children.get(0);
         Expr subscript = this.children.get(1);
         if (!expr.getType().isArrayType()) {

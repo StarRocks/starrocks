@@ -351,10 +351,6 @@ public class SelectStmt extends QueryStmt {
         return tableAliasGenerator;
     }
 
-    public void setTableAliasGenerator(TableAliasGenerator tableAliasGenerator) {
-        this.tableAliasGenerator = tableAliasGenerator;
-    }
-
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         if (isAnalyzed()) {
             return;
