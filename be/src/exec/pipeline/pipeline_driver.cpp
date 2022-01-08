@@ -124,7 +124,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
 
                 if (_check_fragment_is_canceled(runtime_state)) {
-                    _yield(total_chunks_moved, total_rows_moved, time_spent);
+                    _update_metrics(total_chunks_moved, total_rows_moved, time_spent);
                     return _state;
                 }
 
@@ -142,7 +142,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
 
                 if (_check_fragment_is_canceled(runtime_state)) {
-                    _yield(total_chunks_moved, total_rows_moved, time_spent);
+                    _update_metrics(total_chunks_moved, total_rows_moved, time_spent);
                     return _state;
                 }
 
@@ -196,7 +196,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
             set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
-            _yield(total_chunks_moved, total_rows_moved, time_spent);
+            _update_metrics(total_chunks_moved, total_rows_moved, time_spent);
             return _state;
         }
 
@@ -214,7 +214,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             } else {
                 set_driver_state(DriverState::READY);
             }
-            _yield(total_chunks_moved, total_rows_moved, time_spent);
+            _update_metrics(total_chunks_moved, total_rows_moved, time_spent);
             return _state;
         }
     }

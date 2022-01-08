@@ -23,10 +23,13 @@ public:
     virtual ~DriverQueue() = default;
     virtual void close() = 0;
 
+    // from_dispatcher is true, when the dispatcher thread puts back the driver.
     virtual void put_back(const DriverRawPtr driver, bool from_dispatcher) = 0;
     virtual void put_back(const std::vector<DriverRawPtr>& drivers, bool from_dispatcher) = 0;
     virtual StatusOr<DriverRawPtr> take() = 0;
 
+    // Update statistics information of the driver's workgroup
+    // when yielding the driver in the dispatcher thread.
     virtual void yield_driver(const DriverRawPtr driver) = 0;
 
     virtual size_t size() = 0;
@@ -105,8 +108,6 @@ public:
     // Secondly, select the proper driver from the driver queue of this work group.
     StatusOr<DriverRawPtr> take() override;
 
-    // Update statistics information of the driver's workgroup
-    // when yielding the driver in the dispatcher thread.
     void yield_driver(const DriverRawPtr driver) override;
 
     size_t size() override;
