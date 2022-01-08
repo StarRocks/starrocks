@@ -215,6 +215,7 @@ void JoinHashTable::create(const HashTableParam& param) {
 
     _table_items->row_count = 0;
     _table_items->bucket_size = 0;
+    _table_items->need_create_tuple_columns = _need_create_tuple_columns;
     _table_items->build_chunk = std::make_shared<Chunk>();
     _table_items->build_pool = std::make_unique<MemPool>();
     _table_items->probe_pool = std::make_unique<MemPool>();
