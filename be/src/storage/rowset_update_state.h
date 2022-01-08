@@ -31,7 +31,8 @@ public:
 
     Status load(Tablet* tablet, Rowset* rowset);
 
-    Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, const PrimaryIndex& index);
+    Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion lastest_applied_version,
+                 const PrimaryIndex& index);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
@@ -40,12 +41,15 @@ public:
 
     std::string to_string() const;
 
-    const std::vector<PartialUpdateState>& parital_update_states() { return _parital_update_states; }
+    const std::vector<PartialUpdateState>& parital_update_states() { return _partial_update_states; }
 
 private:
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset);
+
+    Status _check_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion lastest_applied_version,
+                           std::vector<uint32_t>& read_column_ids, const PrimaryIndex& index);
 
     std::once_flag _load_once_flag;
     Status _status;
@@ -61,7 +65,7 @@ private:
     uint32_t _next_rowset_id = 0;
 
     // TODO: dump to disk if memory usage is too large
-    std::vector<PartialUpdateState> _parital_update_states;
+    std::vector<PartialUpdateState> _partial_update_states;
 
     RowsetUpdateState(const RowsetUpdateState&) = delete;
     const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;

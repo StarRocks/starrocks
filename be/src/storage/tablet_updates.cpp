@@ -736,7 +736,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     }
 
     int64_t t_load = MonotonicMillis();
-    st = state.apply(&_tablet, rowset.get(), rowset_id, index);
+    st = state.apply(&_tablet, rowset.get(), rowset_id, _edit_version_infos[_apply_version_idx]->version, index);
     if (!st.ok()) {
         manager->update_state_cache().remove(state_entry);
         std::string msg = Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
