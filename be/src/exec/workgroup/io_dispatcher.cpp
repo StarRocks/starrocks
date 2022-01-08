@@ -2,7 +2,7 @@
 
 namespace starrocks::workgroup {
 
-IoDispatcher::IoDispatcher(std::unique_ptr<ThreadPool> thread_pool) : _thread_pool(std::move(thread_pool)) {}
+IoDispatcher::IoDispatcher(std::unique_ptr<ThreadPool>& thread_pool) : _thread_pool(std::move(thread_pool)) {}
 
 void IoDispatcher::initialize(int num_threads) {
     _num_threads_setter.set_actual_num(num_threads);

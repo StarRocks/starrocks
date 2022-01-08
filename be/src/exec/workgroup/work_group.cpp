@@ -191,7 +191,7 @@ void WorkGroupManager::adjust_weight_if_need() {
     }
 
     bool expect = false;
-    if (!_is_adjust.compare_exchange_strong(expect, true)) {
+    if (!_is_adjusted.compare_exchange_strong(expect, true)) {
         // maybe has other thread do it
         return;
     }
@@ -255,7 +255,7 @@ void WorkGroupManager::adjust_weight_if_need() {
         }
     }
     _cur_schedule_num = _schedule_num_period;
-    _is_schedule.store(false, std::memory_order_release);
+    _is_scheduled.store(false, std::memory_order_release);
 }
 
 WorkGroupPtr WorkGroupManager::get_next_wg() {
@@ -272,7 +272,7 @@ WorkGroupPtr WorkGroupManager::get_next_wg() {
     }
 
     bool expect = false;
-    if (!_is_schedule.compare_exchange_strong(expect, true)) {
+    if (!_is_scheduled.compare_exchange_strong(expect, true)) {
         // maybe has other thread do it
         return nullptr;
     }
@@ -284,7 +284,7 @@ WorkGroupPtr WorkGroupManager::get_next_wg() {
     }
     _cur_index = 1;
     index = 0;
-    _is_schedule.store(false, std::memory_order_release);
+    _is_scheduled.store(false, std::memory_order_release);
     return _cur_wait_run_wgs[index];
 }
 
@@ -295,7 +295,7 @@ size_t WorkGroupManager::get_next_wg_index() {
     for (int i = 0; i < _io_wgs.size(); i++) {
         _io_wgs[i]->update_cur_select_factor(_io_wgs[i]->get_select_factor());
         total += _io_wgs[i]->get_select_factor();
-        if (index == -1 || _io_wgs[i]->get_cur_select_factor() < _io_wgs[i]->get_cur_select_factor()) {
+        if (index == -1 || _io_wgs[i]->get_cur_select_factor() > _io_wgs[index]->get_cur_select_factor()) {
             index = i;
         }
     }

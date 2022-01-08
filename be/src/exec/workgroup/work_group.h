@@ -189,7 +189,7 @@ private:
 
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
-    std::atomic<bool> _is_adjust;
+    std::atomic<bool> _is_adjusted;
     size_t _schedule_num_period;
     std::atomic<size_t> _cur_schedule_num = 0;
 
@@ -197,7 +197,7 @@ private:
 
     std::atomic<size_t> _cur_index = 0;
     std::vector<WorkGroupPtr> _cur_wait_run_wgs;
-    std::atomic<bool> _is_schedule = false;
+    std::atomic<bool> _is_scheduled = false;
 };
 
 class DefaultWorkGroupInitialization {
