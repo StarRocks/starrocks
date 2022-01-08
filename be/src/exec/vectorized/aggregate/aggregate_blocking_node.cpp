@@ -175,8 +175,17 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into AggregateBlockingSinkOperator.
-            if (!(operators_with_sink.size() == 1 &&
-                  typeid(*operators_with_sink[0]) == typeid(pipeline::ExchangeSourceOperatorFactory))) {
+            bool need_local_shuffle = true;
+            if (operators_with_sink.size() == 1 &&
+                typeid(*operators_with_sink[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
+                auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(operators_with_sink[0].get());
+                auto& texchange_node = exchange_op->texchange_node();
+                if (texchange_node.__isset.partition_type &&
+                    texchange_node.partition_type == TPartitionType::HASH_PARTITIONED) {
+                    need_local_shuffle = false;
+                }
+            }
+            if (need_local_shuffle) {
                 std::vector<ExprContext*> group_by_expr_ctxs;
                 Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
                 operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(

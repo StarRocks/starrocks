@@ -35,12 +35,16 @@ private:
 
 class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    ExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, int32_t num_sender, const RowDescriptor& row_desc)
+    ExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, const TExchangeNode& texchange_node,
+                                  int32_t num_sender, const RowDescriptor& row_desc)
             : SourceOperatorFactory(id, "exchange_source", plan_node_id),
+              _texchange_node(texchange_node),
               _num_sender(num_sender),
               _row_desc(row_desc) {}
 
     ~ExchangeSourceOperatorFactory() override = default;
+
+    const TExchangeNode texchange_node() { return _texchange_node; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         ++_stream_recvr_cnt;
@@ -52,6 +56,7 @@ public:
     void close_stream_recvr();
 
 private:
+    const TExchangeNode& _texchange_node;
     const int32_t _num_sender;
     const RowDescriptor& _row_desc;
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
