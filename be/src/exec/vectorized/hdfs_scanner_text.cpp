@@ -65,10 +65,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
                                                      scan_range->offset, scan_range->length, scan_range->file_length);
     if (scan_range->offset != 0) {
         CSVReader::Record dummy;
-        Status st = _reader->next_record(&dummy);
-        if (!st.ok()) {
-            return st;
-        }
+        RETURN_IF_ERROR(_reader->next_record(&dummy));
     }
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto slot = _scanner_params.materialize_slots[i];
