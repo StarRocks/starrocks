@@ -51,9 +51,13 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     auto conf_deleter = [conf]() { delete conf; };
     DeferOp delete_conf([conf_deleter] { return conf_deleter(); });
 
-    std::stringstream ss;
-    ss << BackendOptions::get_localhost() << "_";
-    std::string group_id = ss.str() + UniqueId::gen_uid().to_string();
+    std::string group_id;
+    auto it = ctx->kafka_info->properties.find("group.id");
+    if (it == ctx->kafka_info->properties.end()) {
+        group_id = BackendOptions::get_localhost() + "_" + UniqueId::gen_uid().to_string();
+    } else {
+        group_id = it->second;
+    }
     LOG(INFO) << "init kafka consumer with group id: " << group_id;
 
     std::string errstr;
