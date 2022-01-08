@@ -10,14 +10,20 @@
 namespace starrocks::vectorized {
 
 Status HdfsTextScanner::HdfsScannerCSVReader::_fill_buffer() {
-    DCHECK(_buff.free_space() > 0);
-    if (_length <= 0) {
-        return Status::EndOfFile("");
+    if (_should_stop_scan) {
+        return Status::EndOfFile("HdfsScannerCSVReader");
     }
-    Slice s(_buff.limit(), std::min(_buff.free_space(), _length));
+
+    DCHECK(_buff.free_space() > 0);
+    Slice s;
+    if (_remain_length <= 0) {
+        s = Slice(_buff.limit(), _buff.free_space());
+    } else {
+        s = Slice(_buff.limit(), std::min(_buff.free_space(), _remain_length));
+    }
     Status st = _file->read(_offset, &s);
     _offset += s.size;
-    _length -= s.size;
+    _remain_length -= s.size;
     // According to the specification of `Env::read`, when reached the end of
     // a file, the returned status will be OK instead of EOF, but here we check
     // EOF also for safety.
@@ -35,11 +41,13 @@ Status HdfsTextScanner::HdfsScannerCSVReader::_fill_buffer() {
         // Has reached the end of file but still no record delimiter found, which
         // is valid, according the RFC, add the record delimiter ourself.
         _buff.append(_record_delimiter);
-    } else if (_length <= 0 && _buff.position()[n - 1] != _record_delimiter) {
-        // When _length <= 0 it means we have scanned the whole file,
-        // we should add the record delimiter ourself.
-        _buff.append(_record_delimiter);
     }
+
+    if ((_remain_length < 0 && _buff.find(_record_delimiter, n) != nullptr)
+        || (_offset >= _file_length)) {
+        _should_stop_scan = true;
+    }
+
     return Status::OK();
 }
 
@@ -52,9 +60,16 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
+    const THdfsScanRange* scan_range = _scanner_params.scan_ranges[0];
     _reader = std::make_unique<HdfsScannerCSVReader>(_scanner_params.fs, _record_delimiter, _field_delimiter,
-                                                     _scanner_params.scan_ranges[0]->offset,
-                                                     _scanner_params.scan_ranges[0]->file_length);
+                                                     scan_range->offset, scan_range->length, scan_range->file_length);
+    if (scan_range->offset != 0) {
+        CSVReader::Record dummy;
+        Status st = _reader->next_record(&dummy);
+        if (!st.ok()) {
+            return st;
+        }
+    }
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto slot = _scanner_params.materialize_slots[i];
         ConverterPtr conv = csv::get_converter(slot->type(), true);
@@ -73,10 +88,6 @@ void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
 }
 
 Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    if (_scanner_params.scan_ranges[0]->offset != 0) {
-        // TODO: fe get scan range by inputformat.getSplits
-        return Status::EndOfFile("only process scan range with offset 0 for text file!");
-    }
     return _parse_csv(chunk);
 }
 

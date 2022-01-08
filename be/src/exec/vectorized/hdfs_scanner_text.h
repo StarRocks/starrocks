@@ -23,11 +23,12 @@ private:
     class HdfsScannerCSVReader : public CSVReader {
     public:
         HdfsScannerCSVReader(std::shared_ptr<RandomAccessFile> file, char record_delimiter, string field_delimiter,
-                             size_t offset, size_t length)
+                             size_t offset, size_t remain_length, size_t file_length)
                 : CSVReader(record_delimiter, field_delimiter) {
             _file = file;
             _offset = offset;
-            _length = length;
+            _remain_length = remain_length;
+            _file_length = file_length;
         }
 
         Status _fill_buffer() override;
@@ -35,7 +36,9 @@ private:
     private:
         std::shared_ptr<RandomAccessFile> _file;
         size_t _offset = 0;
-        size_t _length = 0;
+        size_t _remain_length = 0;
+        size_t _file_length = 0;
+        bool _should_stop_scan = false;
     };
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
