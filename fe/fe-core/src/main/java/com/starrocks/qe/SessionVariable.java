@@ -173,9 +173,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
 
-    @VariableMgr.VarAttr(name = WORKGROUP_ID)
-    private int workGroupID = 0;
-
     // max memory used on every backend.
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
     public long maxExecMemByte = 2147483648L;

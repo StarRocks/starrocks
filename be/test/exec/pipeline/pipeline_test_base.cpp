@@ -116,12 +116,12 @@ void PipelineTestBase::_prepare() {
         }
     }
 
-    auto wg = workgroup::WorkGroupManager::instance()->get_workgroup(0);
-    for (auto driver : drivers) {
+    _fragment_ctx->set_drivers(std::move(drivers));
+
+    auto wg = workgroup::WorkGroupManager::instance()->get_default_workgroup();
+    for (auto& driver : _fragment_ctx->drivers()) {
         driver->set_workgroup(wg.get());
     }
-
-    _fragment_ctx->set_drivers(std::move(drivers));
 }
 
 void PipelineTestBase::_execute() {
