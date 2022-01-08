@@ -23,7 +23,7 @@ struct HdfsScanStats {
     int64_t expr_filter_ns = 0;
     int64_t io_ns = 0;
     int64_t io_count = 0;
-    int64_t bytes_read_from_disk = 0;
+    int64_t bytes_read = 0;
     int64_t column_read_ns = 0;
     int64_t level_decode_ns = 0;
     int64_t value_decode_ns = 0;

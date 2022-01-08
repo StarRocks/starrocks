@@ -740,7 +740,7 @@ struct THdfsScanNode {
     // Conjuncts that can be evaluated while materializing the items (tuples) of
     // collection-typed slots. Maps from item tuple id to the list of conjuncts
     // to be evaluated.
-    2: optional map<Types.TTupleId, list<Exprs.TExpr>> collection_conjuncts
+    2: optional map<Types.TTupleId, list<Exprs.TExpr>> DEPRECATED_collection_conjuncts
 
     // Conjuncts that can be evaluated against parquet::Statistics using the tuple
     // referenced by 'min_max_tuple_id'.
@@ -750,7 +750,7 @@ struct THdfsScanNode {
     4: optional Types.TTupleId min_max_tuple_id
 
     // The conjuncts that are eligible for dictionary filtering.
-    5: optional map<Types.TSlotId, list<i32>> dictionary_filter_conjuncts
+    5: optional map<Types.TSlotId, list<i32>> DEPRECATED_dictionary_filter_conjuncts
 
     // conjuncts in TPlanNode contains non-partition filters if node_type is HDFS_SCAN_NODE.
     // partition_conjuncts contains partition filters that are not evaled by pruner.
@@ -758,6 +758,15 @@ struct THdfsScanNode {
 
     // hive colunm names in ordinal order.
     7: optional list<string> hive_column_names;
+
+    // table name it scans
+    8: optional string table_name;
+
+    // conjuncts in explained string
+    9: optional string sql_predicates;
+    10: optional string min_max_sql_predicates;
+    11: optional string partition_sql_predicates;
+
 }
 
 struct TProjectNode {
