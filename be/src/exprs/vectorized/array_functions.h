@@ -19,6 +19,20 @@ public:
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
 
+    DEFINE_VECTORIZED_FN(array_distinct_boolean);
+    DEFINE_VECTORIZED_FN(array_distinct_tinyint);
+    DEFINE_VECTORIZED_FN(array_distinct_smallint);
+    DEFINE_VECTORIZED_FN(array_distinct_int);
+    DEFINE_VECTORIZED_FN(array_distinct_bigint);
+    DEFINE_VECTORIZED_FN(array_distinct_largeint);
+    DEFINE_VECTORIZED_FN(array_distinct_float);
+    DEFINE_VECTORIZED_FN(array_distinct_double);
+    DEFINE_VECTORIZED_FN(array_distinct_varchar);
+    DEFINE_VECTORIZED_FN(array_distinct_char);
+    DEFINE_VECTORIZED_FN(array_distinct_decimalv2);
+    DEFINE_VECTORIZED_FN(array_distinct_datetime);
+    DEFINE_VECTORIZED_FN(array_distinct_date);
+
     DEFINE_VECTORIZED_FN(array_sum_boolean);
     DEFINE_VECTORIZED_FN(array_sum_tinyint);
     DEFINE_VECTORIZED_FN(array_sum_smallint);
@@ -80,6 +94,13 @@ private:
     static ColumnPtr _array_process_not_nullable_types(const Column* elements, const UInt32Column& offsets,
                                                        const NullColumn::Container* null_elements,
                                                        std::vector<uint8_t>* null_ptr);
+
+    template <PrimitiveType PT, typename HashSet>
+    static void _array_distinct_item(const ArrayColumn& column, size_t index, HashSet* hash_set,
+                                     ArrayColumn* dest_column);
+
+    template <PrimitiveType type, typename HashSet>
+    static ColumnPtr array_distinct(const Columns& column);
 
     template <PrimitiveType type>
     static ColumnPtr array_sum(const Columns& columns);
