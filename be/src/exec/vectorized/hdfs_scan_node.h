@@ -93,6 +93,8 @@ private:
     Status _get_status();
     void _fill_chunk_pool(int count);
     void _close_pending_scanners();
+    void _push_pending_scanner(HdfsScanner* scanner);
+    HdfsScanner* _pop_pending_scanner();
     static int _compute_priority(int32_t num_submitted_tasks);
 
     void _init_counter(RuntimeState* state);
@@ -163,6 +165,7 @@ private:
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
 
     RuntimeProfile::Counter* _scan_timer = nullptr;
+    RuntimeProfile::Counter* _scanner_queue_timer = nullptr;
     RuntimeProfile::Counter* _scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* _scan_files_counter = nullptr;
     RuntimeProfile::Counter* _reader_init_timer = nullptr;

@@ -151,6 +151,14 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     _is_closed = true;
 }
 
+void HdfsScanner::in_pending_queue() {
+    _pending_queue_sw.start();
+}
+
+uint64_t HdfsScanner::out_pending_queue() {
+    return _pending_queue_sw.reset();
+}
+
 #ifndef BE_TEST
 struct HdfsReadStats {
     int64_t bytes_total_read = 0;
