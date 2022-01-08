@@ -43,7 +43,7 @@ Status HdfsTextScanner::HdfsScannerCSVReader::_fill_buffer() {
         _buff.append(_record_delimiter);
     }
 
-    if ((_remain_length < 0 && _buff.find(_record_delimiter, n) != nullptr)
+    if ((_remain_length < 0 && _buff.find(_record_delimiter, 0) != nullptr)
         || (_offset >= _file_length)) {
         _should_stop_scan = true;
     }
