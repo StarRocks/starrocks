@@ -225,7 +225,7 @@ void WorkGroupManager::adjust_weight_if_need() {
     // B _expect_factor : 0.6749999999999999, and _cpu_expect_use_ratio : 0.3, _diff_factor :  -0.37499999999999994
     // so 0.18757812499999998 + 0.6749999999999999 < 1.0, it mean resource is enough, and available is  -0.37499999999999994 + 0.512421875
 
-    if (positive_total_diff_factor + negative_total_diff_factor > 0) { 
+    if (positive_total_diff_factor + negative_total_diff_factor > 0) {
         // if positive_total_diff_factor + negative_total_diff_factor > 0
         // it mean available resource more than short of resource
         // so we just reduce resource of the workgroup which it over pay by ratio
@@ -239,7 +239,7 @@ void WorkGroupManager::adjust_weight_if_need() {
                                                      positive_total_diff_factor);
             }
         }
-    } else { 
+    } else {
         // if positive_total_diff_factor + negative_total_diff_factor <= 0
         // it mean available resource less than short of resource, but exist some workgroup which over pay
         // so we just reduce resource of the workgroup which it over pay by ratio
