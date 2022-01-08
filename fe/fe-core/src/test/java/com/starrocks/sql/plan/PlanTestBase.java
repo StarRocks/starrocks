@@ -189,7 +189,8 @@ public class PlanTestBase {
                 "  `tf` double NULL COMMENT \"\",\n" +
                 "  `tg` bigint(20) NULL COMMENT \"\",\n" +
                 "  `th` datetime NULL COMMENT \"\",\n" +
-                "  `ti` date NULL COMMENT \"\"\n" +
+                "  `ti` date NULL COMMENT \"\",\n" +
+                "  `tt` char(200) NULL " +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`ta`)\n" +
                 "COMMENT \"OLAP\"\n" +
