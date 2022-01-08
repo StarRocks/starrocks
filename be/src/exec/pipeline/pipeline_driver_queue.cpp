@@ -62,7 +62,7 @@ void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
     _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
 }
 
-void QuerySharedDriverQueue::_put_back(const DriverRawPtr driver, bool from_dispatcher) {
+void QuerySharedDriverQueue::_put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level() % QUEUE_SIZE;
     driver->set_dispatch_queue_index(level);
     _queues[level].queue.emplace(driver);

@@ -86,7 +86,7 @@ public:
     size_t size() override { return _size; }
 
 private:
-    void _put_back(const DriverRawPtr driver, bool from_dispatcher);
+    void _put_back(const DriverRawPtr driver);
 
     static constexpr size_t QUEUE_SIZE = 8;
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
