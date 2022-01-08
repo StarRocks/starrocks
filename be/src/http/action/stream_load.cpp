@@ -406,7 +406,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (!http_req->header(HTTP_LOAD_MEM_LIMIT).empty()) {
         try {
             auto load_mem_limit = std::stoll(http_req->header(HTTP_LOAD_MEM_LIMIT));
-            LOG(INFO) << "compaction load_mem_limit:" << load_mem_limit;
             if (load_mem_limit < 0) {
                 return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
             }
@@ -459,6 +458,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     // to process this load
     if (!ctx->use_streaming) {
         return Status::OK();
+    }
+
+    if (!http_req->header(HTTP_EXEC_MEM_LIMIT).empty()) {
+        auto exec_mem_limit = std::stoll(http_req->header(HTTP_EXEC_MEM_LIMIT));
+        if (exec_mem_limit <= 0) {
+            return Status::InvalidArgument("exec_mem_limit must be greater than 0");
+        }
+        ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
 
     return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
