@@ -105,6 +105,8 @@ public:
     // Must be called once to cleanup any queued resources.
     void close();
 
+    void short_circuit_for_pipeline(const int32_t shuffle_id);
+
     bool has_output_for_pipeline(const int32_t shuffle_id) const;
 
     bool is_finished() const;
@@ -157,10 +159,26 @@ private:
     // key of first level is be_number
     // key of second level is request sequence
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkQueue>> _buffered_chunk_queues;
+
+    std::unordered_set<int32_t> _short_circuit_shuffle_ids;
 };
 
 DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int num_senders)
         : _recvr(parent_recvr), _is_cancelled(false), _num_remaining_senders(num_senders) {}
+
+void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t shuffle_id) {
+    std::lock_guard<std::mutex> l(_lock);
+    _short_circuit_shuffle_ids.insert(shuffle_id);
+
+    auto iter = _chunk_queue.begin();
+    while (iter != _chunk_queue.end()) {
+        if (iter->shuffle_id == shuffle_id) {
+            iter = _chunk_queue.erase(iter);
+        } else {
+            ++iter;
+        }
+    }
+}
 
 bool DataStreamRecvr::SenderQueue::has_output_for_pipeline(const int32_t shuffle_id) const {
     std::lock_guard<std::mutex> l(_lock);
@@ -408,6 +426,9 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     int32_t shuffle_id = request.has_shuffle_id() ? request.shuffle_id() : -1;
+    if (_short_circuit_shuffle_ids.find(shuffle_id) != _short_circuit_shuffle_ids.end()) {
+        return Status::OK();
+    }
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -513,6 +534,9 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
     int32_t shuffle_id = request.has_shuffle_id() ? request.shuffle_id() : -1;
+    if (_short_circuit_shuffle_ids.find(shuffle_id) != _short_circuit_shuffle_ids.end()) {
+        return Status::OK();
+    }
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -876,10 +900,15 @@ Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk
     return status;
 }
 
+void DataStreamRecvr::short_circuit_for_pipeline(const int32_t shuffle_id) {
+    return _sender_queues[0]->short_circuit_for_pipeline(shuffle_id);
+}
+
 bool DataStreamRecvr::has_output_for_pipeline(const int32_t shuffle_id) const {
     DCHECK(!_is_merging);
     return _sender_queues[0]->has_output_for_pipeline(shuffle_id);
 }
+
 bool DataStreamRecvr::is_finished() const {
     DCHECK(!_is_merging);
     return _sender_queues[0]->is_finished();

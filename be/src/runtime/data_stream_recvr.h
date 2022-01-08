@@ -101,6 +101,8 @@ public:
         _sub_plan_query_statistics_recvr->insert(statistics, sender_id);
     }
 
+    void short_circuit_for_pipeline(const int32_t shuffle_id);
+
     bool has_output_for_pipeline(const int32_t shuffle_id) const;
 
     bool is_finished() const;
