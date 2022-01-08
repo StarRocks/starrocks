@@ -101,23 +101,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
             "AverageThreadTokens", std::bind<int64_t>(std::mem_fn(&ThreadResourceMgr::ResourcePool::num_threads),
                                                       _runtime_state->resource_pool()));
 
-    int64_t bytes_limit = request.query_options.mem_limit;
-    if (bytes_limit <= 0) {
-        // sometimes the request does not set the query mem limit, we use default one.
-        // TODO(cmy): we should not allow request without query mem limit.
-        bytes_limit = 2 * 1024 * 1024 * 1024L;
-    }
-
-    if (bytes_limit > _exec_env->query_pool_mem_tracker()->limit()) {
-        LOG(WARNING) << "Query memory limit " << PrettyPrinter::print(bytes_limit, TUnit::BYTES)
-                     << " exceeds process memory limit of "
-                     << PrettyPrinter::print(_exec_env->query_pool_mem_tracker()->limit(), TUnit::BYTES)
-                     << ". Using process memory limit instead";
-        bytes_limit = _exec_env->query_pool_mem_tracker()->limit();
-    }
-
-    LOG(INFO) << "Using query memory limit: " << PrettyPrinter::print(bytes_limit, TUnit::BYTES);
-
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);

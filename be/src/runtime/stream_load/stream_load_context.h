@@ -24,9 +24,7 @@
 #include <rapidjson/prettywriter.h>
 
 #include <future>
-#include <sstream>
 
-#include "common/logging.h"
 #include "common/status.h"
 #include "common/utils.h"
 #include "gen_cpp/BackendService_types.h"
@@ -44,7 +42,7 @@ namespace starrocks {
 // kafka related info
 class KafkaLoadInfo {
 public:
-    KafkaLoadInfo(const TKafkaLoadInfo& t_info)
+    explicit KafkaLoadInfo(const TKafkaLoadInfo& t_info)
             : brokers(t_info.brokers),
               topic(t_info.topic),
               begin_offset(t_info.partition_begin_offset),
@@ -68,12 +66,6 @@ public:
     std::string brokers;
     std::string topic;
 
-    // the following members control the max progress of a consuming
-    // process. if any of them reach, the consuming will finish.
-    int64_t max_interval_s = 5;
-    int64_t max_batch_rows = 1024;
-    int64_t max_batch_size = 100 * 1024 * 1024; // 100MB
-
     // partition -> begin offset, inclusive.
     std::map<int32_t, int64_t> begin_offset;
     // partiton -> commit offset, inclusive.
@@ -86,7 +78,7 @@ class MessageBodySink;
 
 class StreamLoadContext {
 public:
-    StreamLoadContext(ExecEnv* exec_env) : id(UniqueId::gen_uid()), _exec_env(exec_env), _refs(0) {
+    explicit StreamLoadContext(ExecEnv* exec_env) : id(UniqueId::gen_uid()), _exec_env(exec_env), _refs(0) {
         start_nanos = MonotonicNanos();
     }
 
@@ -100,9 +92,6 @@ public:
     }
 
     std::string to_json() const;
-    // the old mini load result format is not same as stream load.
-    // add this function for compatible with old mini load result format.
-    std::string to_json_for_mini_load() const;
 
     // return the brief info of this context.
     // also print the load source info if detail is set to true
@@ -138,7 +127,6 @@ public:
     std::string table;
     std::string label;
     // optional
-    std::string sub_label;
     double max_filter_ratio = 0.0;
     int32_t timeout_second = -1;
     AuthInfo auth;
@@ -148,11 +136,6 @@ public:
     int64_t max_interval_s = 5;
     int64_t max_batch_rows = 100000;
     int64_t max_batch_size = 100 * 1024 * 1024; // 100MB
-
-    // for parse json-data
-    std::string data_format;
-    std::string jsonpath_file;
-    std::string jsonpath;
 
     // only used to check if we receive whole body
     size_t body_bytes = 0;
@@ -197,10 +180,6 @@ public:
     std::string existing_job_status;
 
     std::unique_ptr<KafkaLoadInfo> kafka_info;
-
-    // consumer_id is used for data consumer cache key.
-    // to identified a specified data consumer.
-    int64_t consumer_id = 0;
 
 public:
     ExecEnv* exec_env() { return _exec_env; }
