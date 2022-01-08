@@ -133,6 +133,26 @@ public class CacheDictManager implements IDictManager {
             if (dictSize > 256) {
                 noDictStringColumns.add(columnIdentifier);
             }
+            int dictDataSize = 0;
+            for (int i = 0; i < dictSize; i++) {
+                // a UTF-8 code may take up to 3 bytes
+                dictDataSize += tGlobalDict.strings.get(i).length() * 3;
+                // string offsets
+                dictDataSize += 4;
+            }
+            // 1M
+            final int DICT_PAGE_MAX_SIZE = 1024 * 1024;
+            // If the dictionary data size exceeds 1M,
+            // we won't use the global dictionary optimization.
+            // In this case BE cannot guarantee that the dictionary page
+            // will be generated after the compaction
+            if (dictDataSize > DICT_PAGE_MAX_SIZE) {
+                noDictStringColumns.add(columnIdentifier);
+            }
+
+            for (int i = 0; i < dictSize; ++i) {
+                dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
+            }
             for (int i = 0; i < dictSize; ++i) {
                 dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
             }
