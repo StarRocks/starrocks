@@ -107,7 +107,7 @@ void DriverQueueWithWorkGroup::yield_driver(const DriverRawPtr driver) {
 
     auto* wg = driver->workgroup();
     wg->driver_queue()->yield_driver(driver);
-    wg->increment_real_runtime(driver->driver_acct().get_last_time_spent());
+    wg->increment_real_runtime_ns(driver->driver_acct().get_last_time_spent());
 }
 
 size_t DriverQueueWithWorkGroup::size() {
