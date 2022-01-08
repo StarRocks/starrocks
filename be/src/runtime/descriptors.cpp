@@ -106,7 +106,7 @@ std::string TableDescriptor::debug_string() const {
 }
 
 IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc)
-        : TableDescriptor(tdesc), _columns(tdesc.icebergTable.columns), _table_location(tdesc.icebergTable.location) {}
+        : TableDescriptor(tdesc), _table_location(tdesc.icebergTable.location), _columns(tdesc.icebergTable.columns) {}
 
 HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : TableDescriptor(tdesc),

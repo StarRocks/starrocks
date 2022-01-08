@@ -194,8 +194,7 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
         auto precision = discrete_type->precision();
         auto scale = discrete_type->scale();
         if (precision < 1 || precision > decimal_precision_limit<int128_t> || scale < 0 || scale > precision) {
-            return Status::InternalError(
-                    strings::Substitute("Illegal decimal type Decimal128($0, $1):", precision, scale));
+            return Status::InternalError(strings::Substitute("Decimal($0, $1) is out of range.", precision, scale));
         }
         strict_type_desc->precision = precision;
         strict_type_desc->scale = scale;
@@ -213,7 +212,8 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
     case TYPE_DECIMAL32:
     case TYPE_DECIMAL64: {
         return Status::InternalError(
-                strings::Substitute("Illegal strict type corresponding to arrow type($0)", arrow_type->name()));
+                strings::Substitute("Apache Arrow type($0) does not match the type($1) in StarRocks",
+                                    arrow_type->name(), type_to_string(strict_pt)));
     }
     default:
         break;
@@ -347,7 +347,7 @@ Status ParquetScanner::open_next_reader() {
         Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
                                               CompressionTypePB::NO_COMPRESSION, &file);
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to create random-access files: " << st.to_string();
+            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
             return st;
         }
         _conv_ctx.current_file = file->file_name();

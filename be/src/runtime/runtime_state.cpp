@@ -302,12 +302,11 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
 
     std::stringstream out;
     if (is_summary) {
-        out << "Summary: ";
+        out << "Error: ";
         out << error_msg;
     } else {
         // Note: export reason first in case src line too long and be truncated.
-        out << "Reason: " << error_msg;
-        out << ". src line: [" << line << "]; ";
+        out << "Error: " << error_msg << ". Row: " << line;
     }
 
     if (!out.str().empty()) {
