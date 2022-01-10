@@ -39,9 +39,10 @@ under the License.
         <hadoop.version>2.10.1</hadoop.version>
         <guava.version>30.1.1-jre</guava.version>
         <zookeeper.version>3.4.14</zookeeper.version>
-        <protobuf.version>2.5.0</protobuf.version>
-        <thrift.version>0.13.0</thrift.version>
+        <protobuf.version>3.16.1</protobuf.version>
+        <thrift.version>0.14.1</thrift.version>
         <tomcat.version>8.5.70</tomcat.version>
+        <log4j.version>2.17.1</log4j.version>
         <jackson.version>2.9.10.8</jackson.version>
     </properties>
 
@@ -293,14 +294,14 @@ under the License.
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
-            <version>2.17.1</version>
+            <version>${log4j.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>2.17.1</version>
+            <version>${log4j.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
