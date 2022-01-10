@@ -121,7 +121,17 @@ public class TypeManager {
         return compatibleType;
     }
 
-    public static Type getCompatibleTypeForBinary(Type type1, Type type2) {
+    public static Type getCompatibleTypeForBinary(boolean isEquivalence, Type type1, Type type2) {
+        // 1. Many join on-clause use string = int predicate, follow mysql will cast to double, but
+        //    starrocks cast to double will lose precision, the predicate result will error
+        // 2. Why only support equivalence expression cast to string? Because string order is different
+        //    with number order, like: '12' > '2' is false, but 12 > 2 is true
+        if (isEquivalence) {
+            if ((type1.isStringType() && type2.isNumericType()) || (type1.isNumericType() && type2.isStringType())) {
+                return Type.VARCHAR;
+            }
+        }
+
         return BinaryPredicate.getCmpType(type1, type2);
     }
 
