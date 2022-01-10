@@ -709,6 +709,10 @@ public class EditLog {
                     catalog.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
+                case OperationType.OP_WORKGROUP: {
+                    // TODO(by satanson) read out workgroup entry and ignore it, go on processing sequential entries
+                    break;
+                }
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     catalog.getSmallFileMgr().replayCreateFile(smallFile);
