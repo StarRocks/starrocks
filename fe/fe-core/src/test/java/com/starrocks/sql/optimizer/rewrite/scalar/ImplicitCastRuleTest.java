@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -94,11 +95,11 @@ public class ImplicitCastRuleTest {
         ImplicitCastRule rule = new ImplicitCastRule();
         ScalarOperator result = rule.apply(op, null);
 
-        assertTrue(result.getChild(0) instanceof CastOperator);
+        assertTrue(result.getChild(0) instanceof ConstantOperator);
         assertTrue(result.getChild(1) instanceof CastOperator);
 
-        assertEquals(Type.DOUBLE, result.getChild(0).getType());
-        assertEquals(Type.DOUBLE, result.getChild(1).getType());
+        assertEquals(PrimitiveType.VARCHAR, result.getChild(0).getType().getPrimitiveType());
+        assertEquals(PrimitiveType.VARCHAR, result.getChild(1).getType().getPrimitiveType());
 
         assertTrue(result.getChild(1).getChild(0).getType().isInt());
     }
