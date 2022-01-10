@@ -322,8 +322,8 @@ public:
     ScalarColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
     ~ScalarColumnReader() override = default;
 
-    Status init(RandomAccessFile* file, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
-                const TypeDescriptor& col_type) {
+    Status init(int chunk_size, RandomAccessFile* file, const ParquetField* field,
+                const tparquet::ColumnChunk* chunk_metadata, const TypeDescriptor& col_type) {
         StoredColumnReaderOptions opts;
         opts.stats = _opts.stats;
         _field = field;
@@ -331,7 +331,7 @@ public:
 
         RETURN_IF_ERROR(_init_convert_info());
 
-        return StoredColumnReader::create(file, field, chunk_metadata, opts, &_reader);
+        return StoredColumnReader::create(file, field, chunk_metadata, opts, chunk_size, &_reader);
     }
 
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
@@ -649,20 +649,22 @@ private:
 };
 
 Status ColumnReader::create(RandomAccessFile* file, const ParquetField* field, const tparquet::RowGroup& row_group,
-                            const TypeDescriptor& col_type, const ColumnReaderOptions& opts,
+                            const TypeDescriptor& col_type, const ColumnReaderOptions& opts, int chunk_size,
                             std::unique_ptr<ColumnReader>* output) {
     if (field->type.type == TYPE_MAP || field->type.type == TYPE_STRUCT) {
         return Status::InternalError("not supported type");
     }
     if (field->type.type == TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
-        RETURN_IF_ERROR(ColumnReader::create(file, &field->children[0], row_group, col_type, opts, &child_reader));
+        RETURN_IF_ERROR(
+                ColumnReader::create(file, &field->children[0], row_group, col_type, opts, chunk_size, &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
         *output = std::move(reader);
     } else {
         std::unique_ptr<ScalarColumnReader> reader(new ScalarColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(file, field, &row_group.columns[field->physical_column_index], col_type));
+        RETURN_IF_ERROR(
+                reader->init(chunk_size, file, field, &row_group.columns[field->physical_column_index], col_type));
         *output = std::move(reader);
     }
     return Status::OK();

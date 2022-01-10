@@ -15,14 +15,15 @@ public:
     RepeatedStoredColumnReader(const StoredColumnReaderOptions& opts) : _opts(opts) {}
     ~RepeatedStoredColumnReader() override = default;
 
-    Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata, RandomAccessFile* file) {
+    Status init(int chunk_size, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
+                RandomAccessFile* file) {
         _field = field;
 
         ColumnChunkReaderOptions opts;
         opts.stats = _opts.stats;
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
                                                       _field->type_length, chunk_metadata, file, opts);
-        RETURN_IF_ERROR(_reader->init());
+        RETURN_IF_ERROR(_reader->init(chunk_size));
         _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
@@ -70,14 +71,15 @@ public:
 
     ~OptionalStoredColumnReader() override = default;
 
-    Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata, RandomAccessFile* file) {
+    Status init(int chunk_size, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
+                RandomAccessFile* file) {
         _field = field;
 
         ColumnChunkReaderOptions opts;
         opts.stats = _opts.stats;
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
                                                       _field->type_length, chunk_metadata, file, opts);
-        RETURN_IF_ERROR(_reader->init());
+        RETURN_IF_ERROR(_reader->init(chunk_size));
         _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
@@ -135,14 +137,15 @@ public:
     RequiredStoredColumnReader(const StoredColumnReaderOptions& opts) : _opts(opts) {}
     ~RequiredStoredColumnReader() override = default;
 
-    Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata, RandomAccessFile* file) {
+    Status init(int chunk_size, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
+                RandomAccessFile* file) {
         _field = field;
 
         ColumnChunkReaderOptions opts;
         opts.stats = _opts.stats;
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
                                                       _field->type_length, chunk_metadata, file, opts);
-        RETURN_IF_ERROR(_reader->init());
+        RETURN_IF_ERROR(_reader->init(chunk_size));
         _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
@@ -494,18 +497,18 @@ Status RequiredStoredColumnReader::_next_page() {
 
 Status StoredColumnReader::create(RandomAccessFile* file, const ParquetField* field,
                                   const tparquet::ColumnChunk* chunk_metadata, const StoredColumnReaderOptions& opts,
-                                  std::unique_ptr<StoredColumnReader>* out) {
+                                  int chunk_size, std::unique_ptr<StoredColumnReader>* out) {
     if (field->max_rep_level() > 0) {
         std::unique_ptr<RepeatedStoredColumnReader> reader(new RepeatedStoredColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(field, chunk_metadata, file));
+        RETURN_IF_ERROR(reader->init(chunk_size, field, chunk_metadata, file));
         *out = std::move(reader);
     } else if (field->max_def_level() > 0) {
         std::unique_ptr<OptionalStoredColumnReader> reader(new OptionalStoredColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(field, chunk_metadata, file));
+        RETURN_IF_ERROR(reader->init(chunk_size, field, chunk_metadata, file));
         *out = std::move(reader);
     } else {
         std::unique_ptr<RequiredStoredColumnReader> reader(new RequiredStoredColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(field, chunk_metadata, file));
+        RETURN_IF_ERROR(reader->init(chunk_size, field, chunk_metadata, file));
         *out = std::move(reader);
     }
     return Status::OK();

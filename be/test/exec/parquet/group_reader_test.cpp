@@ -356,7 +356,7 @@ TEST_F(GroupReaderTest, TestInit) {
     ASSERT_TRUE(status.ok());
 
     // create row group reader
-    auto* group_reader = _pool.add(new GroupReader(file, file_meta, 0));
+    auto* group_reader = _pool.add(new GroupReader(config::vector_chunk_size, file, file_meta, 0));
 
     // init row group reader
     status = group_reader->init(*param);
@@ -383,7 +383,7 @@ TEST_F(GroupReaderTest, TestGetNext) {
     ASSERT_TRUE(status.ok());
 
     // create row group reader
-    auto* group_reader = _pool.add(new GroupReader(file, file_meta, 0));
+    auto* group_reader = _pool.add(new GroupReader(config::vector_chunk_size, file, file_meta, 0));
 
     // init row group reader
     status = group_reader->init(*param);

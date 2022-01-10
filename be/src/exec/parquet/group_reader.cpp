@@ -15,8 +15,8 @@ namespace starrocks::parquet {
 constexpr static const PrimitiveType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const FieldType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
 
-GroupReader::GroupReader(RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number)
-        : _file(file), _file_metadata(file_metadata), _row_group_number(row_group_number) {
+GroupReader::GroupReader(int chunk_size, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number)
+        : _chunk_size(chunk_size), _file(file), _file_metadata(file_metadata), _row_group_number(row_group_number) {
     _row_group_metadata =
             std::make_shared<tparquet::RowGroup>(_file_metadata->t_metadata().row_groups[row_group_number]);
 }
@@ -94,7 +94,7 @@ Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column
     {
         SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
         RETURN_IF_ERROR(ColumnReader::create(_file, schema_node, *_row_group_metadata, column.col_type_in_chunk, opts,
-                                             &column_reader));
+                                             _chunk_size, &column_reader));
     }
     _column_readers[column.slot_id] = std::move(column_reader);
     return Status::OK();
@@ -262,7 +262,7 @@ void GroupReader::_init_read_chunk() {
         read_slots.emplace_back(slots[chunk_index]);
     }
 
-    size_t chunk_size = config::vector_chunk_size;
+    size_t chunk_size = _chunk_size;
     _read_chunk = vectorized::ChunkHelper::new_chunk(read_slots, chunk_size);
     raw::stl_vector_resize_uninitialized(&_selection, chunk_size);
 
