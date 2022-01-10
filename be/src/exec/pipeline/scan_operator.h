@@ -11,6 +11,9 @@
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
+namespace workgroup {
+class WorkGroup;
+}
 namespace vectorized {
 class RuntimeFilterProbeCollector;
 }
@@ -42,6 +45,8 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
 
+    void set_workgroup(starrocks::workgroup::WorkGroup* wg);
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -63,6 +68,8 @@ private:
     // Pass limit info to scan operator in order to improve sql:
     // select * from table limit x;
     int64_t _limit; // -1: no limit
+
+    starrocks::workgroup::WorkGroup* _workgroup = nullptr;
 };
 
 class ScanOperatorFactory final : public SourceOperatorFactory {

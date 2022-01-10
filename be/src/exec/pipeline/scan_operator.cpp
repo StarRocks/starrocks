@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/olap_chunk_source.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -127,14 +128,29 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state) {
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             _chunk_source->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
+            if (this->_workgroup != nullptr) {
+                // TODO (by laotan332): need more elaborate info
+                this->_workgroup->increase_chunk_num(_buffer_size);
+            }
         }
         _is_io_task_active.store(false, std::memory_order_release);
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
-    if (_io_threads->try_offer(task)) {
-        _io_task_retry_cnt = 0;
+    bool assign_ok = false;
+    if (_workgroup != nullptr) {
+        if (_workgroup->try_offer_io_task(task)) {
+            _io_task_retry_cnt = 0;
+            assign_ok = true;
+        }
     } else {
+        if (_io_threads->try_offer(task)) {
+            _io_task_retry_cnt = 0;
+            assign_ok = true;
+        }
+    }
+
+    if (!assign_ok) {
         _is_io_task_active.store(false, std::memory_order_release);
         // TODO(hcf) set a proper retry times
         LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool overload, retryCnt="
@@ -144,6 +160,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state) {
         }
     }
     return Status::OK();
+}
+
+void ScanOperator::set_workgroup(starrocks::workgroup::WorkGroup* wg) {
+    _workgroup = wg;
 }
 
 Status ScanOperator::_pickup_morsel(RuntimeState* state) {

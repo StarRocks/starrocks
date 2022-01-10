@@ -2,7 +2,7 @@
 
 namespace starrocks::workgroup {
 
-IoDispatcher::IoDispatcher(std::unique_ptr<ThreadPool>& thread_pool) : _thread_pool(std::move(thread_pool)) {}
+IoDispatcher::IoDispatcher(std::unique_ptr<ThreadPool> thread_pool) : _thread_pool(std::move(thread_pool)) {}
 
 void IoDispatcher::initialize(int num_threads) {
     _num_threads_setter.set_actual_num(num_threads);
@@ -27,7 +27,7 @@ void IoDispatcher::run() {
             break;
         }
 
-        auto wg = _wg_manager->pick_next_wg_for_io();
+        auto wg = WorkGroupManager::instance()->pick_next_wg_for_io();
         if (wg == nullptr) {
             continue;
         }
