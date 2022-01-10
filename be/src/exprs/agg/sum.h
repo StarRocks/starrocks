@@ -106,8 +106,8 @@ public:
         down_cast<ResultColumnType*>(to)->append(this->data(state).sum);
     }
 
-    void batch_finalize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                        Column* to) const {
+    void batch_finalize(FunctionContext* ctx __attribute__((unused)), size_t chunk_size,
+                        const Buffer<AggDataPtr>& agg_states, size_t state_offset, Column* to) const override {
         batch_serialize(chunk_size, agg_states, state_offset, to);
     }
 
