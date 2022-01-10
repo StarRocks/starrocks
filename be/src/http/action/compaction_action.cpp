@@ -27,6 +27,7 @@
 
 #include "common/logging.h"
 #include "common/status.h"
+#include "fmt/core.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
@@ -92,7 +93,7 @@ Status get_params(HttpRequest* req, uint64_t* tablet_id, uint32_t* schema_hash) 
     return Status::OK();
 }
 
-Status CompactionAction::_handle_run_compaction(HttpRequest* req, std::string* json_result) {
+Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_result) {
     if (_running) {
         return Status::TooManyTasks("Manual compaction task is running");
     }
@@ -103,11 +104,11 @@ Status CompactionAction::_handle_run_compaction(HttpRequest* req, std::string* j
 
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
     RETURN_IF(tablet == nullptr,
-              Status::InvalidArgument(fmt::format("Not Found table:{}, schema hash:{}", tablet_id, schema_hash)));
+              Status::InvalidArgument(fmt::format("Not Found tablet:{}, schema hash:{}", tablet_id, schema_hash)));
 
     std::string compaction_type = req->param(PARAM_COMPACTION_TYPE);
     if (compaction_type != PARAM_COMPACTION_BASE && compaction_type != PARAM_COMPACTION_CUMULATIVE) {
-        return Status::NotSupported(strings::Substitute("The compaction type '$0' is not supported", compaction_type));
+        return Status::NotSupported(fmt::format("unsupport compaction type:{}", compaction_type));
     }
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);

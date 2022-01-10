@@ -42,7 +42,7 @@ public:
 
 private:
     Status _handle_show_compaction(HttpRequest* req, std::string* json_result);
-    Status _handle_run_compaction(HttpRequest* req, std::string* json_result);
+    Status _handle_compaction(HttpRequest* req, std::string* json_result);
 
 private:
     CompactionActionType _type;
