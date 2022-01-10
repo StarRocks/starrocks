@@ -65,7 +65,7 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
                 chunk->append_column(ColumnHelper::create_const_null_column(_desired_num_rows), slot->id());
             }
         }
-     
+
         _input_chunks.emplace_back(std::move(chunk));
     }
 
