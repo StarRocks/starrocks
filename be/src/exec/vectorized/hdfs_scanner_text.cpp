@@ -64,11 +64,10 @@ void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
 }
 
 Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    return _parse_csv(chunk);
+    return _parse_csv(runtime_state->chunk_size(), chunk);
 }
 
-Status HdfsTextScanner::_parse_csv(ChunkPtr* chunk) {
-    const int capacity = config::vector_chunk_size;
+Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
     DCHECK_EQ(0, chunk->get()->num_rows());
     Status status;
     CSVReader::Record record;
@@ -82,7 +81,7 @@ Status HdfsTextScanner::_parse_csv(ChunkPtr* chunk) {
 
     csv::Converter::Options options;
 
-    for (size_t num_rows = chunk->get()->num_rows(); num_rows < capacity; /**/) {
+    for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = _reader->next_record(&record);
         if (status.is_end_of_file()) {
             break;
