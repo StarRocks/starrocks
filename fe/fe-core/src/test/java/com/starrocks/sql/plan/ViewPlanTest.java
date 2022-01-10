@@ -1513,6 +1513,12 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void test311() throws Exception {
+        String sql = "SELECT v1 FROM t0 WHERE NOT ((v2 > 93 AND v1 < 27) OR v1 >= 22);";
+        testView(sql);
+    }
+
+    @Test
     public void testArray() throws Exception {
         String sql = "select split('1,2,3', ',') from t1;";
         testView(sql);
