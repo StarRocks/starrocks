@@ -818,8 +818,8 @@ public class Catalog {
             File newMeta = new File(newDefaultMetaDir);
             if (oldMeta.exists() && newMeta.exists()) {
                 LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
-                        "Please check which one has the latest data, and remove the another one.",
-                        newDefaultMetaDir, oldDefaultMetaDir);
+                        "Please make sure {} has the latest data, and remove the another one.",
+                        newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
                 System.exit(-1);
             }
         }
