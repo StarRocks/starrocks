@@ -62,9 +62,9 @@ public:
     }
 
     bool set_check_mem_limit(bool check) {
-        bool tmp_check = _check;
+        bool prev_check = _check;
         _check = check;
-        return tmp_check;
+        return prev_check;
     }
 
     bool check_mem_limit() { return _check; }
