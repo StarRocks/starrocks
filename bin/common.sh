@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 # get jdk version, return version as an Integer.
 # 1.8 => 8, 13.0 => 13
