@@ -56,14 +56,14 @@ Status DeleteConditionHandler::generate_delete_predicate(const TabletSchema& sch
     if (conditions.empty()) {
         LOG(WARNING) << "invalid parameters for store_cond."
                      << " condition_size=" << conditions.size();
-        return Status::InternalError("Invalid parameters for store_cond");
+        return Status::InvalidArgument("Invalid parameters for store_cond");
     }
 
     // check delete condition meet the requirements
     for (const TCondition& condition : conditions) {
         if (!check_condition_valid(schema, condition).ok()) {
             LOG(WARNING) << "invalid condition. condition=" << ThriftDebugString(condition);
-            return Status::InternalError("Invalid condition");
+            return Status::InvalidArgument("Invalid condition");
         }
     }
 
@@ -163,7 +163,7 @@ Status DeleteConditionHandler::check_condition_valid(const TabletSchema& schema,
 
     if (field_index < 0) {
         LOG(WARNING) << "field is not exist. field_index=" << field_index;
-        return Status::InternalError("Field is not exist");
+        return Status::InvalidArgument("Field is not exist");
     }
 
     // Checks that the specified column is a key, is it type float or double.
@@ -173,7 +173,7 @@ Status DeleteConditionHandler::check_condition_valid(const TabletSchema& schema,
         column.type() == OLAP_FIELD_TYPE_FLOAT) {
         LOG(WARNING) << "field is not key column, or storage model is not duplicate, or data type "
                         "is float or double.";
-        return Status::InternalError("Field is not key column");
+        return Status::InvalidArgument("Field is not key column");
     }
 
     // Check that the filter values specified in the delete condition
@@ -187,14 +187,14 @@ Status DeleteConditionHandler::check_condition_valid(const TabletSchema& schema,
     //    the length specified when creating the table
     if ("*=" != cond.condition_op && "!*=" != cond.condition_op && cond.condition_values.size() != 1) {
         LOG(WARNING) << "invalid condition value size " << cond.condition_values.size();
-        return Status::InternalError("Invalid condition.");
+        return Status::InvalidArgument("Invalid condition.");
     }
 
     for (int i = 0; i < cond.condition_values.size(); i++) {
         const string& value_str = cond.condition_values[i];
         if (!is_condition_value_valid(column, cond, value_str)) {
             LOG(WARNING) << "invalid condition value. [value=" << value_str << "]";
-            return Status::InternalError("Invalid condition");
+            return Status::InvalidArgument("Invalid condition");
         }
     }
 

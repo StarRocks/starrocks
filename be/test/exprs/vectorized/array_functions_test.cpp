@@ -580,7 +580,6 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
     }
 }
 
-
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     // array_position([], 1) : 0
@@ -887,7 +886,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_target) {
         EXPECT_EQ(0, result->get(0).get_int32());
     }
     // array_position(ARRAY<TINYINT>[1, 2, 3], 2): 2
-    // array_position(ARRAY<TINYINT>[1, 2, 3], 4): 0 
+    // array_position(ARRAY<TINYINT>[1, 2, 3], 4): 0
     // array_position(ARRAY<TINYINT>[1, 2, 3], NULL): 0
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
@@ -1018,7 +1017,6 @@ TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
         EXPECT_TRUE(result->get(2).is_null());
     }
 }
-
 
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
