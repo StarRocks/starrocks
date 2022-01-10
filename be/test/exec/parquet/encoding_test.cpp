@@ -188,7 +188,7 @@ TEST_F(ParquetEncodingTest, Int32) {
 
         dict_decoder->set_data(dict_encoder->build());
 
-        st = decoder->set_dict(num_dicts, dict_decoder.get());
+        st = decoder->set_dict(config::vector_chunk_size, num_dicts, dict_decoder.get());
         ASSERT_TRUE(st.ok());
 
         DecoderChecker<int32_t, true>::check(values, encoder->build(), decoder.get());
@@ -255,7 +255,7 @@ TEST_F(ParquetEncodingTest, String) {
 
         dict_decoder->set_data(dict_encoder->build());
 
-        st = decoder->set_dict(num_dicts, dict_decoder.get());
+        st = decoder->set_dict(config::vector_chunk_size, num_dicts, dict_decoder.get());
         ASSERT_TRUE(st.ok());
 
         DecoderChecker<Slice, true>::check(slices, encoder->build(), decoder.get());
@@ -324,7 +324,7 @@ TEST_F(ParquetEncodingTest, FixedString) {
         dict_decoder->set_data(dict_encoder->build());
         dict_decoder->set_type_legth(3);
 
-        st = decoder->set_dict(num_dicts, dict_decoder.get());
+        st = decoder->set_dict(config::vector_chunk_size, num_dicts, dict_decoder.get());
         ASSERT_TRUE(st.ok());
 
         DecoderChecker<Slice, true>::check(slices, encoder->build(), decoder.get());

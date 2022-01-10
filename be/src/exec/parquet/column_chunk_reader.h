@@ -36,7 +36,7 @@ public:
                       const ColumnChunkReaderOptions& opts);
     ~ColumnChunkReader();
 
-    Status init();
+    Status init(int chunk_size);
 
     Status next_page();
 
@@ -98,7 +98,7 @@ private:
     Status _parse_page_header();
     Status _parse_page_data();
 
-    Status _try_load_dictionary();
+    Status _try_load_dictionary(int chunk_size);
     Status _read_and_decompress_page_data();
     Status _parse_data_page();
     Status _parse_dict_page();
