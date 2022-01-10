@@ -106,11 +106,6 @@ public:
         down_cast<ResultColumnType*>(to)->append(this->data(state).sum);
     }
 
-    void batch_finalize(FunctionContext* ctx __attribute__((unused)), size_t chunk_size,
-                        const Buffer<AggDataPtr>& agg_states, size_t state_offset, Column* to) const override {
-        batch_serialize(chunk_size, agg_states, state_offset, to);
-    }
-
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
         Buffer<ResultType>& dst_data = down_cast<ResultColumnType*>((*dst).get())->get_data();
         const auto* src_data = down_cast<const InputColumnType*>(src[0].get())->get_data().data();

@@ -70,11 +70,6 @@ public:
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
 
-    void batch_finalize(FunctionContext* ctx __attribute__((unused)), size_t chunk_size,
-                        const Buffer<AggDataPtr>& agg_states, size_t state_offsets, Column* to) const override {
-        batch_serialize(chunk_size, agg_states, state_offsets, to);
-    }
-
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
         auto* column = down_cast<Int64Column*>((*dst).get());
         column->get_data().assign(chunk_size, 1);
@@ -163,11 +158,6 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());
         down_cast<Int64Column*>(to)->append(this->data(state).count);
-    }
-
-    void batch_finalize(FunctionContext* ctx __attribute__((unused)), size_t chunk_size,
-                        const Buffer<AggDataPtr>& agg_states, size_t state_offsets, Column* to) const override {
-        batch_serialize(chunk_size, agg_states, state_offsets, to);
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
