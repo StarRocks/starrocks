@@ -179,7 +179,7 @@ build_openssl() {
     LDFLAGS="-L${TP_LIB_DIR}" \
     CFLAGS="-fPIC" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -zlib -shared ${OPENSSL_PLATFORM}
+    ./Configure --prefix=$TP_INSTALL_DIR -zlib -shared no-asm ${OPENSSL_PLATFORM}
     make -j$PARALLEL && make install
     if [ -f $TP_INSTALL_DIR/lib64/libcrypto.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib && \
