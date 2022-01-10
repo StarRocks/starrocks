@@ -46,8 +46,6 @@ namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
 const static std::string PARAM_COMPACTION_TYPE = "compact_type";
-const static std::string PARAM_COMPACTION_BASE = "base";
-const static std::string PARAM_COMPACTION_CUMULATIVE = "cumulative";
 
 std::atomic_bool CompactionAction::_running = false;
 
@@ -107,7 +105,8 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
               Status::InvalidArgument(fmt::format("Not Found tablet:{}, schema hash:{}", tablet_id, schema_hash)));
 
     std::string compaction_type = req->param(PARAM_COMPACTION_TYPE);
-    if (compaction_type != PARAM_COMPACTION_BASE && compaction_type != PARAM_COMPACTION_CUMULATIVE) {
+    if (compaction_type != to_string(CompactionType::BASE_COMPACTION) &&
+        compaction_type != to_string(CompactionType::CUMULATIVE_COMPACTION)) {
         return Status::NotSupported(fmt::format("unsupport compaction type:{}", compaction_type));
     }
 
@@ -115,7 +114,7 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
 
     auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
 
-    if (compaction_type == PARAM_COMPACTION_CUMULATIVE) {
+    if (compaction_type == to_string(CompactionType::CUMULATIVE_COMPACTION)) {
         vectorized::CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
 
         Status res = cumulative_compaction.compact();
@@ -131,7 +130,7 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
             return res;
         }
         tablet->set_last_cumu_compaction_failure_time(0);
-    } else if (compaction_type == PARAM_COMPACTION_BASE) {
+    } else if (compaction_type == to_string(CompactionType::BASE_COMPACTION)) {
         vectorized::BaseCompaction base_compaction(mem_tracker, tablet);
 
         Status res = base_compaction.compact();
@@ -167,7 +166,7 @@ void CompactionAction::handle(HttpRequest* req) {
             HttpChannel::send_reply(req, HttpStatus::OK, json_result);
         }
     } else if (_type == CompactionActionType::RUN_COMPACTION) {
-        Status st = _handle_run_compaction(req, &json_result);
+        Status st = _handle_compaction(req, &json_result);
         if (!st.ok()) {
             HttpChannel::send_reply(req, HttpStatus::OK, to_json(st));
         } else {
