@@ -138,7 +138,7 @@ HASH_PARTITIONED: 11: O_CUSTKEY
 0:OlapScanNode
 TABLE: orders
 PREAGGREGATION: ON
-PREDICATES: NOT 18: O_COMMENT LIKE '%unusual%deposits%'
+PREDICATES: NOT (18: O_COMMENT LIKE '%unusual%deposits%')
 partitions=1/1
 rollup: orders
 tabletRatio=10/10

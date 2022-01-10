@@ -4243,12 +4243,12 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select v1 from t0 where not (v1 > 2 and if(v2 > 2, FALSE, TRUE))";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (NOT if(2: v2 > 2, FALSE, TRUE))"));
+        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (NOT (if(2: v2 > 2, FALSE, TRUE)))"));
 
         sql = "select v1 from t0 where not (v1 > 2 or v2 is null or if(v3 > 2, FALSE, TRUE))";
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(
-                planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT if(3: v3 > 2, FALSE, TRUE)"));
+                planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT (if(3: v3 > 2, FALSE, TRUE))"));
     }
 
     @Test
