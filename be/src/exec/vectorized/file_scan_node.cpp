@@ -116,7 +116,7 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
             return _process_status;
         }
         if (_runtime_state->is_cancelled()) {
-            if (update_status(Status::Cancelled("Cancelled FileScanNode::get_next"))) {
+            if (_update_status(Status::Cancelled("Cancelled FileScanNode::get_next"))) {
                 _queue_writer_cond.notify_all();
             }
             return _process_status;
