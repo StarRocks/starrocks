@@ -28,14 +28,14 @@ class FileMetaData;
 
 class FileReader {
 public:
-    FileReader(RuntimeState* runtime_state, RandomAccessFile* file, uint64_t file_size);
+    FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size);
     ~FileReader();
 
     Status init(const starrocks::vectorized::HdfsFileReaderParam& param);
     Status get_next(vectorized::ChunkPtr* chunk);
 
 private:
-    RuntimeState* _runtime_state;
+    int _chunk_size;
 
     // parse footer of parquet file
     Status _parse_footer();

@@ -54,7 +54,7 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(RuntimeState* runtime_state, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number);
+    GroupReader(int chunk_size, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number);
     ~GroupReader() = default;
 
     Status init(const GroupReaderParam& _param);
@@ -78,7 +78,7 @@ private:
     void _dict_filter();
     Status _dict_decode(vectorized::ChunkPtr* chunk);
 
-    RuntimeState* _runtime_state;
+    int _chunk_size;
 
     RandomAccessFile* _file;
 

@@ -23,8 +23,8 @@ namespace starrocks::parquet {
 
 static constexpr uint32_t kFooterSize = 8;
 
-FileReader::FileReader(RuntimeState* runtime_state, RandomAccessFile* file, uint64_t file_size)
-        : _runtime_state(runtime_state), _file(file), _file_size(file_size) {}
+FileReader::FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size)
+        : _chunk_size(chunk_size), _file(file), _file_size(file_size) {}
 
 FileReader::~FileReader() = default;
 
@@ -112,7 +112,7 @@ Status FileReader::_parse_footer() {
 }
 
 std::shared_ptr<GroupReader> FileReader::_row_group(int i) {
-    return std::make_shared<GroupReader>(_runtime_state, _file, _file_metadata.get(), i);
+    return std::make_shared<GroupReader>(_chunk_size, _file, _file_metadata.get(), i);
 }
 
 Status FileReader::_check_magic(const uint8_t* file_magic) {
@@ -429,7 +429,7 @@ Status FileReader::_get_next_internal(vectorized::ChunkPtr* chunk) {
     }
 
     if (_cur_row_group_idx < _row_group_size) {
-        size_t row_count = _runtime_state->chunk_size();
+        size_t row_count = _chunk_size;
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
@@ -452,8 +452,7 @@ Status FileReader::_get_next_internal(vectorized::ChunkPtr* chunk) {
 
 Status FileReader::_exec_only_partition_scan(vectorized::ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
-        size_t read_size =
-                std::min(static_cast<size_t>(_runtime_state->chunk_size()), _total_row_count - _scan_row_count);
+        size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
 
         _append_not_exist_column_to_chunk(chunk, read_size);
         _append_partition_column_to_chunk(chunk, read_size);
