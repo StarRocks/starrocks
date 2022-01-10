@@ -10,6 +10,8 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
+#include "util/blocking_queue.hpp"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
@@ -85,6 +87,23 @@ public:
     double get_cpu_unadjusted_actual_use_ratio() const;
 
     static constexpr int DEFAULT_WG_ID = 0;
+    bool try_offer_io_task(const PriorityThreadPool::Task& task);
+    void pick_and_run_io_task();
+
+public:
+    // should be call read chunk from disk
+    void grant_chunk_num(int32_t chunk_num);
+
+    // should be call while comsume chunk from calculate thread
+    void descend_chunk_num(int32_t chunk_num);
+
+    void estimate_trend_factor_period();
+    double get_expect_factor() const;
+    double get_diff_factor() const;
+    double get_select_factor() const;
+    void update_select_factor(double value);
+    double get_cur_select_factor() const;
+    void update_cur_select_factor(double value);
 
 private:
     std::string _name;
@@ -105,6 +124,25 @@ private:
 
     // it's proper to define Context as a Thrift or protobuf struct.
     // WorkGroupContext _context;
+
+    // Queue on which work items are held until a thread is available to process them in
+    // FIFO order.
+    BlockingPriorityQueue<PriorityThreadPool::Task> _io_work_queue;
+
+    std::atomic<double> _cpu_expect_use_ratio;
+    std::atomic<double> _cpu_actual_use_ratio;
+
+    //  some variables for io schedule
+    std::atomic<size_t> _cur_hold_total_chunk_num = 0; // total chunk num wait for consume
+    std::atomic<size_t> _grant_chunk_num_period = 0;
+    std::atomic<size_t> _descend_chunk_num_period = 0;
+
+    std::atomic<bool> _is_estimate = false;
+
+    double _expect_factor; // the factor which should be selected to run by scheduler
+    double _diff_factor;
+    double _select_factor;
+    double _cur_select_factor;
 };
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
@@ -124,6 +162,11 @@ public:
 
     // get next workgroup for io
     WorkGroupPtr pick_next_wg_for_io();
+
+    void adjust_weight_if_need();
+
+    WorkGroupQueue& get_cpu_queue();
+
     WorkGroupQueue& get_io_queue();
 
     size_t get_sum_cpu_limit() const { return _sum_cpu_limit; }
@@ -135,6 +178,10 @@ public:
     int64_t get_sum_unadjusted_cpu_runtime_ns() const { return _sum_unadjusted_cpu_runtime_ns; }
 
 private:
+    WorkGroupPtr get_next_wg();
+    size_t get_next_wg_index();
+
+private:
     std::mutex _mutex;
 
     std::unordered_map<int, WorkGroupPtr> _workgroups;
@@ -142,7 +189,15 @@ private:
 
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
-    std::atomic<int64_t> _sum_unadjusted_cpu_runtime_ns = 0;
+    std::atomic<bool> _is_adjust;
+    size_t _schedule_num_period;
+    std::atomic<size_t> _cur_schedule_num = 0;
+
+    std::vector<WorkGroupPtr> _io_wgs;
+
+    std::atomic<size_t> _cur_index = 0;
+    std::vector<WorkGroupPtr> _cur_wait_run_wgs;
+    std::atomic<bool> _is_schedule = false;
 };
 
 class DefaultWorkGroupInitialization {

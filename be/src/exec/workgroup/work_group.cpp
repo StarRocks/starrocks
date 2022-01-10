@@ -11,12 +11,17 @@ WorkGroup::WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t m
                      WorkGroupType type)
         : _name(name),
           _id(id),
-          _type(type),
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
-          _concurrency(concurrency) {}
+          _concurrency(concurrency),
+          _type(type),
+          _io_work_queue(1024) {
+    _expect_factor = _cpu_expect_use_ratio;
+    _select_factor = _expect_factor;
+    _cur_select_factor = _select_factor;
+}
 
-WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
+WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id), _io_work_queue(1024) {
     if (twg.__isset.cpu_limit) {
         _cpu_limit = twg.cpu_limit;
     } else {
@@ -67,15 +72,10 @@ double WorkGroup::get_cpu_actual_use_ratio() const {
     return static_cast<double>(get_real_runtime_ns()) / sum_cpu_runtime_ns;
 }
 
-double WorkGroup::get_cpu_unadjusted_actual_use_ratio() const {
-    int64_t sum_cpu_runtime_ns = WorkGroupManager::instance()->get_sum_unadjusted_cpu_runtime_ns();
-    if (sum_cpu_runtime_ns == 0) {
-        return 0;
-    }
-    return static_cast<double>(_unadjusted_real_runtime_ns) / sum_cpu_runtime_ns;
+WorkGroupManager::WorkGroupManager() : _schedule_num_period(1024) {
+    _cur_schedule_num = _schedule_num_period;
+    _cur_wait_run_wgs.resize(_schedule_num_period, nullptr);
 }
-
-WorkGroupManager::WorkGroupManager() {}
 WorkGroupManager::~WorkGroupManager() {}
 void WorkGroupManager::destroy() {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -110,8 +110,170 @@ void WorkGroupManager::remove_workgroup(int wg_id) {
     }
 }
 
+bool WorkGroup::try_offer_io_task(const PriorityThreadPool::Task& task) {
+    return _io_work_queue.try_put(task);
+}
+
+void WorkGroup::pick_and_run_io_task() {
+    PriorityThreadPool::Task task;
+    if (_io_work_queue.blocking_get(&task)) {
+        task.work_function();
+    }
+}
+
+// shuold be call when read chunk_num from disk
+void WorkGroup::grant_chunk_num(int32_t chunk_num) {
+    _cur_hold_total_chunk_num += chunk_num;
+    _grant_chunk_num_period += chunk_num;
+}
+
+void WorkGroup::descend_chunk_num(int32_t chunk_num) {
+    _cur_hold_total_chunk_num -= chunk_num;
+    _descend_chunk_num_period -= chunk_num;
+}
+
+double WorkGroup::get_expect_factor() const {
+    return _expect_factor;
+}
+
+double WorkGroup::get_diff_factor() const {
+    return _diff_factor;
+}
+
+double WorkGroup::get_select_factor() const {
+    return _select_factor;
+}
+
+void WorkGroup::update_select_factor(double value) {
+    _select_factor += value;
+}
+
+double WorkGroup::get_cur_select_factor() const {
+    return _cur_select_factor;
+}
+
+void WorkGroup::update_cur_select_factor(double value) {
+    _cur_select_factor += value;
+}
+
+void WorkGroup::estimate_trend_factor_period() {
+    // maybe should add a guard
+    double descend_factor =
+            _descend_chunk_num_period / _cpu_actual_use_ratio * _cpu_expect_use_ratio / _cpu_actual_use_ratio;
+    double grant_factor = _descend_chunk_num_period / _cpu_expect_use_ratio;
+
+    _expect_factor = descend_factor / grant_factor * _cpu_expect_use_ratio;
+    _diff_factor = _cpu_expect_use_ratio - _expect_factor;
+
+    // reset for next period  statistics
+    _descend_chunk_num_period = 0;
+    _grant_chunk_num_period = 0;
+}
+
+void WorkGroupManager::adjust_weight_if_need() {
+    if (--_cur_schedule_num >= 0) {
+        return;
+    }
+
+    bool expect = false;
+    if (!_is_adjust.compare_exchange_strong(expect, true)) {
+        // maybe has other thread do it
+        return;
+    }
+
+    for (auto const& wg : _io_wgs) {
+        wg->estimate_trend_factor_period();
+    }
+
+    double positive_total_diff_factor = 0.0;
+    double negative_total_diff_factor = 0.0;
+    for (auto const& wg : _io_wgs) {
+        if (wg->get_diff_factor() > 0) {
+            positive_total_diff_factor += wg->get_diff_factor();
+        } else {
+            negative_total_diff_factor += wg->get_diff_factor();
+        }
+    }
+
+    // all workgroup don't  satisfy enough resource
+    // keep init select_factor
+    if (positive_total_diff_factor <= 0) {
+        return;
+    }
+    if (positive_total_diff_factor + negative_total_diff_factor >
+        0) { // resource enough but allocate not suit for cpu ratio
+        // adjust select factor
+        for (auto const& wg : _io_wgs) {
+            if (wg->get_diff_factor() < 0) {
+                wg->update_select_factor(0 - negative_total_diff_factor * wg->get_diff_factor() /
+                                                     negative_total_diff_factor);
+            } else if (wg->get_diff_factor() > 0) {
+                wg->update_select_factor(0 - negative_total_diff_factor * wg->get_diff_factor() /
+                                                     positive_total_diff_factor);
+            }
+        }
+    } else { // resource maybe not enough for all , and allocate not suit for cpu ratio
+        // adjust select factor
+        for (auto const& wg : _io_wgs) {
+            if (wg->get_diff_factor() < 0) {
+                wg->update_select_factor(positive_total_diff_factor * wg->get_diff_factor() /
+                                         negative_total_diff_factor);
+            } else if (wg->get_diff_factor() > 0) {
+                wg->update_select_factor(0 - positive_total_diff_factor * wg->get_diff_factor() /
+                                                     positive_total_diff_factor);
+            }
+        }
+    }
+    _cur_schedule_num = _schedule_num_period;
+    _is_schedule.store(false, std::memory_order_release);
+}
+
+WorkGroupPtr WorkGroupManager::get_next_wg() {
+    size_t index = _cur_index;
+    while (!_cur_index.compare_exchange_strong(index, index + 1)) {
+        index = _cur_index;
+        if (index >= _cur_wait_run_wgs.size()) {
+            break;
+        }
+    }
+
+    if (index < _cur_wait_run_wgs.size()) {
+        return _cur_wait_run_wgs[index];
+    }
+
+    bool expect = false;
+    if (!_is_schedule.compare_exchange_strong(expect, true)) {
+        // maybe has other thread do it
+        return nullptr;
+    }
+
+    for (size_t i = 0; i < _schedule_num_period; i++) {
+        size_t idx = get_next_wg_index();
+        _cur_wait_run_wgs[i] = _workgroups[idx];
+    }
+    _cur_index = 1;
+    index = 0;
+    _is_schedule.store(false, std::memory_order_release);
+    return _cur_wait_run_wgs[index];
+}
+
+size_t WorkGroupManager::get_next_wg_index() {
+    size_t index = -1;
+    double total = 0;
+    for (int i = 0; i < _io_wgs.size(); i++) {
+        _io_wgs[i]->update_cur_select_factor(_io_wgs[i]->get_select_factor());
+        total += _io_wgs[i]->get_select_factor();
+        if (index == -1 || _io_wgs[i]->get_cur_select_factor() < _io_wgs[i]->get_cur_select_factor()) {
+            index = i;
+        }
+    }
+    _io_wgs[index]->update_cur_select_factor(0 - total);
+    return index;
+}
+
 WorkGroupPtr WorkGroupManager::pick_next_wg_for_io() {
-    return _wg_io_queue.pick_next();
+    adjust_weight_if_need();
+    return get_next_wg();
 }
 
 WorkGroupQueue& WorkGroupManager::get_io_queue() {
