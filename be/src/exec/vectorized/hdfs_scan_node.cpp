@@ -438,13 +438,13 @@ void HdfsScanNode::_close_pending_scanners() {
 }
 
 void HdfsScanNode::_push_pending_scanner(HdfsScanner* scanner) {
-    scanner->in_pending_queue();
+    scanner->enter_pending_queue();
     _pending_scanners.push(scanner);
 }
 
 HdfsScanner* HdfsScanNode::_pop_pending_scanner() {
     HdfsScanner* scanner = _pending_scanners.pop();
-    uint64_t time = scanner->out_pending_queue();
+    uint64_t time = scanner->exit_pending_queue();
     COUNTER_UPDATE(_scanner_queue_timer, time);
     return scanner;
 }

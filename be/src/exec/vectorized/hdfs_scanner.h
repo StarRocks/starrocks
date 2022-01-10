@@ -202,9 +202,9 @@ public:
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
 
-    void in_pending_queue();
+    void enter_pending_queue();
     // how long it stays inside pending queue.
-    uint64_t out_pending_queue();
+    uint64_t exit_pending_queue();
 
 private:
     bool _is_open = false;

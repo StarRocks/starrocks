@@ -151,11 +151,11 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     _is_closed = true;
 }
 
-void HdfsScanner::in_pending_queue() {
+void HdfsScanner::enter_pending_queue() {
     _pending_queue_sw.start();
 }
 
-uint64_t HdfsScanner::out_pending_queue() {
+uint64_t HdfsScanner::exit_pending_queue() {
     return _pending_queue_sw.reset();
 }
 
