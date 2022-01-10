@@ -12,7 +12,9 @@
 #include "storage/olap_define.h"
 
 namespace starrocks {
+
 class TWorkGroup;
+
 namespace workgroup {
 
 class WorkGroup;
@@ -25,15 +27,6 @@ public:
     virtual void add(const WorkGroupPtr& wg) = 0;
     virtual void remove(const WorkGroupPtr& wg) = 0;
     virtual WorkGroupPtr pick_next() = 0;
-};
-
-class CpuWorkGroupQueue final : public WorkGroupQueue {
-public:
-    CpuWorkGroupQueue() = default;
-    ~CpuWorkGroupQueue() = default;
-    void add(const WorkGroupPtr& wg) override {}
-    void remove(const WorkGroupPtr& wg) override {}
-    WorkGroupPtr pick_next() override { return nullptr; }
 };
 
 class IoWorkGroupQueue final : public WorkGroupQueue {
@@ -64,30 +57,45 @@ public:
 
     void init();
 
-    starrocks::MemTracker* mem_tracker() { return _mem_tracker.get(); }
-    starrocks::pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
+    pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
 
     int id() const { return _id; }
-    int get_cpu_priority() {
-        // TODO: implement cpu priority computation
-        return 0;
-    }
+
+    const std::string& name() const { return _name; }
+
     int get_io_priority() {
         // TODO: implement io priority computation
         return 0;
     }
+
+    size_t get_cpu_limit() const { return _cpu_limit; }
+    int64_t get_vruntime_ns() const { return _vruntime_ns; }
+    int64_t get_real_runtime_ns() const { return _vruntime_ns * _cpu_limit; }
+    // Accumulate virtual runtime divided by _cpu_limit, so that the larger _cpu_limit,
+    // the more cpu time can be consumed proportionally.
+    void increment_real_runtime_ns(int64_t real_runtime_ns) { _vruntime_ns += real_runtime_ns / _cpu_limit; }
+    void set_vruntime_ns(int64_t vruntime_ns) { _vruntime_ns = vruntime_ns; }
+
+    double get_cpu_expected_use_ratio() const;
+    double get_cpu_actual_use_ratio() const;
 
     static constexpr int DEFAULT_WG_ID = 0;
 
 private:
     std::string _name;
     int _id;
+    WorkGroupType _type;
+
     size_t _cpu_limit;
     size_t _memory_limit;
     size_t _concurrency;
-    WorkGroupType _type;
-    std::shared_ptr<starrocks::MemTracker> _mem_tracker;
-    starrocks::pipeline::DriverQueuePtr _driver_queue;
+
+    std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
+
+    pipeline::DriverQueuePtr _driver_queue = nullptr;
+    int64_t _vruntime_ns = 0;
+
     // it's proper to define Context as a Thrift or protobuf struct.
     // WorkGroupContext _context;
 };
@@ -106,20 +114,23 @@ public:
     void destroy();
     // remove already-existing workgroup from WorkGroupManager
     void remove_workgroup(int wg_id);
-    // get next workgroup for computation
-    WorkGroupPtr pick_next_wg_for_cpu();
+
     // get next workgroup for io
     WorkGroupPtr pick_next_wg_for_io();
-
-    WorkGroupQueue& get_cpu_queue();
-
     WorkGroupQueue& get_io_queue();
+
+    size_t get_sum_cpu_limit() const { return _sum_cpu_limit; }
+    void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
+    int64_t get_sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
 
 private:
     std::mutex _mutex;
+
     std::unordered_map<int, WorkGroupPtr> _workgroups;
-    CpuWorkGroupQueue _wg_cpu_queue;
     IoWorkGroupQueue _wg_io_queue;
+
+    std::atomic<size_t> _sum_cpu_limit = 0;
+    std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
 };
 
 class DefaultWorkGroupInitialization {
