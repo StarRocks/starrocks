@@ -9,6 +9,7 @@
 #include "exec/vectorized/hdfs_scanner.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "storage/vectorized/column_predicate.h"
 #include "util/runtime_profile.h"
 
@@ -53,7 +54,7 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number);
+    GroupReader(RuntimeState* state, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number);
     ~GroupReader() = default;
 
     Status init(const GroupReaderParam& _param);
@@ -61,6 +62,10 @@ public:
 
 private:
     using SlotIdExprContextsMap = std::unordered_map<int, std::vector<ExprContext*>>;
+
+    size_t _chunk_size() {
+        return _runtime_state->chunk_size() ? _runtime_state->chunk_size() : config::vector_chunk_size;
+    }
 
     Status _init_column_readers();
     Status _create_column_reader(const GroupReaderParam::Column& column);
@@ -76,6 +81,8 @@ private:
     Status _read(size_t* row_count);
     void _dict_filter();
     Status _dict_decode(vectorized::ChunkPtr* chunk);
+
+    RuntimeState* _runtime_state;
 
     RandomAccessFile* _file;
 

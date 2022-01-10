@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
@@ -15,6 +17,7 @@
 #include "exprs/slot_ref.h"
 #include "exprs/vectorized/binary_predicate.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks::parquet {
 
@@ -24,7 +27,13 @@ using starrocks::vectorized::HdfsFileReaderParam;
 // TODO: min/max conjunct
 class FileReaderTest : public testing::Test {
 public:
-    void SetUp() override {}
+    void SetUp() override {
+        TUniqueId uid;
+        TQueryOptions q_opts;
+        TQueryGlobals q_globals;
+        _runtime_state = std::make_unique<RuntimeState>(uid, q_opts, q_globals, nullptr);
+        _runtime_state->set_chunk_size(4096);
+    }
     void TearDown() override {}
 
 private:
@@ -75,6 +84,7 @@ private:
     int64_t _file_2_size = 850;
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     ObjectPool _pool;
+    std::unique_ptr<RuntimeState> _runtime_state;
 };
 
 void FileReaderTest::_create_conjunct_ctxs_for_min_max(std::vector<ExprContext*>* conjunct_ctxs) {
@@ -529,7 +539,7 @@ TEST_F(FileReaderTest, TestInit) {
     auto file = _create_file(_file_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_size);
+    auto file_reader = std::make_shared<FileReader>(_runtime_state.get(), file.get(), _file_size);
 
     // init
     auto* param = _create_param();
@@ -542,7 +552,7 @@ TEST_F(FileReaderTest, TestGetNext) {
     auto file = _create_file(_file_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_size);
+    auto file_reader = std::make_shared<FileReader>(_runtime_state.get(), file.get(), _file_size);
 
     // init
     auto* param = _create_param();
@@ -564,7 +574,7 @@ TEST_F(FileReaderTest, TestGetNextPartition) {
     auto file = _create_file(_file_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_size);
+    auto file_reader = std::make_shared<FileReader>(_runtime_state.get(), file.get(), _file_size);
 
     // init
     auto* param = _create_param_for_partition();
@@ -586,7 +596,7 @@ TEST_F(FileReaderTest, TestGetNextEmpty) {
     auto file = _create_file(_file_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_size);
+    auto file_reader = std::make_shared<FileReader>(_runtime_state.get(), file.get(), _file_size);
 
     // init
     auto* param = _create_param_for_not_exist();
@@ -608,7 +618,7 @@ TEST_F(FileReaderTest, TestMinMaxConjunct) {
     auto file = _create_file(_file_2_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_2_size);
+    auto file_reader = std::make_shared<FileReader>(_runtime_state.get(), file.get(), _file_2_size);
 
     // init
     auto* param = _create_param_for_min_max();
@@ -633,7 +643,7 @@ TEST_F(FileReaderTest, TestFilterFile) {
     auto file = _create_file(_file_2_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_2_size);
+    auto file_reader = std::make_shared<FileReader>(_runtime_state.get(), file.get(), _file_2_size);
 
     // init
     auto* param = _create_param_for_filter_file();
@@ -653,7 +663,7 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     auto file = _create_file(_file_2_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_2_size);
+    auto file_reader = std::make_shared<FileReader>(_runtime_state.get(), file.get(), _file_2_size);
 
     // init
     auto* param = _create_param_for_dict_filter();

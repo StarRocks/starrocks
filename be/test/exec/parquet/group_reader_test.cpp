@@ -118,7 +118,13 @@ private:
 
 class GroupReaderTest : public ::testing::Test {
 protected:
-    void SetUp() override {}
+    void SetUp() override {
+        TUniqueId uid;
+        TQueryOptions q_opts;
+        TQueryGlobals q_globals;
+        _runtime_state = std::make_unique<RuntimeState>(uid, q_opts, q_globals, nullptr);
+        _runtime_state->set_chunk_size(4096);
+    }
     void TearDown() override {}
 
 private:
@@ -141,6 +147,7 @@ private:
     static void _check_chunk(GroupReaderParam* param, const vectorized::ChunkPtr& chunk, size_t start, size_t count);
 
     ObjectPool _pool;
+    std::unique_ptr<RuntimeState> _runtime_state;
 };
 
 vectorized::ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
@@ -356,7 +363,7 @@ TEST_F(GroupReaderTest, TestInit) {
     ASSERT_TRUE(status.ok());
 
     // create row group reader
-    auto* group_reader = _pool.add(new GroupReader(file, file_meta, 0));
+    auto* group_reader = _pool.add(new GroupReader(_runtime_state.get(), file, file_meta, 0));
 
     // init row group reader
     status = group_reader->init(*param);
@@ -383,7 +390,7 @@ TEST_F(GroupReaderTest, TestGetNext) {
     ASSERT_TRUE(status.ok());
 
     // create row group reader
-    auto* group_reader = _pool.add(new GroupReader(file, file_meta, 0));
+    auto* group_reader = _pool.add(new GroupReader(_runtime_state.get(), file, file_meta, 0));
 
     // init row group reader
     status = group_reader->init(*param);

@@ -6,9 +6,11 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "exec/parquet/group_reader.h"
 #include "gen_cpp/parquet_types.h"
+#include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -27,13 +29,17 @@ class FileMetaData;
 
 class FileReader {
 public:
-    FileReader(RandomAccessFile* file, uint64_t file_size);
+    FileReader(RuntimeState* state, RandomAccessFile* file, uint64_t file_size);
     ~FileReader();
 
     Status init(const starrocks::vectorized::HdfsFileReaderParam& param);
     Status get_next(vectorized::ChunkPtr* chunk);
 
 private:
+    size_t _chunk_size() {
+        return _runtime_state->chunk_size() ? _runtime_state->chunk_size() : config::vector_chunk_size;
+    }
+
     // parse footer of parquet file
     Status _parse_footer();
 
@@ -108,7 +114,7 @@ private:
 
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
-
+    RuntimeState* _runtime_state;
     RandomAccessFile* _file;
     uint64_t _file_size;
 
