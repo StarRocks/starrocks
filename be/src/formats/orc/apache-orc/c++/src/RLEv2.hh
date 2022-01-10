@@ -20,8 +20,7 @@
 * limitations under the License.
 */
 
-#ifndef ORC_RLEV2_HH
-#define ORC_RLEV2_HH
+#pragma once
 
 #include <vector>
 
@@ -357,5 +356,3 @@ private:
     DataBuffer<char>* sharedBufferPtr = &sharedBuffer;
 };
 } // namespace orc
-
-#endif // ORC_RLEV2_HH

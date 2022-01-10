@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -82,9 +82,9 @@ public:
         }
 
         ColumnViewer<Type> find_viewer(find);
-        ColumnBuilder<TYPE_BOOLEAN> builder;
 
         size_t size = columns[0]->size();
+        ColumnBuilder<TYPE_BOOLEAN> builder(size);
         for (int row = 0; row < size; ++row) {
             if (find_viewer.is_null(row)) {
                 builder.append_null();

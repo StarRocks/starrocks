@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <gtest/gtest.h>
 #include <math.h>
@@ -632,7 +632,7 @@ TEST_F(AggregateTest, test_sum_distinct) {
 
 TEST_F(AggregateTest, test_dict_merge) {
     const AggregateFunction* func = get_aggregate_function("dict_merge", TYPE_ARRAY, TYPE_VARCHAR, false);
-    ColumnBuilder<TYPE_VARCHAR> builder;
+    ColumnBuilder<TYPE_VARCHAR> builder(config::vector_chunk_size);
     builder.append(Slice("key1"));
     builder.append(Slice("key2"));
     builder.append(Slice("starrocks-1"));

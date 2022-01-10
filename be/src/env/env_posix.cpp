@@ -9,6 +9,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <fmt/format.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -52,11 +53,11 @@ private:
 static Status io_error(const std::string& context, int err_number) {
     switch (err_number) {
     case ENOENT:
-        return Status::NotFound(context, static_cast<int16_t>(err_number), std::strerror(err_number));
+        return Status::NotFound(fmt::format("{}: {}", context, std::strerror(err_number)));
     case EEXIST:
-        return Status::AlreadyExist(context, static_cast<int16_t>(err_number), std::strerror(err_number));
+        return Status::AlreadyExist(fmt::format("{}: {}", context, std::strerror(err_number)));
     default:
-        return Status::IOError(context, static_cast<int16_t>(err_number), std::strerror(err_number));
+        return Status::IOError(fmt::format("{}: {}", context, std::strerror(err_number)));
     }
 }
 

@@ -217,6 +217,53 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     cardinality=6000000\n" +
                 "     avgRowSize=10.0\n" +
                 "     numNodes=0"));
+
+        sql = "insert into test_all_type(t1a,t1b) select t1a,t1b from test_all_type limit 5";
+        planFragment = getInsertExecPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: t1a | 2: t1b | 11: expr | 12: expr | 13: expr | 14: expr | 15: expr | 16: expr | 17: expr | 18: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  OLAP TABLE SINK\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  2:EXCHANGE\n" +
+                "     limit: 5\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: t1a\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : NULL\n" +
+                "  |  <slot 12> : NULL\n" +
+                "  |  <slot 13> : NULL\n" +
+                "  |  <slot 14> : NULL\n" +
+                "  |  <slot 15> : NULL\n" +
+                "  |  <slot 16> : NULL\n" +
+                "  |  <slot 17> : NULL\n" +
+                "  |  <slot 18> : NULL\n" +
+                "  |  limit: 5\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: test_all_type\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: test_all_type\n" +
+                "     tabletRatio=3/3\n" +
+                "     tabletList=10042,10044,10046\n" +
+                "     cardinality=5\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 5"));
     }
 
     @Test
@@ -366,7 +413,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "group by supp_nation, cust_nation, l_year order by supp_nation, cust_nation, l_year;";
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("     probe runtime filters:\n"
-                + "     - filter_id = 2, probe_expr = (11: L_SUPPKEY)\n"));
+                + "     - filter_id = 3, probe_expr = (11: L_SUPPKEY)\n"));
     }
 
     @Test
@@ -475,15 +522,42 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testCrossJoinPruneChildByProject() throws Exception {
         String sql = "SELECT t2.v7 FROM  t0 right SEMI JOIN t1 on t0.v1=t1.v4, t2";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("7:CROSS JOIN\n" +
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("  6:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v4-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * v7-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                 "  |  \n" +
-                "  |----6:EXCHANGE\n" +
+                "  |----5:EXCHANGE\n" +
+                "  |       cardinality: 1\n" +
                 "  |    \n" +
-                "  4:Project\n" +
-                "  |  <slot 1> : 1: v1"));
+                "  3:HASH JOIN\n" +
+                "  |  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [1: v1, BIGINT, true] = [4: v4, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v4), remote = false\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * v4-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |       cardinality: 1\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     table: t0, rollup: t0\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                "     tabletList=10006,10008,10010\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: v1)\n" +
+                "     column statistics: \n" +
+                "     * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
     }
 
     @Test
@@ -728,6 +802,18 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains("* second-->[0.0, 59.0, 0.0, 1.0, 60.0]"));
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)"));
+    }
+
+    @Test
+    public void testDateFunctionBinaryPredicate() throws Exception {
+        // check cardinality is not 0
+        String sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) = 6";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("cardinality=300000000"));
+
+        sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) in (6)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("cardinality=300000000"));
     }
 
     @Test
@@ -1014,5 +1100,47 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  \n" +
                 "  1:AGGREGATE (update serialize)\n" +
                 "  |  group by: 1: C_CUSTKEY, 2: C_NAME"));
+    }
+
+
+    @Test
+    public void testCastDistributionPrune() throws Exception {
+        String sql = "select * from test_all_type_distributed_by_datetime where cast(id_datetime as date) >= '1970-01-01' " +
+                "and cast(id_datetime as date) <= '1970-01-01'";
+        String plan = getFragmentPlan(sql);
+        // check not prune tablet
+        Assert.assertTrue(plan.contains("tabletRatio=3/3"));
+
+        sql = "select * from test_all_type_distributed_by_datetime where cast(id_datetime as datetime) >= '1970-01-01' " +
+                "and cast(id_datetime as datetime) <= '1970-01-01'";
+        plan = getFragmentPlan(sql);
+        // check prune tablet
+        Assert.assertTrue(plan.contains("tabletRatio=1/3"));
+
+        sql = "select * from test_all_type_distributed_by_date where cast(id_date as datetime) >= '1970-01-01' " +
+                "and cast(id_date as datetime) <= '1970-01-01'";
+        plan = getFragmentPlan(sql);
+        // check not prune tablet
+        Assert.assertTrue(plan.contains("tabletRatio=3/3"));
+
+        sql = "select * from test_all_type_distributed_by_date where cast(id_date as date) >= '1970-01-01' " +
+                "and cast(id_date as date) <= '1970-01-01'";
+        plan = getFragmentPlan(sql);
+        // check prune tablet
+        Assert.assertTrue(plan.contains("tabletRatio=1/3"));
+    }
+
+    @Test
+    public void testCastPartitionPrune() throws Exception {
+        String sql = "select * from test_all_type_partition_by_datetime where cast(id_datetime as date) = '1991-01-01'";
+        String plan = getFragmentPlan(sql);
+        // check not prune partition
+        Assert.assertTrue(plan.contains("partitions=3/3"));
+
+        sql = "select * from test_all_type_partition_by_date where cast(id_date as datetime) >= '1991-01-01 00:00:00' " +
+                "and cast(id_date as datetime) < '1992-01-01 12:00:00'";
+        plan = getFragmentPlan(sql);
+        // check not prune partition
+        Assert.assertTrue(plan.contains("partitions=3/3"));
     }
 }

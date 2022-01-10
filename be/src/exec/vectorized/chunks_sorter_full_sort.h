@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -18,8 +18,9 @@ public:
      * @param is_null_first  NULL values should at the head or tail.
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
-    ChunksSorterFullSort(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                         const std::vector<bool>* is_null_first, size_t size_of_chunk_batch);
+    ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                         const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
+                         size_t size_of_chunk_batch);
     ~ChunksSorterFullSort() override;
 
     // Append a Chunk for sort.

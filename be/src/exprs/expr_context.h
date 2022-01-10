@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXPRS_EXPR_CONTEXT_H
-#define STARROCKS_BE_SRC_QUERY_EXPRS_EXPR_CONTEXT_H
+#pragma once
 
 #include <memory>
 
@@ -168,5 +167,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

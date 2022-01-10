@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "table_function_operator.h"
 
@@ -76,7 +76,7 @@ StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* s
     DCHECK(_input_chunk != nullptr);
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    size_t chunk_size = state->batch_size();
+    size_t chunk_size = state->chunk_size();
     size_t remain_chunk_size = chunk_size;
     std::vector<vectorized::ColumnPtr> output_columns;
 

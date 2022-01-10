@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer;
 
@@ -123,7 +123,8 @@ public class OptimizerTaskTest {
         scan2ColumnMap.put(column3, new Column("t3", ScalarType.INT, true));
         scan2ColumnMap.put(column4, new Column("t4", ScalarType.INT, true));
 
-        OptExpression logicOperatorTree = OptExpression.create(new LogicalJoinOperator(),
+        OptExpression logicOperatorTree =
+                OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(new LogicalOlapScanOperator(olapTable1,
                         scan1ColumnMap, Maps.newHashMap(), null, -1, null)),
                 OptExpression.create(new LogicalOlapScanOperator(olapTable2,
@@ -159,7 +160,7 @@ public class OptimizerTaskTest {
         assertEquals(memo.getGroups().get(2).getPhysicalExpressions().
                 get(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
 
-        MemoStatusChecker checker = new MemoStatusChecker(memo, 2, new ColumnRefSet(Lists.newArrayList(column1)));
+        MemoStatusChecker checker = new MemoStatusChecker(memo, 2, new ColumnRefSet());
         checker.checkStatus();
     }
 
@@ -615,7 +616,7 @@ public class OptimizerTaskTest {
 
         assertEquals(OperatorType.PHYSICAL_OLAP_SCAN, physicalTree.getOp().getOpType());
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getOp();
-        assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column4));
+        assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column1));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
                 getLogicalProperty().getOutputColumns(), new ColumnRefSet(outputColumns1));
@@ -654,7 +655,7 @@ public class OptimizerTaskTest {
         assertNotNull(physicalTree.getOp().getProjection());
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getOp();
-        assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column4));
+        assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column1));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
                 getLogicalProperty().getOutputColumns(), new ColumnRefSet(outputColumns1));
@@ -1602,7 +1603,7 @@ public class OptimizerTaskTest {
 
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getOp();
-        assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column4, column5));
+        assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column1));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
                 getLogicalProperty().getOutputColumns(), new ColumnRefSet(outputColumns));

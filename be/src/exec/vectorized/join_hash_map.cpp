@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/join_hash_map.h"
 
@@ -7,6 +7,7 @@
 #include <runtime/descriptors.h>
 
 #include "exec/vectorized/hash_join_node.h"
+#include "serde/column_array_serde.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -14,12 +15,12 @@ namespace starrocks::vectorized {
 Status SerializedJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* table_items,
                                         HashTableProbeState* probe_state) {
     table_items->build_slice.resize(table_items->row_count + 1);
-    probe_state->buckets.resize(config::vector_chunk_size);
-    probe_state->is_nulls.resize(config::vector_chunk_size);
+    probe_state->buckets.resize(state->chunk_size());
+    probe_state->is_nulls.resize(state->chunk_size());
     return Status::OK();
 }
 
-Status SerializedJoinBuildFunc::construct_hash_table(JoinHashTableItems* table_items,
+Status SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
                                                      HashTableProbeState* probe_state) {
     uint32_t row_count = table_items->row_count;
 
@@ -44,28 +45,28 @@ Status SerializedJoinBuildFunc::construct_hash_table(JoinHashTableItems* table_i
     // calc serialize size
     size_t serialize_size = 0;
     for (const auto& data_column : data_columns) {
-        serialize_size += data_column->serialize_size();
+        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
     uint8_t* ptr = table_items->build_pool->allocate(serialize_size);
     RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join build failed"));
 
     // serialize and build hash table
-    uint32_t quo = row_count / config::vector_chunk_size;
-    uint32_t rem = row_count % config::vector_chunk_size;
+    uint32_t quo = row_count / state->chunk_size();
+    uint32_t rem = row_count % state->chunk_size();
 
     if (!null_columns.empty()) {
         for (size_t i = 0; i < quo; i++) {
-            _build_nullable_columns(table_items, probe_state, data_columns, null_columns,
-                                    1 + config::vector_chunk_size * i, config::vector_chunk_size, &ptr);
+            _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->chunk_size() * i,
+                                    state->chunk_size(), &ptr);
         }
-        _build_nullable_columns(table_items, probe_state, data_columns, null_columns,
-                                1 + config::vector_chunk_size * quo, rem, &ptr);
+        _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->chunk_size() * quo,
+                                rem, &ptr);
     } else {
         for (size_t i = 0; i < quo; i++) {
-            _build_columns(table_items, probe_state, data_columns, 1 + config::vector_chunk_size * i,
-                           config::vector_chunk_size, &ptr);
+            _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * i, state->chunk_size(),
+                           &ptr);
         }
-        _build_columns(table_items, probe_state, data_columns, 1 + config::vector_chunk_size * quo, rem, &ptr);
+        _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * quo, rem, &ptr);
     }
 
     return Status::OK();
@@ -138,7 +139,7 @@ Status SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_item
     // allocate memory for serialize key columns
     size_t serialize_size = 0;
     for (const auto& data_column : data_columns) {
-        serialize_size += data_column->serialize_size();
+        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
     uint8_t* ptr = table_items.probe_pool->allocate(serialize_size);
     RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join probe failed"));
@@ -208,11 +209,13 @@ void JoinHashTable::close() {
 }
 
 void JoinHashTable::create(const HashTableParam& param) {
+    _need_create_tuple_columns = param.need_create_tuple_columns;
     _table_items = std::make_unique<JoinHashTableItems>();
     _probe_state = std::make_unique<HashTableProbeState>();
 
     _table_items->row_count = 0;
     _table_items->bucket_size = 0;
+    _table_items->need_create_tuple_columns = _need_create_tuple_columns;
     _table_items->build_chunk = std::make_shared<Chunk>();
     _table_items->build_pool = std::make_unique<MemPool>();
     _table_items->probe_pool = std::make_unique<MemPool>();
@@ -279,7 +282,7 @@ Status JoinHashTable::build(RuntimeState* state) {
         _probe_state->build_match_index[0] = 1;
     }
 
-    JoinHashMapHelper::prepare_map_index(_probe_state.get());
+    JoinHashMapHelper::prepare_map_index(_probe_state.get(), state->chunk_size());
 
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
@@ -298,13 +301,14 @@ Status JoinHashTable::build(RuntimeState* state) {
     return Status::OK();
 }
 
-Status JoinHashTable::probe(const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos) {
+Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
+                            bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
-#define M(NAME)                                                                \
-    case JoinHashMapType::NAME:                                                \
-        RETURN_IF_ERROR(_##NAME->probe(key_columns, probe_chunk, chunk, eos)); \
+#define M(NAME)                                                                       \
+    case JoinHashMapType::NAME:                                                       \
+        RETURN_IF_ERROR(_##NAME->probe(state, key_columns, probe_chunk, chunk, eos)); \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)
 #undef M
@@ -314,13 +318,13 @@ Status JoinHashTable::probe(const Columns& key_columns, ChunkPtr* probe_chunk, C
     return Status::OK();
 }
 
-Status JoinHashTable::probe_remain(ChunkPtr* chunk, bool* eos) {
+Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
-#define M(NAME)                                             \
-    case JoinHashMapType::NAME:                             \
-        RETURN_IF_ERROR(_##NAME->probe_remain(chunk, eos)); \
+#define M(NAME)                                                    \
+    case JoinHashMapType::NAME:                                    \
+        RETURN_IF_ERROR(_##NAME->probe_remain(state, chunk, eos)); \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)
 #undef M
@@ -350,20 +354,22 @@ Status JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         }
     }
 
-    const auto& tuple_id_map = chunk->get_tuple_id_to_index_map();
-    for (auto iter = tuple_id_map.begin(); iter != tuple_id_map.end(); iter++) {
-        if (_table_items->row_desc->get_tuple_idx(iter->first) != RowDescriptor::INVALID_IDX) {
-            if (_table_items->build_chunk->is_tuple_exist(iter->first)) {
-                ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
-                ColumnPtr& dest_column = _table_items->build_chunk->get_tuple_column_by_id(iter->first);
-                dest_column->append(*src_column, 0, src_column->size());
-                chunk_memory_size += src_column->memory_usage();
-            } else {
-                ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
-                ColumnPtr dest_column = BooleanColumn::create(_table_items->row_count + 1, 1);
-                dest_column->append(*src_column, 0, src_column->size());
-                _table_items->build_chunk->append_tuple_column(dest_column, iter->first);
-                chunk_memory_size += src_column->memory_usage();
+    if (_need_create_tuple_columns) {
+        const auto& tuple_id_map = chunk->get_tuple_id_to_index_map();
+        for (auto iter = tuple_id_map.begin(); iter != tuple_id_map.end(); iter++) {
+            if (_table_items->row_desc->get_tuple_idx(iter->first) != RowDescriptor::INVALID_IDX) {
+                if (_table_items->build_chunk->is_tuple_exist(iter->first)) {
+                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
+                    ColumnPtr& dest_column = _table_items->build_chunk->get_tuple_column_by_id(iter->first);
+                    dest_column->append(*src_column, 0, src_column->size());
+                    chunk_memory_size += src_column->memory_usage();
+                } else {
+                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
+                    ColumnPtr dest_column = BooleanColumn::create(_table_items->row_count + 1, 1);
+                    dest_column->append(*src_column, 0, src_column->size());
+                    _table_items->build_chunk->append_tuple_column(dest_column, iter->first);
+                    chunk_memory_size += src_column->memory_usage();
+                }
             }
         }
     }

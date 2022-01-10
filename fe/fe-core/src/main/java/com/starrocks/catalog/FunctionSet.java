@@ -120,6 +120,9 @@ public class FunctionSet {
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
 
+    // string functions
+    public static final String SUBSTRING = "substring";
+
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
     private static final Map<Type, Type> MULTI_DISTINCT_SUM_RETURN_TYPE =

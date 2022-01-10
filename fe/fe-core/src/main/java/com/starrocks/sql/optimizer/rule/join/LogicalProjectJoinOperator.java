@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.join;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -15,14 +15,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 
-public class MultiJoinOperator extends LogicalOperator {
+public class LogicalProjectJoinOperator extends LogicalOperator {
     private LogicalProjectOperator projectOperator;
     private final LogicalJoinOperator joinOperator;
 
     private Group group;
 
-    public MultiJoinOperator(LogicalProjectOperator projectOperator, LogicalJoinOperator joinOperator) {
-        super(OperatorType.LOGICAL_MULTI_JOIN);
+    public LogicalProjectJoinOperator(LogicalProjectOperator projectOperator, LogicalJoinOperator joinOperator) {
+        super(OperatorType.LOGICAL_PROJECT_JOIN);
         this.projectOperator = projectOperator;
         this.joinOperator = joinOperator;
     }
@@ -41,6 +41,11 @@ public class MultiJoinOperator extends LogicalOperator {
 
     public ScalarOperator getOnPredicate() {
         return joinOperator.getOnPredicate();
+    }
+
+    @Override
+    public ScalarOperator getPredicate() {
+        return joinOperator.getPredicate();
     }
 
     public LogicalProjectOperator getProjectOperator() {
@@ -70,6 +75,19 @@ public class MultiJoinOperator extends LogicalOperator {
 
     public ColumnRefSet getOutputColumns() {
         return new ColumnRefSet(new ArrayList<>(projectOperator.getColumnRefMap().keySet()));
+    }
+
+    public long getLimit() {
+        return projectOperator.getLimit();
+    }
+
+    @Override
+    public void setLimit(long limit) {
+        this.projectOperator.setLimit(limit);
+    }
+
+    public boolean hasLimit() {
+        return projectOperator.hasLimit();
     }
 
     @Override

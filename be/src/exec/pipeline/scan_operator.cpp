@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/scan_operator.h"
 
@@ -106,9 +106,9 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     }
 
     auto&& chunk = _chunk_source->get_next_chunk_from_buffer();
-    // If buffer size is smaller than half of batch_size,
+    // If number of cached chunk is smaller than half of buffer_size,
     // we can start the next scan task ahead of time to obtain better continuity
-    if (_chunk_source->get_buffer_size() < (_batch_size >> 1) && !_is_io_task_active.load(std::memory_order_acquire) &&
+    if (_chunk_source->get_buffer_size() < (_buffer_size >> 1) && !_is_io_task_active.load(std::memory_order_acquire) &&
         _chunk_source->has_next_chunk()) {
         RETURN_IF_ERROR(_trigger_next_scan(state));
     }
@@ -126,7 +126,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state) {
     task.work_function = [this, state]() {
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            _chunk_source->buffer_next_batch_chunks_blocking(_batch_size, _is_finished);
+            _chunk_source->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
         }
         _is_io_task_active.store(false, std::memory_order_release);
     };

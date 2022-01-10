@@ -21,8 +21,7 @@
 //     ...
 //   }
 
-#ifndef BASE_ONCE_H_
-#define BASE_ONCE_H_
+#pragma once
 
 #include "gutil/atomicops.h"
 #include "gutil/dynamic_annotations.h"
@@ -114,5 +113,3 @@ private:
     GoogleOnceDynamic(const GoogleOnceDynamic&) = delete;
     const GoogleOnceDynamic& operator=(const GoogleOnceDynamic&) = delete;
 };
-
-#endif // BASE_ONCE_H_

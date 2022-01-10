@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 set(EXEC_FILES
         ./test_main.cpp
@@ -30,7 +30,6 @@ set(EXEC_FILES
         ./exec/plain_text_line_reader_gzip_test.cpp
         ./exec/plain_text_line_reader_lz4frame_test.cpp
         ./exec/plain_text_line_reader_uncompressed_test.cpp
-        #./exec/tablet_sink_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
         #./exec/vectorized/csv_scanner_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
@@ -126,6 +125,7 @@ set(EXEC_FILES
         ./storage/page_cache_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
+        ./storage/rowset_update_state_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
         ./storage/rowset/binary_plain_page_test.cpp
@@ -196,6 +196,8 @@ set(EXEC_FILES
         ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
+        ./serde/column_array_serde_test.cpp
+        ./serde/protobuf_serde_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
@@ -247,12 +249,17 @@ set(EXEC_FILES
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
-set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-        
+
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+        set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+        set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+        set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+endif()
+
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif()

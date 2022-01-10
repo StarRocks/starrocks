@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -90,6 +90,7 @@ private:
     TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
 
     bool _is_push_down = false;
+    bool _need_create_tuple_columns = true;
 
     JoinHashTable _ht;
 

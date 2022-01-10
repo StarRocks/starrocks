@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import avro.shaded.com.google.common.base.Preconditions;
@@ -59,7 +59,7 @@ public class PruneHiveScanColumnRule extends TransformationRule {
                 }
                 Type columnType = outputColumns.get(index).getType();
                 if (columnType.isScalarType()) {
-                    int columnLength = columnType.getSlotSize();
+                    int columnLength = columnType.getTypeSize();
                     if (columnLength < smallestColumnLength) {
                         smallestIndex = index;
                         smallestColumnLength = columnLength;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/aggregate/distinct_blocking_node.h"
 
@@ -42,7 +42,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
         if (chunk->is_empty()) {
             continue;
         }
-        DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
+        DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
 
         _aggregator->evaluate_exprs(chunk.get());
 
@@ -105,7 +105,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = config::vector_chunk_size;
+    int32_t chunk_size = runtime_state()->chunk_size();
 
     if (false) {
     }
@@ -116,10 +116,10 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
+    size_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having
-    size_t old_size = (*chunk)->num_rows();
     ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
     _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
 
@@ -152,7 +152,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, partition_expr_ctxs);
+    operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), operators_with_sink,
+                                                                            partition_expr_ctxs);
     operators_with_sink.push_back(std::move(sink_operator));
     context->add_pipeline(operators_with_sink);
     // Aggregator must be used by a pair of sink and source operators,

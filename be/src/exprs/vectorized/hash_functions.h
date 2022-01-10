@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -26,9 +26,8 @@ inline ColumnPtr HashFunctions::murmur_hash3_32(FunctionContext* context,
         viewers.emplace_back(column);
     }
 
-    ColumnBuilder<TYPE_INT> builder;
-
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> builder(size);
     for (int row = 0; row < size; ++row) {
         uint32_t seed = HashUtil::MURMUR3_32_SEED;
         bool has_null = false;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -94,10 +94,10 @@ private:
     const uint64_t _repeat_times_required;
     // repeat timer for chunk. 0 <=  _repeat_times_last < _repeat_times_required.
     uint64_t _repeat_times_last;
-    // only null columns for reusing, It has config::vector_chunk_size rows.
+    // only null columns for reusing, It has chunk_size rows.
     const ColumnPtr& _column_null;
     // column for grouping_id and virtual columns for grouping()/grouping_id() for reusing.
-    // It has config::vector_chunk_size rows.
+    // It has chunk_size rows.
     const std::vector<std::vector<ColumnPtr>>& _grouping_columns;
     // _grouping_list for grouping_id'value and grouping()/grouping_id()'s value.
     // It's a two dimensional array.

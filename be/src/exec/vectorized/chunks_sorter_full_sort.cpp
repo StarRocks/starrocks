@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "chunks_sorter_full_sort.h"
 
@@ -236,10 +236,11 @@ private:
     }
 };
 
-ChunksSorterFullSort::ChunksSorterFullSort(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                                           const std::vector<bool>* is_null_first, size_t size_of_chunk_batch)
-        : ChunksSorter(sort_exprs, is_asc, is_null_first, size_of_chunk_batch) {
-    _selective_values.resize(config::vector_chunk_size);
+ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                                           const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
+                                           size_t size_of_chunk_batch)
+        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, size_of_chunk_batch) {
+    _selective_values.resize(_state->chunk_size());
 }
 
 ChunksSorterFullSort::~ChunksSorterFullSort() = default;
@@ -277,7 +278,7 @@ void ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
         return;
     }
     *eos = false;
-    size_t count = std::min(size_t(config::vector_chunk_size), _sorted_permutation.size() - _next_output_row);
+    size_t count = std::min(size_t(_state->chunk_size()), _sorted_permutation.size() - _next_output_row);
     chunk->reset(_sorted_segment->chunk->clone_empty(count).release());
     _append_rows_to_chunk(chunk->get(), _sorted_segment->chunk.get(), _sorted_permutation, _next_output_row, count);
     _next_output_row += count;
@@ -311,7 +312,7 @@ bool ChunksSorterFullSort::pull_chunk(ChunkPtr* chunk) {
         *chunk = nullptr;
         return true;
     }
-    size_t count = std::min(size_t(config::vector_chunk_size), _sorted_permutation.size() - _next_output_row);
+    size_t count = std::min(size_t(_state->chunk_size()), _sorted_permutation.size() - _next_output_row);
     chunk->reset(_sorted_segment->chunk->clone_empty(count).release());
     _append_rows_to_chunk(chunk->get(), _sorted_segment->chunk.get(), _sorted_permutation, _next_output_row, count);
     _next_output_row += count;

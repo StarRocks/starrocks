@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/exchange/sink_buffer.h"
 
@@ -46,6 +46,10 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
 }
 
 SinkBuffer::~SinkBuffer() {
+    // In some extreme cases, the pipeline driver has not been created yet, and the query is over
+    // At this time, sink_buffer also needs to be able to be destructed correctly
+    _is_finishing = true;
+
     DCHECK(is_finished());
 
     for (auto& [_, buffer] : _buffers) {

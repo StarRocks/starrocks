@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -38,7 +38,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -48,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
@@ -73,6 +73,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -93,7 +94,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.join.MultiJoinOperator;
+import com.starrocks.sql.optimizer.rule.join.LogicalProjectJoinOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -163,6 +164,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             statistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
         }
 
+        /*
         Projection projection = node.getProjection();
         if (projection != null) {
             Statistics.Builder pruneBuilder = Statistics.builder();
@@ -180,6 +182,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         } else {
             context.setStatistics(statistics);
         }
+         */
+        context.setStatistics(statistics);
         return null;
     }
 
@@ -221,6 +225,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         builder.setOutputRowCount(tableRowCount);
         // 4. estimate cardinality
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalIcebergScan(LogicalIcebergScanOperator node, ExpressionContext context) {
+        return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
+        return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
+                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        // TODO: get statistics from iceberg catalog or metadata
+        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        builder.setOutputRowCount(1);
         context.setStatistics(builder.build());
         return visitOperator(node, context);
     }
@@ -286,7 +309,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // Hive column statistics may be -1 in avgSize, numNulls and distinct values, default values need to be reassigned
     private HiveColumnStats computeHiveColumnStatistics(ColumnRefOperator column, HiveColumnStats hiveColumnStats) {
         double avgSize =
-                hiveColumnStats.getAvgSize() != -1 ? hiveColumnStats.getAvgSize() : column.getType().getSlotSize();
+                hiveColumnStats.getAvgSize() != -1 ? hiveColumnStats.getAvgSize() : column.getType().getTypeSize();
         long numNulls = hiveColumnStats.getNumNulls() != -1 ? hiveColumnStats.getNumNulls() : 0;
         long distinctValues = hiveColumnStats.getNumDistinctValues() != -1 ? hiveColumnStats.getNumDistinctValues() : 1;
 
@@ -530,7 +553,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         }
         numRows = totalBytes /
-                hiveTable.getBaseSchema().stream().mapToInt(column -> column.getType().getSlotSize()).sum();
+                hiveTable.getBaseSchema().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
         return numRows;
     }
 
@@ -774,23 +797,28 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitMultiJoin(MultiJoinOperator node, ExpressionContext context) {
+    public Void visitMultiJoin(LogicalProjectJoinOperator node, ExpressionContext context) {
         computeJoinNode(context, node.getOnPredicate(), node.getPredicate(), node.getJoinOperator().getJoinType(),
                 node.getLimit());
-        Statistics statistics = context.getStatistics();
         LogicalProjectOperator projectOperator = node.getProjectOperator();
-        Statistics.Builder pruneBuilder = Statistics.builder();
-        pruneBuilder.addColumnStatistics(statistics.getColumnStatistics());
-        pruneBuilder.setOutputRowCount(statistics.getOutputRowCount());
 
-        for (ColumnRefOperator columnRefOperator : projectOperator.getColumnRefMap().keySet()) {
-            ScalarOperator mapOperator = projectOperator.getColumnRefMap().get(columnRefOperator);
-            pruneBuilder.addColumnStatistic(columnRefOperator,
-                    ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
+        Statistics.Builder builder = Statistics.builder();
+        Statistics inputStatistics = context.getStatistics();
+        builder.setOutputRowCount(inputStatistics.getOutputRowCount());
+
+        Statistics.Builder allBuilder = Statistics.builder();
+        allBuilder.addColumnStatistics(inputStatistics.getColumnStatistics());
+
+        for (ColumnRefOperator requiredColumnRefOperator : projectOperator.getColumnRefMap().keySet()) {
+            ScalarOperator mapOperator = projectOperator.getColumnRefMap().get(requiredColumnRefOperator);
+            ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
+            builder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
+            allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
         }
 
-        context.setStatistics(pruneBuilder.build());
-        return visitOperator(context.getOp(), context);
+        context.setStatistics(builder.build());
+        return null;
+        //return visitOperator(context.getOp(), context);
     }
 
     @Override

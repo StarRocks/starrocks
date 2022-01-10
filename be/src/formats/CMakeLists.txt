@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/converter")
@@ -8,6 +8,7 @@ add_library(Formats STATIC
         csv/binary_converter.cpp
         csv/boolean_converter.cpp
         csv/converter.cpp
+        csv/csv_reader.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp
         csv/decimalv2_converter.cpp

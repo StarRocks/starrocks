@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 
@@ -42,7 +42,7 @@ bool MultiCastLocalExchanger::can_push_chunk() const {
     // if for the fastest consumer, the exchanger still has enough chunk to be consumed.
     // the exchanger does not need any input.
     if ((_current_accumulated_row_size - _fast_accumulated_row_size) >
-        config::vector_chunk_size * kBufferedRowSizeScaleFactor) {
+        _runtime_state->chunk_size() * kBufferedRowSizeScaleFactor) {
         return false;
     }
     return true;

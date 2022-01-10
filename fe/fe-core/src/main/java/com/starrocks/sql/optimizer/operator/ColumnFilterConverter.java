@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.operator;
 
@@ -80,7 +80,7 @@ public class ColumnFilterConverter {
                 return type == columnType || (type != Type.LARGEINT && columnType != Type.LARGEINT);
             }
 
-            return type.isDateType() && columnType.isDateType();
+            return type.equals(columnType);
         }
 
         return false;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/binary_predicate.h"
 
@@ -60,9 +60,8 @@ public:
         ColumnViewer<Type> v2(r);
         Columns list = {l, r};
 
-        ColumnBuilder<TYPE_BOOLEAN> builder;
-
         size_t size = list[0]->size();
+        ColumnBuilder<TYPE_BOOLEAN> builder(size);
         for (int row = 0; row < size; ++row) {
             auto null1 = v1.is_null(row);
             auto null2 = v2.is_null(row);

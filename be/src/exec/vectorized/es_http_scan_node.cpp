@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/es_http_scan_node.h"
 
@@ -273,10 +273,10 @@ Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpSc
         properties[ESScanReader::KEY_TYPE] = es_scan_range.type;
     }
     properties[ESScanReader::KEY_SHARD] = std::to_string(es_scan_range.shard_id);
-    properties[ESScanReader::KEY_BATCH_SIZE] = std::to_string(runtime_state()->batch_size());
+    properties[ESScanReader::KEY_BATCH_SIZE] = std::to_string(runtime_state()->chunk_size());
     properties[ESScanReader::KEY_HOST_PORT] = get_host_port(es_scan_range.es_hosts);
     // push down limit to Elasticsearch
-    if (limit() != -1 && limit() <= runtime_state()->batch_size()) {
+    if (limit() != -1 && limit() <= runtime_state()->chunk_size()) {
         properties[ESScanReader::KEY_TERMINATE_AFTER] = std::to_string(limit());
     }
 

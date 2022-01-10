@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "sorted_chunks_merger.h"
 
@@ -6,7 +6,8 @@
 
 namespace starrocks::vectorized {
 
-SortedChunksMerger::SortedChunksMerger(bool is_pipeline) : _is_pipeline(is_pipeline) {}
+SortedChunksMerger::SortedChunksMerger(RuntimeState* state, bool is_pipeline)
+        : _state(state), _is_pipeline(is_pipeline) {}
 
 SortedChunksMerger::~SortedChunksMerger() = default;
 
@@ -130,11 +131,11 @@ Status SortedChunksMerger::get_next(ChunkPtr* chunk, bool* eos) {
     // multiple sources
     *eos = false;
     ChunkCursor* cursor = _min_heap[0];
-    *chunk = cursor->clone_empty_chunk(config::vector_chunk_size);
+    *chunk = cursor->clone_empty_chunk(_state->chunk_size());
 
     ChunkPtr current_chunk = cursor->get_current_chunk();
     std::vector<uint32_t> selective_values; // for append_selective call
-    selective_values.reserve(config::vector_chunk_size);
+    selective_values.reserve(_state->chunk_size());
     selective_values.push_back(cursor->get_current_position_in_chunk());
     size_t row_number = 1;
 
@@ -146,7 +147,7 @@ Status SortedChunksMerger::get_next(ChunkPtr* chunk, bool* eos) {
         _min_heap.pop_back();
     }
 
-    while (row_number < config::vector_chunk_size && !_min_heap.empty()) {
+    while (row_number < _state->chunk_size() && !_min_heap.empty()) {
         cursor = _min_heap[0];
         const auto& ptr = cursor->get_current_chunk();
         if (current_chunk == ptr) {
@@ -212,7 +213,7 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
         if (_wait_for_data) {
             _wait_for_data = false;
             move_cursor_and_adjust_min_heap(eos);
-            if (_row_number >= config::vector_chunk_size || _min_heap.empty()) {
+            if (_row_number >= _state->chunk_size() || _min_heap.empty()) {
                 collect_merged_chunks(chunk);
                 break;
             }
@@ -222,10 +223,10 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
         // Guarantee: min_heap is keep min heap property, and it isn't empty.
         _cursor = _min_heap[0];
         if (!_row_number) {
-            _result_chunk = _cursor->clone_empty_chunk(config::vector_chunk_size);
+            _result_chunk = _cursor->clone_empty_chunk(_state->chunk_size());
             _current_chunk = _cursor->get_current_chunk();
             _selective_values.clear();
-            _selective_values.reserve(config::vector_chunk_size);
+            _selective_values.reserve(_state->chunk_size());
             _selective_values.push_back(_cursor->get_current_position_in_chunk());
         } else {
             const auto& ptr = _cursor->get_current_chunk();
@@ -255,7 +256,7 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
             // move to next row
             _wait_for_data = false;
             move_cursor_and_adjust_min_heap(eos);
-            if (_row_number >= config::vector_chunk_size || _min_heap.empty()) {
+            if (_row_number >= _state->chunk_size() || _min_heap.empty()) {
                 collect_merged_chunks(chunk);
                 break;
             }

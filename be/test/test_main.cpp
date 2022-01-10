@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "butil/file_util.h"
 #include "column/column_helper.h"
@@ -41,7 +41,6 @@ int main(int argc, char** argv) {
     starrocks::MemInfo::init();
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
-    starrocks::vectorized::ColumnHelper::init_static_variable();
     starrocks::vectorized::date::init_date_cache();
 
     std::vector<starrocks::StorePath> paths;

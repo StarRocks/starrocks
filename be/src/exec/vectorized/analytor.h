@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -112,7 +112,7 @@ public:
     void find_peer_group_end();
     void reset_state_for_new_partition(int64_t found_partition_end);
 
-    void remove_unused_buffer_values();
+    void remove_unused_buffer_values(RuntimeState* state);
 
 #ifdef NDEBUG
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;

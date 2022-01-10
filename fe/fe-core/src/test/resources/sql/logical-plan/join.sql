@@ -4,10 +4,8 @@ select v1, v2, ta, td from t0 inner join tall on t0.v1 = tall.td
 logical project (col,col,col,col)
     logical project (col,col,col,col,col,col,col,col,col,col,col,col)
         logical inner join (col = col)
-            logical project (col,col,col)
-                logical scan
-            logical project (col,col,col,col,col,col,col,col,col)
-                logical scan
+            logical scan
+            logical scan
 [end]
 
 [sql]
@@ -19,11 +17,9 @@ logical project (col,col,col,col)
             logical project (col,col)
                 logical aggregate () (sum(col),sum(col))
                     logical project (col,col)
-                        logical project (col,col,col)
-                            logical scan
+                        logical scan
             logical project (col,col)
-                logical project (col,col,col)
-                    logical scan
+                logical scan
 [end]
 
 [sql]
@@ -35,9 +31,7 @@ logical project (col,col)
             logical project (col,col)
                 logical aggregate () (sum(col),sum(col))
                     logical project (col,col)
-                        logical project (col,col,col)
-                            logical scan
+                        logical scan
             logical project (col,col)
-                logical project (col,col,col)
-                    logical scan
+                logical scan
 [end]

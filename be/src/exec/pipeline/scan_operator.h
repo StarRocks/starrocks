@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -52,7 +52,7 @@ private:
     // TODO(hcf) ugly, remove this later
     RuntimeState* _state = nullptr;
 
-    const size_t _batch_size = config::pipeline_io_buffer_size;
+    const size_t _buffer_size = config::pipeline_io_buffer_size;
     mutable bool _is_finished = false;
     std::atomic_bool _is_io_task_active = false;
     int32_t _io_task_retry_cnt = 0;

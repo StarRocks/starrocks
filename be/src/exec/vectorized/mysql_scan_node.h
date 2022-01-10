@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -69,6 +69,8 @@ private:
     std::vector<std::string> _columns;
     // where clause
     std::vector<std::string> _filters;
+    // limit for query with external table.
+    int64_t _limit;
 
     // Descriptor of tuples read from MySQL table.
     const TupleDescriptor* _tuple_desc;

@@ -91,6 +91,7 @@ set(EXEC_FILES
     vectorized/intersect_node.cpp
     vectorized/hdfs_scanner.cpp
     vectorized/hdfs_scanner_orc.cpp
+    vectorized/hdfs_scanner_text.cpp
     vectorized/json_scanner.cpp
     vectorized/project_node.cpp
     vectorized/dict_decode_node.cpp
@@ -185,12 +186,15 @@ set(EXEC_FILES
     pipeline/set/intersect_build_sink_operator.cpp
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
+    workgroup/work_group.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
-set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+endif()
 
 set(EXEC_FILES
     ${EXEC_FILES}
@@ -200,8 +204,7 @@ set(EXEC_FILES
 
 IF (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES}
-        vectorized/hdfs_scan_node.cpp
-    )
+        vectorized/hdfs_scan_node.cpp)
 endif()
 
 add_library(Exec STATIC

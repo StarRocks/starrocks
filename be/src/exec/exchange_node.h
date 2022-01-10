@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_EXCHANGE_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_EXCHANGE_NODE_H
+#pragma once
 
 #include "exec/exec_node.h"
 #include "exec/sort_exec_exprs.h"
@@ -103,5 +102,3 @@ private:
 };
 
 }; // namespace starrocks
-
-#endif

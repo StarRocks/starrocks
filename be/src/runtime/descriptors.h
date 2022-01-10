@@ -174,7 +174,7 @@ public:
     // partition slots would be [x, y]
     // partition key values wold be [1, 2]
     std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
-    Status create_part_key_exprs(ObjectPool* pool);
+    Status create_part_key_exprs(ObjectPool* pool, int32_t chunk_size);
 
 private:
     int64_t _id = 0;
@@ -196,9 +196,9 @@ public:
 
     const std::string& hdfs_base_dir() const { return _hdfs_base_dir; }
 
-    Status create_key_exprs(ObjectPool* pool) {
+    Status create_key_exprs(ObjectPool* pool, int32_t chunk_size) {
         for (auto& part : _partition_id_to_desc_map) {
-            RETURN_IF_ERROR(part.second->create_part_key_exprs(pool));
+            RETURN_IF_ERROR(part.second->create_part_key_exprs(pool, chunk_size));
         }
         return Status::OK();
     }
@@ -208,6 +208,16 @@ private:
     std::vector<TColumn> _columns;
     std::vector<TColumn> _partition_columns;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
+};
+
+class IcebergTableDescriptor : public TableDescriptor {
+public:
+    IcebergTableDescriptor(const TTableDescriptor& tdesc);
+    ~IcebergTableDescriptor() override = default;
+
+private:
+    std::string _table_location;
+    std::vector<TColumn> _columns;
 };
 
 class OlapTableDescriptor : public TableDescriptor {
@@ -318,7 +328,7 @@ class DescriptorTbl {
 public:
     // Creates a descriptor tbl within 'pool' from thrift_tbl and returns it via 'tbl'.
     // Returns OK on success, otherwise error (in which case 'tbl' will be unset).
-    static Status create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl);
+    static Status create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl, int32_t chunk_size);
 
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;

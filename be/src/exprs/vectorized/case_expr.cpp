@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/case_expr.h"
 
@@ -136,9 +136,8 @@ private:
         ColumnViewer<WhenType> case_viewer(case_column);
         then_viewers.emplace_back(else_column);
 
-        ColumnBuilder<ResultType> builder(this->type().precision, this->type().scale);
         size_t size = when_columns[0]->size();
-        builder.reserve(size);
+        ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
 
         bool columns_has_null = false;
         for (ColumnPtr& column : when_columns) {
@@ -247,9 +246,8 @@ private:
         then_columns.emplace_back(else_column);
         then_viewers.emplace_back(else_column);
 
-        ColumnBuilder<ResultType> builder(this->type().precision, this->type().scale);
         size_t size = when_columns[0]->size();
-        builder.reserve(size);
+        ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
 
         bool when_columns_has_null = false;
         for (ColumnPtr& column : when_columns) {

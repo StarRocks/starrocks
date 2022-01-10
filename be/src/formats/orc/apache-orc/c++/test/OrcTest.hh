@@ -20,10 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_TEST_HH
-#define ORC_TEST_HH
+#pragma once
 
 // determine the size of an array
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(*array))
-
-#endif

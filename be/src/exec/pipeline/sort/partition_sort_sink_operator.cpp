@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 
@@ -66,18 +66,18 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t degree_of_paralleli
     std::shared_ptr<ChunksSorter> chunks_sorter;
     if (_limit >= 0) {
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
-            chunks_sorter =
-                    std::make_unique<HeapChunkSorter>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
-                                                      &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+            chunks_sorter = std::make_unique<HeapChunkSorter>(
+                    runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                    _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
         } else {
-            chunks_sorter =
-                    std::make_unique<ChunksSorterTopn>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
-                                                       &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+            chunks_sorter = std::make_unique<ChunksSorterTopn>(
+                    runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                    _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
         }
     } else {
-        chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                           &_is_asc_order, &_is_null_first,
-                                                                           SIZE_OF_CHUNK_FOR_FULL_SORT);
+        chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(
+                runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
     auto sort_context = _sort_context_factory->create(driver_sequence);
 

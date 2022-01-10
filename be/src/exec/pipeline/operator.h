@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -223,6 +223,10 @@ public:
     }
     const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
 
+    void set_runtime_state(RuntimeState* state) { this->_state = state; }
+
+    RuntimeState* runtime_state() { return _state; }
+
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state) {
         auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
@@ -257,6 +261,8 @@ protected:
     // Mappings from input slot to output slot of ancestor exec nodes (include itself).
     // It is used to rewrite runtime in filters.
     std::vector<TupleSlotMapping> _tuple_slot_mappings;
+
+    RuntimeState* _state = nullptr;
 };
 
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;

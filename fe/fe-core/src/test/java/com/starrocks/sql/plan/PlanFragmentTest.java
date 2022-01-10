@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -1075,7 +1075,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testJoinCastFloat() throws Exception {
         String sql = "select * from t1, t3 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("equal join conjunct: 18: cast = 17: cast"));
+        Assert.assertTrue(plan.contains("equal join conjunct: 7: t1a = 17: cast"));
     }
 
     @Test
@@ -1159,15 +1159,14 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEquivalenceTest() throws Exception {
         String sql = "select * from t0 as x1 join t0 as x2 on x1.v2 = x2.v2 where x2.v2 = 'zxcv';";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n"
-                + "     TABLE: t0\n"
-                + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(2: v2 AS DOUBLE) = CAST('zxcv' AS DOUBLE)"));
-
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: CAST(2: v2 AS VARCHAR(1048576)) = 'zxcv'"));
         Assert.assertTrue(plan.contains("  1:OlapScanNode\n"
                 + "     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(5: v2 AS DOUBLE) = CAST('zxcv' AS DOUBLE)\n"));
+                + "     PREDICATES: CAST(5: v2 AS VARCHAR(1048576)) = 'zxcv'\n"));
     }
 
     @Test
@@ -1260,10 +1259,10 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from t0 join t1 on t0.v1 = t1.v4 and cast(t0.v1 as STRING) = t0.v1";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("|  equal join conjunct: 1: v1 = 4: v4"));
-        Assert.assertTrue(plan.contains("     TABLE: t0\n"
-                + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(CAST(1: v1 AS VARCHAR(65533)) AS DOUBLE) = CAST(1: v1 AS DOUBLE)\n"
-                + "     partitions=0/1"));
+        Assert.assertTrue(plan.contains("     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(1048576))\n" +
+                "     partitions=0/1\n"));
     }
 
     @Test
@@ -2570,10 +2569,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "join join2 on join1.id = join2.value\n" +
                 "and join2.value in ('abc');";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(
-                explainString.contains("equal join conjunct: 7: cast = 8: cast"));
-        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS DOUBLE)"));
-        Assert.assertTrue(explainString.contains("<slot 8> : CAST(6: value AS DOUBLE)"));
+        Assert.assertTrue(explainString.contains("equal join conjunct: 7: cast = 6: value"));
+        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR(1048576))"));
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -4758,7 +4755,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
-                "  |  <slot 25> : CAST(49 AS DOUBLE)\n" +
+                "  |  <slot 26> : CAST(49 AS VARCHAR(1048576))\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
     }
@@ -5200,7 +5197,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  limit: 5"));
         connectContext.getSessionVariable().setSqlSelectLimit(limit);
     }
-  
+
     @Test
     public void testProjectReuse() throws Exception {
         String sql = "select nullif(v1, v1) + (0) as a , nullif(v1, v1) + (1 - 1) as b from t0;";
@@ -5213,7 +5210,72 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testFunctionNullable() throws Exception {
         String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
-                "id:0, fid:50303, could_apply_dict_optimize:false), has_nullable_child:false, is_nullable:true"));
+        Assert.assertTrue(
+                plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
+                        "id:0, fid:50303, could_apply_dict_optimize:false), has_nullable_child:false, is_nullable:true"));
+    }
+
+    @Test
+    public void testOnlyCrossJoin() throws Exception {
+        String sql = "select * from t0 as x0 join t1 as x1 on (1 = 2) is not null;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL"));
+    }
+
+    @Test
+    public void testFailedLeftJoin() {
+        String sql = "select * from t0 as x0 left outer join t1 as x1 on (1 = 2) is not null";
+        Assert.assertThrows("No equal on predicate in LEFT OUTER JOIN is not supported", SemanticException.class,
+                () -> getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testDecimalConstRewrite() throws Exception {
+        String sql = "select * from t0 WHERE CAST( - 8 AS DECIMAL ) * + 52 + 87 < - 86";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: TRUE"));
+    }
+
+    @Test
+    public void testJoinReorderWithPredicate() throws Exception {
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(2);
+        String sql = "select t0.v1 from t0, t1, t2, t3 where t0.v1 + t3.v1 = 2";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
+        Assert.assertTrue(plan.contains("11:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 1: v1 + 10: v1 = 2"));
+    }
+
+    @Test
+    public void testDateTypeReduceCast() throws Exception {
+        String sql =
+                "select * from test_all_type_distributed_by_datetime where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
+                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-01 18:00:00'";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "CAST(CAST(8: id_datetime AS DATE) AS DATETIME) >= '1970-01-01 12:00:00', CAST(CAST(8: id_datetime AS DATE) AS DATETIME) <= '1970-01-01 18:00:00'"));
+    }
+
+    @Test
+    public void testCharCompareWithVarchar() throws Exception {
+        String sql = "select t2.tb from tall t1 join tall t2 " +
+                "on t1.tc = t2.tb and t2.tt = 123 and (t2.tt != 'ax') = t2.td;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: 20: tt = '123', " +
+                "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1"));
+    }
+    
+    @Test
+    public void testEqStringCast() throws Exception {
+        String sql = "select 'a' = v1 from t0";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) = 'a'\n"));
     }
 }

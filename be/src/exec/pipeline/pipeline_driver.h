@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -17,6 +17,9 @@
 #include "exec/pipeline/source_operator.h"
 #include "util/phmap/phmap.h"
 namespace starrocks {
+namespace workgroup {
+class WorkGroup;
+}
 namespace pipeline {
 
 class PipelineDriver;
@@ -319,6 +322,10 @@ public:
 
     std::string to_readable_string() const;
 
+    starrocks::workgroup::WorkGroup* workgroup();
+
+    void set_workgroup(starrocks::workgroup::WorkGroup* wg);
+
 private:
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
@@ -360,6 +367,8 @@ private:
     const int64_t _yield_max_time_spent;
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
+
+    starrocks::workgroup::WorkGroup* _workgroup = nullptr;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

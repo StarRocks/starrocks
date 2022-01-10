@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
@@ -653,7 +654,7 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
                 "  |  group by: [10: S_ADDRESS, INT, false]\n" +
-                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(65533)) = ''"));
+                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH + ")) = ''"));
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  cardinality: 1"));

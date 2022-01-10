@@ -14,8 +14,7 @@
 //     Analysis: memcmp, fastmemcmp_inlined, fastmemcmp
 //     2012-01-30
 
-#ifndef STRINGS_FASTMEM_H_
-#define STRINGS_FASTMEM_H_
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -160,5 +159,3 @@ inline void memcpy_inlined(void* dst, const void* src, size_t size) {
 }
 
 } // namespace strings
-
-#endif // STRINGS_FASTMEM_H_

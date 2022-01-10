@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "aggregate_distinct_blocking_source_operator.h"
 
@@ -27,7 +27,7 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chu
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
 
-    int32_t chunk_size = state->batch_size();
+    int32_t chunk_size = state->chunk_size();
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
 
     if (false) {
@@ -39,11 +39,11 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chu
     APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
+    size_t old_size = chunk->num_rows();
     eval_runtime_bloom_filters(chunk.get());
 
     // For having
     eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), chunk.get());
-    size_t old_size = chunk->num_rows();
     _aggregator->update_num_rows_returned(-(old_size - chunk->num_rows()));
 
     DCHECK_CHUNK(chunk);

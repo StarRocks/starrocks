@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -378,7 +378,6 @@ public:
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         const auto& type = context->get_return_type();
-        ColumnBuilder<Type> result(type.precision, type.scale);
 
         std::vector<ColumnViewer<Type>> list;
         list.reserve(columns.size());
@@ -387,6 +386,7 @@ public:
         }
 
         auto size = columns[0]->size();
+        ColumnBuilder<Type> result(size, type.precision, type.scale);
         for (int row = 0; row < size; row++) {
             auto value = list[0].value(row);
             bool is_null = false;
@@ -419,7 +419,6 @@ public:
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         const auto& type = context->get_return_type();
-        ColumnBuilder<Type> result(type.precision, type.scale);
 
         std::vector<ColumnViewer<Type>> list;
         list.reserve(columns.size());
@@ -428,6 +427,7 @@ public:
         }
 
         auto size = columns[0]->size();
+        ColumnBuilder<Type> result(size, type.precision, type.scale);
         for (int row = 0; row < size; row++) {
             auto value = list[0].value(row);
             bool is_null = false;

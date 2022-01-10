@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/analytor.h"
 
@@ -171,7 +171,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                         _agg_expr_ctxs[i][j]->root()->type(), _agg_expr_ctxs[i][j]->root()->is_nullable(),
                         _agg_expr_ctxs[i][j]->root()->is_constant(), 0);
             }
-            _agg_intput_columns[i][j]->reserve(config::vector_chunk_size * BUFFER_CHUNK_NUMBER);
+            _agg_intput_columns[i][j]->reserve(state->chunk_size() * BUFFER_CHUNK_NUMBER);
         }
 
         DCHECK(_agg_functions[i] != nullptr);
@@ -203,7 +203,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         _partition_columns[i] = vectorized::ColumnHelper::create_column(
                 _partition_ctxs[i]->root()->type(), _partition_ctxs[i]->root()->is_nullable() | has_outer_join_child,
                 _partition_ctxs[i]->root()->is_constant(), 0);
-        _partition_columns[i]->reserve(config::vector_chunk_size * BUFFER_CHUNK_NUMBER);
+        _partition_columns[i]->reserve(state->chunk_size() * BUFFER_CHUNK_NUMBER);
     }
 
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs));
@@ -212,7 +212,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         _order_columns[i] = vectorized::ColumnHelper::create_column(
                 _order_ctxs[i]->root()->type(), _order_ctxs[i]->root()->is_nullable() | has_outer_join_child,
                 _order_ctxs[i]->root()->is_constant(), 0);
-        _order_columns[i]->reserve(config::vector_chunk_size * BUFFER_CHUNK_NUMBER);
+        _order_columns[i]->reserve(state->chunk_size() * BUFFER_CHUNK_NUMBER);
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
@@ -476,10 +476,10 @@ void Analytor::reset_state_for_new_partition(int64_t found_partition_end) {
     DCHECK_GE(_current_row_position, 0);
 }
 
-void Analytor::remove_unused_buffer_values() {
+void Analytor::remove_unused_buffer_values(RuntimeState* state) {
     if (_input_chunks.size() <= _output_chunk_index ||
         _input_chunk_first_row_positions[_output_chunk_index] - _removed_from_buffer_rows <
-                config::vector_chunk_size * BUFFER_CHUNK_NUMBER) {
+                state->chunk_size() * BUFFER_CHUNK_NUMBER) {
         return;
     }
 
