@@ -808,7 +808,7 @@ public class Catalog {
 
         // 1. check and create dirs and files
         //      if metaDir is the default config: StarRocksFE.STARROCKS_HOME_DIR + "/meta",
-        //      we should check whether the both the new default dir (STARROCKS_HOME_DIR + "/meta")
+        //      we should check whether both the new default dir (STARROCKS_HOME_DIR + "/meta")
         //      and the old default dir (DORIS_HOME_DIR + "/doris-meta") are present. If both are present,
         //      we need to let users keep only one to avoid starting from outdated metadata.
         String oldDefaultMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
