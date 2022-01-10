@@ -32,7 +32,7 @@ class StoredColumnReader {
 public:
     static Status create(RandomAccessFile* file, const ParquetField* field,
                          const tparquet::ColumnChunk* _chunk_metadata, const StoredColumnReaderOptions& opts,
-                         std::unique_ptr<StoredColumnReader>* out);
+                         int chunk_size, std::unique_ptr<StoredColumnReader>* out);
 
     virtual ~StoredColumnReader() = default;
 
