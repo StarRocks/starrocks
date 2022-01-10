@@ -302,6 +302,18 @@ public:
 
     ~ZlibBlockCompression() override = default;
 
+    virtual Status init_compress_stream(z_stream& zstrm) const {
+        zstrm.zalloc = Z_NULL;
+        zstrm.zfree = Z_NULL;
+        zstrm.opaque = Z_NULL;
+        auto zres = deflateInit(&zstrm, Z_DEFAULT_COMPRESSION);
+        if (zres != Z_OK) {
+            return Status::InvalidArgument(
+                    strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres));
+        }
+        return Status::OK();
+    }
+
     Status compress(const Slice& input, Slice* output) const override {
         auto zres = ::compress((Bytef*)output->data, &output->size, (Bytef*)input.data, input.size);
         if (zres != Z_OK) {
@@ -312,17 +324,14 @@ public:
 
     Status compress(const std::vector<Slice>& inputs, Slice* output) const override {
         z_stream zstrm;
-        zstrm.zalloc = Z_NULL;
-        zstrm.zfree = Z_NULL;
-        zstrm.opaque = Z_NULL;
-        auto zres = deflateInit(&zstrm, Z_DEFAULT_COMPRESSION);
-        if (zres != Z_OK) {
-            return Status::InvalidArgument(
-                    strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres));
+        Status st = init_compress_stream(zstrm);
+        if (!st.ok()) {
+            return st;
         }
         // we assume that output is e
         zstrm.next_out = (Bytef*)output->data;
         zstrm.avail_out = output->size;
+        auto zres = Z_OK;
         for (int i = 0; i < inputs.size(); ++i) {
             if (inputs[i].size == 0) {
                 continue;
@@ -442,6 +451,103 @@ public:
     size_t max_compressed_len(size_t len) const override { return ZSTD_compressBound(len); }
 };
 
+class GzipBlockCompression final : public ZlibBlockCompression {
+public:
+    static const GzipBlockCompression* instance() {
+        static GzipBlockCompression s_instance;
+        return &s_instance;
+    }
+
+    ~GzipBlockCompression() override = default;
+
+    Status init_compress_stream(z_stream& zstrm) const override {
+        zstrm.zalloc = Z_NULL;
+        zstrm.zfree = Z_NULL;
+        zstrm.opaque = Z_NULL;
+        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY);
+        if (zres != Z_OK) {
+            return Status::InvalidArgument(
+                    strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres));
+        }
+        return Status::OK();
+    }
+
+    Status compress(const Slice& input, Slice* output) const override {
+        std::vector<Slice> orig_slices;
+        orig_slices.emplace_back(input);
+        auto zres = ZlibBlockCompression::compress(orig_slices, output);
+        if (!zres.ok()) {
+            return Status::InvalidArgument(
+                    strings::Substitute("Fail to do ZLib compress, error=$0", zres.get_error_msg()));
+        }
+        return Status::OK();
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override {
+        z_stream z_strm = {nullptr};
+        z_strm.zalloc = Z_NULL;
+        z_strm.zfree = Z_NULL;
+        z_strm.opaque = Z_NULL;
+
+        int ret = inflateInit2(&z_strm, MAX_WBITS + 16);
+        if (ret < 0) {
+            std::stringstream ss;
+            ss << "Failed to init inflate. status code: " << ret;
+            return Status::InternalError(ss.str());
+        }
+
+        // 1. set input and output
+        z_strm.next_in = reinterpret_cast<Bytef*>(input.data);
+        z_strm.avail_in = input.size;
+        z_strm.next_out = reinterpret_cast<Bytef*>(output->data);
+        z_strm.avail_out = output->size;
+
+        while (z_strm.avail_out > 0 && z_strm.avail_in > 0) {
+            // inflate() performs one or both of the following actions:
+            //   Decompress more input starting at next_in and update next_in and avail_in
+            //       accordingly.
+            //   Provide more output starting at next_out and update next_out and avail_out
+            //       accordingly.
+            // inflate() returns Z_OK if some progress has been made (more input processed
+            // or more output produced)
+
+            int ret = inflate(&z_strm, Z_NO_FLUSH);
+
+            VLOG(10) << "gzip dec ret: " << ret;
+
+            if (ret == Z_BUF_ERROR) {
+                // Z_BUF_ERROR indicates that inflate() could not consume more input or
+                // produce more output. inflate() can be called again with more output space
+                // or more available input
+                // ATTN: even if ret == Z_OK, output_bytes_written may also be zero
+                return Status::OK();
+            } else if (ret == Z_STREAM_END) {
+                // reset z_strm to continue decoding a subsequent gzip stream
+                ret = inflateReset(&z_strm);
+                if (ret != Z_OK) {
+                    std::stringstream ss;
+                    ss << "Failed to inflateRset. return code: " << ret;
+                    (void)inflateEnd(&z_strm);
+                    return Status::InternalError(ss.str());
+                }
+            } else if (ret != Z_OK) {
+                std::stringstream ss;
+                ss << "Failed to inflate. return code: " << ret;
+                (void)inflateEnd(&z_strm);
+                return Status::InternalError(ss.str());
+            } else {
+                // here ret must be Z_OK.
+                // we continue if avail_out and avail_in > 0.
+                // this means 'inflate' is not done yet.
+            }
+        }
+
+        (void)inflateEnd(&z_strm);
+
+        return Status::OK();
+    }
+};
+
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
@@ -461,6 +567,9 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         break;
     case CompressionTypePB::ZSTD:
         *codec = ZstdBlockCompression::instance();
+        break;
+    case CompressionTypePB::GZIP:
+        *codec = GzipBlockCompression::instance();
         break;
     default:
         return Status::NotFound(strings::Substitute("unknown compression type($0)", type));
