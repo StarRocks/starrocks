@@ -35,6 +35,7 @@ import com.google.common.collect.Sets;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
+import com.starrocks.StarRocksFE;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -806,16 +807,37 @@ public class Catalog {
         getHelperNodes(args);
 
         // 1. check and create dirs and files
+        //      if metaDir is the default config: StarRocksFE.STARROCKS_HOME_DIR + "/meta",
+        //      we should check whether the both the new default dir (STARROCKS_HOME_DIR + "/meta")
+        //      and the old default dir (DORIS_HOME_DIR + "/doris-meta") are present. If both are present,
+        //      we need to let users keep only one to avoid starting from outdated metadata.
+        String oldDefaultMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
+        String newDefaultMetaDir = StarRocksFE.STARROCKS_HOME_DIR + "/meta";
+        if (metaDir.equals(newDefaultMetaDir)) {
+            File oldMeta = new File(oldDefaultMetaDir);
+            File newMeta = new File(newDefaultMetaDir);
+            if (oldMeta.exists() && newMeta.exists()) {
+                LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
+                        "Please check which one has the latest data, and remove another.", newDefaultMetaDir, oldDefaultMetaDir);
+                System.exit(-1);
+            }
+        }
         File meta = new File(metaDir);
         if (!meta.exists()) {
-            String oldMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
-            File oldMeta = new File(oldMetaDir);
+            // If metaDir is not the default config, it means the user has specified the other directory
+            // We should not use the oldDefaultMetaDir.
+            // Just exit in this case
+            if (!metaDir.equals(newDefaultMetaDir)) {
+                LOG.error("meta dir {} dose not exist, will exit", metaDir);
+                System.exit(-1);
+            }
+            File oldMeta = new File(oldDefaultMetaDir);
             if (oldMeta.exists()) {
                 // For backward compatible
-                Config.meta_dir = oldMetaDir;
+                Config.meta_dir = oldDefaultMetaDir;
                 setMetaDir();
             } else {
-                LOG.error("{} does not exist, will exit", meta.getAbsolutePath());
+                LOG.error("meta dir {} does not exist, will exit", meta.getAbsolutePath());
                 System.exit(-1);
             }
         }
