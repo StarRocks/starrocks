@@ -5,6 +5,7 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -19,6 +20,12 @@ public final class LogicalProjectOperator extends LogicalOperator {
     public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         super(OperatorType.LOGICAL_PROJECT);
         this.columnRefMap = columnRefMap;
+    }
+
+    public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap, long limit) {
+        super(OperatorType.LOGICAL_PROJECT);
+        this.columnRefMap = columnRefMap;
+        this.limit = limit;
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
@@ -65,5 +72,26 @@ public final class LogicalProjectOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalProject(optExpression, context);
+    }
+
+    public static class Builder extends Operator.Builder<LogicalProjectOperator, LogicalProjectOperator.Builder> {
+        private Map<ColumnRefOperator, ScalarOperator> columnRefMap;
+
+        @Override
+        public Builder withOperator(LogicalProjectOperator operator) {
+            super.withOperator(operator);
+            this.columnRefMap = operator.getColumnRefMap();
+            return this;
+        }
+
+        public Builder setColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+            this.columnRefMap = columnRefMap;
+            return this;
+        }
+
+        @Override
+        public LogicalProjectOperator build() {
+            return new LogicalProjectOperator(columnRefMap, this.limit);
+        }
     }
 }
