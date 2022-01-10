@@ -10,11 +10,11 @@ namespace starrocks {
 // channel per [sender_id]
 class PassThroughSenderChannel {
 public:
-    void append_chunk(const vectorized::Chunk* chunk, size_t chunk_size) {
+    void append_chunk(const vectorized::Chunk* chunk, size_t chunk_size, int32_t shuffle_id) {
         auto clone = chunk->clone_unique();
         {
             std::unique_lock lock(_mutex);
-            _buffer.emplace_back(std::move(clone));
+            _buffer.emplace_back(std::make_pair(std::move(clone), shuffle_id));
             _bytes.push_back(chunk_size);
         }
     }
@@ -86,9 +86,10 @@ void PassThroughContext::init() {
     _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
 }
 
-void PassThroughContext::append_chunk(int sender_id, const vectorized::Chunk* chunk, size_t chunk_size) {
+void PassThroughContext::append_chunk(int sender_id, const vectorized::Chunk* chunk, size_t chunk_size,
+                                      int32_t shuffle_id) {
     PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);
-    sender_channel->append_chunk(chunk, chunk_size);
+    sender_channel->append_chunk(chunk, chunk_size, shuffle_id);
 }
 void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
     PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);

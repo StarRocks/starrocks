@@ -434,7 +434,11 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         DCHECK(swap_chunks.size() == swap_bytes.size());
         size_t bytes = 0;
         for (size_t i = 0; i < swap_chunks.size(); i++) {
-            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), shuffle_id, std::move(swap_chunks[i]), nullptr};
+            // The sending and receiving of local pass do not necessarily correspond to one-to-one
+            // So one receiving may receive two or more sending messages, and we need to use the chunk's shuffle_id
+            // but not the request's shuffle_id
+            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), swap_chunks[i].second, std::move(swap_chunks[i].first),
+                           nullptr};
             chunks.emplace_back(std::move(item));
             bytes += swap_bytes[i];
         }
@@ -464,12 +468,13 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             return Status::OK();
         }
 
-        if (_short_circuit_shuffle_ids.find(shuffle_id) != _short_circuit_shuffle_ids.end()) {
-            return Status::OK();
-        }
-
-        for (auto& pair : chunks) {
-            _chunk_queue.emplace_back(std::move(pair));
+        for (auto& item : chunks) {
+            // This chunks may contains different shuffle_id
+            if (item.shuffle_id >= 0 &&
+                _short_circuit_shuffle_ids.find(item.shuffle_id) != _short_circuit_shuffle_ids.end()) {
+                continue;
+            }
+            _chunk_queue.emplace_back(std::move(item));
         }
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             _chunk_queue.back().closure = *done;
@@ -543,7 +548,11 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
         DCHECK(swap_chunks.size() == swap_bytes.size());
         size_t bytes = 0;
         for (size_t i = 0; i < swap_chunks.size(); i++) {
-            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), shuffle_id, std::move(swap_chunks[i]), nullptr};
+            // The sending and receiving of local pass do not necessarily correspond to one-to-one
+            // So one receiving may receive two or more sending messages, and we need to use the chunk's shuffle_id
+            // but not the request's shuffle_id
+            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), swap_chunks[i].second, std::move(swap_chunks[i].first),
+                           nullptr};
             local_chunk_queue.emplace_back(std::move(item));
             bytes += swap_bytes[i];
         }
@@ -576,10 +585,6 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
             return Status::OK();
         }
 
-        if (_short_circuit_shuffle_ids.find(shuffle_id) != _short_circuit_shuffle_ids.end()) {
-            return Status::OK();
-        }
-
         auto& chunk_queues = _buffered_chunk_queues[be_number];
 
         if (!local_chunk_queue.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
@@ -602,8 +607,13 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
 
             // Now, all the packets with sequance <= unprocessed_sequence have been received
             // so chunks of unprocessed_sequence can be flushed to ready queue
-            for (auto& chunk : unprocessed_chunk_queue) {
-                _chunk_queue.emplace_back(std::move(chunk));
+            for (auto& item : unprocessed_chunk_queue) {
+                // This chunks may contains different shuffle_id
+                if (item.shuffle_id >= 0 &&
+                    _short_circuit_shuffle_ids.find(item.shuffle_id) != _short_circuit_shuffle_ids.end()) {
+                    continue;
+                }
+                _chunk_queue.emplace_back(std::move(item));
             }
 
             chunk_queues.erase(it);

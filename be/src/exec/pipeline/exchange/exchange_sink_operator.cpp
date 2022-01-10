@@ -196,7 +196,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     if (chunk != nullptr) {
         if (_use_pass_through) {
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
-            _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size);
+            // -1 means disable pipeline level shuffle
+            _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
+                                               _parent->_is_pipeline_level_shuffle ? _shuffle_id : -1);
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
         } else {
