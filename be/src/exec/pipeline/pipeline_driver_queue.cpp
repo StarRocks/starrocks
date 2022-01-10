@@ -2,80 +2,183 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
+#include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
+
 namespace starrocks::pipeline {
-void QuerySharedDriverQueue::close() {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-    _is_closed = true;
-    _cv.notify_all();
-}
 
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
-    int level = driver->driver_acct().get_level();
-    {
-        std::lock_guard<std::mutex> lock(_global_mutex);
-        _queues[level % QUEUE_SIZE].queue.emplace(driver);
-        _cv.notify_one();
-    }
+    _put_back(driver);
 }
 
 void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
-    std::vector<int> levels(drivers.size());
-    for (int i = 0; i < drivers.size(); i++) {
-        levels[i] = drivers[i]->driver_acct().get_level();
-    }
-
-    std::lock_guard<std::mutex> lock(_global_mutex);
-    for (int i = 0; i < drivers.size(); i++) {
-        _queues[levels[i] % QUEUE_SIZE].queue.emplace(drivers[i]);
-        _cv.notify_one();
+    for (auto driver : drivers) {
+        _put_back(driver);
     }
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
+void QuerySharedDriverQueue::put_back_from_dispatcher(const DriverRawPtr driver) {
+    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+    put_back(driver);
+}
+
+void QuerySharedDriverQueue::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
+    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+    put_back(drivers);
+}
+
+StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
     DriverRawPtr driver_ptr;
 
-    {
-        std::unique_lock<std::mutex> lock(_global_mutex);
-        while (true) {
-            if (_is_closed) {
-                return Status::Cancelled("Shutdown");
+    for (int i = 0; i < QUEUE_SIZE; ++i) {
+        // we just search for queue has element
+        if (!_queues[i].queue.empty()) {
+            double local_target_time = _queues[i].accu_time_after_divisor();
+            // if this is first queue that has element, we select it;
+            // else we choose queue that the execution time is less sufficient,
+            // and record time.
+            if (queue_idx < 0 || local_target_time < target_accu_time) {
+                target_accu_time = local_target_time;
+                queue_idx = i;
             }
-
-            for (int i = 0; i < QUEUE_SIZE; ++i) {
-                // we just search for queue has element
-                if (!_queues[i].queue.empty()) {
-                    double local_target_time = _queues[i].accu_time_after_divisor();
-                    // if this is first queue that has element, we select it;
-                    // else we choose queue that the execution time is less sufficient,
-                    // and record time.
-                    if (queue_idx < 0 || local_target_time < target_accu_time) {
-                        target_accu_time = local_target_time;
-                        queue_idx = i;
-                    }
-                }
-            }
-
-            if (queue_idx >= 0) {
-                break;
-            }
-            _cv.wait(lock);
         }
-        // record queue's index to accumulate time for it.
-        *queue_index = queue_idx;
-        driver_ptr = _queues[queue_idx].queue.front();
-        _queues[queue_idx].queue.pop();
     }
 
-    // next pipeline driver to execute.
+    // Always return non-null driver, which is guaranteed be the callee, e.g. DriverQueueWithWorkGroup::take().
+    DCHECK(queue_idx >= 0);
+
+    driver_ptr = _queues[queue_idx].queue.front();
+    _queues[queue_idx].queue.pop();
+
+    --_size;
+
     return driver_ptr;
 }
 
-SubQuerySharedDriverQueue* QuerySharedDriverQueue::get_sub_queue(size_t index) {
-    return _queues + index;
+void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
+    _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
+}
+
+void QuerySharedDriverQueue::_put_back(const DriverRawPtr driver) {
+    int level = driver->driver_acct().get_level() % QUEUE_SIZE;
+    driver->set_dispatch_queue_index(level);
+    _queues[level].queue.emplace(driver);
+    ++_size;
+}
+
+void DriverQueueWithWorkGroup::close() {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+    _is_closed = true;
+    _cv.notify_all();
+}
+
+void DriverQueueWithWorkGroup::put_back(const DriverRawPtr driver) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+    _put_back<false>(driver);
+}
+
+void DriverQueueWithWorkGroup::put_back(const std::vector<DriverRawPtr>& drivers) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    for (const auto driver : drivers) {
+        _put_back<false>(driver);
+    }
+}
+
+void DriverQueueWithWorkGroup::put_back_from_dispatcher(const DriverRawPtr driver) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+    _put_back<true>(driver);
+}
+
+void DriverQueueWithWorkGroup::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    for (const auto driver : drivers) {
+        _put_back<true>(driver);
+    }
+}
+
+StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take() {
+    std::unique_lock<std::mutex> lock(_global_mutex);
+
+    if (_is_closed) {
+        return Status::Cancelled("Shutdown");
+    }
+
+    while (_wgs.empty()) {
+        _cv.wait(lock);
+        if (_is_closed) {
+            return Status::Cancelled("Shutdown");
+        }
+    }
+
+    auto wg = _find_min_wg();
+    if (wg->driver_queue()->size() == 1) {
+        _sum_cpu_limit -= wg->get_cpu_limit();
+        _wgs.erase(wg);
+    }
+
+    return wg->driver_queue()->take();
+}
+
+void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
+    std::unique_lock<std::mutex> lock(_global_mutex);
+
+    int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
+    auto* wg = driver->workgroup();
+    wg->driver_queue()->update_statistics(driver);
+    wg->increment_real_runtime_ns(driver->driver_acct().get_last_time_spent());
+    workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
+}
+
+size_t DriverQueueWithWorkGroup::size() {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    size_t size = 0;
+    for (auto wg : _wgs) {
+        size += wg->driver_queue()->size();
+    }
+
+    return size;
+}
+
+template <bool from_dispatcher>
+void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
+    auto* wg = driver->workgroup();
+    if (_wgs.find(wg) == _wgs.end()) {
+        _sum_cpu_limit += wg->get_cpu_limit();
+        if constexpr (!from_dispatcher) {
+            auto* min_wg = _find_min_wg();
+            if (min_wg != nullptr) {
+                wg->set_vruntime_ns(
+                        std::max(wg->get_vruntime_ns(), min_wg->get_vruntime_ns() - _ideal_runtime_ns(wg) / 2));
+            }
+        }
+
+        _wgs.emplace(wg);
+    }
+
+    wg->driver_queue()->put_back(driver);
+    _cv.notify_one();
+}
+
+workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_wg() {
+    workgroup::WorkGroup* min_wg = nullptr;
+    int64_t min_vruntime_ns = 0;
+    for (auto wg : _wgs) {
+        if (min_wg == nullptr || min_vruntime_ns > wg->get_vruntime_ns()) {
+            min_wg = wg;
+            min_vruntime_ns = wg->get_vruntime_ns();
+        }
+    }
+    return min_wg;
+}
+
+int64_t DriverQueueWithWorkGroup::_ideal_runtime_ns(workgroup::WorkGroup* wg) {
+    return DISPATCH_PERIOD_PER_WG_NS * _wgs.size() * wg->get_cpu_limit() / _sum_cpu_limit;
 }
 
 } // namespace starrocks::pipeline
