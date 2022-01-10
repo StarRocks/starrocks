@@ -6,8 +6,6 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "common/object_pool.h"
-#include "env/compressed_file.h"
 #include "env/env.h"
 #include "env/env_broker.h"
 #include "env/env_stream_pipe.h"
@@ -18,8 +16,6 @@
 #include "exec/vectorized/parquet_scanner.h"
 #include "exprs/expr.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
@@ -27,13 +23,7 @@
 namespace starrocks::vectorized {
 
 FileScanNode::FileScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs),
-          _tuple_id(tnode.file_scan_node.tuple_id),
-          _runtime_state(nullptr),
-          _tuple_desc(nullptr),
-          _max_queue_size(32),
-          _num_running_scanners(0),
-          _scan_finished(false) {}
+        : ScanNode(pool, tnode, descs), _tuple_id(tnode.file_scan_node.tuple_id) {}
 
 FileScanNode::~FileScanNode() = default;
 
@@ -77,17 +67,17 @@ Status FileScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
     RETURN_IF_CANCELLED(state);
 
-    RETURN_IF_ERROR(start_scanners());
+    RETURN_IF_ERROR(_start_scanners());
 
     return Status::OK();
 }
 
-Status FileScanNode::start_scanners() {
+Status FileScanNode::_start_scanners() {
     {
         std::unique_lock<std::mutex> l(_chunk_queue_lock);
 
         _num_running_scanners = 1;
-        _scanner_threads.emplace_back(&FileScanNode::scanner_worker, this, 0, _scan_ranges.size());
+        _scanner_threads.emplace_back(&FileScanNode::_scanner_worker, this, 0, _scan_ranges.size());
     }
     return Status::OK();
 }
@@ -101,7 +91,7 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     // check if CANCELLED.
     if (state->is_cancelled()) {
         std::unique_lock<std::mutex> l(_chunk_queue_lock);
-        if (update_status(Status::Cancelled("Cancelled FileScanNode::get_next"))) {
+        if (_update_status(Status::Cancelled("Cancelled FileScanNode::get_next"))) {
             // Notify all scanners
             _queue_writer_cond.notify_all();
             return _process_status;
@@ -126,13 +116,14 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
             return _process_status;
         }
         if (_runtime_state->is_cancelled()) {
-            if (update_status(Status::Cancelled("Cancelled FileScanNode::get_next"))) {
+            if (_update_status(Status::Cancelled("Cancelled FileScanNode::get_next"))) {
                 _queue_writer_cond.notify_all();
             }
             return _process_status;
         }
         if (!_chunk_queue.empty()) {
             temp_chunk = _chunk_queue.front();
+            _cur_mem_usage -= temp_chunk->memory_usage();
             _chunk_queue.pop_front();
         }
     }
@@ -184,6 +175,7 @@ Status FileScanNode::close(RuntimeState* state) {
     while (!_chunk_queue.empty()) {
         _chunk_queue.pop_front();
     }
+    _cur_mem_usage = 0;
 
     return ExecNode::close(state);
 }
@@ -198,7 +190,8 @@ void FileScanNode::debug_string(int ident_level, std::stringstream* out) const {
     (*out) << "FileScanNode";
 }
 
-std::unique_ptr<FileScanner> FileScanNode::create_scanner(const TBrokerScanRange& scan_range, ScannerCounter* counter) {
+std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRange& scan_range,
+                                                           ScannerCounter* counter) {
     if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {
         return std::make_unique<ORCScanner>(_runtime_state, runtime_profile(), scan_range, counter);
     } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_PARQUET) {
@@ -210,13 +203,13 @@ std::unique_ptr<FileScanner> FileScanNode::create_scanner(const TBrokerScanRange
     }
 }
 
-Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std::vector<ExprContext*>& conjunct_ctxs,
-                                  ScannerCounter* counter) {
+Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std::vector<ExprContext*>& conjunct_ctxs,
+                                   ScannerCounter* counter) {
     if (scan_range.ranges.empty()) {
         return Status::EndOfFile("scan range is empty");
     }
     //create scanner object and open
-    std::unique_ptr<FileScanner> scanner = create_scanner(scan_range, counter);
+    std::unique_ptr<FileScanner> scanner = _create_scanner(scan_range, counter);
     if (scanner == nullptr) {
         return Status::InternalError("Failed to create scanner");
     }
@@ -248,7 +241,7 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
                    // 1. too many batches in queue, or
                    // 2. at least one batch in queue and memory exceed limit.
                    (_chunk_queue.size() >= _max_queue_size ||
-                    (_runtime_state->instance_mem_tracker()->any_limit_exceeded() && !_chunk_queue.empty()))) {
+                    (_cur_mem_usage >= _max_mem_usage && !_chunk_queue.empty()))) {
                 _queue_writer_cond.wait_for(l, std::chrono::seconds(1));
             }
             // Process already set failed, so we just return OK
@@ -264,6 +257,7 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
                 return Status::Cancelled("Cancelled FileScanNode::scanner_scan");
             }
             // Queue size Must be smaller than _max_queue_size
+            _cur_mem_usage += temp_chunk->memory_usage();
             _chunk_queue.push_back(std::move(temp_chunk));
 
             // Notify reader to
@@ -274,7 +268,7 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
     return Status::OK();
 }
 
-void FileScanNode::scanner_worker(int start_idx, int length) {
+void FileScanNode::_scanner_worker(int start_idx, int length) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
 
     // Clone expr context
@@ -298,7 +292,7 @@ void FileScanNode::scanner_worker(int start_idx, int length) {
                 }
                 new_scan_range.ranges.emplace_back(range_desc);
             }
-            status = scanner_scan(new_scan_range, scanner_expr_ctxs, &counter);
+            status = _scanner_scan(new_scan_range, scanner_expr_ctxs, &counter);
 
             // todo: break if failed ?
             if (!status.ok() && !status.is_end_of_file()) {
@@ -326,7 +320,7 @@ void FileScanNode::scanner_worker(int start_idx, int length) {
     {
         std::lock_guard<std::mutex> l(_chunk_queue_lock);
         if (!status.ok() && !status.is_end_of_file()) {
-            update_status(status);
+            _update_status(status);
         }
         // This scanner will finish
         _num_running_scanners--;
