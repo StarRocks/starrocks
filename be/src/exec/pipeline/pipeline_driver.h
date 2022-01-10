@@ -283,7 +283,9 @@ public:
             if (_global_rf_descriptors.empty()) {
                 return false;
             }
-            _global_rf_wait_timeout_ns += _precondition_block_timer_sw->elapsed_time() + 5000000;
+            // wait global rf to be ready for at most _global_rf_wait_time_out_ns after
+            // both dependencies_block and local_rf_block return false.
+            _global_rf_wait_timeout_ns += _precondition_block_timer_sw->elapsed_time();
             return global_rf_block();
         } else {
             return global_rf_block();
