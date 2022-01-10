@@ -220,7 +220,8 @@ public class Coordinator {
         } else {
             this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
         }
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
+        String nowString =
+                DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
         if (context.getLastQueryId() != null) {
@@ -1271,7 +1272,8 @@ public class Coordinator {
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
                     int numInstances = param.instanceExecParams.size();
-                    int pipelineDop = Math.max(1, degreeOfParallelism / Math.max(1, numInstances / numBackends));
+                    int pipelineDop =
+                            Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
                     param.fragment.setPipelineDop(pipelineDop);
                 }
             }
