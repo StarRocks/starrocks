@@ -211,7 +211,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     // create file reader
-    _reader = std::make_shared<parquet::FileReader>(_scanner_params.fs.get(),
+    _reader = std::make_shared<parquet::FileReader>(runtime_state, _scanner_params.fs.get(),
                                                     _scanner_params.scan_ranges[0]->file_length);
 #ifndef BE_TEST
     SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);

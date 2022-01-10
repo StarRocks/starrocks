@@ -9,6 +9,7 @@
 #include "common/status.h"
 #include "exec/parquet/group_reader.h"
 #include "gen_cpp/parquet_types.h"
+#include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -27,13 +28,15 @@ class FileMetaData;
 
 class FileReader {
 public:
-    FileReader(RandomAccessFile* file, uint64_t file_size);
+    FileReader(RuntimeState* runtime_state, RandomAccessFile* file, uint64_t file_size);
     ~FileReader();
 
     Status init(const starrocks::vectorized::HdfsFileReaderParam& param);
     Status get_next(vectorized::ChunkPtr* chunk);
 
 private:
+    RuntimeState* _runtime_state;
+
     // parse footer of parquet file
     Status _parse_footer();
 

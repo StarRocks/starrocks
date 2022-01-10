@@ -32,7 +32,7 @@ public:
     // TODO(zc): review this,
     // create a column reader
     static Status create(RandomAccessFile* file, const ParquetField* field, const tparquet::RowGroup& row_group,
-                         const TypeDescriptor& col_type, const ColumnReaderOptions& opts,
+                         const TypeDescriptor& col_type, const ColumnReaderOptions& opts, int chunk_size,
                          std::unique_ptr<ColumnReader>* reader);
 
     virtual ~ColumnReader() = default;

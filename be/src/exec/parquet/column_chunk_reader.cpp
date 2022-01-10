@@ -81,7 +81,7 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 
-Status ColumnChunkReader::init() {
+Status ColumnChunkReader::init(int chunk_size) {
     int64_t start_offset = 0;
     if (metadata().__isset.dictionary_page_offset) {
         start_offset = metadata().dictionary_page_offset;
@@ -97,7 +97,7 @@ Status ColumnChunkReader::init() {
     auto compress_type = convert_compression_codec(metadata().codec);
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
 
-    RETURN_IF_ERROR(_try_load_dictionary());
+    RETURN_IF_ERROR(_try_load_dictionary(chunk_size));
     RETURN_IF_ERROR(_parse_page_data());
     return Status::OK();
 }
@@ -218,7 +218,7 @@ Status ColumnChunkReader::_parse_dict_page() {
     return Status::OK();
 }
 
-Status ColumnChunkReader::_try_load_dictionary() {
+Status ColumnChunkReader::_try_load_dictionary(int chunk_size) {
     RETURN_IF_ERROR(_parse_page_header());
     const auto& header = *_page_reader->current_header();
     if (header.type != tparquet::PageType::DICTIONARY_PAGE) {
@@ -247,7 +247,7 @@ Status ColumnChunkReader::_try_load_dictionary() {
     std::unique_ptr<Decoder> decoder;
     RETURN_IF_ERROR(EncodingInfo::get(metadata().type, tparquet::Encoding::RLE_DICTIONARY, &code_info));
     RETURN_IF_ERROR(code_info->create_decoder(&decoder));
-    RETURN_IF_ERROR(decoder->set_dict(header.dictionary_page_header.num_values, dict_decoder.get()));
+    RETURN_IF_ERROR(decoder->set_dict(chunk_size, header.dictionary_page_header.num_values, dict_decoder.get()));
     _decoders[static_cast<int>(tparquet::Encoding::RLE_DICTIONARY)] = std::move(decoder);
 
     RETURN_IF_ERROR(_parse_page_header());
