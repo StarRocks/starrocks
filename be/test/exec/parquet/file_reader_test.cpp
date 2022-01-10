@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/parquet/file_reader.h"
 
@@ -329,7 +329,7 @@ HdfsFileReaderParam* FileReaderTest::_create_file2_base_param() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl);
+    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     param->tuple_desc = tuple_desc;
@@ -398,7 +398,7 @@ HdfsFileReaderParam* FileReaderTest::_create_param_for_min_max() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl);
+    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     param->min_max_tuple_desc = tuple_desc;
@@ -450,7 +450,7 @@ HdfsFileReaderParam* FileReaderTest::_create_param_for_filter_file() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl);
+    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     param->tuple_desc = tuple_desc;
@@ -529,7 +529,7 @@ TEST_F(FileReaderTest, TestInit) {
     auto file = _create_file(_file_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_size);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
 
     // init
     auto* param = _create_param();
@@ -542,7 +542,7 @@ TEST_F(FileReaderTest, TestGetNext) {
     auto file = _create_file(_file_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_size);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
 
     // init
     auto* param = _create_param();
@@ -564,7 +564,7 @@ TEST_F(FileReaderTest, TestGetNextPartition) {
     auto file = _create_file(_file_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_size);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
 
     // init
     auto* param = _create_param_for_partition();
@@ -586,7 +586,7 @@ TEST_F(FileReaderTest, TestGetNextEmpty) {
     auto file = _create_file(_file_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_size);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
 
     // init
     auto* param = _create_param_for_not_exist();
@@ -608,7 +608,7 @@ TEST_F(FileReaderTest, TestMinMaxConjunct) {
     auto file = _create_file(_file_2_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_2_size);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
 
     // init
     auto* param = _create_param_for_min_max();
@@ -633,7 +633,7 @@ TEST_F(FileReaderTest, TestFilterFile) {
     auto file = _create_file(_file_2_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_2_size);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
 
     // init
     auto* param = _create_param_for_filter_file();
@@ -653,7 +653,7 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     auto file = _create_file(_file_2_path);
 
     // create file reader
-    auto file_reader = std::make_shared<FileReader>(file.get(), _file_2_size);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
 
     // init
     auto* param = _create_param_for_dict_filter();

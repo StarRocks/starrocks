@@ -179,7 +179,7 @@ build_openssl() {
     LDFLAGS="-L${TP_LIB_DIR}" \
     CFLAGS="-fPIC" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -zlib -shared ${OPENSSL_PLATFORM}
+    ./Configure --prefix=$TP_INSTALL_DIR -zlib -shared no-asm ${OPENSSL_PLATFORM}
     make -j$PARALLEL && make install
     if [ -f $TP_INSTALL_DIR/lib64/libcrypto.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib && \
@@ -741,7 +741,7 @@ build_mariadb() {
 # aliyun_oss_jars
 build_aliyun_oss_jars() {
     check_if_source_exist $ALIYUN_OSS_JARS_SOURCE
-    cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/aliyun_oss_jars
+    cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/
 }
 
 build_libevent

@@ -31,8 +31,7 @@
 //
 // Buffer routines will copy to and from buffers without causing
 // a bus error when the architecture requires differnt byte alignments
-#ifndef UTIL_ENDIAN_ENDIAN_H_
-#define UTIL_ENDIAN_ENDIAN_H_
+#pragma once
 
 #include <cassert>
 
@@ -371,5 +370,3 @@ public:
 
 // Network byte order is big-endian
 typedef BigEndian NetworkByteOrder;
-
-#endif // UTIL_ENDIAN_ENDIAN_H_

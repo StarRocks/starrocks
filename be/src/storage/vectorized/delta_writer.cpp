@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/delta_writer.h"
 
@@ -141,19 +141,20 @@ Status DeltaWriter::_init() {
     // maybe partial update, change to partial tablet schema
     if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
         partial_col_num < _tablet->tablet_schema().num_columns()) {
-        std::vector<std::size_t> column_indexes;
+        writer_context.referenced_column_ids.reserve(partial_col_num);
         for (auto i = 0; i < partial_col_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
-            std::size_t index = _tablet->field_index(slot_col_name);
+            int32_t index = _tablet->field_index(slot_col_name);
             if (index < 0) {
                 std::stringstream ss;
                 ss << "invalid column name: " << slot_col_name;
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
-            column_indexes.push_back(index);
+            writer_context.referenced_column_ids.push_back(index);
         }
-        writer_context.partial_update_tablet_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+        writer_context.partial_update_tablet_schema =
+                TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();

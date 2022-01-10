@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/aggregate/distinct_streaming_node.h"
 
@@ -77,12 +77,6 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     DCHECK(false);
                 }
 
-                if (_aggregator->is_none_group_by_exprs()) {
-                    _aggregator->compute_single_agg_state(input_chunk_size);
-                } else {
-                    _aggregator->compute_batch_agg_states(input_chunk_size);
-                }
-
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
                 _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
@@ -115,12 +109,6 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 #undef HASH_MAP_METHOD
                     else {
                         DCHECK(false);
-                    }
-
-                    if (_aggregator->is_none_group_by_exprs()) {
-                        _aggregator->compute_single_agg_state(input_chunk_size);
-                    } else {
-                        _aggregator->compute_batch_agg_states(input_chunk_size);
                     }
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
@@ -212,7 +200,7 @@ void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
 #define HASH_MAP_METHOD(NAME)                                                                                     \
     else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                                  \
             _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, config::vector_chunk_size, chunk);
+                    *_aggregator->hash_set_variant().NAME, runtime_state()->chunk_size(), chunk);
     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {

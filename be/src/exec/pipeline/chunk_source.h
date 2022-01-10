@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -34,7 +34,7 @@ public:
 
     virtual StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() = 0;
 
-    virtual Status buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) = 0;
+    virtual Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) = 0;
 
 protected:
     // The morsel will own by pipeline driver

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer;
 
 /**
@@ -106,6 +106,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalHiveScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalIcebergScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -94,6 +94,8 @@ private:
 
     void _init_counter(RuntimeState* state);
 
+    Status _init_table();
+
     int _tuple_id = 0;
     const TupleDescriptor* _tuple_desc = nullptr;
 
@@ -131,6 +133,7 @@ private:
     std::vector<THdfsScanRange> _scan_ranges;
     std::vector<HdfsFileDesc*> _hdfs_files;
     const HdfsTableDescriptor* _hdfs_table = nullptr;
+    const IcebergTableDescriptor* _iceberg_table = nullptr;
     std::vector<std::string> _hive_column_names;
 
     std::unique_ptr<MemPool> _mem_pool;
@@ -157,14 +160,14 @@ private:
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
 
     RuntimeProfile::Counter* _scan_timer = nullptr;
+    RuntimeProfile::Counter* _scan_ranges_counter = nullptr;
+    RuntimeProfile::Counter* _scan_files_counter = nullptr;
     RuntimeProfile::Counter* _reader_init_timer = nullptr;
     RuntimeProfile::Counter* _open_file_timer = nullptr;
-    RuntimeProfile::Counter* _raw_rows_counter = nullptr;
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
 
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _io_counter = nullptr;
-    RuntimeProfile::Counter* _bytes_read_from_disk_counter = nullptr;
     RuntimeProfile::Counter* _column_read_timer = nullptr;
     RuntimeProfile::Counter* _level_decode_timer = nullptr;
     RuntimeProfile::Counter* _value_decode_timer = nullptr;

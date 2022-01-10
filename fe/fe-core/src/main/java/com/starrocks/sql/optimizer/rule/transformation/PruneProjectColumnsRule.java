@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -27,8 +27,7 @@ public class PruneProjectColumnsRule extends TransformationRule {
 
     public PruneProjectColumnsRule() {
         super(RuleType.TF_PRUNE_PROJECT_COLUMNS, Pattern.create(OperatorType.LOGICAL_PROJECT).
-                addChildren(Pattern.create(OperatorType.PATTERN_LEAF).
-                        addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF))));
+                addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)));
     }
 
     @Override

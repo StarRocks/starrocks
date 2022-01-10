@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <memory>
 #include <vector>
@@ -23,7 +23,7 @@ class Chunk;
 class Field;
 class Column;
 class Schema;
-struct RuntimeChunkMeta;
+struct ProtobufChunkMeta;
 
 // We may change the Buffer implementation in the future.
 template <typename T>

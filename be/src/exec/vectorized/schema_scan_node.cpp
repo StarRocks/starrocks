@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/schema_scan_node.h"
 
@@ -201,7 +201,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
             break;
         }
 
-        if (row_num >= config::vector_chunk_size) {
+        if (row_num >= runtime_state()->chunk_size()) {
             break;
         }
 

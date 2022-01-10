@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/const_column.h"
 
@@ -55,20 +55,6 @@ int ConstColumn::compare_at(size_t left, size_t right, const Column& rhs, int na
     DCHECK(rhs.is_constant());
     const auto& rhs_data = static_cast<const ConstColumn&>(rhs)._data;
     return _data->compare_at(0, 0, *rhs_data, nan_direction_hint);
-}
-
-uint8_t* ConstColumn::serialize_column(uint8_t* dst) {
-    encode_fixed64_le(dst, _size);
-    dst += sizeof(size_t);
-
-    return _data->serialize_column(dst);
-}
-
-const uint8_t* ConstColumn::deserialize_column(const uint8_t* src) {
-    _size = decode_fixed64_le(src);
-    src += sizeof(size_t);
-
-    return _data->deserialize_column(src);
 }
 
 } // namespace starrocks::vectorized

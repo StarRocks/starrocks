@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hdfs_scanner.h"
 
@@ -211,7 +211,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     // create file reader
-    _reader = std::make_shared<parquet::FileReader>(_scanner_params.fs.get(),
+    _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _scanner_params.fs.get(),
                                                     _scanner_params.scan_ranges[0]->file_length);
 #ifndef BE_TEST
     SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
@@ -229,11 +229,11 @@ void HdfsParquetScanner::update_counter() {
     HdfsScanner::update_counter();
 
 #ifndef BE_TEST
-    COUNTER_UPDATE(_scanner_params.parent->_raw_rows_counter, _stats.raw_rows_read);
+    COUNTER_UPDATE(_scanner_params.parent->_rows_read_counter, _stats.raw_rows_read);
     COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_from_disk_counter, _stats.bytes_read_from_disk);
+    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read);
     COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
     COUNTER_UPDATE(_scanner_params.parent->_value_decode_timer, _stats.value_decode_ns);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/olap_scan_node.h"
 
@@ -184,7 +184,7 @@ Status OlapScanNode::close(RuntimeState* state) {
     _dict_optimize_parser.close(state);
 
     // Reduce the memory usage if the the average string size is greater than 512.
-    release_large_columns<BinaryColumn>(config::vector_chunk_size * 512);
+    release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
 
     return ScanNode::close(state);
 }
@@ -197,7 +197,7 @@ OlapScanNode::~OlapScanNode() {
 }
 
 void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
-    const size_t capacity = config::vector_chunk_size;
+    const size_t capacity = runtime_state()->chunk_size();
     for (int i = 0; i < count; i++) {
         ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity, force_column_pool));
         {
@@ -503,8 +503,8 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     }
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / config::vector_chunk_size;
-    _chunks_per_scanner += (config::doris_scanner_row_num % config::vector_chunk_size != 0);
+    _chunks_per_scanner = config::doris_scanner_row_num / runtime_state()->chunk_size();
+    _chunks_per_scanner += (config::doris_scanner_row_num % runtime_state()->chunk_size() != 0);
     int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);

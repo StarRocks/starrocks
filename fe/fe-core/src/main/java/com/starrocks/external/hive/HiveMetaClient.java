@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.external.hive;
 
@@ -15,6 +15,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.ObejctStorageUtils;
+import com.starrocks.external.hive.text.TextFileFormatDesc;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -188,7 +189,8 @@ public class HiveMetaClient {
 
             String path = ObejctStorageUtils.formatObjectStoragePath(sd.getLocation());
             List<HdfsFileDesc> fileDescs = getHdfsFileDescs(path,
-                    ObejctStorageUtils.isObjectStorage(path) || HdfsFileFormat.isSplittable(sd.getInputFormat()));
+                    ObejctStorageUtils.isObjectStorage(path) || HdfsFileFormat.isSplittable(sd.getInputFormat()),
+                    sd);
             return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
         } catch (NoSuchObjectException e) {
             throw new DdlException("get hive partition meta data failed: "
@@ -452,10 +454,16 @@ public class HiveMetaClient {
         }
     }
 
-    private List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable) throws Exception {
+    private List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
+                                                StorageDescriptor sd) throws Exception {
         URI uri = new URI(dirPath);
         FileSystem fileSystem = getFileSystem(uri);
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
+        // get properties like 'field.delim' and 'line.delim' from StorageDescriptor
+        TextFileFormatDesc textFileFormatDesc = new TextFileFormatDesc(
+                sd.getSerdeInfo().getParameters().getOrDefault("field.delim", ","),
+                sd.getSerdeInfo().getParameters().getOrDefault("line.delim", "\n"));
+
         // fileSystem.listLocatedStatus is an api to list all statuses and
         // block locations of the files in the given path in one operation.
         // The performance is better than getting status and block location one by one.
@@ -470,7 +478,7 @@ public class HiveMetaClient {
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
-                        ImmutableList.copyOf(fileBlockDescs), isSplittable));
+                        ImmutableList.copyOf(fileBlockDescs), isSplittable, textFileFormatDesc));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory

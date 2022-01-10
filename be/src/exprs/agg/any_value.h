@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -139,7 +139,7 @@ public:
         OP()(this->data(state), value);
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         update(ctx, columns, state, 0);
     }
@@ -192,7 +192,7 @@ public:
         OP()(this->data(state), value);
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         update(ctx, columns, state, 0);
     }

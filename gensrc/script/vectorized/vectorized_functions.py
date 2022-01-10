@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 # The format is:
 #   <function id> <name>, <return_type>, [<args>], <backend fn>,
@@ -583,4 +583,5 @@ vectorized_functions = [
     #[150014, 'array_max', 'DECIMAL128', ['ARRAY_DECIMAL128'], 'ArrayFunctions::array_max'],
 
     [150083, 'array_remove', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_remove'],
+    [150084, 'array_position', 'INT', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_position'],
 ]

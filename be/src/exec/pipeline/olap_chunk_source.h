@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -60,7 +60,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() override;
 
-    Status buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) override;
+    Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) override;
 
 private:
     Status _get_tablet(const TInternalScanRange* scan_range);

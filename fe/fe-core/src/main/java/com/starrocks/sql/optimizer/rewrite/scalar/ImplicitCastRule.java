@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
@@ -122,7 +122,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
-        Type compatibleType = TypeManager.getCompatibleTypeForBinary(type1, type2);
+        Type compatibleType =
+                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType().isEquivalence(), type1, type2);
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/tablet_updates.h"
 
@@ -695,24 +695,13 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             << " rowset:" << rowset_id;
     RowsetSharedPtr rowset = _get_rowset(rowset_id);
     auto manager = StorageEngine::instance()->update_manager();
-    // 1. load index
-    auto index_entry = manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
-    auto& index = index_entry->value();
-    auto st = index.load(&_tablet);
-    manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    if (!st.ok()) {
-        LOG(ERROR) << "_apply_rowset_commit error: load primary index failed: " << st << " " << debug_string();
-        manager->index_cache().remove(index_entry);
-        _set_error();
-        return;
-    }
-    // 2. load upserts/deletes in rowset
+
+    // 1. load upserts/deletes in rowset
     auto state_entry = manager->update_state_cache().get_or_create(
             Substitute("$0_$1", tablet_id, rowset->rowset_id().to_string()));
     state_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& state = state_entry->value();
-    st = state.load(&_tablet, rowset.get());
+    auto st = state.load(&_tablet, rowset.get());
     manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
     if (!st.ok()) {
         LOG(ERROR) << "_apply_rowset_commit error: load rowset update state failed: " << st << " " << debug_string();
@@ -720,6 +709,21 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         _set_error();
         return;
     }
+
+    std::lock_guard lg(_index_lock);
+    // 2. load index
+    auto index_entry = manager->index_cache().get_or_create(tablet_id);
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    auto& index = index_entry->value();
+    st = index.load(&_tablet);
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+    if (!st.ok()) {
+        LOG(ERROR) << "_apply_rowset_commit error: load primary index failed: " << st << " " << debug_string();
+        manager->index_cache().remove(index_entry);
+        _set_error();
+        return;
+    }
+
     int64_t t_load = MonotonicMillis();
     st = state.apply(&_tablet, rowset.get(), rowset_id, index);
     if (!st.ok()) {
@@ -731,8 +735,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     int64_t t_apply = MonotonicMillis();
 
     // 3. generate delvec
-    PrimaryIndex::DeletesMap new_deletes;
     // add initial empty delvec for new segments
+    PrimaryIndex::DeletesMap new_deletes;
+    size_t delete_op = 0;
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         new_deletes[rowset_id + i] = {};
     }
@@ -743,7 +748,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
     }
-    size_t delete_op = 0;
+
     for (const auto& one_delete : state.deletes()) {
         delete_op += one_delete->size();
         index.erase(*one_delete, &new_deletes);
@@ -2431,6 +2436,42 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }
     }
+    return Status::OK();
+}
+
+Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
+                                                    EditVersion* read_version, uint32_t* next_rowset_id,
+                                                    std::vector<std::vector<uint64_t>*>* rss_rowids) {
+    std::lock_guard lg(_index_lock);
+    {
+        // get next_rowset_id and read_version to identify conflict
+        std::lock_guard wl(_lock);
+        *next_rowset_id = _next_rowset_id;
+        *read_version = _edit_version_infos[_apply_version_idx]->version;
+    }
+
+    auto manager = StorageEngine::instance()->update_manager();
+    auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    auto& index = index_entry->value();
+    auto st = index.load(tablet);
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+    if (!st.ok()) {
+        LOG(ERROR) << "prepare_partial_update_states error: load primary index failed: " << st << " " << debug_string();
+        manager->index_cache().remove(index_entry);
+        _set_error();
+        return Status::InternalError("prepare_partial_update_states error: load primary index failed");
+    }
+
+    // get rss_rowids for each segment of rowset
+    uint32_t num_segments = upserts.size();
+    for (size_t i = 0; i < num_segments; i++) {
+        auto& pks = *upserts[i];
+        index.get(pks, (*rss_rowids)[i]);
+    }
+    // index may be used for later commits, keep in cache
+    manager->index_cache().release(index_entry);
+
     return Status::OK();
 }
 

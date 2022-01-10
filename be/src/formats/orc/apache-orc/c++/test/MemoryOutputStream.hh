@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_MEMORYOUTPUTSTREAM_HH
-#define ORC_MEMORYOUTPUTSTREAM_HH
+#pragma once
 
 #include <iostream>
 
@@ -59,5 +58,3 @@ private:
     uint64_t length, naturalWriteSize;
 };
 } // namespace orc
-
-#endif

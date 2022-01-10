@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/bitmap_functions.h"
 
@@ -16,9 +16,9 @@ namespace starrocks::vectorized {
 
 ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
-    ColumnBuilder<TYPE_OBJECT> builder;
 
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
@@ -52,9 +52,9 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
 
 ColumnPtr BitmapFunctions::bitmap_hash(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
-    ColumnBuilder<TYPE_OBJECT> builder;
 
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
         BitmapValue bitmap;
 
@@ -73,9 +73,9 @@ ColumnPtr BitmapFunctions::bitmap_hash(FunctionContext* context, const starrocks
 
 ColumnPtr BitmapFunctions::bitmap_count(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
-    ColumnBuilder<TYPE_BIGINT> builder;
 
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> builder(size);
     for (int row = 0; row < size; ++row) {
         int64_t value = viewer.is_null(row) ? 0 : viewer.value(row)->cardinality();
         builder.append(value);
@@ -95,9 +95,8 @@ ColumnPtr BitmapFunctions::bitmap_or(FunctionContext* context, const starrocks::
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_OBJECT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
-
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             builder.append_null();
@@ -120,9 +119,8 @@ ColumnPtr BitmapFunctions::bitmap_and(FunctionContext* context, const starrocks:
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_OBJECT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
-
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             builder.append_null();
@@ -152,11 +150,10 @@ ColumnPtr BitmapFunctions::bitmap_from_string(FunctionContext* context, const Co
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
-    ColumnBuilder<TYPE_OBJECT> builder;
-
     std::vector<uint64_t> bits;
 
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
@@ -207,9 +204,8 @@ ColumnPtr BitmapFunctions::bitmap_andnot(FunctionContext* context, const starroc
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_OBJECT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
-
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             builder.append_null();
@@ -232,9 +228,8 @@ ColumnPtr BitmapFunctions::bitmap_xor(FunctionContext* context, const starrocks:
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_OBJECT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
-
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             builder.append_null();
@@ -257,9 +252,8 @@ ColumnPtr BitmapFunctions::bitmap_remove(FunctionContext* context, const starroc
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
     ColumnViewer<TYPE_BIGINT> rhs(columns[1]);
 
-    ColumnBuilder<TYPE_OBJECT> builder;
-
     size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             builder.append_null();

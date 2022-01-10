@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <limits>
 
@@ -125,8 +125,8 @@ bool test_simd_select_if_wrapper() {
 
 template <PrimitiveType... TYPE>
 bool test_simd_select_if_all() {
-    constexpr int batch_size = 4095;
-    return (... && test_simd_select_if_wrapper<TYPE, batch_size>());
+    constexpr int chunk_size = 4095;
+    return (... && test_simd_select_if_wrapper<TYPE, chunk_size>());
 }
 
 PARALLEL_TEST(SIMDSelectorTest, SelectorTest) {

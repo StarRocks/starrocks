@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "aggregate_distinct_blocking_sink_operator.h"
 
@@ -45,7 +45,7 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk
 }
 
 Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    DCHECK_LE(chunk->num_rows(), state->batch_size());
+    DCHECK_LE(chunk->num_rows(), state->chunk_size());
     _aggregator->evaluate_exprs(chunk.get());
 
     {

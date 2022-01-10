@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/table_function_node.h"
 
@@ -90,7 +90,7 @@ Status TableFunctionNode::open(RuntimeState* state) {
 Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    int chunk_size = config::vector_chunk_size;
+    int chunk_size = runtime_state()->chunk_size();
     int reserve_chunk_size = chunk_size;
     std::vector<ColumnPtr> output_columns;
 

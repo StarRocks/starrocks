@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/json_functions.h"
 
@@ -173,8 +173,8 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
 
     simdjson::ondemand::parser parser;
 
-    ColumnBuilder<primitive_type> result;
     auto size = columns[0]->size();
+    ColumnBuilder<primitive_type> result(size);
     for (int row = 0; row < size; ++row) {
         if (json_viewer.is_null(row) || path_viewer.is_null(row)) {
             result.append_null();

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/json_scanner.h"
 
@@ -35,7 +35,7 @@ JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _next_range(0),
-          _max_chunk_size(config::vector_chunk_size),
+          _max_chunk_size(state->chunk_size()),
           _cur_file_reader(nullptr),
           _cur_file_eof(true) {}
 

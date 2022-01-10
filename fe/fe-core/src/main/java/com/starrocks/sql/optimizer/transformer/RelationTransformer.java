@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
@@ -346,6 +347,9 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(),
                     colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.ICEBERG.equals(node.getTable().getType())) {
+            scanOperator = new LogicalIcebergScanOperator(node.getTable(), node.getTable().getType(),
+                    colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalSchemaScanOperator(node.getTable(),
@@ -490,9 +494,9 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                     new ColumnRefSet(leftPlan.getOutputColumn()),
                     new ColumnRefSet(rightPlan.getOutputColumn()), conjuncts);
 
-            Preconditions.checkState(eqPredicate.size() > 0);
-
-            onPredicate = Utils.compoundAnd(eqPredicate.get(0), onPredicate);
+            if (eqPredicate.size() > 0) {
+                onPredicate = Utils.compoundAnd(eqPredicate.get(0), onPredicate);
+            }
         }
 
         ExpressionMapping outputExpressionMapping;

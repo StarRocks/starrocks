@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -79,6 +79,7 @@ private:
     size_t _probe_rows_index = 0;
 
     bool _eos = false;
+    bool _need_create_tuple_columns = true;
 
     Buffer<SlotDescriptor*> _col_types;
     Buffer<TupleId> _output_build_tuple_ids;

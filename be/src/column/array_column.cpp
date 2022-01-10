@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/array_column.h"
 
@@ -181,27 +181,11 @@ void ArrayColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, s
     }
 }
 
-void ArrayColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
-    reserve(batch_size);
-    for (size_t i = 0; i < batch_size; ++i) {
+void ArrayColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+    reserve(chunk_size);
+    for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
-}
-
-size_t ArrayColumn::serialize_size() const {
-    return _offsets->serialize_size() + _elements->serialize_size();
-}
-
-uint8_t* ArrayColumn::serialize_column(uint8_t* dst) {
-    dst = _offsets->serialize_column(dst);
-    dst = _elements->serialize_column(dst);
-    return dst;
-}
-
-const uint8_t* ArrayColumn::deserialize_column(const uint8_t* src) {
-    src = _offsets->deserialize_column(src);
-    src = _elements->deserialize_column(src);
-    return src;
 }
 
 MutableColumnPtr ArrayColumn::clone_empty() const {

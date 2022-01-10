@@ -8,6 +8,7 @@
 #include "column/chunk.h"
 #include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -345,6 +346,15 @@ std::string PipelineDriver::to_readable_string() const {
     }
     ss << "]";
     return ss.str();
+}
+
+starrocks::workgroup::WorkGroup* PipelineDriver::workgroup() {
+    DCHECK(_workgroup != nullptr);
+    return _workgroup;
+}
+
+void PipelineDriver::set_workgroup(starrocks::workgroup::WorkGroup* wg) {
+    this->_workgroup = wg;
 }
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {

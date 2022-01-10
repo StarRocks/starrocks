@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
@@ -337,7 +337,7 @@ TEST_F(StringFunctionSubstrTest, substringNullTest) {
     pos->append(5);
     len->append(2);
 
-    ColumnBuilder<TYPE_VARCHAR> b;
+    ColumnBuilder<TYPE_VARCHAR> b(config::vector_chunk_size);
 
     for (int j = 0; j < 20; ++j) {
         b.append("test" + std::to_string(j), j % 2 == 0);

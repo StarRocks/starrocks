@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.join;
 
@@ -44,7 +44,7 @@ public class ReorderJoinRule extends Rule {
             for (OptExpression innerJoinRoot : innerJoinTrees) {
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(innerJoinRoot);
 
-                enumerate(new JoinReorderLeftDeep(context), context, (MultiJoinOperator) innerJoinRoot.getOp(),
+                enumerate(new JoinReorderLeftDeep(context), context, (LogicalProjectJoinOperator) innerJoinRoot.getOp(),
                         multiJoinNode);
                 //If there is no statistical information, the DP and greedy reorder algorithm are disabled,
                 //and the query plan degenerates to the left deep tree
@@ -56,12 +56,12 @@ public class ReorderJoinRule extends Rule {
                         && context.getSessionVariable().isCboEnableDPJoinReorder()) {
                     //10 table join reorder takes more than 100ms,
                     //so the join reorder using dp is currently controlled below 10.
-                    enumerate(new JoinReorderDP(context), context, (MultiJoinOperator) innerJoinRoot.getOp(),
+                    enumerate(new JoinReorderDP(context), context, (LogicalProjectJoinOperator) innerJoinRoot.getOp(),
                             multiJoinNode);
                 }
 
                 if (context.getSessionVariable().isCboEnableGreedyJoinReorder()) {
-                    enumerate(new JoinReorderGreedy(context), context, (MultiJoinOperator) innerJoinRoot.getOp(),
+                    enumerate(new JoinReorderGreedy(context), context, (LogicalProjectJoinOperator) innerJoinRoot.getOp(),
                             multiJoinNode);
                 }
             }
@@ -73,12 +73,12 @@ public class ReorderJoinRule extends Rule {
                                       List<OptExpression> results,
                                       boolean findNewRoot) {
         Operator operator = root.getOp();
-        if (operator instanceof MultiJoinOperator) {
+        if (operator instanceof LogicalProjectJoinOperator) {
             // If the user specifies joinHint, then no reorder
-            if (!((MultiJoinOperator) operator).getJoinHint().isEmpty()) {
+            if (!((LogicalProjectJoinOperator) operator).getJoinHint().isEmpty()) {
                 return;
             }
-            MultiJoinOperator joinOperator = (MultiJoinOperator) operator;
+            LogicalProjectJoinOperator joinOperator = (LogicalProjectJoinOperator) operator;
             if (joinOperator.isInnerOrCrossJoin()) {
                 // For A inner join (B inner join C), we only think A is root tree
                 if (!findNewRoot) {
@@ -98,7 +98,7 @@ public class ReorderJoinRule extends Rule {
     }
 
     void enumerate(JoinOrder reorderAlgorithm, OptimizerContext context,
-                   MultiJoinOperator root,
+                   LogicalProjectJoinOperator root,
                    MultiJoinNode multiJoinNode) {
         reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
                 multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
@@ -137,7 +137,7 @@ public class ReorderJoinRule extends Rule {
                             multiJoinNode.getExpressionMap().get(context.getColumnRefFactory().getColumnRef(id)));
                 }
             }
-            ((MultiJoinOperator) joinExpr.getOp()).setProjectOperator(new LogicalProjectOperator(projectMap));
+            ((LogicalProjectJoinOperator) joinExpr.getOp()).setProjectOperator(new LogicalProjectOperator(projectMap));
 
             ColumnRefSet requireInputColumns = new ColumnRefSet(new ArrayList<>(projectMap.keySet()));
             joinExpr = new OutputColumnsPrune(context).rewrite(joinExpr, requireInputColumns);
@@ -170,11 +170,11 @@ public class ReorderJoinRule extends Rule {
                     return optExpression;
                 }
 
-                MultiJoinOperator multiJoinOperator = new MultiJoinOperator(
+                LogicalProjectJoinOperator logicalProjectJoinOperator = new LogicalProjectJoinOperator(
                         (LogicalProjectOperator) optExpression.getOp(),
                         (LogicalJoinOperator) optExpression.inputAt(0).getOp());
-                multiJoinOperator.setGroup(optExpression.getGroupExpression().getGroup());
-                OptExpression multiOpt = OptExpression.create(multiJoinOperator, optExpression.inputAt(0).getInputs());
+                logicalProjectJoinOperator.setGroup(optExpression.getGroupExpression().getGroup());
+                OptExpression multiOpt = OptExpression.create(logicalProjectJoinOperator, optExpression.inputAt(0).getInputs());
                 multiOpt.deriveLogicalPropertyItself();
 
                 return multiOpt;
@@ -207,10 +207,10 @@ public class ReorderJoinRule extends Rule {
         public OptExpression visitMultiJoin(OptExpression optExpression, Void context) {
             visit(optExpression, context);
 
-            MultiJoinOperator multiJoinOperator = (MultiJoinOperator) optExpression.getOp();
+            LogicalProjectJoinOperator logicalProjectJoinOperator = (LogicalProjectJoinOperator) optExpression.getOp();
 
             OptExpression projectOpt =
-                    OptExpression.create(multiJoinOperator.getJoinOperator(), optExpression.getInputs());
+                    OptExpression.create(logicalProjectJoinOperator.getJoinOperator(), optExpression.getInputs());
             projectOpt.deriveLogicalPropertyItself();
 
             ExpressionContext expressionContext = new ExpressionContext(projectOpt);
@@ -220,7 +220,7 @@ public class ReorderJoinRule extends Rule {
             projectOpt.setStatistics(expressionContext.getStatistics());
 
             OptExpression joinOpt =
-                    OptExpression.create(multiJoinOperator.getProjectOperator(), Lists.newArrayList(projectOpt));
+                    OptExpression.create(logicalProjectJoinOperator.getProjectOperator(), Lists.newArrayList(projectOpt));
             joinOpt.deriveLogicalPropertyItself();
 
             expressionContext = new ExpressionContext(joinOpt);
@@ -256,8 +256,8 @@ public class ReorderJoinRule extends Rule {
 
         @Override
         public OptExpression visitMultiJoin(OptExpression optExpression, ColumnRefSet requireColumns) {
-            MultiJoinOperator multiJoinOperator = (MultiJoinOperator) optExpression.getOp();
-            ColumnRefSet outputColumns = multiJoinOperator.getOutputColumns();
+            LogicalProjectJoinOperator logicalProjectJoinOperator = (LogicalProjectJoinOperator) optExpression.getOp();
+            ColumnRefSet outputColumns = logicalProjectJoinOperator.getOutputColumns();
 
             ColumnRefSet newOutputColumns = new ColumnRefSet();
             for (int id : outputColumns.getColumnIds()) {
@@ -266,7 +266,7 @@ public class ReorderJoinRule extends Rule {
                 }
             }
 
-            LogicalProjectOperator projectOperator = multiJoinOperator.getProjectOperator();
+            LogicalProjectOperator projectOperator = logicalProjectJoinOperator.getProjectOperator();
             Map<ColumnRefOperator, ScalarOperator> newProject = new HashMap<>();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
                 if (newOutputColumns.contains(entry.getKey().getId())) {
@@ -274,12 +274,12 @@ public class ReorderJoinRule extends Rule {
                 }
             }
 
-            multiJoinOperator.setProjectOperator(new LogicalProjectOperator(newProject));
-            requireColumns = multiJoinOperator.getRequiredChildInputColumns();
+            logicalProjectJoinOperator.setProjectOperator(new LogicalProjectOperator(newProject));
+            requireColumns = logicalProjectJoinOperator.getRequiredChildInputColumns();
             OptExpression left = rewrite(optExpression.inputAt(0), (ColumnRefSet) requireColumns.clone());
             OptExpression right = rewrite(optExpression.inputAt(1), (ColumnRefSet) requireColumns.clone());
 
-            OptExpression joinOpt = OptExpression.create(multiJoinOperator, Lists.newArrayList(left, right));
+            OptExpression joinOpt = OptExpression.create(logicalProjectJoinOperator, Lists.newArrayList(left, right));
             joinOpt.deriveLogicalPropertyItself();
 
             ExpressionContext expressionContext = new ExpressionContext(joinOpt);

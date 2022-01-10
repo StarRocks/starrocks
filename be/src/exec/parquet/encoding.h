@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -40,7 +40,7 @@ public:
     Decoder() = default;
     virtual ~Decoder() = default;
 
-    virtual Status set_dict(size_t num_values, Decoder* decoder) {
+    virtual Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) {
         return Status::NotSupported("set_dict is not supported");
     }
 

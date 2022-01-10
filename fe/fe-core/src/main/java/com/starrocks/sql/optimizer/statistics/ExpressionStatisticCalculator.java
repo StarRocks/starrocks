@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -64,7 +64,7 @@ public class ExpressionStatisticCalculator {
             OptionalDouble value = doubleValueFromConstant(operator);
             if (value.isPresent()) {
                 return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
-                        operator.getType().getSlotSize(), 1);
+                        operator.getType().getTypeSize(), 1);
             } else if (operator.getType().isStringType()) {
                 return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
             } else {
@@ -87,7 +87,7 @@ public class ExpressionStatisticCalculator {
             double distinctValues = childrenColumnStatistics.stream().mapToDouble(
                     ColumnStatistic::getDistinctValuesCount).sum();
             return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
-                    caseWhenOperator.getType().getSlotSize(), distinctValues);
+                    caseWhenOperator.getType().getTypeSize(), distinctValues);
         }
 
         @Override
@@ -154,7 +154,7 @@ public class ExpressionStatisticCalculator {
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.COUNT:
                     return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
-                            callOperator.getType().getSlotSize(), rowCount);
+                            callOperator.getType().getTypeSize(), rowCount);
                 default:
                     return ColumnStatistic.unknown();
             }
@@ -165,13 +165,13 @@ public class ExpressionStatisticCalculator {
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.MAX:
                     value = columnStatistic.getMaxValue();
-                    return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
+                    return new ColumnStatistic(value, value, 0, callOperator.getType().getTypeSize(), 1);
                 case FunctionSet.MIN:
                     value = columnStatistic.getMinValue();
-                    return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
+                    return new ColumnStatistic(value, value, 0, callOperator.getType().getTypeSize(), 1);
                 case FunctionSet.ANY_VALUE:
                     value = (columnStatistic.getMaxValue() - columnStatistic.getMinValue()) / 2;
-                    return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
+                    return new ColumnStatistic(value, value, 0, callOperator.getType().getTypeSize(), 1);
                 case FunctionSet.YEAR:
                     int minValue = 1700;
                     int maxValue = 2100;
@@ -182,31 +182,37 @@ public class ExpressionStatisticCalculator {
                         LOG.warn("get date type column statistics min/max failed. " + e);
                     }
                     return new ColumnStatistic(minValue, maxValue, 0,
-                            callOperator.getType().getSlotSize(),
+                            callOperator.getType().getTypeSize(),
                             Math.min(columnStatistic.getDistinctValuesCount(), (maxValue - minValue + 1)));
                 case FunctionSet.MONTH:
                     return new ColumnStatistic(1, 12, 0,
-                            callOperator.getType().getSlotSize(),
+                            callOperator.getType().getTypeSize(),
                             Math.min(columnStatistic.getDistinctValuesCount(), 12));
                 case FunctionSet.DAY:
                     return new ColumnStatistic(1, 31, 0,
-                            callOperator.getType().getSlotSize(),
+                            callOperator.getType().getTypeSize(),
                             Math.min(columnStatistic.getDistinctValuesCount(), 31));
                 case FunctionSet.HOUR:
                     return new ColumnStatistic(0, 23, 0,
-                            callOperator.getType().getSlotSize(),
+                            callOperator.getType().getTypeSize(),
                             Math.min(columnStatistic.getDistinctValuesCount(), 24));
                 case FunctionSet.MINUTE:
                 case FunctionSet.SECOND:
                     return new ColumnStatistic(0, 59, 0,
-                            callOperator.getType().getSlotSize(),
+                            callOperator.getType().getTypeSize(),
                             Math.min(columnStatistic.getDistinctValuesCount(), 60));
                 case FunctionSet.COUNT:
                     return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
-                            callOperator.getType().getSlotSize(), rowCount);
-                default:
-                    // return child column statistic default
+                            callOperator.getType().getTypeSize(), rowCount);
+                case FunctionSet.MULTI_DISTINCT_COUNT:
+                    return new ColumnStatistic(0, columnStatistic.getDistinctValuesCount(), 0,
+                            callOperator.getType().getTypeSize(), rowCount);
+                // use child column statistics for now
+                case FunctionSet.SUM:
+                case FunctionSet.AVG:
                     return columnStatistic;
+                default:
+                    return ColumnStatistic.unknown();
             }
         }
 
@@ -218,12 +224,12 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.ADD:
                     return new ColumnStatistic(left.getMinValue() + right.getMinValue(),
                             left.getMaxValue() + right.getMaxValue(), nullsFraction,
-                            callOperator.getType().getSlotSize(),
+                            callOperator.getType().getTypeSize(),
                             distinctValues);
                 case FunctionSet.SUBTRACT:
                     return new ColumnStatistic(left.getMinValue() - right.getMaxValue(),
                             left.getMaxValue() - right.getMinValue(), nullsFraction,
-                            callOperator.getType().getSlotSize(),
+                            callOperator.getType().getTypeSize(),
                             distinctValues);
                 case FunctionSet.MULTIPLY:
                     double multiplyMinValue = Math.min(Math.min(
@@ -235,7 +241,7 @@ public class ExpressionStatisticCalculator {
                                     left.getMinValue() * right.getMaxValue()),
                             left.getMaxValue() * right.getMinValue()), left.getMaxValue() * right.getMaxValue());
                     return new ColumnStatistic(multiplyMinValue, multiplyMaxValue, nullsFraction,
-                            callOperator.getType().getSlotSize(), distinctValues);
+                            callOperator.getType().getTypeSize(), distinctValues);
                 case FunctionSet.DIVIDE:
                     double divideMinValue = Math.min(Math.min(
                                     Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
@@ -248,11 +254,13 @@ public class ExpressionStatisticCalculator {
                                     left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     return new ColumnStatistic(divideMinValue, divideMaxValue, nullsFraction,
-                            callOperator.getType().getSlotSize(),
+                            callOperator.getType().getTypeSize(),
                             distinctValues);
-                default:
-                    // return child column statistic default
+                // use child column statistics for now
+                case FunctionSet.SUBSTRING:
                     return left;
+                default:
+                    return ColumnStatistic.unknown();
             }
         }
 
@@ -263,9 +271,12 @@ public class ExpressionStatisticCalculator {
                     double distinctValues = childColumnStatisticList.get(1).getDistinctValuesCount() +
                             childColumnStatisticList.get(2).getDistinctValuesCount();
                     return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
-                            callOperator.getType().getSlotSize(), distinctValues);
-                default:
+                            callOperator.getType().getTypeSize(), distinctValues);
+                // use child column statistics for now
+                case FunctionSet.SUBSTRING:
                     return childColumnStatisticList.get(0);
+                default:
+                    return ColumnStatistic.unknown();
             }
         }
 

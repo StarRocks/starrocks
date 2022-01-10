@@ -211,7 +211,7 @@ public:
     static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
                                                 TabletSchemaMap* schema_map);
     static std::shared_ptr<TabletSchema> create(const TabletSchema& tablet_schema,
-                                                const std::vector<std::size_t>& column_indexes);
+                                                const std::vector<int32_t>& column_indexes);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/utility_functions.h"
 
@@ -22,10 +22,10 @@ ColumnPtr UtilityFunctions::current_version(FunctionContext* context, const Colu
 }
 
 ColumnPtr UtilityFunctions::sleep(FunctionContext* context, const Columns& columns) {
-    ColumnBuilder<TYPE_BOOLEAN> result;
     ColumnViewer<TYPE_INT> data_column(columns[0]);
 
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -53,8 +53,7 @@ ColumnPtr UtilityFunctions::last_query_id(FunctionContext* context, const Column
 ColumnPtr UtilityFunctions::uuid(FunctionContext*, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
 
-    ColumnBuilder<TYPE_VARCHAR> result;
-    result.reserve(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
     for (int i = 0; i < num_rows; ++i) {
         result.append(generate_uuid_string());
     }

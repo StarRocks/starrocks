@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.join;
 
@@ -60,13 +60,25 @@ public class MultiJoinNode {
                                         List<ScalarOperator> predicates,
                                         Map<ColumnRefOperator, ScalarOperator> expressionMap) {
         Operator operator = node.getOp();
-        if (!(operator instanceof MultiJoinOperator)) {
+        if (!(operator instanceof LogicalProjectJoinOperator)) {
             atoms.add(node);
             return;
         }
 
-        MultiJoinOperator joinOperator = (MultiJoinOperator) operator;
+        LogicalProjectJoinOperator joinOperator = (LogicalProjectJoinOperator) operator;
         if (!joinOperator.isInnerOrCrossJoin()) {
+            atoms.add(node);
+            return;
+        }
+
+        ScalarOperator joinPredicate = joinOperator.getPredicate();
+
+        /*
+         * If the predicate is equal binary predicate and wasn't push down to child, it's
+         * means the predicate can't bind to any child, join reorder can't handle the predicate
+         *
+         * */
+        if (JoinPredicateUtils.isEqualBinaryPredicate(joinPredicate)) {
             atoms.add(node);
             return;
         }
@@ -91,7 +103,6 @@ public class MultiJoinNode {
         flattenJoinNode(node.inputAt(0), atoms, predicates, expressionMap);
         flattenJoinNode(node.inputAt(1), atoms, predicates, expressionMap);
         predicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
-        ScalarOperator joinPredicate = joinOperator.getPredicate();
         Preconditions.checkState(!JoinPredicateUtils.isEqualBinaryPredicate(joinPredicate));
         predicates.addAll(Utils.extractConjuncts(joinPredicate));
     }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <algorithm>
 
@@ -149,9 +149,9 @@ ColumnPtr haystack_vector_and_needle_vector(const ColumnPtr& haystack_ptr, const
     ColumnViewer<TYPE_VARCHAR> haystack_viewer(haystack_ptr);
     ColumnViewer<TYPE_VARCHAR> needle_viewer(needle_ptr);
     ColumnViewer<TYPE_INT> start_pos_viewer(start_pos_ptr);
-    ColumnBuilder<TYPE_INT> builder;
 
     size_t size = haystack_ptr->size();
+    ColumnBuilder<TYPE_INT> builder(size);
 
     for (size_t i = 0; i < size; ++i) {
         if (haystack_viewer.is_null(i) || needle_viewer.is_null(i) || start_pos_viewer.is_null(i)) {

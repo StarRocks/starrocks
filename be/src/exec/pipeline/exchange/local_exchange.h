@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -65,7 +65,7 @@ class PartitionExchanger final : public LocalExchanger {
                     const std::vector<ExprContext*>& partition_expr_ctxs)
                 : _source(source), _is_shuffle(is_shuffle), _partition_expr_ctxs(partition_expr_ctxs) {
             _partitions_columns.resize(partition_expr_ctxs.size());
-            _hash_values.reserve(config::vector_chunk_size);
+            _hash_values.reserve(source->runtime_state()->chunk_size());
         }
 
         // Divide chunk into shuffle partitions.

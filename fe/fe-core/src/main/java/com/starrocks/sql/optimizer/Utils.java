@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer;
 
@@ -356,7 +356,7 @@ public class Utils {
         for (ColumnRefOperator columnRefOperator : columnRefOperatorList) {
             Type columnType = columnRefOperator.getType();
             if (columnType.isScalarType()) {
-                int columnLength = columnType.getSlotSize();
+                int columnLength = columnType.getTypeSize();
                 if (columnLength < smallestColumnLength) {
                     smallestColumnRef = columnRefOperator;
                     smallestColumnLength = columnLength;

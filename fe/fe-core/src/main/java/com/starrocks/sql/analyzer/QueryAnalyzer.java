@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -38,6 +38,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SchemaTable;
@@ -864,7 +865,7 @@ public class QueryAnalyzer {
 
     private boolean isSupportedTable(Table table) {
         return table instanceof OlapTable || table instanceof HiveTable || table instanceof SchemaTable ||
-                table instanceof MysqlTable || table instanceof EsTable;
+                table instanceof MysqlTable || table instanceof EsTable || table instanceof IcebergTable;
     }
 
     Table resolveTable(TableRef tableRef) {

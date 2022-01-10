@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
@@ -53,8 +53,8 @@ public class CTASAnalyzer {
         QueryRelation queryRelation = new QueryAnalyzer(catalog, session)
                 .transformQueryStmt(queryStmt, new Scope(RelationId.anonymous(), new RelationFields()));
 
-        // Pair<TableName, ColumnName>
-        Map<Pair<String, String>, Table> columnNameToTable = Maps.newHashMap();
+        // Pair<TableName, Pair<ColumnName, ColumnAlias>>
+        Map<Pair<String, Pair<String, String>>, Table> columnNameToTable = Maps.newHashMap();
         Map<String, Table> tableRefToTable = Maps.newHashMap();
 
         // For replication_num, we select the maximum value of all tables replication_num
@@ -74,6 +74,8 @@ public class CTASAnalyzer {
                 for (String alias : aliases) {
                     tableRefToTable.put(alias, table);
                 }
+            } else {
+                tableRefToTable.put(table.getName(), table);
             }
         }
 
@@ -109,7 +111,8 @@ public class CTASAnalyzer {
                 SlotRef slotRef = (SlotRef) originExpression;
                 String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
                 Table table = tableRefToTable.get(tableName);
-                columnNameToTable.put(new Pair<>(tableName, slotRef.getColumnName()), table);
+                columnNameToTable.put(new Pair<>(tableName,
+                        new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
             }
         }
 
@@ -130,13 +133,13 @@ public class CTASAnalyzer {
             double candidateDistinctCountCount = 1.0;
             StatisticStorage currentStatisticStorage = Catalog.getCurrentStatisticStorage();
 
-            for (Map.Entry<Pair<String, String>, Table> columnEntry : columnNameToTable.entrySet()) {
-                String columnName = columnEntry.getKey().second;
+            for (Map.Entry<Pair<String, Pair<String, String>>, Table> columnEntry : columnNameToTable.entrySet()) {
+                Pair<String, String> columnName = columnEntry.getKey().second;
                 ColumnStatistic columnStatistic = currentStatisticStorage.getColumnStatistic(
-                        columnEntry.getValue(), columnName);
+                        columnEntry.getValue(), columnName.first);
                 double curDistinctValuesCount = columnStatistic.getDistinctValuesCount();
                 if (curDistinctValuesCount > candidateDistinctCountCount) {
-                    defaultColumnName = columnName;
+                    defaultColumnName = columnName.second;
                     candidateDistinctCountCount = curDistinctValuesCount;
                 }
             }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.join;
 
@@ -226,7 +226,7 @@ public abstract class JoinOrder {
         if (exprInfo.leftChildExpr != null) {
             cost += exprInfo.leftChildExpr.bestExprInfo.cost;
             cost += exprInfo.rightChildExpr.bestExprInfo.cost;
-            MultiJoinOperator joinOperator = (MultiJoinOperator) exprInfo.expr.getOp();
+            LogicalProjectJoinOperator joinOperator = (LogicalProjectJoinOperator) exprInfo.expr.getOp();
             if (penaltyCross && joinOperator.getJoinOperator().getJoinType().isCrossJoin()) {
                 cost *= Constants.CrossJoinCostPenalty;
             }
@@ -281,7 +281,7 @@ public abstract class JoinOrder {
         ColumnRefSet outputColumns = new ColumnRefSet();
         outputColumns.union(leftExprInfo.expr.getOutputColumns());
         outputColumns.union(rightExprInfo.expr.getOutputColumns());
-        MultiJoinOperator multiJoinOperator = new MultiJoinOperator(
+        LogicalProjectJoinOperator logicalProjectJoinOperator = new LogicalProjectJoinOperator(
                 new LogicalProjectOperator(
                         outputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
                                 .collect(Collectors.toMap(Function.identity(), Function.identity()))),
@@ -290,12 +290,12 @@ public abstract class JoinOrder {
         // In StarRocks, we only support hash join.
         // So we always use small table as right child
         if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
-            OptExpression joinExpr = OptExpression.create(multiJoinOperator, rightExprInfo.expr,
+            OptExpression joinExpr = OptExpression.create(logicalProjectJoinOperator, rightExprInfo.expr,
                     leftExprInfo.expr);
             joinExpr.deriveLogicalPropertyItself();
             return new ExpressionInfo(joinExpr, rightGroup, leftGroup);
         } else {
-            OptExpression joinExpr = OptExpression.create(multiJoinOperator, leftExprInfo.expr,
+            OptExpression joinExpr = OptExpression.create(logicalProjectJoinOperator, leftExprInfo.expr,
                     rightExprInfo.expr);
             joinExpr.deriveLogicalPropertyItself();
             return new ExpressionInfo(joinExpr, leftGroup, rightGroup);
@@ -307,17 +307,17 @@ public abstract class JoinOrder {
             return;
         }
 
-        if (!(exprInfo.expr.getOp() instanceof MultiJoinOperator)) {
+        if (!(exprInfo.expr.getOp() instanceof LogicalProjectJoinOperator)) {
             Preconditions.checkState(false);
         }
 
-        MultiJoinOperator multiJoinOperator = (MultiJoinOperator) exprInfo.expr.getOp();
+        LogicalProjectJoinOperator logicalProjectJoinOperator = (LogicalProjectJoinOperator) exprInfo.expr.getOp();
 
         Map<ColumnRefOperator, ScalarOperator> projection =
-                new HashMap<>(multiJoinOperator.getProjectOperator().getColumnRefMap());
+                new HashMap<>(logicalProjectJoinOperator.getProjectOperator().getColumnRefMap());
         projection.putAll(expression);
         exprInfo.expr = OptExpression.create(
-                new MultiJoinOperator(new LogicalProjectOperator(projection), multiJoinOperator.getJoinOperator()),
+                new LogicalProjectJoinOperator(new LogicalProjectOperator(projection), logicalProjectJoinOperator.getJoinOperator()),
                 exprInfo.expr.getInputs());
         exprInfo.expr.deriveLogicalPropertyItself();
     }

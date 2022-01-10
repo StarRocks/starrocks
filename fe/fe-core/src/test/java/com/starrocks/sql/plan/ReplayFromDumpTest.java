@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -222,7 +222,8 @@ public class ReplayFromDumpTest {
         // This test has column statistics and accurate table row count
         SessionVariable sessionVariable = VariableMgr.newSessionVariable();
         sessionVariable.setNewPlanerAggStage(1);
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"), sessionVariable);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"), sessionVariable);
         Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
     }
 
@@ -291,9 +292,9 @@ public class ReplayFromDumpTest {
 
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  15:CROSS JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("  14:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates: (CAST(2: v2 AS DOUBLE) = CAST(8: v2 AS DOUBLE)) OR (3: v3 = 8: v2), " +
+                "  |  predicates: (2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2), " +
                 "CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1'\n"));
     }
 
@@ -313,7 +314,7 @@ public class ReplayFromDumpTest {
     public void testMultiCountDistinct() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains(" 33:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(replayPair.second.contains("  32:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), multi_distinct_count(128: case), max(103: count)"));
     }
@@ -330,7 +331,8 @@ public class ReplayFromDumpTest {
     public void test() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
+                        TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("  12:Decode\n" +
                 "  |  <dict id 42> : <string id 18>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;

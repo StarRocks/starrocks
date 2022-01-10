@@ -59,8 +59,7 @@
 // has a key of "foo" (type: string) with a value of 3 (type: int).
 //
 
-#ifndef UTIL_GTL_MAP_UTIL_H_
-#define UTIL_GTL_MAP_UTIL_H_
+#pragma once
 
 #include <glog/logging.h>
 
@@ -846,5 +845,3 @@ typename MapContainer::mapped_type* const ComputePairIfAbsent(MapContainer* cont
                                                               Function compute_pair_func) {
     return ComputePairIfAbsentReturnAbsense<MapContainer, Function>(container, key, compute_pair_func).first;
 };
-
-#endif // UTIL_GTL_MAP_UTIL_H_

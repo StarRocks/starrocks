@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_MYSQL_SCANNER_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_MYSQL_SCANNER_H
+#pragma once
 
 #include <cstdlib>
 #include <string>
@@ -58,7 +57,7 @@ public:
 
     // query for STARROCKS
     Status query(const std::string& table, const std::vector<std::string>& fields,
-                 const std::vector<std::string>& filters);
+                 const std::vector<std::string>& filters, int64_t limit);
     Status get_next_row(char*** buf, unsigned long** lengths, bool* eos);
 
     int field_num() const { return _field_num; }
@@ -75,5 +74,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

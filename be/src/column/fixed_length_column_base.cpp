@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <gutil/strings/fastmem.h>
 
@@ -158,34 +158,12 @@ const uint8_t* FixedLengthColumnBase<T>::deserialize_and_append(const uint8_t* p
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
-    raw::make_room(&_data, batch_size);
-    for (size_t i = 0; i < batch_size; ++i) {
+void FixedLengthColumnBase<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+    raw::make_room(&_data, chunk_size);
+    for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(&_data[i], srcs[i].data, sizeof(T));
         srcs[i].data = srcs[i].data + sizeof(T);
     }
-}
-
-template <typename T>
-uint8_t* FixedLengthColumnBase<T>::serialize_column(uint8_t* dst) {
-    uint32_t size = byte_size();
-    encode_fixed32_le(dst, size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _data.data(), size);
-    dst += size;
-    return dst;
-}
-
-template <typename T>
-const uint8_t* FixedLengthColumnBase<T>::deserialize_column(const uint8_t* src) {
-    uint32_t size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
-    raw::make_room(&_data, size / sizeof(ValueType));
-    strings::memcpy_inlined(_data.data(), src, size);
-    src += size;
-    return src;
 }
 
 template <typename T>

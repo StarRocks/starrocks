@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -46,20 +46,6 @@ public class PruneProjectRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         if (((LogicalProjectOperator) input.getOp()).getColumnRefMap().isEmpty()) {
             return Lists.newArrayList(input.inputAt(0));
-            /*
-            //Preconditions.checkState(false);
-            Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
-
-            LogicalOperator logicalOperator = (LogicalOperator) input.inputAt(0).getOp();
-
-            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(
-                    logicalOperator.getOutputColumns(new ExpressionContext(input.inputAt(0))).getStream().
-                            mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList()));
-            projectMap.put(smallestColumn, smallestColumn);
-            LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
-            projectOperator.setLimit(input.getOp().getLimit());
-            return Lists.newArrayList(OptExpression.create(projectOperator, input.getInputs()));
-             */
         }
 
         return Collections.emptyList();

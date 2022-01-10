@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.operator;
 
@@ -10,12 +10,13 @@ public enum OperatorType {
     LOGICAL_PROJECT,
     LOGICAL_OLAP_SCAN,
     LOGICAL_HIVE_SCAN,
+    LOGICAL_ICEBERG_SCAN,
     LOGICAL_SCHEMA_SCAN,
     LOGICAL_MYSQL_SCAN,
     LOGICAL_ES_SCAN,
     LOGICAL_META_SCAN,
     LOGICAL_JOIN,
-    LOGICAL_MULTI_JOIN,
+    LOGICAL_PROJECT_JOIN,
     LOGICAL_AGGR,
     LOGICAL_FILTER,
     LOGICAL_LIMIT,
@@ -42,6 +43,7 @@ public enum OperatorType {
     PHYSICAL_HASH_JOIN,
     PHYSICAL_OLAP_SCAN,
     PHYSICAL_HIVE_SCAN,
+    PHYSICAL_ICEBERG_SCAN,
     PHYSICAL_SCHEMA_SCAN,
     PHYSICAL_MYSQL_SCAN,
     PHYSICAL_META_SCAN,

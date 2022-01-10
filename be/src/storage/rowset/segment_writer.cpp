@@ -111,7 +111,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.adaptive_page_format = (_opts.storage_format_version > 1);
         opts.meta = _footer.add_columns();
 
-        _init_column_meta(opts.meta, column_index, column);
+        if (!_opts.referenced_column_ids.empty()) {
+            DCHECK(_opts.referenced_column_ids.size() == num_columns);
+            _init_column_meta(opts.meta, _opts.referenced_column_ids[column_index], column);
+        } else {
+            _init_column_meta(opts.meta, column_index, column);
+        }
 
         // now we create zone map for key columns
         // and not support zone map for array type.
@@ -168,8 +173,9 @@ uint64_t SegmentWriter::estimate_segment_size() {
     return size;
 }
 
-Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size) {
+Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {
     RETURN_IF_ERROR(finalize_columns(index_size));
+    *footer_position = _wblock->bytes_appended();
     return finalize_footer(segment_file_size);
 }
 

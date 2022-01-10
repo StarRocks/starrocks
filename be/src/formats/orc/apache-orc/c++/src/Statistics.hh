@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_STATISTICS_IMPL_HH
-#define ORC_STATISTICS_IMPL_HH
+#pragma once
 
 #include <sstream>
 #include <utility>
@@ -1351,5 +1350,3 @@ public:
 std::unique_ptr<MutableColumnStatistics> createColumnStatistics(const Type& type);
 
 } // namespace orc
-
-#endif

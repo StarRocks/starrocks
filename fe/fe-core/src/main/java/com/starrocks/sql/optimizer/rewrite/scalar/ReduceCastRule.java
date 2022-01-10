@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
@@ -84,14 +84,13 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
     }
 
     public boolean checkCastTypeReduceAble(Type parent, Type child, Type grandChild) {
-        int parentSlotSize = parent.getSlotSize();
-        int childSlotSize = child.getSlotSize();
-        int grandChildSlotSize = grandChild.getSlotSize();
+        int parentSlotSize = parent.getTypeSize();
+        int childSlotSize = child.getTypeSize();
+        int grandChildSlotSize = grandChild.getTypeSize();
 
         if (parent.isDecimalOfAnyVersion() || child.isDecimalOfAnyVersion() || grandChild.isDecimalOfAnyVersion()) {
             return false;
         }
-
         if (parentSlotSize > childSlotSize && grandChildSlotSize > childSlotSize) {
             return false;
         }

@@ -1,17 +1,27 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.statistic.Constants;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
 import java.util.UUID;
+
+import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
 
 public class CTASAnalyzerTest {
@@ -32,6 +42,17 @@ public class CTASAnalyzerTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        // create statistic
+        CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
+        dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
+        try {
+            Catalog.getCurrentCatalog().createDb(dbStmt);
+        } catch (DdlException e) {
+            return;
+        }
+        starRocksAssert.useDatabase(Constants.StatisticsDBName);
+        starRocksAssert.withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
 
         starRocksAssert.withDatabase("ctas").useDatabase("ctas")
                 .withTable("create table test(c1 varchar(10),c2 varchar(10)) DISTRIBUTED BY HASH(c1) " +
@@ -130,6 +151,28 @@ public class CTASAnalyzerTest {
                         "\"colocate_with\" = \"groupa5\",\n" +
                         "\"in_memory\" = \"false\",\n" +
                         "\"storage_format\" = \"DEFAULT\"\n" +
+                        ");")
+                .withTable("CREATE TABLE `duplicate_table_with_null` (\n" +
+                        "    `k1`  date,\n" +
+                        "    `k2`  datetime,\n" +
+                        "    `k3`  char(20),\n" +
+                        "    `k4`  varchar(20),\n" +
+                        "    `k5`  boolean,\n" +
+                        "    `k6`  tinyint,\n" +
+                        "    `k7`  smallint,\n" +
+                        "    `k8`  int,\n" +
+                        "    `k9`  bigint,\n" +
+                        "    `k10` largeint,\n" +
+                        "    `k11` float,\n" +
+                        "    `k12` double,\n" +
+                        "    `k13` decimal(27,9)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "    \"replication_num\" = \"1\",\n" +
+                        "    \"storage_format\" = \"v2\"\n" +
                         ");");
     }
 
@@ -148,6 +191,31 @@ public class CTASAnalyzerTest {
         String CTASSQL2 = "create table test6 as select c1+c2 as cr from test3;";
 
         UtFrameUtils.parseStmtWithNewAnalyzer(CTASSQL2, ctx);
+
+        String CTASSQL3 = "create table t1 as select k1,k2,k3,k4,k5,k6,k7,k8 from duplicate_table_with_null;";
+
+        UtFrameUtils.parseStmtWithNewAnalyzer(CTASSQL3, ctx);
+    }
+
+    @Test
+    public void testSelectColumn() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String SQL = "create table t2 as select k1 as a,k2 as b from duplicate_table_with_null t2;";
+
+        StatisticStorage storage = new CachedStatisticStorage();
+        Table table = ctx.getCatalog().getDb("default_cluster:ctas")
+                .getTable("duplicate_table_with_null");
+        ColumnStatistic k1cs = new ColumnStatistic(1.5928416E9, 1.5982848E9,
+                1.5256461111280627E-4, 4.0, 64.0);
+        ColumnStatistic k2cs = new ColumnStatistic(1.5928416E9, 1.598350335E9,
+                1.5256461111280627E-4, 8.0, 66109.0);
+        storage.addColumnStatistic(table, "k1", k1cs);
+        storage.addColumnStatistic(table, "k2", k2cs);
+
+        ctx.getCatalog().setStatisticStorage(storage);
+
+        UtFrameUtils.parseStmtWithNewAnalyzer(SQL, ctx);
     }
 
     @Test

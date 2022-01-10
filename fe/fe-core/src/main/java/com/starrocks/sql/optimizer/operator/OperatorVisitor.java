@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.base.Preconditions;
@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
@@ -38,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -52,7 +54,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.rule.join.MultiJoinOperator;
+import com.starrocks.sql.optimizer.rule.join.LogicalProjectJoinOperator;
 
 /**
  * OperatorVisitor is used to traverse Operator
@@ -82,6 +84,11 @@ public abstract class OperatorVisitor<R, C> {
     public R visitLogicalHiveScan(LogicalHiveScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
+
+    public R visitLogicalIcebergScan(LogicalIcebergScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
 
     public R visitLogicalMysqlScan(LogicalMysqlScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
@@ -167,7 +174,7 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
-    public R visitMultiJoin(MultiJoinOperator node, C context) {
+    public R visitMultiJoin(LogicalProjectJoinOperator node, C context) {
         return visitOperator(node, context);
     }
 
@@ -195,6 +202,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalHiveScan(PhysicalHiveScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, C context) {
         return visitOperator(node, context);
     }
 

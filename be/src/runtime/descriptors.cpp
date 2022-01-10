@@ -105,6 +105,9 @@ std::string TableDescriptor::debug_string() const {
     return out.str();
 }
 
+IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc)
+        : TableDescriptor(tdesc), _table_location(tdesc.icebergTable.location), _columns(tdesc.icebergTable.columns) {}
+
 HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : TableDescriptor(tdesc),
           _columns(tdesc.hdfsTable.columns),
@@ -144,7 +147,7 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THdfsTable& thrift_table,
           _location(thrift_partition.location.suffix),
           _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
-Status HdfsPartitionDescriptor::create_part_key_exprs(ObjectPool* pool) {
+Status HdfsPartitionDescriptor::create_part_key_exprs(ObjectPool* pool, int32_t chunk_size) {
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals));
     return Status::OK();
 }
@@ -455,7 +458,8 @@ std::string RowDescriptor::debug_string() const {
     return ss.str();
 }
 
-Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl) {
+Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl,
+                             int32_t chunk_size) {
     *tbl = pool->add(new DescriptorTbl());
 
     // deserialize table descriptors first, they are being referenced by tuple descriptors
@@ -482,8 +486,12 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
             break;
         case TTableType::HDFS_TABLE: {
             auto* hdfs_desc = pool->add(new HdfsTableDescriptor(tdesc, pool));
-            RETURN_IF_ERROR(hdfs_desc->create_key_exprs(pool));
+            RETURN_IF_ERROR(hdfs_desc->create_key_exprs(pool, chunk_size));
             desc = hdfs_desc;
+            break;
+        }
+        case TTableType::ICEBERG_TABLE: {
+            desc = pool->add(new IcebergTableDescriptor(tdesc));
             break;
         }
         default:
