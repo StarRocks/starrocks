@@ -709,6 +709,21 @@ public class EditLog {
                     catalog.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
+                case OperationType.OP_CREATE_WORKGROUP: {
+                    final WorkGroupEntry entry = (WorkGroupEntry) journal.getData();
+                    catalog.getWorkGroupMgr().replayCreateWorkGroup(entry);
+                    break;
+                }
+                case OperationType.OP_ALTER_WORKGROUP: {
+                    final WorkGroupEntry entry = (WorkGroupEntry) journal.getData();
+                    catalog.getWorkGroupMgr().replayAlterWorkGroup(entry);
+                    break;
+                }
+                case OperationType.OP_DROP_WORKGROUP: {
+                    final WorkGroupEntry entry = (WorkGroupEntry) journal.getData();
+                    catalog.getWorkGroupMgr().replayDropWorkGroup(entry);
+                    break;
+                }
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     catalog.getSmallFileMgr().replayCreateFile(smallFile);
@@ -934,6 +949,16 @@ public class EditLog {
 
     public void logCreateTable(CreateTableInfo info) {
         logEdit(OperationType.OP_CREATE_TABLE, info);
+    }
+
+    public void logCreateWorkGroup(WorkGroupEntry entry) {
+        logEdit(OperationType.OP_CREATE_WORKGROUP, entry);
+    }
+    public void logDropWorkGroup(WorkGroupEntry entry) {
+        logEdit(OperationType.OP_CREATE_WORKGROUP, entry);
+    }
+    public void logAlterWorkGroup(WorkGroupEntry entry) {
+        logEdit(OperationType.OP_CREATE_WORKGROUP, entry);
     }
 
     public void logAddPartition(PartitionPersistInfo info) {

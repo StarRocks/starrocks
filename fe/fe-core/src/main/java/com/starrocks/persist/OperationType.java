@@ -184,6 +184,9 @@ public class OperationType {
     // resource 276~290
     public static final short OP_CREATE_RESOURCE = 276;
     public static final short OP_DROP_RESOURCE = 277;
+    public static final short OP_CREATE_WORKGROUP = 278;
+    public static final short OP_DROP_WORKGROUP = 279;
+    public static final short OP_ALTER_WORKGROUP = 280;
 
     // NOTICE newly added type starts from 10000, to avoid conflicting with community added type
 

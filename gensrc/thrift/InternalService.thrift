@@ -159,6 +159,31 @@ struct TQueryOptions {
   55: optional TPipelineProfileMode pipeline_profile_mode;
 }
 
+enum TWorkGroupType {
+  WG_REALTIME,
+  WG_NORMAL,
+  WG_DEFAULT
+}
+
+struct TWorkGroupClassifier {
+  1: optional i64 id
+  2: optional i64 workgroup_id
+  3: optional string user
+  4: optional string role
+  5: optional set<string> query_types
+  6: optional string source_ip
+}
+
+struct TWorkGroup {
+  1: optional string name
+  2: optional i64 id
+  3: optional i32 cpu_core_limit
+  4: optional double mem_limit
+  5: optional i32 concurrency_limit
+  6: optional TWorkGroupType workgroup_type
+  7: optional list<TWorkGroupClassifier> classifiers 
+}
+
 
 // A scan range plus the parameters needed to execute that scan.
 struct TScanRangeParams {
@@ -247,21 +272,6 @@ struct TQueryGlobals {
 
 enum InternalServiceVersion {
   V1
-}
-
-enum TWorkGroupType {
-    WG_NORMAL,
-    WG_DEFAULT,
-    WG_REALTIME
-}
-
-struct TWorkGroup {
-    1: optional i32 id
-    2: optional string name
-    3: optional i64 cpu_limit
-    4: optional i64 memory_limit
-    5: optional i64 concurrency
-    6: optional TWorkGroupType type
 }
 
 // ExecPlanFragment

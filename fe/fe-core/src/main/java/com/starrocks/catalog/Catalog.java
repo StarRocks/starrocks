@@ -446,6 +446,8 @@ public class Catalog {
 
     private long feStartTime;
 
+    private WorkGroupMgr workGroupMgr;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -582,6 +584,8 @@ public class Catalog {
         this.auth = new Auth();
         this.domainResolver = new DomainResolver(auth);
 
+        this.workGroupMgr = new WorkGroupMgr(this);
+
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
@@ -671,6 +675,10 @@ public class Catalog {
 
     public Auth getAuth() {
         return auth;
+    }
+
+    public WorkGroupMgr getWorkGroupMgr() {
+        return workGroupMgr;
     }
 
     public TabletScheduler getTabletScheduler() {

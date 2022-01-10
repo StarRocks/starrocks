@@ -28,12 +28,18 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.analysis.SetOperationStmt.Qualifier;
 import com.starrocks.analysis.SetOperationStmt.Operation;
 import com.starrocks.analysis.SetOperationStmt.SetOperand;
+import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.DropWorkGroupStmt;
+import com.starrocks.analysis.ShowWorkGroupsStmt;
+import com.starrocks.analysis.DescribeWorkGroupStmt;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
@@ -238,7 +244,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ENTER, KW_ERRORS, KW_EVENTS, KW_EXCEPT, KW_EXISTS, KW_EXPORT,
     KW_EXTERNAL, KW_EXTRACT,
     KW_FALSE, KW_FOLLOWER, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FILE, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORCE, KW_FORMAT, KW_FRONTEND, KW_FRONTENDS, KW_FULL, KW_FN, KW_FUNCTION, KW_FUNCTIONS,
-    KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUP, KW_GROUPING,
+    KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUP, KW_GROUPING, KW_RESOURCE_GROUP, KW_RESOURCE_GROUPS,
     KW_HASH, KW_HAVING, KW_HELP,KW_HLL, KW_HLL_UNION, KW_HOUR, KW_HUB,
     KW_IDENTIFIED, KW_IF, KW_IN, KW_INDEX, KW_INDEXES, KW_INFILE, KW_INSTALL,
     KW_INNER, KW_INSERT, KW_INT, KW_SIGNED, KW_INTERMEDIATE, KW_INTERSECT, KW_INTERVAL, KW_INTO, KW_IGNORE, KW_IS, KW_ISNULL, KW_ISOLATION,
@@ -289,7 +295,8 @@ nonterminal StatementBase stmt, add_stmt, add_param, show_stmt, show_param, help
     describe_stmt, alter_stmt,
     use_stmt, kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt, delete_param, 
     link_stmt, migrate_stmt, enter_stmt, unsupported_stmt, export_stmt, admin_stmt, truncate_stmt, refresh_stmt,
-    import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt;
+    import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt,
+    alter_resource_group_stmt;
 
 nonterminal ImportColumnDesc import_column_desc;
 nonterminal List<ImportColumnDesc> import_column_descs;
@@ -349,6 +356,8 @@ nonterminal Expr where_clause;
 nonterminal Expr where_clause_without_null;
 nonterminal Predicate predicate, between_predicate, comparison_predicate,
   compound_predicate, in_predicate, like_predicate, exists_predicate;
+nonterminal List<List<Predicate>> classifier_list;
+nonterminal List<Predicate> classifier, predicate_list;
 nonterminal ArrayList<Expr> opt_partition_by_clause;
 nonterminal Expr having_clause;
 nonterminal ArrayList<OrderByElement> order_by_elements, order_by_clause;
@@ -471,7 +480,7 @@ nonterminal String keyword, ident, ident_or_text, variable_name, text_or_passwor
 
 nonterminal String opt_db, procedure_or_function, opt_comment, opt_engine;
 nonterminal ColumnDef.DefaultValueDef opt_default_value;
-nonterminal Boolean opt_if_exists, opt_if_not_exists;
+nonterminal Boolean opt_if_exists, opt_if_not_exists, opt_or_replace;
 nonterminal Boolean opt_external;
 nonterminal Boolean opt_force;
 nonterminal IndexDef.IndexType opt_index_type;
@@ -750,6 +759,38 @@ create_analyze_stmt ::=
     :}
     ;
 
+classifier_list ::=
+    classifier:classifier
+    {:
+        List<List<Predicate>> list = new ArrayList<>();
+        list.add(classifier);
+        RESULT = list;
+    :}
+    | classifier_list:list COMMA classifier:classifier
+    {:
+        list.add(classifier);
+        RESULT = list;
+    :}
+    ;
+
+classifier ::= LPAREN predicate_list:list RPAREN
+    {:
+        RESULT = list;
+    :}
+    ;
+
+predicate_list ::= predicate:item
+    {:
+        List<Predicate> list = new ArrayList<>();
+        list.add(item);
+        RESULT = list;
+    :}
+    | predicate_list:list COMMA predicate:item
+    {:
+        list.add(item);
+        RESULT = list;
+    :}
+    ;
 // Alter Statement
 alter_stmt ::=
     KW_ALTER KW_TABLE table_name:tbl
@@ -798,6 +839,29 @@ alter_stmt ::=
       opt_datasource_properties:datasourceProperties
     {:
         RESULT = new AlterRoutineLoadStmt(jobLabel, jobProperties, datasourceProperties);
+    :}
+    | alter_resource_group_stmt:stmt
+    {:
+        RESULT = stmt;
+    :}
+    ;
+
+alter_resource_group_stmt ::=
+    KW_ALTER KW_RESOURCE_GROUP ident:name KW_ADD classifier_list:list
+    {:
+        RESULT = new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.AddClassifiers(list));
+    :}
+    |KW_ALTER KW_RESOURCE_GROUP ident:name KW_DROP LPAREN integer_list:list RPAREN
+    {:
+        RESULT = new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.DropClassifiers(list));
+    :}
+    |KW_ALTER KW_RESOURCE_GROUP ident:name KW_DROP KW_ALL
+    {:
+        RESULT = new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.DropAllClassifiers());
+    :}
+    |KW_ALTER KW_RESOURCE_GROUP ident:name KW_WITH key_value_map:properties
+    {:
+        RESULT = new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.AlterProperties(properties));
     :}
     ;
 
@@ -1212,6 +1276,12 @@ create_stmt ::=
     | create_analyze_stmt:stmt
     {:
         RESULT = stmt;
+    :}
+    | KW_CREATE KW_RESOURCE_GROUP opt_if_not_exists:if_not_exists opt_or_replace:or_replace ident:name
+      KW_TO classifier_list:classifiers
+      KW_WITH LPAREN key_value_map:properties RPAREN
+    {:
+        RESULT = new CreateWorkGroupStmt(name, if_not_exists, or_replace, classifiers, properties);
     :}
     ;
 
@@ -1779,6 +1849,10 @@ drop_stmt ::=
     {:
         RESULT = new DropAnalyzeJobStmt(id);
     :}
+    | KW_DROP KW_RESOURCE_GROUP ident:name
+    {:
+        RESULT = new DropWorkGroupStmt(name);
+    :}
     ;
 
 // Recover statement
@@ -2195,6 +2269,16 @@ opt_if_not_exists ::=
     :}
     ;
 
+opt_or_replace ::=
+    {:
+        RESULT = false;
+    :}
+    | KW_OR KW_REPLACE
+    {:
+        RESULT = true;
+    :}
+    ;
+
 opt_external ::=
     /* empty */
     {:
@@ -2513,6 +2597,10 @@ show_param ::=
     {:
         RESULT = new ShowAnalyzeStmt();
     :}
+    | KW_RESOURCE_GROUPS
+    {:
+        RESULT = new ShowWorkGroupsStmt();
+    :}
     ;
 
 opt_tmp ::=
@@ -2709,6 +2797,10 @@ describe_stmt ::=
     {:
         stmt.getQueryStmt().setIsExplain(true);
         RESULT = stmt;
+    :}
+    | describe_command KW_RESOURCE_GROUP ident:name
+    {:
+        RESULT = new DescribeWorkGroupStmt(name);
     :}
     ;
 
@@ -5073,6 +5165,8 @@ keyword ::=
     | KW_RESTORE:id
     {: RESULT = id; :}
     | KW_RETURNS:id
+    {: RESULT = id; :}
+    | KW_ROLE:id
     {: RESULT = id; :}
     | KW_ROLLBACK:id
     {: RESULT = id; :}

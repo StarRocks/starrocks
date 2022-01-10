@@ -17,23 +17,23 @@ WorkGroup::WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t m
           _concurrency(concurrency) {}
 
 WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
-    if (twg.__isset.cpu_limit) {
-        _cpu_limit = twg.cpu_limit;
+    if (twg.__isset.cpu_core_limit) {
+        _cpu_limit = twg.cpu_core_limit;
     } else {
         _cpu_limit = -1;
     }
-    if (twg.__isset.memory_limit) {
-        _memory_limit = twg.memory_limit;
+    if (twg.__isset.mem_limit) {
+        _memory_limit = twg.mem_limit;
     } else {
         _memory_limit = -1;
     }
-    if (twg.__isset.concurrency) {
-        _concurrency = twg.concurrency;
+    if (twg.__isset.concurrency_limit) {
+        _concurrency = twg.concurrency_limit;
     } else {
         _concurrency = -1;
     }
-    if (twg.__isset.type) {
-        switch (twg.type) {
+    if (twg.__isset.workgroup_type) {
+        switch (twg.workgroup_type) {
         case TWorkGroupType::WG_NORMAL:
             _type = WG_NORMAL;
             break;
