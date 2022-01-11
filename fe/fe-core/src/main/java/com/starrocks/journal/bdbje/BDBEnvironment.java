@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.logging.Level;
 
 /* this class contains the reference to bdb environment.
  * including all the opened databases and the replicationGroupAdmin.
@@ -130,12 +131,16 @@ public class BDBEnvironment {
             replicationConfig.setConsistencyPolicy(new NoConsistencyRequiredPolicy());
         }
 
+        java.util.logging.Logger parent = java.util.logging.Logger.getLogger("com.sleepycat.je");
+        parent.setLevel(Level.parse(Config.bdbje_log_level));
+
         // set environment config
         environmentConfig = new EnvironmentConfig();
         environmentConfig.setTransactional(true);
         environmentConfig.setAllowCreate(true);
         environmentConfig.setCachePercent(MEMORY_CACHE_PERCENT);
         environmentConfig.setLockTimeout(Config.bdbje_lock_timeout_second, TimeUnit.SECONDS);
+        environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdbje_log_level);
         if (isElectable) {
             Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),
                     getSyncPolicy(Config.replica_sync_policy), getAckPolicy(Config.replica_ack_policy));
