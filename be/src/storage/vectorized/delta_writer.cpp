@@ -282,12 +282,7 @@ Status DeltaWriter::commit() {
     }
 
     _cur_rowset->set_schema(&_tablet->tablet_schema());
-    auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
-                                                          _cur_rowset, false);
-    if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
-        _set_state(kAborted);
-        return Status::InternalError("Fail to commit transaction");
-    }
+
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {
@@ -296,6 +291,12 @@ Status DeltaWriter::commit() {
         }
     }
 
+    auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
+                                                          _cur_rowset, false);
+    if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
+        _set_state(kAborted);
+        return Status::InternalError("Fail to commit transaction");
+    }
     State curr_state = kClosed;
     if (!_state.compare_exchange_strong(curr_state, kCommitted, std::memory_order_acq_rel)) {
         return Status::InternalError("delta writer has been aborted");
