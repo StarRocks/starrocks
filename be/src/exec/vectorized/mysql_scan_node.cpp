@@ -114,7 +114,7 @@ Status MysqlScanNode::open(RuntimeState* state) {
                 // we support numerical type, char type and date type.
                 switch (type) {
                     // In Filter is must handle by VectorizedInConstPredicate type.
-#define EXTRACT_BASIC_FIELD_VALUE(TYPE, APPEND_TO_SQL)                                        \
+#define READ_CONST_PREDICATE(TYPE, APPEND_TO_SQL)                                        \
     case TYPE: {                                                                              \
         if (typeid(*root_expr) == typeid(VectorizedInConstPredicate<TYPE>)) {                 \
             const auto* pred = down_cast<const VectorizedInConstPredicate<TYPE>*>(root_expr); \
@@ -134,7 +134,7 @@ Status MysqlScanNode::open(RuntimeState* state) {
     }
 
 #define DIRECT_APPEND_TO_SQL list_values.emplace_back(std::to_string(value));
-                    APPLY_FOR_NUMERICAL_TYPE(EXTRACT_BASIC_FIELD_VALUE, DIRECT_APPEND_TO_SQL)
+                    APPLY_FOR_NUMERICAL_TYPE(READ_CONST_PREDICATE, DIRECT_APPEND_TO_SQL)
 #undef APPLY_FOR_NUMERICAL_TYPE
 #undef DIRECT_APPEND_TO_SQL
 
@@ -149,7 +149,7 @@ Status MysqlScanNode::open(RuntimeState* state) {
     }                                  \
     ss << '"';                         \
     list_values.emplace_back(ss.str());
-                    APPLY_FOR_VARCHAR_DATE_TYPE(EXTRACT_BASIC_FIELD_VALUE, CONVERT_APPEND_TO_SQL)
+                    APPLY_FOR_VARCHAR_DATE_TYPE(READ_CONST_PREDICATE, CONVERT_APPEND_TO_SQL)
 #undef APPLY_FOR_VARCHAR_DATE_TYPE
 #undef CONVERT_APPEND_TO_SQL
 
