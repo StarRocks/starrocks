@@ -91,6 +91,7 @@ set(EXEC_FILES
     vectorized/intersect_node.cpp
     vectorized/hdfs_scanner.cpp
     vectorized/hdfs_scanner_orc.cpp
+    vectorized/hdfs_scanner_parquet.cpp
     vectorized/hdfs_scanner_text.cpp
     vectorized/json_scanner.cpp
     vectorized/project_node.cpp
