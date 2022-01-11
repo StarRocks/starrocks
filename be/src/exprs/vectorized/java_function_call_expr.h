@@ -7,7 +7,6 @@
 #include "exprs/expr.h"
 
 namespace starrocks::vectorized {
-struct JavaFunctionDescriptor;
 struct JavaUDFContext;
 struct UDFFunctionCallHelper;
 

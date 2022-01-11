@@ -6,6 +6,9 @@
 #include <functional>
 #include <memory>
 #include <sstream>
+#include <tuple>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 #include "column/column.h"
@@ -47,38 +50,43 @@ struct UDFFunctionCallHelper {
     JavaUDFContext* fn_desc;
     JavaMethodDescriptor* call_desc;
     std::vector<std::string> _data_buffer;
+
+    using VariantContainer = std::variant<
+#define M(NAME) RunTimeColumnType<NAME>::Container,
+            APPLY_FOR_NUMBERIC_TYPE(M)
+#undef M
+                    std::vector<jobject>>;
+
     // Now we only support String/int
     ColumnPtr call(FunctionContext* ctxs, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
 
         size_t num_cols = columns.size();
 
-        std::vector<std::vector<jvalue>> cast_values;
-        cast_values.resize(num_cols);
-        for (int i = 0; i < num_cols; ++i) {
-            cast_values[i].resize(size);
-        }
+        std::vector<VariantContainer> casts_values;
+
+        do_resize(&casts_values, size);
 
         // step 1
         // cast column to jvalue vector
         for (int i = 0; i < num_cols; ++i) {
-            cast_type_to_jvalue(&cast_values[i], columns[i].get(), i, size);
+            cast_type_to_jvalue(&casts_values[i], columns[i].get(), i, size);
         }
 
         // step 2
         // combine input jvalue to jvalue array
         std::vector<jvalue> params(num_cols * size);
         for (int i = 0; i < num_cols; ++i) {
-            combine_inputs(&params, cast_values[i], columns[i].get(), i, num_cols, size);
+            combine_inputs(&params, casts_values[i], columns[i].get(), i, num_cols, size);
         }
         // step 3
         // call evalute
-        std::vector<jvalue> result(size);
-        call_evalute(&result, params, num_cols, size);
+        VariantContainer results;
+        call_evaluate(&results, params, num_cols, size);
 
         // step 4
         // get result
-        auto res = get_result(result);
+        auto res = get_result(results);
 
         // TODO: add error message to Context
         if (auto jthr = helper.getEnv()->ExceptionOccurred(); jthr != nullptr) {
@@ -91,42 +99,74 @@ struct UDFFunctionCallHelper {
         // step 5
         // do clear
         for (int i = 0; i < num_cols; ++i) {
-            do_clear(&cast_values[i], call_desc->method_desc[i + 1]);
+            do_clear(&casts_values[i]);
         }
-        do_clear(&result, call_desc->method_desc[0]);
+        do_clear(&results);
 
         return res;
     }
 
-    void do_clear(std::vector<jvalue>* jvalues, const MethodTypeDescriptor& desc) {
-        auto& helper = JVMFunctionHelper::getInstance();
-        JNIEnv* env = helper.getEnv();
-        if (desc.is_box) {
-            int size = jvalues->size();
-            for (int i = 0; i < size; ++i) {
-                env->DeleteLocalRef((*jvalues)[i].l);
+    void do_resize(std::vector<VariantContainer>* container, int num_rows) {
+        int num_cols = call_desc->method_desc.size();
+        container->reserve(num_cols);
+        for (int i = 0; i < num_cols; ++i) {
+            if (call_desc->method_desc[i + 1].is_box) {
+                container->emplace_back(std::vector<jobject>());
+            } else {
+                switch (call_desc->method_desc[i + 1].type) {
+#define M(NAME)                                                        \
+    case NAME: {                                                       \
+        container->emplace_back(RunTimeColumnType<NAME>::Container()); \
+        break;                                                         \
+    }
+                    APPLY_FOR_NUMBERIC_TYPE(M)
+#undef M
+                default:
+                    break;
+                }
             }
         }
+
+        for (int i = 0; i < num_cols; ++i) {
+            std::visit([=](auto& container) { container.resize(num_rows); }, (*container)[i]);
+        }
+    }
+
+    void do_clear(VariantContainer* values) {
+        std::visit(
+                [](auto&& container) {
+                    using ContainerType = decay_t<decltype(container)>;
+                    if constexpr (std::is_same_v<std::vector<jobject>, ContainerType>) {
+                        auto& helper = JVMFunctionHelper::getInstance();
+                        JNIEnv* env = helper.getEnv();
+                        for (int i = 0; i < container.size(); ++i) {
+                            env->DeleteLocalRef(container[i]);
+                        }
+                    }
+                },
+                *values);
     }
 
     template <PrimitiveType TYPE>
-    ColumnPtr get_primtive_result(const std::vector<jvalue>& result) {
-        auto res = RunTimeColumnType<TYPE>::create(result.size());
-        auto& container = res->get_data();
-        for (int i = 0; i < result.size(); ++i) {
-            unaligned_store<RunTimeCppType<TYPE>>(&container[i],
-                                                  *reinterpret_cast<const RunTimeCppType<TYPE>*>(&result[i]));
-        }
+    ColumnPtr get_primtive_result(const VariantContainer& result, int num_rows) {
+        auto res = RunTimeColumnType<TYPE>::create(num_rows);
+        auto& res_data = res->get_data();
+        std::visit(
+                [&](auto&& container) {
+                    memcpy(res_data.data(), container.data(), sizeof(RunTimeCppType<TYPE>) * num_rows);
+                },
+                result);
         return res;
     }
 
-    ColumnPtr get_result(const std::vector<jvalue>& result) {
+    ColumnPtr get_result(const VariantContainer& result) {
+        int num_rows = std::visit([](auto&& container) { return container.size(); }, result);
         auto& helper = JVMFunctionHelper::getInstance();
         if (!call_desc->method_desc[0].is_box) {
             switch (call_desc->method_desc[0].type) {
-#define M(NAME)                                   \
-    case NAME: {                                  \
-        return get_primtive_result<NAME>(result); \
+#define M(NAME)                                             \
+    case NAME: {                                            \
+        return get_primtive_result<NAME>(result, num_rows); \
     }
                 APPLY_FOR_NUMBERIC_TYPE(M)
 #undef M
@@ -137,13 +177,14 @@ struct UDFFunctionCallHelper {
         } else {
 #define GET_BOX_RESULT(NAME, cxx_type)                                           \
     case NAME: {                                                                 \
-        auto null_col = NullColumn::create(result.size());                       \
-        auto data_col = RunTimeColumnType<NAME>::create(result.size());          \
+        auto null_col = NullColumn::create(num_rows);                            \
+        auto data_col = RunTimeColumnType<NAME>::create(num_rows);               \
         auto& null_data = null_col->get_data();                                  \
         auto& container = data_col->get_data();                                  \
-        for (int i = 0; i < result.size(); ++i) {                                \
-            if (result[i].l != nullptr) {                                        \
-                container[i] = helper.valint8_t(result[i].l);                    \
+        const auto& result_data = std::get<std::vector<jobject>>(result);        \
+        for (int i = 0; i < num_rows; ++i) {                                     \
+            if (result_data[i] != nullptr) {                                     \
+                container[i] = helper.valint8_t(result_data[i]);                 \
             } else {                                                             \
                 null_data[i] = true;                                             \
             }                                                                    \
@@ -158,14 +199,15 @@ struct UDFFunctionCallHelper {
                 GET_BOX_RESULT(TYPE_INT, int32_t)
                 GET_BOX_RESULT(TYPE_BIGINT, int64_t)
             case TYPE_VARCHAR: {
-                _data_buffer.resize(result.size());
-                auto null_col = NullColumn::create(result.size());
+                _data_buffer.resize(num_rows);
+                auto null_col = NullColumn::create(num_rows);
                 auto& null_data = null_col->get_data();
                 std::vector<Slice> slices;
-                slices.resize(result.size());
-                for (int i = 0; i < result.size(); ++i) {
-                    if (result[i].l != nullptr) {
-                        slices[i] = helper.sliceVal((jstring)result[i].l, &_data_buffer[i]);
+                slices.resize(num_rows);
+                const auto& result_data = std::get<std::vector<jobject>>(result);
+                for (int i = 0; i < num_rows; ++i) {
+                    if (result_data[i] != nullptr) {
+                        slices[i] = helper.sliceVal((jstring)result_data[i], &_data_buffer[i]);
                     } else {
                         null_data[i] = true;
                     }
@@ -182,7 +224,17 @@ struct UDFFunctionCallHelper {
         return nullptr;
     }
 
-    void call_evalute(std::vector<jvalue>* result, const std::vector<jvalue>& params, int num_cols, int num_rows) {
+#define CALL_PRIMITIVE_METHOD(TYPE, RES, RES_TYPE)                                                 \
+    case TYPE: {                                                                                   \
+        *result = RunTimeColumnType<TYPE>::Container(num_rows);                                    \
+        auto& res_data = std::get<RunTimeColumnType<TYPE>::Container>(*result);                    \
+        for (int i = 0, j = 0; i < num_rows; ++i, j += num_cols) {                                 \
+            res_data[i] = env->Call##RES_TYPE##MethodA(fn_desc->udf_handle, methodID, &params[j]); \
+        }                                                                                          \
+        break;                                                                                     \
+    }
+
+    void call_evaluate(VariantContainer* result, const std::vector<jvalue>& params, int num_cols, int num_rows) {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
         jmethodID methodID = env->GetMethodID(fn_desc->udf_class.clazz(), fn_desc->evaluate->name.c_str(),
@@ -190,69 +242,61 @@ struct UDFFunctionCallHelper {
         DCHECK(methodID != nullptr);
         if (!call_desc->method_desc[0].is_box) {
             switch (call_desc->method_desc[0].type) {
-            case TYPE_BOOLEAN: {
-                for (int i = 0, j = 0; i < num_rows; ++i, j += num_cols) {
-                    (*result)[i].z = env->CallBooleanMethodA(fn_desc->udf_handle, methodID, &params[j]);
-                }
-                break;
-            }
-            case TYPE_TINYINT: {
-                for (int i = 0, j = 0; i < num_rows; ++i, j += num_cols) {
-                    (*result)[i].b = env->CallByteMethodA(fn_desc->udf_handle, methodID, &params[j]);
-                }
-                break;
-            }
-            case TYPE_SMALLINT: {
-                for (int i = 0, j = 0; i < num_rows; ++i, j += num_cols) {
-                    (*result)[i].s = env->CallShortMethodA(fn_desc->udf_handle, methodID, &params[j]);
-                }
-                break;
-            }
-            case TYPE_INT: {
-                for (int i = 0, j = 0; i < num_rows; ++i, j += num_cols) {
-                    (*result)[i].i = env->CallIntMethodA(fn_desc->udf_handle, methodID, &params[j]);
-                }
-                break;
-            }
-            case TYPE_BIGINT: {
-                for (int i = 0, j = 0; i < num_rows; ++i, j += num_cols) {
-                    (*result)[i].j = env->CallLongMethodA(fn_desc->udf_handle, methodID, &params[j]);
-                }
-                break;
-            }
+                CALL_PRIMITIVE_METHOD(TYPE_BOOLEAN, z, Boolean)
+                CALL_PRIMITIVE_METHOD(TYPE_TINYINT, b, Byte)
+                CALL_PRIMITIVE_METHOD(TYPE_SMALLINT, s, Short)
+                CALL_PRIMITIVE_METHOD(TYPE_INT, i, Int)
+                CALL_PRIMITIVE_METHOD(TYPE_BIGINT, j, Long)
+                CALL_PRIMITIVE_METHOD(TYPE_FLOAT, f, Float)
+                CALL_PRIMITIVE_METHOD(TYPE_DOUBLE, d, Double)
             default:
                 DCHECK(false) << "Java UDF Not Support Type" << call_desc->method_desc[0].type;
                 break;
             }
 
         } else {
+            *result = std::vector<jobject>(num_rows);
+            auto& res_data = std::get<std::vector<jobject>>(*result);
             for (int i = 0, j = 0; i < num_rows; ++i, j += num_cols) {
-                (*result)[i].l = env->CallObjectMethodA(fn_desc->udf_handle, methodID, &params[j]);
+                res_data[i] = env->CallObjectMethodA(fn_desc->udf_handle, methodID, &params[j]);
             }
         }
     }
 
-    void combine_inputs(std::vector<jvalue>* res, const std::vector<jvalue>& data, Column* col, int col_idx,
-                        int num_cols, int num_rows) {
+    void combine_inputs(std::vector<jvalue>* res, VariantContainer& data, Column* col, int col_idx, int num_cols,
+                        int num_rows) {
         if (col->is_nullable()) {
-            auto* null_col = down_cast<NullableColumn*>(col);
-            const NullData& null_data = null_col->immutable_null_column_data();
-            for (int i = 0, j = col_idx; i < num_rows; ++i, j += num_cols) {
-                if (null_data[i]) {
-                    (*res)[j].l = nullptr;
-                } else {
-                    (*res)[j] = data[i];
-                }
-            }
+            std::visit(
+                    [&](auto&& container) {
+                        using Container = std::decay_t<decltype(container)>;
+                        using ValueType = typename Container::value_type;
+                        auto* null_col = down_cast<NullableColumn*>(col);
+
+                        const NullData& null_data = null_col->immutable_null_column_data();
+                        for (int i = 0, j = col_idx; i < num_rows; ++i, j += num_cols) {
+                            if (null_data[i]) {
+                                (*res)[j].l = nullptr;
+                            } else {
+                                memcpy(&(*res)[j], &container[i], sizeof(ValueType));
+                            }
+                        }
+                    },
+                    data);
         } else {
-            for (int i = 0, j = col_idx; i < num_rows; ++i, j += num_cols) {
-                (*res)[j] = data[i];
-            }
+            std::visit(
+                    [&](auto&& container) {
+                        using Container = std::decay_t<decltype(container)>;
+                        using ValueType = typename Container::value_type;
+                        for (int i = 0, j = col_idx; i < num_rows; ++i, j += num_cols) {
+                            memcpy(&(*res)[j], &container[i], sizeof(ValueType));
+                        }
+                    },
+                    data);
         }
     }
 
     // cast type to jvalue
-    void cast_type_to_jvalue(std::vector<jvalue>* res, Column* column, int col_idx, size_t num_rows) {
+    void cast_type_to_jvalue(VariantContainer* res, Column* column, int col_idx, size_t num_rows) {
         // handle nullable func
         switch (call_desc->method_desc[col_idx + 1].type) {
 #define M(NAME)                                                                                   \
@@ -270,12 +314,12 @@ struct UDFFunctionCallHelper {
         }
     }
 
+    // cast data type to boxed type
     template <PrimitiveType TYPE>
-    jvalue transfer(RunTimeCppType<TYPE> data_value, JVMFunctionHelper& helper);
+    jobject transfer(RunTimeCppType<TYPE> data_value, JVMFunctionHelper& helper);
 
     template <PrimitiveType TYPE>
-    void do_cast_type_to_jvalue(std::vector<jvalue>* res, const MethodTypeDescriptor& desc, Column* column, int size) {
-        auto& res_data = *res;
+    void do_cast_type_to_jvalue(VariantContainer* res, const MethodTypeDescriptor& desc, Column* column, int size) {
         auto& helper = JVMFunctionHelper::getInstance();
 
         auto do_cast = [&](const RunTimeColumnType<TYPE>* spec_col, int size) {
@@ -283,20 +327,22 @@ struct UDFFunctionCallHelper {
             if (desc.is_box) {
                 // has null
                 // not has null
+                auto& res_data = std::get<std::vector<jobject>>(*res);
                 for (int i = 0; i < size; i++) {
                     res_data[i] = transfer<TYPE>(container[i], helper);
                 }
             } else {
-                for (int i = 0; i < size; i++) {
-                    unaligned_store<RunTimeCppType<TYPE>>(&res_data[i], container[i]);
+                if constexpr (isArithmeticPT<TYPE>) {
+                    auto& res_data = std::get<typename RunTimeColumnType<TYPE>::Container>(*res);
+                    for (int i = 0; i < size; i++) {
+                        res_data[i] = container[i];
+                    }
                 }
             }
         };
 
         if (column->only_null()) {
-            for (int i = 0; i < size; ++i) {
-                memset(res->data(), 0, sizeof(jvalue));
-            }
+            // use default value, nothing to do
             return;
         }
 
@@ -305,9 +351,14 @@ struct UDFFunctionCallHelper {
             auto data_col = ColumnHelper::get_data_column(column);
             const auto* spec_col = down_cast<RunTimeColumnType<TYPE>*>(data_col);
             do_cast(spec_col, 1);
-            for (int i = 1; i < size; ++i) {
-                res_data[i] = res_data[0];
-            }
+
+            std::visit(
+                    [&](auto&& res_data) {
+                        for (int i = 0; i < size; ++i) {
+                            res_data[i] = res_data[0];
+                        }
+                    },
+                    *res);
             return;
         }
 
@@ -323,10 +374,10 @@ struct UDFFunctionCallHelper {
     }
 };
 
-#define DEFINE_TRANSTER(TYPE, APPLY_FUNC)                                                                       \
-    template <>                                                                                                 \
-    jvalue UDFFunctionCallHelper::transfer<TYPE>(RunTimeCppType<TYPE> data_value, JVMFunctionHelper & helper) { \
-        return {.l = APPLY_FUNC};                                                                               \
+#define DEFINE_TRANSTER(TYPE, APPLY_FUNC)                                                                        \
+    template <>                                                                                                  \
+    jobject UDFFunctionCallHelper::transfer<TYPE>(RunTimeCppType<TYPE> data_value, JVMFunctionHelper & helper) { \
+        return APPLY_FUNC;                                                                                       \
     }
 
 DEFINE_TRANSTER(TYPE_BOOLEAN, helper.newBoolean(data_value));
