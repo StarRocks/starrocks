@@ -1978,7 +1978,7 @@ public class PlanFragmentBuilder {
             // reset column is nullable, for handle union select xx join select xxx...
             setOperationNode.setHasNullableGenerateChild();
             for (int outputColumnIndex = 0; outputColumnIndex < setOperation.getOutputColumnRefOp().size();
-                 ++outputColumnIndex) {
+                    ++outputColumnIndex) {
                 ColumnRefOperator columnRefOperator = setOperation.getOutputColumnRefOp().get(outputColumnIndex);
                 SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(columnRefOperator.getId()));
                 slotDesc.setIsNullable(slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild());
