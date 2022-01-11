@@ -110,6 +110,7 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_set(con
     for (const auto& s : strings) {
         CppType v;
         auto st = type_info->from_string(&v, s);
+        DCHECK(st.ok());
         result.push_back(v);
     }
     return result;

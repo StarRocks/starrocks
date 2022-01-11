@@ -38,8 +38,9 @@ Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::strin
         *rowset =
                 BetaRowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
         RETURN_IF_ERROR((*rowset)->init());
+        return Status::OK();
     }
-    return Status::OK();
+    return Status::NotSupported("unsupported rowset type");
 }
 
 Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output) {

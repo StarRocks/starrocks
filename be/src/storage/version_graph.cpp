@@ -315,7 +315,6 @@ Status VersionGraph::delete_version_from_graph(const Version& version) {
         LOG(WARNING) << "vertex for version does not exists. "
                      << "version=" << version.first << "-" << version.second;
         return Status::NotFound("Not found version");
-        ;
     }
 
     int64_t start_vertex_index = _vertex_index_map[start_vertex_value];

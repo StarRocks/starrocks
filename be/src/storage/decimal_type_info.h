@@ -49,7 +49,7 @@ public:
     static inline Status to_decimal(const From* src, To* dst, int src_precision, int src_scale, int dst_precision,
                                     int dst_scale) {
         if (dst_scale < src_scale || dst_precision - dst_scale < src_precision - src_scale) {
-            return Status::InternalError("Fail to cast to decimal.");
+            return Status::InvalidArgument("Fail to cast to decimal.");
         }
         int adjust_scale = dst_scale - src_scale;
         if (adjust_scale == 0) {
@@ -90,7 +90,7 @@ public:
         TO_DECIMAL_MACRO(128, 128)
 #pragma GCC diagnostic pop
 #undef TO_DECIMAL_MACRO
-        return Status::InternalError("Fail to cast to decimal.");
+        return Status::InvalidArgument("Fail to cast to decimal.");
     }
 
     //convert and deep copy value from other type's source
@@ -104,7 +104,7 @@ public:
             auto fail = DecimalV3Cast::from_string<CppType>(&result, precision(), scale(), src_value->data,
                                                             src_value->size);
             if (UNLIKELY(fail)) {
-                return Status::InternalError("Fail to cast to decimal.");
+                return Status::InvalidArgument("Fail to cast to decimal.");
             }
             memcpy(dest, &result, sizeof(CppType));
             return Status::OK();
@@ -115,7 +115,7 @@ public:
             return to_decimal(src_type->type(), type(), src, dest, src_type->precision(), src_type->scale(),
                               precision(), scale());
         default:
-            return Status::InternalError("Fail to cast to decimal.");
+            return Status::InvalidArgument("Fail to cast to decimal.");
         }
     }
 
@@ -144,7 +144,7 @@ public:
         TO_DECIMAL_MACRO(128, 128)
 #pragma GCC diagnostic pop
 #undef TO_DECIMAL_MACRO
-        return Status::InternalError("Fail to cast to decimal.");
+        return Status::InvalidArgument("Fail to cast to decimal.");
     }
 
     //convert and deep copy value from other type's source
@@ -169,7 +169,7 @@ public:
         auto err = DecimalV3Cast::from_string<CppType>(data_ptr, decimal_precision_limit<CppType>, _scale,
                                                        scan_key.c_str(), scan_key.size());
         if (err) {
-            return Status::InternalError("Fail to cast to decimal.");
+            return Status::InvalidArgument("Fail to cast to decimal.");
         }
         return Status::OK();
     }

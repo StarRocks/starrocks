@@ -140,6 +140,7 @@ Status copy_file(const string& src, const string& dest) {
         ssize_t rd_size = ::read(src_fd, buf, sizeof(buf));
         if (rd_size < 0) {
             res = Status::IOError(fmt::format("Error to read file: {}, error:{} ", src, std::strerror(Errno::no())));
+            goto COPY_EXIT;
         } else if (0 == rd_size) {
             break;
         }

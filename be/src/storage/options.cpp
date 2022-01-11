@@ -60,7 +60,7 @@ Status parse_root_path(const string& root_path, StorePath* path) {
     tmp_vec[0].erase(tmp_vec[0].find_last_not_of('/') + 1);
     if (tmp_vec[0].empty() || tmp_vec[0][0] != '/') {
         LOG(WARNING) << "invalid store path. path=" << tmp_vec[0];
-        return Status::InternalError("Invalid store path");
+        return Status::InvalidArgument("Invalid store path");
     }
 
     string canonicalized_path;
@@ -105,7 +105,7 @@ Status parse_root_path(const string& root_path, StorePath* path) {
             medium_str = to_upper(value);
         } else {
             LOG(WARNING) << "invalid property of store path, " << tmp_vec[i];
-            return Status::InternalError("Invalid property of store path");
+            return Status::InvalidArgument("Invalid property of store path");
         }
     }
 
@@ -137,7 +137,7 @@ Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>*
     }
     if (paths->empty() || (path_vec.size() != paths->size() && !config::ignore_broken_disk)) {
         LOG(WARNING) << "fail to parse storage_root_path config. value=[" << config_path << "]";
-        return Status::InternalError("Fail to parse storage_root_path");
+        return Status::InvalidArgument("Fail to parse storage_root_path");
     }
     return Status::OK();
 }

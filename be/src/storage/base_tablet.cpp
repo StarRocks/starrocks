@@ -34,7 +34,7 @@ BaseTablet::BaseTablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir
 Status BaseTablet::set_tablet_state(TabletState state) {
     if (_tablet_meta->tablet_state() == TABLET_SHUTDOWN && state != TABLET_SHUTDOWN) {
         LOG(WARNING) << "could not change tablet state from shutdown to " << state;
-        return Status::InternalError(fmt::format("Change tablet state from SHUTODWN to {} is forbidden", state));
+        return Status::InvalidArgument(fmt::format("Change tablet state from SHUTODWN to {} is forbidden", state));
     }
     _tablet_meta->set_tablet_state(state);
     _state = state;

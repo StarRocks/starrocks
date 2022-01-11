@@ -33,7 +33,7 @@ Status decimal12_t::from_string(const std::string& str) {
 
     if (sign != nullptr) {
         if (sign != value_string) {
-            return Status::InternalError("Fail to cast to decimal.");
+            return Status::InvalidArgument("Fail to cast to decimal.");
         } else {
             ++value_string;
         }

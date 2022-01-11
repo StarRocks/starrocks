@@ -132,7 +132,7 @@ Status SnapshotManager::release_snapshot(const string& snapshot_path) {
     }
 
     LOG(WARNING) << "Illegal snapshot_path: " << snapshot_path;
-    return Status::InternalError(fmt::format("Illegal snapshot_path: {}", snapshot_path));
+    return Status::InvalidArgument(fmt::format("Illegal snapshot_path: {}", snapshot_path));
 }
 
 Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tablet_id, int32_t schema_hash) {

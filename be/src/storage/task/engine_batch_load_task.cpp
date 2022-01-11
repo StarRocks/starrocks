@@ -135,6 +135,7 @@ AgentStatus EngineBatchLoadTask::_process() {
         time_t push_finish = time(nullptr);
         LOG(INFO) << "Push finish, cost time: " << (push_finish - push_begin);
         if (push_status.is_already_exist()) {
+            status = STARROCKS_PUSH_HAD_LOADED;
         } else if (!push_status.ok()) {
             status = STARROCKS_ERROR;
         }
@@ -179,13 +180,13 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
         LOG(INFO) << "Finish to load file."
                   << ". transaction_id=" << request.transaction_id << ", tablet=" << tablet->full_name()
                   << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+        write_bytes = push_handler.write_bytes();
+        write_rows = push_handler.write_rows();
         StarRocksMetrics::instance()->push_requests_success_total.increment(1);
         StarRocksMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
         StarRocksMetrics::instance()->push_request_write_bytes.increment(write_bytes);
         StarRocksMetrics::instance()->push_request_write_rows.increment(write_rows);
     }
-    write_bytes = push_handler.write_bytes();
-    write_rows = push_handler.write_rows();
 
     return res;
 }
@@ -196,7 +197,6 @@ Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TT
 
     if (tablet_info_vec == nullptr) {
         LOG(WARNING) << "The input tablet_info_vec is a null pointer";
-        StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
         return Status::InternalError("The input tablet_info_vec is a null pointer");
     }
 
