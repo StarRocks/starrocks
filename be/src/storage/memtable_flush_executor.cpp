@@ -56,7 +56,7 @@ Status FlushToken::submit(const std::shared_ptr<vectorized::MemTable>& memtable)
         return Status::InternalError(ss.str());
     }
     _flush_token->submit_func([this, memtable] {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(memtable->mem_tracker());
+        SCOPED_THREAD_LOCAL_MEM_SETTER(memtable->mem_tracker(), false);
         _stats.cur_flush_count++;
         _flush_vectorized_memtable(memtable);
         const_cast<std::shared_ptr<vectorized::MemTable>&>(memtable).reset();

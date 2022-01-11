@@ -163,7 +163,7 @@ Status DeltaWriter::_init() {
 }
 
 Status DeltaWriter::write(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
 
     if (_is_cancelled) {
         return Status::OK();
@@ -194,7 +194,7 @@ Status DeltaWriter::_flush_memtable_async() {
 }
 
 Status DeltaWriter::flush_memtable_async() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
 
     if (_is_cancelled) {
         return Status::OK();
@@ -233,7 +233,7 @@ void DeltaWriter::_reset_mem_table() {
 }
 
 Status DeltaWriter::close() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
 
     if (_is_cancelled) {
         return Status::OK();
@@ -253,7 +253,7 @@ Status DeltaWriter::close() {
 }
 
 Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
 
     if (_is_cancelled) {
         return Status::OK();
@@ -302,7 +302,7 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
 }
 
 Status DeltaWriter::cancel() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
 
     if (_is_cancelled) {
         return Status::OK();
