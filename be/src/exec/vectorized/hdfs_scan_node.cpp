@@ -97,6 +97,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     _scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
+    _hdfs_io_profile.init(_runtime_profile.get());
 
     _mem_pool = std::make_unique<MemPool>();
 
@@ -195,7 +196,7 @@ Status HdfsScanNode::_start_scan_thread(RuntimeState* state) {
     // start scanner
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
-        CHECK(_submit_scanner(_pending_scanners.pop(), true));
+        CHECK(_submit_scanner(_pop_pending_scanner(), true));
     }
 
     return Status::OK();
@@ -223,6 +224,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
 
     HdfsScanner* scanner = nullptr;
     if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::PARQUET) {
+        _parquet_profile.init(_runtime_profile.get());
         scanner = _pool->add(new HdfsParquetScanner());
     } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::ORC) {
         scanner = _pool->add(new HdfsOrcScanner());
@@ -235,7 +237,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     }
 
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
-    _pending_scanners.push(scanner);
+    _push_pending_scanner(scanner);
 
     return Status::OK();
 }
@@ -329,7 +331,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             need_put = std::min(left_resource, need_put);
             std::lock_guard<std::mutex> l(_mtx);
             while (need_put-- > 0 && !_pending_scanners.empty()) {
-                if (!_submit_scanner(_pending_scanners.pop(), false)) {
+                if (!_submit_scanner(_pop_pending_scanner(), false)) {
                     break;
                 }
             }
@@ -346,7 +348,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     if (!scanner->is_open() && scanner->open_limit() > concurrency_limit) {
         if (!scanner->has_pending_token()) {
             std::lock_guard<std::mutex> l(_mtx);
-            _pending_scanners.push(scanner);
+            _push_pending_scanner(scanner);
             return;
         }
     }
@@ -365,7 +367,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             if (_chunk_pool.empty()) {
                 scanner->set_keep_priority(true);
                 scanner->release_pending_token(&_pending_token);
-                _pending_scanners.push(scanner);
+                _push_pending_scanner(scanner);
                 scanner = nullptr;
                 break;
             }
@@ -395,7 +397,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             if (!_submit_scanner(scanner, false)) {
                 std::lock_guard<std::mutex> l(_mtx);
                 scanner->release_pending_token(&_pending_token);
-                _pending_scanners.push(scanner);
+                _push_pending_scanner(scanner);
             }
         } else if (status.ok()) {
             DCHECK(scanner == nullptr);
@@ -404,9 +406,9 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             scanner->close(_runtime_state);
             _closed_scanners.fetch_add(1, std::memory_order_release);
             std::lock_guard<std::mutex> l(_mtx);
-            auto nscanner = _pending_scanners.empty() ? nullptr : _pending_scanners.pop();
+            auto nscanner = _pending_scanners.empty() ? nullptr : _pop_pending_scanner();
             if (nscanner != nullptr && !_submit_scanner(nscanner, false)) {
-                _pending_scanners.push(nscanner);
+                _push_pending_scanner(nscanner);
             }
         } else {
             _update_status(status);
@@ -429,10 +431,22 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
 void HdfsScanNode::_close_pending_scanners() {
     std::lock_guard<std::mutex> l(_mtx);
     while (!_pending_scanners.empty()) {
-        auto* scanner = _pending_scanners.pop();
+        auto* scanner = _pop_pending_scanner();
         scanner->close(_runtime_state);
         _closed_scanners.fetch_add(1, std::memory_order_release);
     }
+}
+
+void HdfsScanNode::_push_pending_scanner(HdfsScanner* scanner) {
+    scanner->enter_pending_queue();
+    _pending_scanners.push(scanner);
+}
+
+HdfsScanner* HdfsScanNode::_pop_pending_scanner() {
+    HdfsScanner* scanner = _pending_scanners.pop();
+    uint64_t time = scanner->exit_pending_queue();
+    COUNTER_UPDATE(_scanner_queue_timer, time);
+    return scanner;
 }
 
 Status HdfsScanNode::_get_status() {
@@ -478,7 +492,7 @@ Status HdfsScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         const int32_t num_running = _num_scanners - num_pending - num_closed;
         if ((num_pending > 0) && (num_running < kMaxConcurrency)) {
             if (_chunk_pool.size() >= (num_running + 1) * _chunks_per_scanner) {
-                (void)_submit_scanner(_pending_scanners.pop(), true);
+                (void)_submit_scanner(_pop_pending_scanner(), true);
             }
         }
     }
@@ -673,6 +687,7 @@ void HdfsScanNode::_update_status(const Status& status) {
 
 void HdfsScanNode::_init_counter(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+    _scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
     _reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
     _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
@@ -680,25 +695,7 @@ void HdfsScanNode::_init_counter(RuntimeState* state) {
     _io_timer = ADD_TIMER(_runtime_profile, "IoTime");
     _io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
     _column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
-    _level_decode_timer = ADD_TIMER(_runtime_profile, "LevelDecodeTime");
-    _value_decode_timer = ADD_TIMER(_runtime_profile, "ValueDecodeTime");
-    _page_read_timer = ADD_TIMER(_runtime_profile, "PageReadTime");
     _column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
-
-    _bytes_total_read = ADD_COUNTER(_runtime_profile, "BytesTotalRead", TUnit::BYTES);
-    _bytes_read_local = ADD_COUNTER(_runtime_profile, "BytesReadLocal", TUnit::BYTES);
-    _bytes_read_short_circuit = ADD_COUNTER(_runtime_profile, "BytesReadShortCircuit", TUnit::BYTES);
-    _bytes_read_dn_cache = ADD_COUNTER(_runtime_profile, "BytesReadDataNodeCache", TUnit::BYTES);
-    _bytes_read_remote = ADD_COUNTER(_runtime_profile, "BytesReadRemote", TUnit::BYTES);
-
-    // reader init
-    _footer_read_timer = ADD_TIMER(_runtime_profile, "ReaderInitFooterRead");
-    _column_reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInitColumnReaderInit");
-
-    // dict filter
-    _group_chunk_read_timer = ADD_TIMER(_runtime_profile, "GroupChunkRead");
-    _group_dict_filter_timer = ADD_TIMER(_runtime_profile, "GroupDictFilter");
-    _group_dict_decode_timer = ADD_TIMER(_runtime_profile, "GroupDictDecode");
 }
 
 } // namespace starrocks::vectorized
