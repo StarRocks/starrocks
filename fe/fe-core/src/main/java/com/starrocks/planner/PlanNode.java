@@ -29,6 +29,7 @@ import com.google.common.math.LongMath;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
@@ -45,11 +46,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Stream;
 
 /**
  * Each PlanNode represents a single relational operator
@@ -686,6 +689,16 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 return true;
             }
         }
+
+        List<ProjectNode> projectNodes = Lists.newArrayList();
+        collectAll(Predicates.instanceOf(ProjectNode.class), projectNodes);
+        for (ProjectNode node : projectNodes) {
+            Stream<Map<SlotId, Expr>> slotMapStream = Stream.of(node.getSlotMap(), node.getCommonSlotMap());
+            if (slotMapStream.flatMap(map -> map.entrySet().stream())
+                    .anyMatch(entry -> entry.getValue().isNullable())) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -782,7 +795,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return false;
     }
 
-
     public boolean canPushDownRuntimeFilter() {
         // RuntimeFilter can only be pushed into multicast fragment iff.
         // this runtime filter is applied to all consumers. It's quite hard to do
@@ -797,7 +809,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
-        if (!canPushDownRuntimeFilter()) return false;
+        if (!canPushDownRuntimeFilter()) {
+            return false;
+        }
 
         // theoretically runtime filter can be applied on multiple child nodes.
         boolean accept = false;

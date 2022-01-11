@@ -53,6 +53,14 @@ public class ProjectNode extends PlanNode {
         return children.get(0).getNumInstances();
     }
 
+    public Map<SlotId, Expr> getSlotMap() {
+        return this.slotMap;
+    }
+
+    public Map<SlotId, Expr> getCommonSlotMap() {
+        return this.commonSlotMap;
+    }
+
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
