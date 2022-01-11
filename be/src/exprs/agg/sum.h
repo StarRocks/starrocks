@@ -91,8 +91,8 @@ public:
         down_cast<ResultColumnType*>(to)->append(this->data(state).sum);
     }
 
-    void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                         Column* to) const override {
+    void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                         size_t state_offset, Column* to) const override {
         ResultColumnType* column = down_cast<ResultColumnType*>(to);
         Buffer<ResultType>& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
@@ -104,11 +104,6 @@ public:
                             Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
         down_cast<ResultColumnType*>(to)->append(this->data(state).sum);
-    }
-
-    void batch_finalize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                        Column* to) const {
-        batch_serialize(chunk_size, agg_states, state_offset, to);
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {

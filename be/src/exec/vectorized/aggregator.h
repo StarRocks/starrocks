@@ -333,8 +333,8 @@ public:
                 }
             } else {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_serialize(read_index, _tmp_agg_states, _agg_states_offsets[i],
-                                                       agg_result_column[i].get());
+                    _agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                       _agg_states_offsets[i], agg_result_column[i].get());
                 }
             }
         }
