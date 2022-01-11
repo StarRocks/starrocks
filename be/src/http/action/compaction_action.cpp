@@ -40,12 +40,13 @@
 #include "storage/tablet.h"
 #include "storage/vectorized/base_compaction.h"
 #include "storage/vectorized/cumulative_compaction.h"
+#include "util/defer_op.h"
 #include "util/json_util.h"
 
 namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
-const static std::string PARAM_COMPACTION_TYPE = "compact_type";
+const static std::string PARAM_COMPACTION_TYPE = "compaction_type";
 
 std::atomic_bool CompactionAction::_running = false;
 
@@ -95,7 +96,10 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     if (_running) {
         return Status::TooManyTasks("Manual compaction task is running");
     }
+
     _running = true;
+    DeferOp defer([&]() { _running = false; });
+
     uint64_t tablet_id;
     uint32_t schema_hash;
     RETURN_IF_ERROR(get_params(req, &tablet_id, &schema_hash));
