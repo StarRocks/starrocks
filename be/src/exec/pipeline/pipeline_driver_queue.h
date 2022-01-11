@@ -136,7 +136,7 @@ private:
 
     std::mutex _global_mutex;
     std::condition_variable _cv;
-    // _ready_wgs contains the workgroup which including the drivers need to be run.
+    // _ready_wgs contains the workgroups which include the drivers need to be run.
     std::unordered_set<workgroup::WorkGroup*> _ready_wgs;
     size_t _sum_cpu_limit = 0;
 
