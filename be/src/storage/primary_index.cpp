@@ -843,8 +843,8 @@ Status PrimaryIndex::load(Tablet* tablet) {
     _status = _do_load(tablet);
     _loaded = true;
     if (!_status.ok()) {
-        LOG(WARNING) << "load PrimaryIndex error: " << _status << " tablet:" << _tablet_id
-                     << " stack:" << get_stack_trace();
+        LOG(WARNING) << "load PrimaryIndex error: " << _status << " tablet:" << _tablet_id << " stack:\n"
+                     << get_stack_trace();
         if (_status.is_mem_limit_exceeded()) {
             LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
         }
