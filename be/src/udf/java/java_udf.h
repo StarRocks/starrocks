@@ -205,7 +205,7 @@ public:
     ClassAnalyzer() = default;
     ~ClassAnalyzer() = default;
     Status has_method(jclass clazz, const std::string& method, bool* has);
-    Status get_sign(jclass clazz, const std::string& method, std::string* sign);
+    Status get_signature(jclass clazz, const std::string& method, std::string* sign);
     Status get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
     Status get_udaf_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
 };

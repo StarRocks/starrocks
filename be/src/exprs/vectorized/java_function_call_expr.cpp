@@ -469,7 +469,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         std::vector<MethodTypeDescriptor> mtdesc;
         RETURN_IF_ERROR(_func_desc->analyzer->has_method(_func_desc->udf_class.clazz(), method_name, &has_method));
         if (has_method) {
-            RETURN_IF_ERROR(_func_desc->analyzer->get_sign(_func_desc->udf_class.clazz(), method_name, &sign));
+            RETURN_IF_ERROR(_func_desc->analyzer->get_signature(_func_desc->udf_class.clazz(), method_name, &sign));
             RETURN_IF_ERROR(_func_desc->analyzer->get_method_desc(sign, &mtdesc));
             *res = std::make_unique<JavaMethodDescriptor>();
             (*res)->name = std::move(method_name);

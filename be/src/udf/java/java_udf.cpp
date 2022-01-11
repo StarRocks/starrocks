@@ -356,7 +356,7 @@ Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* 
     return Status::OK();
 }
 
-Status ClassAnalyzer::get_sign(jclass clazz, const std::string& method, std::string* sign) {
+Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std::string* sign) {
     DCHECK(clazz != nullptr);
     DCHECK(sign != nullptr);
     auto& helper = JVMFunctionHelper::getInstance();
@@ -366,10 +366,10 @@ Status ClassAnalyzer::get_sign(jclass clazz, const std::string& method, std::str
     if (class_analyzer == nullptr) {
         return Status::InternalError(fmt::format("ClassAnalyzer Not Found: {}", CLASS_ANALYZER_NAME));
     }
-    jmethodID getSign = env->GetStaticMethodID(class_analyzer, "getSign",
+    jmethodID getSign = env->GetStaticMethodID(class_analyzer, "getSignature",
                                                "(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/String;");
     if (getSign == nullptr) {
-        return Status::InternalError("couldn't found getSign method");
+        return Status::InternalError("couldn't found getSignature method");
     }
 
     jstring method_name = helper.to_jstring(method.c_str());

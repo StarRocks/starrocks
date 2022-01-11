@@ -23,7 +23,7 @@ public class UDFClassAnalyzer {
         anlyMap.put("void", "V");
     }
 
-    private static String getSign(String typeName) {
+    private static String getSignature(String typeName) {
         String prefix = "";
         if (typeName.contains("[]")) {
             prefix = "[";
@@ -49,7 +49,7 @@ public class UDFClassAnalyzer {
         return false;
     }
 
-    public static String getSign(String methodName, Class clazz) throws NoSuchMethodException {
+    public static String getSignature(String methodName, Class clazz) throws NoSuchMethodException {
         for (Method declaredMethod : clazz.getDeclaredMethods()) {
             if (declaredMethod.getName().equals(methodName)) {
                 if (Modifier.isStatic(declaredMethod.getModifiers())) {
@@ -58,10 +58,10 @@ public class UDFClassAnalyzer {
                 StringBuilder val = new StringBuilder("(");
                 for (Type genericParameterType : declaredMethod.getGenericParameterTypes()) {
                     String typeName = genericParameterType.getTypeName();
-                    val.append(getSign(typeName));
+                    val.append(getSignature(typeName));
                 }
                 val.append(")");
-                val.append(getSign(declaredMethod.getReturnType().getName()));
+                val.append(getSignature(declaredMethod.getReturnType().getName()));
                 return val.toString();
             }
         }
