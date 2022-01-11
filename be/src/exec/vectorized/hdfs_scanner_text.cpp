@@ -43,8 +43,10 @@ Status HdfsTextScanner::HdfsScannerCSVReader::_fill_buffer() {
         _buff.append(_record_delimiter);
     }
 
-    if ((_remain_length < 0 && _buff.find(_record_delimiter, 0) != nullptr)
-        || (_offset >= _file_length)) {
+    // For each scan range we always read the first record of next scan range,so _remain_length
+    // may be negative here. Once we have read the first record of next scan range we
+    // should stop scan in the next round.
+    if ((_remain_length < 0 && _buff.find(_record_delimiter, 0) != nullptr) || (_offset >= _file_length)) {
         _should_stop_scan = true;
     }
 
@@ -64,6 +66,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     _reader = std::make_unique<HdfsScannerCSVReader>(_scanner_params.fs, _record_delimiter, _field_delimiter,
                                                      scan_range->offset, scan_range->length, scan_range->file_length);
     if (scan_range->offset != 0) {
+        // Always skip first record of scan range with non-zero offset.
         CSVReader::Record dummy;
         RETURN_IF_ERROR(_reader->next_record(&dummy));
     }
