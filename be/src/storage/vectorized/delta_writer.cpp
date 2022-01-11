@@ -50,7 +50,7 @@ DeltaWriter::~DeltaWriter() {
 }
 
 void DeltaWriter::_garbage_collection() {
-    OLAPStatus rollback_status = OLAP_SUCCESS;
+    Status rollback_status = Status::OK();
     if (_tablet != nullptr) {
         TxnManager* txn_mgr = _storage_engine->txn_manager();
         rollback_status = txn_mgr->rollback_txn(_opt.partition_id, _tablet, _opt.txn_id);
@@ -58,7 +58,7 @@ void DeltaWriter::_garbage_collection() {
     // has to check rollback status, because the rowset maybe committed in this thread and
     // published in another thread, then rollback will failed.
     // when rollback failed should not delete rowset
-    if (rollback_status == OLAP_SUCCESS) {
+    if (rollback_status.ok()) {
         _storage_engine->add_unused_rowset(_cur_rowset);
     }
 }
@@ -120,9 +120,9 @@ Status DeltaWriter::_init() {
         }
 
         std::lock_guard push_lock(_tablet->get_push_lock());
-        OLAPStatus olap_status =
+        Status olap_status =
                 _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
-        if (olap_status != OLAPStatus::OLAP_SUCCESS) {
+        if (!olap_status.ok()) {
             _set_state(kAborted);
             std::stringstream ss;
             ss << "Fail to prepare transaction. tablet_id=" << _opt.tablet_id << " err=" << olap_status;
@@ -284,7 +284,7 @@ Status DeltaWriter::commit() {
     _cur_rowset->set_schema(&_tablet->tablet_schema());
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);
-    if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
+    if (!res.ok() && !res.is_already_exist()) {
         _set_state(kAborted);
         return Status::InternalError("Fail to commit transaction");
     }

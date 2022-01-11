@@ -123,9 +123,8 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
             auto res = data_dir->load();
-            if (res != OLAP_SUCCESS) {
-                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res;
-                // TODO(lingbin): why not exit progress, to force OP to change the conf
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
             }
         });
         Thread::set_thread_name(threads.back(), "load_data_dir");
@@ -275,8 +274,7 @@ std::vector<DataDir*> StorageEngine::get_stores() {
 template std::vector<DataDir*> StorageEngine::get_stores<false>();
 template std::vector<DataDir*> StorageEngine::get_stores<true>();
 
-OLAPStatus StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
-    OLAPStatus res = OLAP_SUCCESS;
+Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
     data_dir_infos->clear();
 
     MonotonicStopWatch timer;
@@ -306,7 +304,7 @@ OLAPStatus StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_in
     }
 
     timer.stop();
-    return res;
+    return Status::OK();
 }
 
 void StorageEngine::_start_disk_stat_monitor() {
@@ -676,23 +674,21 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     return Status::OK();
 }
 
-OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
-    OLAPStatus res = OLAP_SUCCESS;
+Status StorageEngine::_start_trash_sweep(double* usage) {
+    Status res = Status::OK();
 
     const int32_t snapshot_expire = config::snapshot_expire_time_sec;
     const int32_t trash_expire = config::trash_file_expire_time_sec;
     const double guard_space = config::storage_flood_stage_usage_percent / 100.0;
     std::vector<DataDirInfo> data_dir_infos;
-    RETURN_NOT_OK_LOG(get_all_data_dir_info(&data_dir_infos, false),
-                      "failed to get root path stat info when sweep trash.")
+    RETURN_IF_ERROR(get_all_data_dir_info(&data_dir_infos, false));
 
     time_t now = time(nullptr);
     tm local_tm_now;
     memset(&local_tm_now, 0, sizeof(tm));
 
     if (localtime_r(&now, &local_tm_now) == nullptr) {
-        LOG(WARNING) << "fail to localtime_r time. time=" << now;
-        return OLAP_ERR_OS_ERROR;
+        return Status::InternalError(fmt::format("Fail to localtime_r time: {}", now));
     }
     const time_t local_now = mktime(&local_tm_now);
 
@@ -704,17 +700,17 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
         double curr_usage = (double)(info.disk_capacity - info.available) / info.disk_capacity;
         *usage = *usage > curr_usage ? *usage : curr_usage;
 
-        OLAPStatus curr_res = OLAP_SUCCESS;
+        Status curr_res = Status::OK();
         std::string snapshot_path = info.path + SNAPSHOT_PREFIX;
         curr_res = _do_sweep(snapshot_path, local_now, snapshot_expire);
-        if (curr_res != OLAP_SUCCESS) {
+        if (!curr_res.ok()) {
             LOG(WARNING) << "failed to sweep snapshot. path=" << snapshot_path << ", err_code=" << curr_res;
             res = curr_res;
         }
 
         std::string trash_path = info.path + TRASH_PREFIX;
         curr_res = _do_sweep(trash_path, local_now, curr_usage > guard_space ? 0 : trash_expire);
-        if (curr_res != OLAP_SUCCESS) {
+        if (!curr_res.ok()) {
             LOG(WARNING) << "failed to sweep trash. [path=%s" << trash_path << ", err_code=" << curr_res;
             res = curr_res;
         }
@@ -787,8 +783,8 @@ void StorageEngine::_clean_unused_txns() {
     }
 }
 
-OLAPStatus StorageEngine::_do_sweep(const std::string& scan_root, const time_t& local_now, const int32_t expire) {
-    OLAPStatus res = OLAP_SUCCESS;
+Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& local_now, const int32_t expire) {
+    Status res = Status::OK();
     if (!FileUtils::check_exist(scan_root)) {
         // dir not existed. no need to sweep trash.
         return res;
@@ -803,8 +799,8 @@ OLAPStatus StorageEngine::_do_sweep(const std::string& scan_root, const time_t& 
             memset(&local_tm_create, 0, sizeof(tm));
 
             if (strptime(str_time.c_str(), "%Y%m%d%H%M%S", &local_tm_create) == nullptr) {
-                LOG(WARNING) << "fail to strptime time. [time=" << str_time << "]";
-                res = OLAP_ERR_OS_ERROR;
+                LOG(WARNING) << "Fail to strptime time:" << str_time;
+                res = Status::InternalError(fmt::format("Fail to strptime time: {}", str_time));
                 continue;
             }
 
@@ -820,16 +816,16 @@ OLAPStatus StorageEngine::_do_sweep(const std::string& scan_root, const time_t& 
             if (difftime(local_now, mktime(&local_tm_create)) >= actual_expire) {
                 Status ret = FileUtils::remove_all(path_name);
                 if (!ret.ok()) {
-                    LOG(WARNING) << "fail to remove file or directory. path=" << path_name
-                                 << ", error=" << ret.to_string();
-                    res = OLAP_ERR_OS_ERROR;
+                    LOG(WARNING) << "fail to remove file. path: " << path_name << ", error: " << ret.to_string();
+                    res = Status::IOError(
+                            fmt::format("Fail remove file. path: {}, error: {}", path_name, ret.to_string()));
                     continue;
                 }
             }
         }
     } catch (...) {
         LOG(WARNING) << "Exception occur when scan directory. path=" << scan_root;
-        res = OLAP_ERR_IO_ERROR;
+        res = Status::IOError(fmt::format("Exception occur when scan directory. path: {}", scan_root));
     }
 
     return res;
@@ -843,7 +839,7 @@ void StorageEngine::start_delete_unused_rowset() {
         } else if (it->second->need_delete_file()) {
             VLOG(3) << "start to remove rowset:" << it->second->rowset_id()
                     << ", version:" << it->second->version().first << "-" << it->second->version().second;
-            OLAPStatus status = it->second->remove();
+            Status status = it->second->remove();
             VLOG(3) << "remove rowset:" << it->second->rowset_id() << " finished. status:" << status;
             it = _unused_rowsets.erase(it);
         }
@@ -869,7 +865,6 @@ void StorageEngine::add_unused_rowset(const RowsetSharedPtr& rowset) {
     }
 }
 
-// TODO(zc): refactor this funciton
 Status StorageEngine::create_tablet(const TCreateTabletReq& request) {
     // Get all available stores, use ref_root_path if the caller specified
     std::vector<DataDir*> stores;
@@ -881,60 +876,53 @@ Status StorageEngine::create_tablet(const TCreateTabletReq& request) {
     return _tablet_manager->create_tablet(request, stores);
 }
 
-OLAPStatus StorageEngine::obtain_shard_path(TStorageMedium::type storage_medium, int64_t path_hash,
-                                            std::string* shard_path, DataDir** store) {
-    if (shard_path == nullptr) {
-        LOG(WARNING) << "invalid output parameter which is null pointer.";
-        return OLAP_ERR_CE_CMD_PARAMS_ERROR;
-    }
+Status StorageEngine::obtain_shard_path(TStorageMedium::type storage_medium, int64_t path_hash, std::string* shard_path,
+                                        DataDir** store) {
+    DCHECK(shard_path != nullptr) << "Null pointer";
 
     if (path_hash != -1) {
         // get store by path hash
         *store = StorageEngine::instance()->get_store(path_hash);
         if (*store == nullptr) {
             LOG(WARNING) << "Fail to get store. path_hash=" << path_hash;
-            return OLAP_ERR_NO_AVAILABLE_ROOT_PATH;
+            return Status::InternalError(fmt::format("Fail to get store. path_hash: {}", path_hash));
         }
     } else {
         // get store randomly by the specified medium
         auto stores = get_stores_for_create_tablet(storage_medium);
         if (stores.empty()) {
-            LOG(WARNING) << "Fail to obtain shard_path: empty store list";
-            return OLAP_ERR_NO_AVAILABLE_ROOT_PATH;
+            LOG(WARNING) << "There is no suitable DataDir";
+            return Status::InternalError("There is no suitable DataDir");
         }
         *store = stores[0];
     }
 
     uint64_t shard = 0;
-    OLAPStatus res = (*store)->get_shard(&shard);
-    if (res != OLAP_SUCCESS) {
-        LOG(WARNING) << "Fail to obtain shard path. res=" << res;
-        return res;
-    }
+    RETURN_IF_ERROR((*store)->get_shard(&shard));
 
     std::stringstream root_path_stream;
     root_path_stream << (*store)->path() << DATA_PREFIX << "/" << shard;
     *shard_path = root_path_stream.str();
 
     LOG(INFO) << "Obtained shard path=" << *shard_path;
-    return res;
+    return Status::OK();
 }
 
-OLAPStatus StorageEngine::load_header(const std::string& shard_path, const TCloneReq& request, bool restore,
-                                      bool is_primary_key) {
+Status StorageEngine::load_header(const std::string& shard_path, const TCloneReq& request, bool restore,
+                                  bool is_primary_key) {
     DataDir* store = nullptr;
     {
-        // TODO(zc)
         try {
             auto store_path = std::filesystem::path(shard_path).parent_path().parent_path().string();
             store = get_store(store_path);
             if (store == nullptr) {
                 LOG(WARNING) << "Invalid shard path=" << shard_path << "tablet_id=" << request.tablet_id;
-                return OLAP_ERR_INVALID_ROOT_PATH;
+                return Status::InternalError(
+                        fmt::format("Invalid shard_path: {}, tablet_id: {}", shard_path, request.tablet_id));
             }
         } catch (...) {
-            LOG(WARNING) << "Invalid shard path=" << shard_path << "tablet_id=" << request.tablet_id;
-            return OLAP_ERR_INVALID_ROOT_PATH;
+            return Status::InternalError(
+                    fmt::format("Invalid shard_path: {}, tablet_id: {}", shard_path, request.tablet_id));
         }
     }
 
@@ -953,13 +941,13 @@ OLAPStatus StorageEngine::load_header(const std::string& shard_path, const TClon
     if (!st.ok()) {
         LOG(WARNING) << "Fail to load headers, "
                      << "tablet_id=" << request.tablet_id << " status=" << st;
-        return OLAP_ERR_TABLE_NOT_FOUND;
+        return st;
     }
     LOG(INFO) << "Loaded headers tablet_id=" << request.tablet_id << " schema_hash=" << request.schema_hash;
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-OLAPStatus StorageEngine::execute_task(EngineTask* task) {
+Status StorageEngine::execute_task(EngineTask* task) {
     // 1. add wlock to related tablets
     // 2. do prepare work
     // 3. release wlock
@@ -985,17 +973,11 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
             }
         }
         // add write lock to all related tablets
-        OLAPStatus prepare_status = task->prepare();
-        if (prepare_status != OLAP_SUCCESS) {
-            return prepare_status;
-        }
+        RETURN_IF_ERROR(task->prepare());
     }
 
     // do execute work without lock
-    OLAPStatus exec_status = task->execute();
-    if (exec_status != OLAP_SUCCESS) {
-        return exec_status;
-    }
+    RETURN_IF_ERROR(task->execute());
 
     // 1. add wlock to related tablets
     // 2. do finish work
@@ -1023,8 +1005,7 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
             }
         }
         // add write lock to all related tablets
-        OLAPStatus fin_status = task->finish();
-        return fin_status;
+        return task->finish();
     }
 }
 

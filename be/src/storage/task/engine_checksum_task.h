@@ -31,7 +31,7 @@ namespace starrocks {
 // add "Engine" as task prefix to prevent duplicate name with agent task
 class EngineChecksumTask : public EngineTask {
 public:
-    OLAPStatus execute() override;
+    Status execute() override;
 
     EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash, TVersion version,
                        uint32_t* checksum);
@@ -39,7 +39,7 @@ public:
     ~EngineChecksumTask() override = default;
 
 private:
-    OLAPStatus _compute_checksum();
+    Status _compute_checksum();
 
     std::unique_ptr<MemTracker> _mem_tracker;
 

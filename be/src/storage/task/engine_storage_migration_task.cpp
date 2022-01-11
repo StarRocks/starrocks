@@ -32,45 +32,45 @@ EngineStorageMigrationTask::EngineStorageMigrationTask(TTabletId tablet_id, TSch
                                                        DataDir* dest_store)
         : _tablet_id(tablet_id), _schema_hash(schema_hash), _dest_store(dest_store) {}
 
-OLAPStatus EngineStorageMigrationTask::execute() {
+Status EngineStorageMigrationTask::execute() {
     StarRocksMetrics::instance()->storage_migrate_requests_total.increment(1);
 
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
     if (tablet == nullptr) {
-        LOG(WARNING) << "failed to find tablet. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash;
-        return OLAP_ERR_TABLE_NOT_FOUND;
+        LOG(WARNING) << "Not found tablet: " << _tablet_id;
+        return Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
     }
     if (tablet->updates() != nullptr) {
-        LOG(WARNING) << "migration task does not support updatable tablet yet";
-        return OLAP_ERR_OTHER_ERROR;
+        LOG(WARNING) << "Not support to migrate updatable tablet: " << _tablet_id;
+        return Status::NotSupported(fmt::format("Not support to migrate updatable tablet: {}", _tablet_id));
     }
 
     // check tablet data dir
     if (tablet->data_dir() == _dest_store) {
-        LOG(INFO) << "tablet is already in the dest path. tablet_id=" << _tablet_id
-                  << ", dest_store=" << _dest_store->path();
-        return OLAP_SUCCESS;
+        LOG(INFO) << "Already existed path. tablet_id=" << _tablet_id << ", dest_store=" << _dest_store->path();
+        return Status::OK();
     }
 
     // check disk capacity
     int64_t tablet_size = tablet->tablet_footprint();
     if (_dest_store->reach_capacity_limit(tablet_size)) {
-        LOG(WARNING) << "disk reaches capacity limit. tablet_id=" << _tablet_id
-                     << ", dest_store=" << _dest_store->path();
-        return OLAP_ERR_DISK_REACH_CAPACITY_LIMIT;
+        LOG(WARNING) << "No space left to migration. tablet_id: " << _tablet_id
+                     << ", dest_path: " << _dest_store->path();
+        return Status::IOError(fmt::format("No space left to migration. tablet_id: {}, dest_path: {}", _tablet_id,
+                                           _dest_store->path()));
     }
 
     return _storage_migrate(tablet);
 }
 
-OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
+Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     if (bg_worker_stopped) {
         LOG(WARNING) << "Process is going to quit. The migration should be stopped as soon as possible.";
-        return OLAP_ERR_OTHER_ERROR;
+        return Status::InternalError("Process is going to quit.");
     }
 
-    OLAPStatus res = OLAP_SUCCESS;
+    Status res = Status::OK();
     LOG(INFO) << "begin to process storage migrate. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash
               << ", tablet=" << tablet->full_name() << ", dest_store=" << _dest_store->path();
 
@@ -83,11 +83,11 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         // lock
         std::unique_lock migration_wlock(tablet->get_migration_lock(), std::try_to_lock);
         if (!migration_wlock.owns_lock()) {
-            return OLAP_ERR_RWLOCK_ERROR;
+            return Status::InternalError("Fail to get lock");
         }
         if (tablet->is_migrating()) {
             LOG(WARNING) << "tablet is already migrating.";
-            return OLAP_ERR_OTHER_ERROR;
+            return Status::InternalError("tablet is already migrating.");
         }
 
         std::lock_guard push_lock(tablet->get_push_lock());
@@ -99,7 +99,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
                 _tablet_id, _schema_hash, tablet->tablet_uid(), &partition_id, &transaction_ids);
         if (!transaction_ids.empty()) {
             LOG(WARNING) << "could not migration because has unfinished txns.";
-            return OLAP_ERR_HEADER_HAS_PENDING_DATA;
+            return Status::InternalError("could not migration because has unfinished txns.");
         }
 
         // get all versions to be migrate
@@ -107,23 +107,26 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
             std::shared_lock header_rdlock(tablet->get_header_lock());
             const RowsetSharedPtr lastest_version = tablet->rowset_with_max_version();
             if (lastest_version == nullptr) {
-                LOG(WARNING) << "tablet has no any version.";
-                return OLAP_ERR_VERSION_NOT_EXIST;
+                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id()
+                             << ", version: " << lastest_version->start_version() << "-"
+                             << lastest_version->end_version();
+                return Status::NotFound(fmt::format("Not found version in tablet. tablet: {}, version: {}-{}",
+                                                    tablet->tablet_id(), lastest_version->start_version(),
+                                                    lastest_version->end_version()));
             }
 
             end_version = lastest_version->end_version();
-            res = tablet->capture_consistent_rowsets(Version(0, end_version), &consistent_rowsets).ok()
-                          ? OLAP_SUCCESS
-                          : OLAP_ERR_OTHER_ERROR;
-            if (res != OLAP_SUCCESS || consistent_rowsets.empty()) {
-                LOG(WARNING) << "fail to capture consistent rowsets. version=" << end_version;
-                return OLAP_ERR_VERSION_NOT_EXIST;
+            res = tablet->capture_consistent_rowsets(Version(0, end_version), &consistent_rowsets);
+            if (!res.ok() || consistent_rowsets.empty()) {
+                LOG(WARNING) << "Fail to capture consistent rowsets. version=" << end_version;
+                return Status::InternalError(
+                        fmt::format("Fail to capture consistent rowsets. version: {}", end_version));
             }
         }
 
         // get shard
         res = _dest_store->get_shard(&shard);
-        if (res != OLAP_SUCCESS) {
+        if (!res.ok()) {
             LOG(WARNING) << "fail to get root path shard. res=" << res;
             return res;
         }
@@ -134,26 +137,26 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         // if dir already exist then return err, it should not happen
         // should not remove the dir directly
         if (FileUtils::check_exist(schema_hash_path)) {
-            LOG(INFO) << "schema hash path already exist, skip this path. "
-                      << "schema_hash_path=" << schema_hash_path;
-            return OLAP_ERR_FILE_ALREADY_EXIST;
+            LOG(INFO) << "Path already exist. "
+                      << "schema_hash_path: " << schema_hash_path;
+            return Status::AlreadyExist(fmt::format("Path already exist. schema_hash_path: {}", schema_hash_path));
         }
 
         TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta());
         Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta.get());
         if (st.ok()) {
-            LOG(WARNING) << "tablet_meta already exists. data_dir:" << _dest_store->path()
-                         << "tablet:" << tablet->full_name();
-            return OLAP_ERR_META_ALREADY_EXIST;
+            LOG(WARNING) << "tablet_meta already exist. tablet:" << tablet->full_name();
+            return Status::AlreadyExist(fmt::format("tablet_meta already exist. tablet: {}", tablet->full_name()));
         } else if (!st.is_not_found()) {
-            LOG(WARNING) << "fail to get tablet meta: " << st;
-            return OLAP_ERR_IO_ERROR;
+            LOG(WARNING) << "tablet_meta not found. tablet: " << tablet->full_name();
+            return Status::NotFound(fmt::format("tablet_meta not found. tablet: {}", tablet->full_name()));
         }
 
         st = FileUtils::create_dir(schema_hash_path);
         if (!st.ok()) {
-            LOG(WARNING) << "fail to create path. path=" << schema_hash_path << ", error=" << st.to_string();
-            return OLAP_ERR_CANNOT_CREATE_DIR;
+            LOG(WARNING) << "Fail to create dir. path: " << schema_hash_path << ", error: " << st.to_string();
+            return Status::IOError(
+                    fmt::format("Fail to create dir. path: {}, error: {}", schema_hash_path, st.to_string()));
         }
 
         // set tablet is_migrating
@@ -165,7 +168,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
     do {
         // 2. copy all index and data files without lock
         res = _copy_index_and_data_files(schema_hash_path, tablet, consistent_rowsets);
-        if (res != OLAP_SUCCESS) {
+        if (!res.ok()) {
             LOG(WARNING) << "fail to copy index and data files when migrate. res=" << res;
             need_remove_new_path = true;
             std::unique_lock migration_wlock(tablet->get_migration_lock());
@@ -186,22 +189,21 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         if (!transaction_ids.empty()) {
             LOG(WARNING) << "could not migration because has unfinished txns.";
             need_remove_new_path = true;
-            res = OLAP_ERR_HEADER_HAS_PENDING_DATA;
+            res = Status::InternalError("could not migration because has unfinished txns.");
             break;
         }
 
         auto new_tablet_meta = std::make_shared<TabletMeta>();
         Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta.get());
         if (st.ok()) {
-            LOG(WARNING) << "tablet_meta already exists. data_dir:" << _dest_store->path()
-                         << "tablet:" << tablet->full_name();
+            LOG(WARNING) << "tablet_meta already exist. tablet:" << tablet->full_name();
             need_remove_new_path = true;
-            res = OLAP_ERR_META_ALREADY_EXIST;
+            res = Status::AlreadyExist(fmt::format("tablet_meta already exist. tablet: {}", tablet->full_name()));
             break;
         } else if (!st.is_not_found()) {
-            LOG(WARNING) << "fail to get tablet meta: " << st;
+            LOG(WARNING) << "tablet_meta not found. tablet: " << tablet->full_name();
             need_remove_new_path = true;
-            res = OLAP_ERR_IO_ERROR;
+            res = Status::NotFound(fmt::format("tablet_meta not found. tablet: {}", tablet->full_name()));
             break;
         }
 
@@ -210,17 +212,22 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
             std::shared_lock header_rdlock(tablet->get_header_lock());
             const RowsetSharedPtr lastest_version = tablet->rowset_with_max_version();
             if (lastest_version == nullptr) {
-                LOG(WARNING) << "tablet has no any version.";
+                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id()
+                             << ", version: " << lastest_version->start_version() << "-"
+                             << lastest_version->end_version();
                 need_remove_new_path = true;
-                res = OLAP_ERR_VERSION_NOT_EXIST;
+                res = Status::NotFound(fmt::format("Not found version in tablet. tablet: {}, version: {}-{}",
+                                                   tablet->tablet_id(), lastest_version->start_version(),
+                                                   lastest_version->end_version()));
                 break;
             }
             int32_t new_end_version = lastest_version->end_version();
             if (end_version != new_end_version) {
-                LOG(WARNING) << "copied version=" << end_version
-                             << " is different from new version=" << new_end_version;
+                LOG(WARNING) << "Version does not match. src_version: " << end_version
+                             << ", dst_version: " << new_end_version;
                 need_remove_new_path = true;
-                res = OLAP_ERR_VERSION_NOT_EXIST;
+                res = Status::InternalError(fmt::format("Version does not match. src_version: {}, dst_version: {}",
+                                                        end_version, new_end_version));
                 break;
             }
 
@@ -229,15 +236,15 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         }
 
         new_meta_file = schema_hash_path + "/" + std::to_string(_tablet_id) + ".hdr";
-        res = new_tablet_meta->save(new_meta_file).ok() ? OLAP_SUCCESS : OLAP_ERR_IO_ERROR;
-        if (res != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to save meta to path. file=" << new_meta_file;
+        res = new_tablet_meta->save(new_meta_file);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to save meta to path. file=" << new_meta_file;
             need_remove_new_path = true;
             break;
         }
 
-        res = TabletMeta::reset_tablet_uid(new_meta_file).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
-        if (res != OLAP_SUCCESS) {
+        res = TabletMeta::reset_tablet_uid(new_meta_file);
+        if (!res.ok()) {
             LOG(WARNING) << "errors while set tablet uid. file=" << new_meta_file;
             need_remove_new_path = true;
             break;
@@ -249,16 +256,16 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         if (!st.ok()) {
             LOG(WARNING) << "Fail to convert rowset id. path=" << schema_hash_path;
             need_remove_new_path = true;
-            res = OLAP_ERR_OTHER_ERROR;
+            res = Status::InternalError(fmt::format("Fail to convert rowset id. path: {}", schema_hash_path));
             break;
         }
 
         st = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(_dest_store, _tablet_id, _schema_hash,
                                                                                schema_hash_path, false);
         if (!st.ok()) {
-            LOG(WARNING) << "failed to load tablet from new path. path=" << schema_hash_path;
+            LOG(WARNING) << "Fail to load tablet from new path. path: " << schema_hash_path;
             need_remove_new_path = true;
-            res = OLAP_ERR_TABLE_NOT_FOUND;
+            res = Status::InternalError(fmt::format("Fail to load tablet from new path. path: {}", schema_hash_path));
             break;
         }
 
@@ -268,8 +275,8 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         if (new_tablet == nullptr) {
             // tablet already loaded success.
             // just log, and not set need_remove_new_path.
-            LOG(WARNING) << "get null tablet. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash;
-            res = OLAP_ERR_TABLE_NOT_FOUND;
+            LOG(WARNING) << "Not found tablet: " << _tablet_id;
+            res = Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
             break;
         }
         AlterTabletTaskSharedPtr alter_task = tablet->alter_task();
@@ -291,7 +298,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
                          << ", path=" << schema_hash_path << ", error=" << st.to_string();
         }
     }
-    if (res != OLAP_SUCCESS && need_remove_new_path) {
+    if (!res.ok() && need_remove_new_path) {
         // remove all index and data files if migration failed
         Status st = FileUtils::remove_all(schema_hash_path);
         if (!st.ok()) {
@@ -324,18 +331,18 @@ void EngineStorageMigrationTask::_generate_new_header(DataDir* store, const uint
     // remove old meta after the new tablet is loaded successfully
 }
 
-OLAPStatus EngineStorageMigrationTask::_copy_index_and_data_files(
+Status EngineStorageMigrationTask::_copy_index_and_data_files(
         const string& schema_hash_path, const TabletSharedPtr& ref_tablet,
         const std::vector<RowsetSharedPtr>& consistent_rowsets) const {
-    OLAPStatus status = OLAP_SUCCESS;
+    Status status = Status::OK();
     for (const auto& rs : consistent_rowsets) {
         bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
         if (bg_worker_stopped) {
-            status = OLAP_ERR_OTHER_ERROR;
+            status = Status::InternalError("Process is going to quit.");
             break;
         }
         status = rs->copy_files_to(schema_hash_path);
-        if (status != OLAP_SUCCESS) {
+        if (!status.ok()) {
             break;
         }
     }

@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-OLAPStatus decimal12_t::from_string(const std::string& str) {
+Status decimal12_t::from_string(const std::string& str) {
     integer = 0;
     fraction = 0;
     const char* value_string = str.c_str();
@@ -33,7 +33,7 @@ OLAPStatus decimal12_t::from_string(const std::string& str) {
 
     if (sign != nullptr) {
         if (sign != value_string) {
-            return OLAP_ERR_INPUT_PARAMETER_ERROR;
+            return Status::InvalidArgument("Fail to cast to decimal.");
         } else {
             ++value_string;
         }
@@ -62,7 +62,7 @@ OLAPStatus decimal12_t::from_string(const std::string& str) {
         integer = -integer;
     }
 
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 } // namespace starrocks

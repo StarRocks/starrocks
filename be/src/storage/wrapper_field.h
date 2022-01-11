@@ -47,7 +47,7 @@ public:
 
     // Construct from a serialized string which is terminated by '\0'
     // do not include the null flag
-    OLAPStatus from_string(const std::string& value_string) {
+    Status from_string(const std::string& value_string) {
         if (_is_string_type) {
             if (value_string.size() > _var_length) {
                 Slice* slice = reinterpret_cast<Slice*>(cell_ptr());
