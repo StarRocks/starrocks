@@ -645,7 +645,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             error_tablet_ids.clear();
             EnginePublishVersionTask engine_task(publish_version_req, &error_tablet_ids);
             res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-            if (!res.ok()) {
+            if (res.ok()) {
                 break;
             } else {
                 LOG(WARNING) << "publish version error, retry. [transaction_id=" << publish_version_req.transaction_id
