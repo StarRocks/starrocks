@@ -2000,8 +2000,8 @@ public class Coordinator {
                         params.setPipeline_dop(fragment.getPipelineDop());
                         // TODO (by satanson): just for verification of resource isolation.
                         TWorkGroup wg = new TWorkGroup();
-                        wg.name = "";
-                        wg.id = ConnectContext.get().getSessionVariable().getWorkgroupId();
+                        wg.setName("");
+                        wg.setId(ConnectContext.get().getSessionVariable().getWorkgroupId());
                         params.setWorkgroup(wg);
                     }
 
