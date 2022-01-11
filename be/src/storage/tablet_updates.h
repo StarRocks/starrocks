@@ -224,6 +224,10 @@ public:
                                          EditVersion* read_version, uint32_t* next_rowset_id,
                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
 
+    // this function is not thread safe
+    // it is only used in ut of partial update now
+    EditVersion lastest_applied_version() { return _edit_version_infos[_apply_version_idx]->version; }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

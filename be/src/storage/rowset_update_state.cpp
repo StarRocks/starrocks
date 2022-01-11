@@ -249,9 +249,8 @@ Status RowsetUpdateState::_check_conflict(Tablet* tablet, Rowset* rowset, uint32
                                           EditVersion lastest_applied_version, std::vector<uint32_t>& read_column_ids,
                                           const PrimaryIndex& index) {
     // _partial_update_states is empty which means write column is empty
-    // return Status::OK() directly
     if (_partial_update_states.empty()) {
-        return Status::OK();
+        return Status::InternalError("write column is empty");
     }
 
     // _read_version is equal to lastest_applied_version which means there is no
@@ -260,20 +259,19 @@ Status RowsetUpdateState::_check_conflict(Tablet* tablet, Rowset* rowset, uint32
         return Status::OK();
     }
 
-    EditVersion version;
-    uint32_t next_rowset_id = 0;
+    LOG(INFO) << "lastest_applied_version: " << lastest_applied_version.to_string()
+              << " vs read_version: " << _read_version.to_string();
+    // get rss_rowids to identify conflict exist or not
+    int64_t t_start = MonotonicMillis();
     uint32_t num_segments = _upserts.size();
     std::vector<std::vector<uint64_t>> new_rss_rowids;
-    std::vector<std::vector<uint64_t>*> rss_rowids;
     new_rss_rowids.resize(num_segments);
-    rss_rowids.resize(num_segments);
     for (uint32_t i = 0; i < num_segments; ++i) {
-        new_rss_rowids[i].resize(_upserts[i]->size());
-        rss_rowids[i] = &new_rss_rowids[i];
+        auto& pks = *_upserts[i];
+        new_rss_rowids[i].resize(pks.size());
+        index.get(pks, &new_rss_rowids[i]);
     }
-
-    RETURN_IF_ERROR(
-            tablet->updates()->prepare_partial_update_states(tablet, _upserts, &version, &next_rowset_id, &rss_rowids));
+    int64_t t_get_rowids = MonotonicMillis();
 
     for (uint32_t i = 0; i < num_segments; ++i) {
         std::vector<std::unique_ptr<vectorized::Column>> new_write_columns;
@@ -326,6 +324,12 @@ Status RowsetUpdateState::_check_conflict(Tablet* tablet, Rowset* rowset, uint32
         }
     }
 
+    int64_t t_reslove_conflict = MonotonicMillis();
+    LOG(INFO) << Substitute(
+            "check partial rowset conflict tablet:$0 rowset:$1 #column:$2 getrowid:$3ms #reslove_conflict $4ms",
+            tablet->tablet_id(), rowset_id, read_column_ids.size(), (t_get_rowids - t_start) / 1000000,
+            (t_reslove_conflict - t_get_rowids) / 1000000);
+
     return Status::OK();
 }
 
@@ -369,52 +373,16 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
 
     RETURN_IF_ERROR(_check_conflict(tablet, rowset, rowset_id, lastest_applied_version, read_column_ids, index));
     for (size_t i = 0; i < num_segments; i++) {
-        // should not happened
-        if (_partial_update_states.empty()) {
-            auto& pks = *_upserts[i];
-            int64_t t_start = MonotonicMillis();
-            std::vector<uint64_t> rowids(pks.size());
-            int64_t t_get_rowids = MonotonicMillis();
-            index.get(pks, &rowids);
-            size_t num_default = 0;
-            std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
-            vector<uint32_t> idxes;
-            // group rowids by rssid, and for each group sort by rowid
-            plan_read_by_rssid(rowids, &num_default, &rowids_by_rssid, &idxes);
-            // get column values by rowid, also get default values if needed
-            RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid,
-                                                                 &read_columns));
-            for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-                write_columns[col_idx]->reset_column();
-                write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0, idxes.size());
-            }
-            int64_t t_get_column_values = MonotonicMillis();
-            auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
-            auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
-            rewrite_files.emplace_back(src_path, dest_path);
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
-                                                     write_columns, i));
-            int64_t t_rewrite = MonotonicMillis();
-            LOG(INFO) << Substitute(
-                    "apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #default:$4 getrowid:$5ms "
-                    "#read:$6($7ms) "
-                    "write:$8ms total:$9ms",
-                    tablet->tablet_id(), rowset_id, i, read_column_ids.size(), num_default,
-                    (t_get_rowids - t_start) / 1000000, pks.size() - num_default,
-                    (t_get_column_values - t_get_rowids) / 1000000, (t_rewrite - t_get_column_values) / 1000000,
-                    (t_rewrite - t_start) / 1000000);
-        } else {
-            auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
-            auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
-            rewrite_files.emplace_back(src_path, dest_path);
-            int64_t t_rewrite_start = MonotonicMillis();
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
-                                                     _partial_update_states[i].write_columns, i));
-            int64_t t_rewrite_end = MonotonicMillis();
-            LOG(INFO) << Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
-                                    tablet->tablet_id(), rowset_id, i, read_column_ids.size(),
-                                    (t_rewrite_end - t_rewrite_start) / 1000000);
-        }
+        auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        rewrite_files.emplace_back(src_path, dest_path);
+        int64_t t_rewrite_start = MonotonicMillis();
+        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
+                                                 _partial_update_states[i].write_columns, i));
+        int64_t t_rewrite_end = MonotonicMillis();
+        LOG(INFO) << Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
+                                tablet->tablet_id(), rowset_id, i, read_column_ids.size(),
+                                (t_rewrite_end - t_rewrite_start) / 1000000);
     }
     for (size_t i = 0; i < num_segments; i++) {
         RETURN_IF_ERROR(Env::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));

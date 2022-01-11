@@ -43,6 +43,13 @@ public:
 
     const std::vector<PartialUpdateState>& parital_update_states() { return _partial_update_states; }
 
+    // call check conflict directly
+    // only use for ut of partial update
+    Status test_check_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion lastest_applied_version,
+                               std::vector<uint32_t>& read_column_ids, const PrimaryIndex& index) {
+        return _check_conflict(tablet, rowset, rowset_id, lastest_applied_version, read_column_ids, index);
+    }
+
 private:
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
