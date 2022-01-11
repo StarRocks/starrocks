@@ -7,6 +7,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -14,7 +15,11 @@ using vectorized::ChunkHelper;
 
 RowsetUpdateState::RowsetUpdateState() = default;
 
-RowsetUpdateState::~RowsetUpdateState() = default;
+RowsetUpdateState::~RowsetUpdateState() {
+    if (!_status.ok()) {
+        LOG(WARNING) << "bad RowsetUpdateState released tablet:" << _tablet_id;
+    }
+}
 
 Status RowsetUpdateState::load(int64_t tablet_id, Rowset* rowset) {
     if (UNLIKELY(!_status.ok())) {
@@ -23,6 +28,13 @@ Status RowsetUpdateState::load(int64_t tablet_id, Rowset* rowset) {
     std::call_once(_load_once_flag, [&] {
         _tablet_id = tablet_id;
         _status = _do_load(rowset);
+        if (!_status.ok()) {
+            LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
+                         << get_stack_trace();
+            if (_status.is_mem_limit_exceeded()) {
+                LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
+            }
+        }
     });
     return _status;
 }
