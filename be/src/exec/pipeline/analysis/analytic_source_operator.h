@@ -4,7 +4,6 @@
 
 #include <utility>
 
-#include "exec/pipeline/analysis/analytor_factory.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/vectorized/analytor.h"
 
