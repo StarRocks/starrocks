@@ -4078,6 +4078,13 @@ public class Catalog {
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                                 DataProperty.DEFAULT_DATA_PROPERTY);
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
+                        if (olapTable.dynamicPartitionExists() && olapTable.getColocateGroup() != null) {
+                            HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
+                            if (info.getBucketNum() != olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
+                                throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
+                                                       + " if creating a colocate table");
+                            }
+                        }
                         if (hasMedium) {
                             olapTable.setStorageMedium(dataProperty.getStorageMedium());
                         }
