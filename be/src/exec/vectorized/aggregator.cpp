@@ -2,10 +2,16 @@
 
 #include "aggregator.h"
 
+#include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
+
+namespace vectorized {
+Status init_udaf_context(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
+                         starrocks_udf::FunctionContext* context);
+} // namespace vectorized
 
 Aggregator::Aggregator(const TPlanNode& tnode) : _tnode(tnode) {}
 
@@ -16,6 +22,35 @@ Status Aggregator::open(RuntimeState* state) {
         _evaluate_const_columns(i);
     }
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        if (_tnode.agg_node.aggregate_functions[i].nodes[0].fn.binary_type == TFunctionBinaryType::SRJAR) {
+            const auto& fn = _tnode.agg_node.aggregate_functions[i].nodes[0].fn;
+            auto st = vectorized::init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                                    _agg_fn_ctxs[i]);
+            RETURN_IF_ERROR(st);
+        }
+    }
+
+    if (_group_by_expr_ctxs.empty()) {
+        _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        THROW_BAD_ALLOC_IF_NULL(_single_agg_state);
+        for (int i = 0; i < _agg_functions.size(); i++) {
+            _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+        }
+        if (_agg_expr_ctxs.empty()) {
+            return Status::InternalError("Invalid agg query plan");
+        }
+    }
+
+    // For SQL: select distinct id from table or select id from from table group by id;
+    // we don't need to allocate memory for agg states.
+    if (_is_only_group_by_columns) {
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
+    } else {
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
+    }
+
     return Status::OK();
 }
 
@@ -88,8 +123,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             {
                 bool is_input_nullable =
                         !fn.arg_types.empty() && (has_outer_join_child || desc.nodes[0].has_nullable_child);
-                auto* func = vectorized::get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable,
-                                                                agg_func_set_version);
+                auto* func = vectorized::get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
                 _agg_functions[i] = func;
             }
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
@@ -117,7 +151,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                            is_input_nullable, agg_func_set_version);
+                                                            is_input_nullable, fn.binary_type, agg_func_set_version);
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid agg function plan: $0", fn.name.function_name));
@@ -197,25 +231,6 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         state->obj_pool()->add(_agg_fn_ctxs[i]);
     }
 
-    if (_group_by_expr_ctxs.empty()) {
-        _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-        THROW_BAD_ALLOC_IF_NULL(_single_agg_state);
-        for (int i = 0; i < _agg_functions.size(); i++) {
-            _agg_functions[i]->create(_single_agg_state + _agg_states_offsets[i]);
-        }
-        if (_agg_expr_ctxs.empty()) {
-            return Status::InternalError("Invalid agg query plan");
-        }
-    }
-
-    // For SQL: select distinct id from table or select id from from table group by id;
-    // we don't need to allocate memory for agg states.
-    if (_is_only_group_by_columns) {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
-    } else {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
-    }
-
     return Status::OK();
 }
 
@@ -226,18 +241,12 @@ Status Aggregator::close(RuntimeState* state) {
 
     _is_closed = true;
 
-    for (auto ctx : _agg_fn_ctxs) {
-        if (ctx != nullptr && ctx->impl()) {
-            ctx->impl()->close();
-        }
-    }
-
     // _mem_pool is nullptr means prepare phase failed
     if (_mem_pool != nullptr) {
         // Note: we must free agg_states object before _mem_pool free_all;
         if (_single_agg_state != nullptr) {
             for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->destroy(_single_agg_state + _agg_states_offsets[i]);
+                _agg_functions[i]->destroy(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
             }
         } else if (!_is_only_group_by_columns) {
             if (false) {
@@ -250,6 +259,12 @@ Status Aggregator::close(RuntimeState* state) {
         }
 
         _mem_pool->free_all();
+    }
+
+    for (auto ctx : _agg_fn_ctxs) {
+        if (ctx != nullptr && ctx->impl()) {
+            ctx->impl()->close();
+        }
     }
 
     Expr::close(_group_by_expr_ctxs, state);

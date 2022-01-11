@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <cstring>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,7 @@ class RuntimeState;
 
 namespace vectorized {
 class Column;
+class JavaUDAFContext;
 using ColumnPtr = std::shared_ptr<Column>;
 } // namespace vectorized
 
@@ -59,7 +61,7 @@ public:
             const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size,
             bool debug);
 
-    ~FunctionContextImpl() = default;
+    ~FunctionContextImpl();
 
     FunctionContextImpl(starrocks_udf::FunctionContext* parent);
 
@@ -107,6 +109,8 @@ public:
     bool check_local_allocations_empty();
 
     RuntimeState* state() { return _state; }
+
+    vectorized::JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
     std::string& string_result() { return _string_result; }
 
@@ -191,6 +195,9 @@ private:
 
     // this is used for count memory usage of aggregate state
     size_t _mem_usage = 0;
+
+    // UDAF Context
+    std::unique_ptr<vectorized::JavaUDAFContext> _jvm_udaf_ctxs;
 };
 
 } // namespace starrocks

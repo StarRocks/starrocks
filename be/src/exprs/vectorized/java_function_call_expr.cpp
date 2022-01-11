@@ -198,6 +198,8 @@ struct UDFFunctionCallHelper {
                 GET_BOX_RESULT(TYPE_SMALLINT, int16_t)
                 GET_BOX_RESULT(TYPE_INT, int32_t)
                 GET_BOX_RESULT(TYPE_BIGINT, int64_t)
+                GET_BOX_RESULT(TYPE_FLOAT, float)
+                GET_BOX_RESULT(TYPE_DOUBLE, double)
             case TYPE_VARCHAR: {
                 _data_buffer.resize(num_rows);
                 auto null_col = NullColumn::create(num_rows);
