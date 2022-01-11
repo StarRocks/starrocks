@@ -145,7 +145,7 @@ int main(int argc, char** argv) {
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
-    if (olap_res != starrocks::OLAP_SUCCESS) {
+    if (!olap_res.ok()) {
         LOG(FATAL) << "parse config storage path failed, path=" << starrocks::config::storage_root_path;
         exit(-1);
     }

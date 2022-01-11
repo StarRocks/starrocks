@@ -1146,7 +1146,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     LOG(INFO) << "creating tablet meta. next_unique_id=" << next_unique_id;
 
     uint64_t shard_id = 0;
-    if (store->get_shard(&shard_id) != OLAP_SUCCESS) {
+    if (!store->get_shard(&shard_id).ok()) {
         LOG(WARNING) << "Fail to get root path shard";
         return Status::InternalError("fail to get root path shard");
     }

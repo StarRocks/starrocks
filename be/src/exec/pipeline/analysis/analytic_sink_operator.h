@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "exec/pipeline/analysis/analytor_factory.h"
 #include "exec/pipeline/operator.h"
 #include "exec/vectorized/analytor.h"
 

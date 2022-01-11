@@ -22,7 +22,10 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.ClientPool;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.thrift.FrontendService;
@@ -40,6 +43,7 @@ public class MasterOpExecutor {
     private static final Logger LOG = LogManager.getLogger(MasterOpExecutor.class);
 
     private final OriginStatement originStmt;
+    private StatementBase parsedStmt;
     private final ConnectContext ctx;
     private TMasterOpResult result;
 
@@ -50,6 +54,11 @@ public class MasterOpExecutor {
     private boolean shouldNotRetry;
 
     public MasterOpExecutor(OriginStatement originStmt, ConnectContext ctx, RedirectStatus status, boolean isQuery) {
+        this(null, originStmt, ctx, status, isQuery);
+    }
+
+    public MasterOpExecutor(StatementBase parsedStmt, OriginStatement originStmt,
+                            ConnectContext ctx, RedirectStatus status, boolean isQuery) {
         this.originStmt = originStmt;
         this.ctx = ctx;
         if (status.isNeedToWaitJournalSync()) {
@@ -60,6 +69,7 @@ public class MasterOpExecutor {
         this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000;
         // if isQuery=false, we shouldn't retry twice when catch exception because of Idempotency
         this.shouldNotRetry = !isQuery;
+        this.parsedStmt = parsedStmt;
     }
 
     public void execute() throws Exception {
@@ -71,6 +81,28 @@ public class MasterOpExecutor {
             MysqlStateType state = MysqlStateType.fromString(result.state);
             if (state != null) {
                 ctx.getState().setStateType(state);
+                if (state == MysqlStateType.EOF || state == MysqlStateType.OK) {
+                    afterForward();
+                }
+            }
+        }
+    }
+
+    private void afterForward() throws DdlException {
+        if (parsedStmt != null) {
+            if (parsedStmt instanceof SetStmt) {
+                SetExecutor executor = new SetExecutor(ctx, (SetStmt) parsedStmt);
+                try {
+                    executor.setSessionVars();
+                } catch (DdlException e) {
+                    LOG.warn("set session variables after forward failed", e);
+                    // set remote result to null, so that mysql protocol will show the error message
+                    result = null;
+                    throw new DdlException("Global level variables are set successfully, " +
+                            "but session level variables are set failed with error: " + e.getMessage() + ". " +
+                            "Please check if the version of fe currently connected is the same as the version of master, " +
+                            "or re-establish the connection and you will see the new variables");
+                }
             }
         }
     }
