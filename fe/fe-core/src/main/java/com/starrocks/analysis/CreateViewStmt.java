@@ -75,9 +75,9 @@ public class CreateViewStmt extends BaseViewStmt {
             cloneStmt = viewDefStmt.clone();
         }
 
-        // Analyze view define statement
-        Analyzer viewAnalyzer = new Analyzer(analyzer);
-        viewDefStmt.analyze(viewAnalyzer);
+        com.starrocks.sql.analyzer.Analyzer
+                newAnalyzer = new com.starrocks.sql.analyzer.Analyzer(ConnectContext.get().getCatalog(), ConnectContext.get());
+        newAnalyzer.analyze(viewDefStmt);
 
         createView(analyzer);
     }
