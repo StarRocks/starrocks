@@ -101,6 +101,7 @@ public:
     double get_expect_factor() const;
     double get_diff_factor() const;
     double get_select_factor() const;
+    void set_select_factor(double value);
     void update_select_factor(double value);
     double get_cur_select_factor() const;
     void update_cur_select_factor(double value);
@@ -184,6 +185,8 @@ private:
 private:
     std::mutex _mutex;
 
+    std::condition_variable _cv;
+
     std::unordered_map<int, WorkGroupPtr> _workgroups;
     IoWorkGroupQueue _wg_io_queue;
 
@@ -194,6 +197,8 @@ private:
     std::atomic<size_t> _cur_schedule_num = 0;
 
     std::vector<WorkGroupPtr> _io_wgs;
+    std::unordered_set<workgroup::WorkGroup*> _ready_wgs;
+
 
     std::atomic<size_t> _cur_index = 0;
     std::vector<WorkGroupPtr> _cur_wait_run_wgs;

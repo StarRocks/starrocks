@@ -73,7 +73,7 @@ double WorkGroup::get_cpu_actual_use_ratio() const {
 }
 
 WorkGroupManager::WorkGroupManager() : _schedule_num_period(1024) {
-    _cur_schedule_num = _schedule_num_period;
+    _cur_schedule_num = 0;
     _cur_wait_run_wgs.resize(_schedule_num_period, nullptr);
 }
 WorkGroupManager::~WorkGroupManager() {}
@@ -144,6 +144,10 @@ double WorkGroup::get_select_factor() const {
     return _select_factor;
 }
 
+void WorkGroup::set_select_factor(double value) {
+    _select_factor = value;
+}
+
 void WorkGroup::update_select_factor(double value) {
     _select_factor += value;
 }
@@ -169,15 +173,15 @@ void WorkGroup::estimate_trend_factor_period() {
     // so _expect_factor = decrease_factor / increase_factor * 70
 
     double decrease_factor =
-            _decrease_chunk_num_period / _cpu_actual_use_ratio * _cpu_expect_use_ratio / _cpu_actual_use_ratio;
-    double increase_factor = _increase_chunk_num_period / _cpu_expect_use_ratio;
+            _decrease_chunk_num_period / get_cpu_actual_use_ratio() * get_cpu_expected_use_ratio() / get_cpu_actual_use_ratio();
+    double increase_factor = _increase_chunk_num_period / get_cpu_actual_use_ratio();
 
-    _expect_factor = decrease_factor / increase_factor * _cpu_expect_use_ratio;
+    _expect_factor = decrease_factor / increase_factor * get_cpu_expected_use_ratio();
 
     // diff_factor mean diff between actually need io resource percent and limit percent of cpu
     // if it is nagative, it mean resouse less and need more
     // if it is positive, it mean resouse is enough and can be reduce
-    _diff_factor = _cpu_expect_use_ratio - _expect_factor;
+    _diff_factor = get_cpu_expected_use_ratio() - _expect_factor;
 
     // it only use for this period to calculate factors
     // over calculate, it must be reset to zero for next period
@@ -194,6 +198,12 @@ void WorkGroupManager::adjust_weight_if_need() {
     if (!_is_adjusted.compare_exchange_strong(expect, true)) {
         // maybe has other thread do it
         return;
+    }
+
+    // lock 
+    _io_wgs.clear();
+    for (const auto& wg : _read_io_wgs) {
+       _io_wgs.push_back(wg); 
     }
 
     // calculate all wg factors
@@ -216,6 +226,11 @@ void WorkGroupManager::adjust_weight_if_need() {
     // If positive_total_diff_factor <= 0, it mean not exist workgroup which over pay io resource
     // so it don't need adjust, just keep
     if (positive_total_diff_factor <= 0) {
+        for (auto const& wg : _io_wgs) {
+            wg->set_select_factor(wg->get_cpu_expected_use_ratio());
+        }
+        _cur_schedule_num = _schedule_num_period;
+        _is_scheduled.store(false, std::memory_order_release);
         return;
     }
 
@@ -304,8 +319,12 @@ size_t WorkGroupManager::get_next_wg_index() {
 }
 
 WorkGroupPtr WorkGroupManager::pick_next_wg_for_io() {
+    while (_ready_wgs.empty()) {
+        _cv.wait(lock);
+    }
     adjust_weight_if_need();
-    return get_next_wg();
+    auto wg = get_next_wg();
+    if (wg->)
 }
 
 WorkGroupQueue& WorkGroupManager::get_io_queue() {
@@ -322,6 +341,10 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     WorkGroupManager::instance()->add_workgroup(default_wg);
     WorkGroupManager::instance()->add_workgroup(wg1);
     WorkGroupManager::instance()->add_workgroup(wg2);
+
+    default_wg->set_select_factor(default_wg->get_cpu_expected_use_ratio());
+    wg1->set_select_factor(wg1->get_cpu_expected_use_ratio());
+    wg2->set_select_factor(wg2->get_cpu_expected_use_ratio());
 }
 
 } // namespace workgroup
