@@ -293,6 +293,11 @@ Status DeltaWriter::commit() {
 
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);
+
+    if (res != OLAP_SUCCESS) {
+        _storage_engine->update_manager()->on_rowset_cancel(_tablet.get(), _cur_rowset.get());
+    }
+
     if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
         _set_state(kAborted);
         return Status::InternalError("Fail to commit transaction");
