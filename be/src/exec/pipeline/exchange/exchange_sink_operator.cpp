@@ -283,29 +283,40 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
 
     // fragment_instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
     std::optional<std::shared_ptr<Channel>> pseudo_channel;
+
+    // Pipeline level shuffle shouldn't change distribution of be level shuffle
+    // In other words, same hash value mapping to same destination with or without pipeline level shuffle
+    // because global runtime filter depend on this distribution
+    // For example
+    // a. without pipeline shuffle
+    //      channel0(dest0), channel1(dest1), channel2(dest2)
+    //      (0 mod 3 = 0) -> channel0 -> dest0
+    //      (1 mod 3 = 1) -> channel1 -> dest1
+    //      (2 mod 3 = 2) -> channel2 -> dest2
+    //      (3 mod 3 = 0) -> channel0 -> dest0
+    //      (4 mod 3 = 1) -> channel1 -> dest1
+    //      (5 mod 3 = 2) -> channel2 -> dest2
+    // b. with pipeline shuffle
+    //      channel0(dest0), channel1(dest1), channel2(dest2)
+    //      channel3(dest0), channel4(dest1), channel5(dest2)
+    //      (0 mod 6 = 0) -> channel0 -> dest0
+    //      (1 mod 6 = 1) -> channel1 -> dest1
+    //      (2 mod 6 = 2) -> channel2 -> dest2
+    //      (3 mod 6 = 3) -> channel3 -> dest0
+    //      (4 mod 6 = 4) -> channel4 -> dest1
+    //      (5 mod 6 = 5) -> channel5 -> dest2
     size_t max_shuffle_id = 1;
     if (_is_pipeline_level_shuffle) {
         max_shuffle_id = _dest_dop;
     }
-
-    // Pipeline level shuffle shouldn't change distribution of be level shuffle
-    // because global runtime filter depend on this distribution
-    // For example
-    // a. without pipeline shuffle
-    //      0,3,... -> destination1
-    //      1,4,... -> destination2
-    //      2,5,... -> destination3
-    // b. with pipeline shuffle
-    //      0,3,... -> destination1
-    //      1,4,... -> destination2
-    //      2,5,... -> destination3
-    for (auto shuffle_id = 0; shuffle_id < max_shuffle_id; ++shuffle_id) {
+    for (auto cnt = 0; cnt < max_shuffle_id; ++cnt) {
         for (const auto& destination : destinations) {
             const auto& fragment_instance_id = destination.fragment_instance_id;
             if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
                 _channels.emplace_back(pseudo_channel.value());
             } else {
                 const auto channel_id = _channels.size();
+                const auto shuffle_id = channel_id % max_shuffle_id;
                 _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id,
                                                    shuffle_id, channel_id, enable_exchange_pass_through,
                                                    pass_through_chunk_buffer));
@@ -483,24 +494,24 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
             // Compute row indexes for each channel
             _channel_row_idx_start_points.assign(num_channels + 1, 0);
-            for (uint16_t i = 0; i < num_rows; ++i) {
-                uint16_t channel_index = _hash_values[i] % num_channels;
+            for (size_t i = 0; i < num_rows; ++i) {
+                size_t channel_index = _hash_values[i] % num_channels;
                 _channel_row_idx_start_points[channel_index]++;
                 _hash_values[i] = channel_index;
             }
             // NOTE:
             // we make the last item equal with number of rows of this chunk
-            for (int i = 1; i <= num_channels; ++i) {
+            for (int32_t i = 1; i <= num_channels; ++i) {
                 _channel_row_idx_start_points[i] += _channel_row_idx_start_points[i - 1];
             }
 
-            for (int i = num_rows - 1; i >= 0; --i) {
+            for (int32_t i = num_rows - 1; i >= 0; --i) {
                 _row_indexes[_channel_row_idx_start_points[_hash_values[i]] - 1] = i;
                 _channel_row_idx_start_points[_hash_values[i]]--;
             }
         }
 
-        for (int i : _channel_indices) {
+        for (int32_t i : _channel_indices) {
             size_t from = _channel_row_idx_start_points[i];
             size_t size = _channel_row_idx_start_points[i + 1] - from;
             if (size == 0) {

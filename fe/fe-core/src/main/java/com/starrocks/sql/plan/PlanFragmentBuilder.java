@@ -211,7 +211,6 @@ public class PlanFragmentBuilder {
                 new PlanFragment(execPlan.getPlanCtx().getNextFragmentId(), exchangeNode, DataPartition.UNPARTITIONED);
         inputFragment.setDestination(exchangeNode);
         inputFragment.setOutputPartition(DataPartition.UNPARTITIONED);
-        exchangeNode.setPartitionType(inputFragment.getOutputPartition().getType());
 
         exchangeFragment.setOutputExprs(outputExprs);
         execPlan.getFragments().add(exchangeFragment);
@@ -718,8 +717,7 @@ public class PlanFragmentBuilder {
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
                 for (ScalarOperator predicate : predicates) {
-                    icebergScanNode.getConjuncts()
-                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                    icebergScanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 icebergScanNode.getScanRangeLocations();
                 /*
@@ -1236,7 +1234,6 @@ public class PlanFragmentBuilder {
             fragment.setQueryGlobalDicts(distribution.getGlobalDicts());
             inputFragment.setDestination(exchangeNode);
             inputFragment.setOutputPartition(dataPartition);
-            exchangeNode.setPartitionType(inputFragment.getOutputPartition().getType());
 
             context.getFragments().add(fragment);
             return fragment;
@@ -1276,7 +1273,6 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getPlanCtx().getNextFragmentId(), exchangeNode, dataPartition);
             inputFragment.setDestination(exchangeNode);
             inputFragment.setOutputPartition(dataPartition);
-            exchangeNode.setPartitionType(inputFragment.getOutputPartition().getType());
 
             context.getFragments().add(fragment);
             return fragment;

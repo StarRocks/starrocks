@@ -868,6 +868,8 @@ public class Coordinator {
             // hash-partitioned
             // output at the moment
 
+            // set params for pipeline level shuffle
+            params.fragment.getDestNode().setPartitionType(params.fragment.getOutputPartition().getType());
             if (sink instanceof DataStreamSink) {
                 DataStreamSink dataStreamSink = (DataStreamSink) sink;
                 dataStreamSink.setExchDop(destParams.fragment.getPipelineDop());

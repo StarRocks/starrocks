@@ -278,7 +278,8 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
         }
         bool is_pipeline_level_shuffle = false;
         int32_t dest_dop = -1;
-        if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED) {
+        if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
+            sender->get_partition_type() == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
             is_pipeline_level_shuffle = true;
             dest_dop = t_stream_sink.dest_dop;
             DCHECK_GT(dest_dop, 0);

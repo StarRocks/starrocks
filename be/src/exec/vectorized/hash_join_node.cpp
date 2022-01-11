@@ -382,13 +382,16 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
+            TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED;
             bool rhs_need_local_shuffle = true;
             if (rhs_operators.size() == 1 &&
                 typeid(*rhs_operators[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
                 auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(rhs_operators[0].get());
                 auto& texchange_node = exchange_op->texchange_node();
                 if (texchange_node.__isset.partition_type &&
-                    texchange_node.partition_type == TPartitionType::HASH_PARTITIONED) {
+                    (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                     texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED)) {
+                    part_type = texchange_node.partition_type;
                     rhs_need_local_shuffle = false;
                 }
             }
@@ -398,15 +401,21 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                 auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(lhs_operators[0].get());
                 auto& texchange_node = exchange_op->texchange_node();
                 if (texchange_node.__isset.partition_type &&
-                    texchange_node.partition_type == TPartitionType::HASH_PARTITIONED) {
+                    (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                     texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED)) {
+                    part_type = texchange_node.partition_type;
                     lhs_need_local_shuffle = false;
                 }
             }
-            if (rhs_need_local_shuffle || lhs_need_local_shuffle) {
+
+            // Make sure that local shuffle use the same hash function as the remote exchange sink do
+            if (rhs_need_local_shuffle) {
                 rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators,
-                                                                                  _build_expr_ctxs);
+                                                                                  _build_expr_ctxs, part_type);
+            }
+            if (lhs_need_local_shuffle) {
                 lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators,
-                                                                                  _probe_expr_ctxs);
+                                                                                  _probe_expr_ctxs, part_type);
             }
         }
     }
