@@ -8,6 +8,7 @@
 
 #include "column/column_helper.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
+#include "exec/vectorized/hdfs_scanner_parquet.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/chunk_helper.h"
