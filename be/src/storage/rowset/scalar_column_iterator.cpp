@@ -444,12 +444,14 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseR
         }
 
         if (iter.begin() >= end_ord) {
+            contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
             RETURN_IF_ERROR(_page->read_dict_codes(dst, read_range));
             read_range.clear();
         }
     }
 
     if (!read_range.empty()) {
+        contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         RETURN_IF_ERROR(_page->read_dict_codes(dst, read_range));
         read_range.clear();
     }
