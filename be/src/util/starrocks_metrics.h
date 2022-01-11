@@ -55,6 +55,13 @@ private:
             #name, [&]() { StarRocksMetrics::instance()->name.set_value(func()); });
 
 class StarRocksMetrics {
+private:
+    static const std::string _s_registry_name;
+    static const std::string _s_hook_name;
+
+    MetricRegistry _metrics;
+    SystemMetrics _system_metrics;
+
 public:
     // counters
     METRIC_DEFINE_INT_COUNTER(fragment_requests_total, MetricUnit::REQUESTS);
@@ -233,13 +240,6 @@ private:
     void _update();
     void _update_process_thread_num();
     void _update_process_fd_num();
-
-private:
-    static const std::string _s_registry_name;
-    static const std::string _s_hook_name;
-
-    MetricRegistry _metrics;
-    SystemMetrics _system_metrics;
 };
 
 }; // namespace starrocks

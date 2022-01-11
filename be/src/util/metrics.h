@@ -23,6 +23,8 @@
 
 #include <gperftools/malloc_extension.h>
 
+#include <memory>
+
 #include "common/compiler_util.h"
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
@@ -352,26 +354,24 @@ public:
     void deregister_hook(const std::string& name);
 
     void collect(MetricsVisitor* visitor) {
-        std::lock_guard<SpinLock> l(_lock);
         if (!config::enable_metric_calculator) {
             // Before we collect, need to call hooks
-            unprotected_trigger_hook();
+            _trigger_hook();
         }
 
-        for (auto& it : _collectors) {
-            it.second->collect(_name, it.first, visitor);
+        auto all_collector = _all_collectors_snapshot;
+        for (auto& [name, collector] : *all_collector) {
+            collector.collect(_name, name, visitor);
         }
     }
 
-    void trigger_hook() {
-        std::lock_guard<SpinLock> l(_lock);
-        unprotected_trigger_hook();
-    }
+    void trigger_hook() { _trigger_hook(); }
 
 private:
-    void unprotected_trigger_hook() {
-        for (const auto& it : _hooks) {
-            it.second();
+    void _trigger_hook() {
+        auto hooks = _all_hooks_snapshot;
+        for (const auto& [name, hook] : *hooks) {
+            hook();
         }
     }
 
@@ -383,6 +383,16 @@ private:
     mutable SpinLock _lock;
     std::map<std::string, MetricCollector*> _collectors;
     std::map<std::string, std::function<void()>> _hooks;
+
+    using FlatCollectors = std::vector<std::pair<std::string, MetricCollector>>;
+    using FlatCollectorsPtr = std::shared_ptr<FlatCollectors>;
+    using FlatHooks = std::vector<std::pair<std::string, std::function<void()>>>;
+    using FlatHooksPtr = std::shared_ptr<FlatHooks>;
+
+    // both _all_collectors_snapshot and _all_hooks_snapshot were Copy on write
+    // so when we call collect or trigger_hook method, we don't have to acquire any lock
+    std::shared_ptr<FlatCollectors> _all_collectors_snapshot = std::make_shared<FlatCollectors>();
+    std::shared_ptr<FlatHooks> _all_hooks_snapshot = std::make_shared<FlatHooks>();
 };
 
 using IntCounter = CoreLocalCounter<int64_t>;

@@ -21,6 +21,9 @@
 
 #include "util/metrics.h"
 
+#include <algorithm>
+#include <memory>
+
 namespace starrocks {
 
 MetricLabels MetricLabels::EmptyLabels;
@@ -134,6 +137,8 @@ MetricRegistry::~MetricRegistry() {
             _deregister_locked(metric);
         }
     }
+    _all_collectors_snapshot.reset();
+    _all_hooks_snapshot.reset();
     // All register metric will deregister
     DCHECK(_collectors.empty()) << "_collectors not empty, size=" << _collectors.size();
 }
@@ -153,6 +158,19 @@ bool MetricRegistry::register_metric(const std::string& name, const MetricLabels
     auto res = collector->add_metric(labels, metric);
     if (res) {
         metric->_registry = this;
+        FlatCollectorsPtr collectors = std::make_shared<FlatCollectors>(*_all_collectors_snapshot);
+        bool new_collector = true;
+        for (int i = 0; i < collectors->size(); ++i) {
+            if ((*collectors)[i].first == name) {
+                (*collectors)[i].second = *collector;
+                new_collector = false;
+                break;
+            }
+        }
+        if (new_collector) {
+            collectors->emplace_back(name, *collector);
+        }
+        _all_collectors_snapshot = collectors;
     }
     return res;
 }
@@ -170,6 +188,25 @@ void MetricRegistry::_deregister_locked(Metric* metric) {
         delete it->second;
         _collectors.erase(it);
     }
+
+    if (_all_collectors_snapshot) {
+        to_erase.clear();
+        FlatCollectorsPtr collectors = std::make_shared<FlatCollectors>(*_all_collectors_snapshot);
+        for (auto& [name, collector] : *collectors) {
+            collector.remove_metric(metric);
+            if (collector.empty()) {
+                to_erase.emplace_back(name);
+            }
+        }
+
+        FlatCollectorsPtr new_collectors = std::make_shared<FlatCollectors>();
+        for (auto& [name, collector] : *collectors) {
+            if (auto iter = std::find(to_erase.begin(), to_erase.end(), name); iter == to_erase.end()) {
+                new_collectors->emplace_back(name, collector);
+            }
+        }
+        _all_collectors_snapshot = new_collectors;
+    }
 }
 
 Metric* MetricRegistry::get_metric(const std::string& name, const MetricLabels& labels) const {
@@ -184,12 +221,23 @@ Metric* MetricRegistry::get_metric(const std::string& name, const MetricLabels& 
 bool MetricRegistry::register_hook(const std::string& name, const std::function<void()>& hook) {
     std::lock_guard<SpinLock> l(_lock);
     auto it = _hooks.emplace(name, hook);
-    return it.second;
+    if (it.second) {
+        FlatHooksPtr hooks = std::make_shared<FlatHooks>(*_all_hooks_snapshot);
+        hooks->emplace_back(name, hook);
+        _all_hooks_snapshot = hooks;
+        return true;
+    }
+    return false;
 }
 
 void MetricRegistry::deregister_hook(const std::string& name) {
     std::lock_guard<SpinLock> l(_lock);
     _hooks.erase(name);
+
+    FlatHooksPtr hooks = std::make_shared<FlatHooks>(*_all_hooks_snapshot);
+    auto iter = std::remove_if(hooks->begin(), hooks->end(), [&](const auto& par) { return par.first == name; });
+    hooks->erase(iter, hooks->end());
+    _all_hooks_snapshot = hooks;
 }
 
 } // namespace starrocks
