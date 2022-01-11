@@ -189,7 +189,7 @@ public class PlanFragmentBuilder {
         }
 
         List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
-                        .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
+                .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
                 .collect(Collectors.toList());
         execPlan.getOutputExprs().addAll(outputExprs);
 
@@ -717,7 +717,8 @@ public class PlanFragmentBuilder {
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
                 for (ScalarOperator predicate : predicates) {
-                    icebergScanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                    icebergScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 icebergScanNode.getScanRangeLocations();
                 /*
@@ -1221,7 +1222,7 @@ public class PlanFragmentBuilder {
                 }
                 List<Expr> distributeExpressions =
                         partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
             } else {
@@ -1491,7 +1492,7 @@ public class PlanFragmentBuilder {
 
                 List<Expr> eqJoinConjuncts =
                         eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
 
                 for (Expr expr : eqJoinConjuncts) {
@@ -1503,13 +1504,13 @@ public class PlanFragmentBuilder {
                 List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getJoinPredicate());
                 otherJoin.removeAll(eqOnPredicates);
                 List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 // 3. Get conjuncts
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
                 List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 if (joinOperator.isLeftOuterJoin()) {
@@ -1571,14 +1572,14 @@ public class PlanFragmentBuilder {
                             .map(columnRefFactory::getColumnRef).collect(Collectors.toList());
                     List<Expr> leftJoinExprs =
                             leftPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                     .collect(Collectors.toList());
 
                     List<ScalarOperator> rightPredicates = rightOnPredicateColumns.stream()
                             .map(columnRefFactory::getColumnRef).collect(Collectors.toList());
                     List<Expr> rightJoinExprs =
                             rightPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                     .collect(Collectors.toList());
 
                     DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
@@ -1847,7 +1848,7 @@ public class PlanFragmentBuilder {
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                             .collect(Collectors.toList());
 
             List<OrderByElement> orderByElements = node.getOrderByElements().stream().map(e -> new OrderByElement(
@@ -1938,7 +1939,10 @@ public class PlanFragmentBuilder {
             PlanFragment setOperationFragment =
                     new PlanFragment(context.getPlanCtx().getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
             List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
-
+            // record children output columns could generate nullable columns
+            List<Boolean> childrenOutputNullableList = new ArrayList<>(
+                    Arrays.asList(new Boolean[setOperation.getChildOutputColumns().get(0).size()]));
+            Collections.fill(childrenOutputNullableList, Boolean.FALSE);
             for (int i = 0; i < optExpr.getInputs().size(); i++) {
                 List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(i);
                 PlanFragment fragment = visit(optExpr.getInputs().get(i), context);
@@ -1946,9 +1950,12 @@ public class PlanFragmentBuilder {
                 List<Expr> materializedExpressions = Lists.newArrayList();
 
                 // keep output column order
-                for (ColumnRefOperator ref : childOutput) {
+                for (int childIndex = 0; childIndex < childOutput.size(); ++childIndex) {
+                    ColumnRefOperator ref = childOutput.get(childIndex);
                     SlotDescriptor slotDescriptor = context.getDescTbl().getSlotDesc(new SlotId(ref.getId()));
                     materializedExpressions.add(new SlotRef(slotDescriptor));
+                    childrenOutputNullableList.set(childIndex,
+                            childrenOutputNullableList.get(childIndex) | slotDescriptor.getIsNullable());
                 }
 
                 materializedResultExprLists.add(materializedExpressions);
@@ -1970,9 +1977,12 @@ public class PlanFragmentBuilder {
 
             // reset column is nullable, for handle union select xx join select xxx...
             setOperationNode.setHasNullableGenerateChild();
-            for (ColumnRefOperator columnRefOperator : setOperation.getOutputColumnRefOp()) {
+            for (int outputColumnIndex = 0; outputColumnIndex < setOperation.getOutputColumnRefOp().size();
+                 ++outputColumnIndex) {
+                ColumnRefOperator columnRefOperator = setOperation.getOutputColumnRefOp().get(outputColumnIndex);
                 SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(columnRefOperator.getId()));
                 slotDesc.setIsNullable(slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild());
+                slotDesc.setIsNullable(slotDesc.getIsNullable() | childrenOutputNullableList.get(outputColumnIndex));
             }
             setOperationTuple.computeMemLayout();
 

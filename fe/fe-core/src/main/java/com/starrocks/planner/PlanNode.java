@@ -689,16 +689,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 return true;
             }
         }
-
-        List<ProjectNode> projectNodes = Lists.newArrayList();
-        collectAll(Predicates.instanceOf(ProjectNode.class), projectNodes);
-        for (ProjectNode node : projectNodes) {
-            Stream<Map<SlotId, Expr>> slotMapStream = Stream.of(node.getSlotMap(), node.getCommonSlotMap());
-            if (slotMapStream.flatMap(map -> map.entrySet().stream())
-                    .anyMatch(entry -> entry.getValue().isNullable())) {
-                return true;
-            }
-        }
         return false;
     }
 

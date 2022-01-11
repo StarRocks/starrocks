@@ -5277,9 +5277,15 @@ public class PlanFragmentTest extends PlanTestBase {
                 "      )\n" +
                 "  ) t;";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("8:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(plan.contains("  8:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: [9: day, TINYINT, true]\n" +
-                "  |  hasNullableGenerateChild: true"));
+                "  |  cardinality: 0\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [4, TINYINT, true]\n" +
+                "  |      [8, TINYINT, false]\n" +
+                "  |  pass-through-operands: all"));
     }
 }
