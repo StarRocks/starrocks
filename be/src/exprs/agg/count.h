@@ -56,8 +56,8 @@ public:
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
 
-    void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                         Column* to) const override {
+    void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                         size_t state_offset, Column* to) const override {
         Int64Column* column = down_cast<Int64Column*>(to);
         Buffer<int64_t>& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
@@ -70,13 +70,8 @@ public:
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
 
-    void batch_finalize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offsets,
-                        Column* to) const {
-        batch_serialize(chunk_size, agg_states, state_offsets, to);
-    }
-
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        Int64Column* column = down_cast<Int64Column*>((*dst).get());
+        auto* column = down_cast<Int64Column*>((*dst).get());
         column->get_data().assign(chunk_size, 1);
     }
 
@@ -151,8 +146,8 @@ public:
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
 
-    void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                         Column* to) const override {
+    void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                         size_t state_offset, Column* to) const override {
         Int64Column* column = down_cast<Int64Column*>(to);
         Buffer<int64_t>& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
@@ -163,11 +158,6 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());
         down_cast<Int64Column*>(to)->append(this->data(state).count);
-    }
-
-    void batch_finalize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offsets,
-                        Column* to) const {
-        batch_serialize(chunk_size, agg_states, state_offsets, to);
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
