@@ -4796,6 +4796,16 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testCountDistinctFloatTwoPhase() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct t1e) from test_all_type";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("aggregate: multi_distinct_count[([5: t1e, FLOAT, true]); " +
+                "args: FLOAT; result: VARCHAR; args nullable: true; result nullable: false"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testCastDecimalZero() throws Exception {
         Config.enable_decimal_v3 = true;
         String sql = "select (CASE WHEN CAST(t0.v1 AS BOOLEAN ) THEN 0.00 END) BETWEEN (0.07) AND (0.04) from t0;";

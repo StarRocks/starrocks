@@ -392,7 +392,8 @@ public class FunctionSet {
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
-            } else if (t.isBoolean() || t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint() || t.isDouble()) {
+            } else if (t.isBoolean() || t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() ||
+                    t.isLargeint() || t.isFloat() || t.isDouble()) {
                 addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
