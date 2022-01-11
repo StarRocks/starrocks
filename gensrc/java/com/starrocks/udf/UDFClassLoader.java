@@ -6,6 +6,11 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 
+// UDF ClassLoader
+// Used to isolate classes between UDFs to avoid the influence between static variables.
+// BE UDF's Expr creates a new instance of ClassLoader 
+// each time it opens. It can ensure no influence on each other.
+
 public class UDFClassLoader extends ClassLoader {
     private String UDFPath;
     private URLClassLoader loader;

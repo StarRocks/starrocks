@@ -6,6 +6,7 @@
 #include "common/status.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
+
 // implements by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
 // Why do we need to use this function?
@@ -56,7 +57,6 @@ public:
 
     jobject newString(const char* data, size_t size);
 
-    int intVal(jobject jinteger);
     Slice sliceVal(jstring jstr);
     size_t string_length(jstring jstr);
     Slice sliceVal(jstring jstr, std::string* buffer);
@@ -90,17 +90,11 @@ private:
     jobject _utf8_charsets;
 };
 
-// Object Guard
-// auto release jobject
-class ObjectGuard {
-public:
-    ObjectGuard(jobject&& obj) {}
-    ~ObjectGuard() noexcept;
-
-private:
-    jobject _obj;
-};
-
+// Used for UDAF serialization and deserialization,
+// providing a C++ memory space for Java to access.
+// DirectByteBuffer does not hold ownership of this memory space
+// Handle will be freed during destructuring,
+// but no operations will be done on this memory space
 class DirectByteBuffer {
 public:
     static constexpr const char* JNI_CLASS_NAME = "java/nio/ByteBuffer";
@@ -119,6 +113,8 @@ public:
         _capacity = other._capacity;
 
         other._handle = nullptr;
+        _data = nullptr;
+        _capacity = 0;
     }
 
     DirectByteBuffer& operator=(DirectByteBuffer&& other) {
@@ -140,7 +136,7 @@ private:
     int _capacity;
 };
 
-// Class Object, create by ClassLoader
+// A Class object created from the ClassLoader that can be accessed by multiple threads
 class JVMClass {
 public:
     JVMClass(jobject&& clazz) : _clazz(std::move(clazz)) {}
@@ -163,12 +159,14 @@ public:
 
     jclass clazz() const { return (jclass)_clazz; }
 
+    // Create a new instance using the default constructor
     Status newInstance(jobject* object) const;
 
 private:
     jobject _clazz;
 };
 
+// For loading UDF Class
 // Not thread safe
 class ClassLoader {
 public:
@@ -201,7 +199,7 @@ struct JavaMethodDescriptor {
     jmethodID get_method_id(jclass clazz) const;
 };
 
-// method
+// Used to get function signatures
 class ClassAnalyzer {
 public:
     ClassAnalyzer() = default;

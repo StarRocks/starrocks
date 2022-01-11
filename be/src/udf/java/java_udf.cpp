@@ -174,10 +174,6 @@ jobject JVMFunctionHelper::newString(const char* data, size_t size) {
     return nstr;
 }
 
-int JVMFunctionHelper::intVal(jobject jinteger) {
-    return _env->CallIntMethod(jinteger, _val_int);
-}
-
 size_t JVMFunctionHelper::string_length(jstring jstr) {
     return _env->GetStringUTFLength(jstr);
 }
