@@ -89,7 +89,7 @@ public:
     template <bool include_unused = false>
     std::vector<DataDir*> get_stores();
 
-    OLAPStatus get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
+    Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
     // get root path for creating tablet. The returned vector of root path should be random,
     // for avoiding that all the tablet would be deployed one disk.
@@ -113,17 +113,17 @@ public:
     // @param [out] shard_path choose an available shard_path to clone new tablet
     // @param [out] store choose an available root_path to clone new tablet
     // @return error code
-    OLAPStatus obtain_shard_path(TStorageMedium::type storage_medium, int64_t path_hash, std::string* shared_path,
-                                 DataDir** store);
+    Status obtain_shard_path(TStorageMedium::type storage_medium, int64_t path_hash, std::string* shared_path,
+                             DataDir** store);
 
     // Load new tablet to make it effective.
     //
     // @param [in] root_path specify root path of new tablet
     // @param [in] request specify new tablet info
     // @param [in] restore whether we're restoring a tablet from trash
-    // @return OLAP_SUCCESS if load tablet success
-    OLAPStatus load_header(const std::string& shard_path, const TCloneReq& request, bool restore = false,
-                           bool is_primary_key = false);
+    // @return Status::OK() if load tablet success
+    Status load_header(const std::string& shard_path, const TCloneReq& request, bool restore = false,
+                       bool is_primary_key = false);
 
     // To trigger a disk-stat and tablet report
     void trigger_report() {
@@ -150,7 +150,7 @@ public:
         }
     }
 
-    OLAPStatus execute_task(EngineTask* task);
+    Status execute_task(EngineTask* task);
 
     TabletManager* tablet_manager() { return _tablet_manager.get(); }
 
@@ -203,7 +203,7 @@ private:
 
     void _clean_unused_rowset_metas();
 
-    OLAPStatus _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
+    Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
@@ -239,7 +239,7 @@ private:
     Status _perform_cumulative_compaction(DataDir* data_dir);
     Status _perform_base_compaction(DataDir* data_dir);
     Status _perform_update_compaction(DataDir* data_dir);
-    OLAPStatus _start_trash_sweep(double* usage);
+    Status _start_trash_sweep(double* usage);
     void _start_disk_stat_monitor();
 
 private:

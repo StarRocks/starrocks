@@ -52,7 +52,7 @@ public:
 
     std::string get_schema_hash_full_path(const TabletSharedPtr& ref_tablet, const std::string& location) const;
 
-    OLAPStatus release_snapshot(const std::string& snapshot_path);
+    Status release_snapshot(const std::string& snapshot_path);
 
     static SnapshotManager* instance();
 

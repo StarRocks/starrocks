@@ -37,32 +37,32 @@ EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet
     _mem_tracker = std::make_unique<MemTracker>(-1, "checksum instance", mem_tracker);
 }
 
-OLAPStatus EngineChecksumTask::execute() {
+Status EngineChecksumTask::execute() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    OLAPStatus res = _compute_checksum();
+    Status res = _compute_checksum();
     return res;
 } // execute
 
-OLAPStatus EngineChecksumTask::_compute_checksum() {
+Status EngineChecksumTask::_compute_checksum() {
     LOG(INFO) << "begin to process compute checksum."
               << "tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash << ", version=" << _version;
 
     if (_checksum == nullptr) {
-        LOG(WARNING) << "invalid output parameter which is null pointer.";
-        return OLAP_ERR_CE_CMD_PARAMS_ERROR;
+        LOG(WARNING) << "The input checksum is a null pointer";
+        return Status::InternalError("The input checksum is a null pointer");
     }
 
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
-    if (nullptr == tablet.get()) {
-        LOG(WARNING) << "can't find tablet. tablet_id=" << _tablet_id << " schema_hash=" << _schema_hash;
-        return OLAP_ERR_TABLE_NOT_FOUND;
+    if (tablet == nullptr) {
+        LOG(WARNING) << "Not found tablet: " << _tablet_id;
+        return Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
     }
 
     if (tablet->updates() != nullptr) {
         *_checksum = 0;
         LOG(INFO) << "Skipped compute checksum for updatable tablet";
-        return OLAP_SUCCESS;
+        return Status::OK();
     }
 
     std::vector<uint32_t> return_columns;
@@ -89,7 +89,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     if (!st.ok()) {
         LOG(WARNING) << "Failed to prepare tablet reader. tablet=" << tablet->full_name()
                      << ", error:" << st.to_string();
-        return OLAP_ERR_ROWSET_READER_INIT;
+        return st;
     }
 
     vectorized::TabletReaderParams reader_params;
@@ -99,7 +99,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     st = reader.open(reader_params);
     if (!st.ok()) {
         LOG(WARNING) << "Failed to open tablet reader. tablet=" << tablet->full_name() << ", error:" << st.to_string();
-        return OLAP_ERR_ROWSET_READER_INIT;
+        return st;
     }
 
     uint32_t checksum = 0;
@@ -116,7 +116,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
         st = _mem_tracker->check_mem_limit("ConsistencyCheck");
         if (!st.ok()) {
             LOG(WARNING) << "failed to finish compute checksum. " << st.message() << std::endl;
-            return OLAP_ERR_OTHER_ERROR;
+            return st;
         }
 #endif
 
@@ -134,12 +134,12 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
 
     if (!st.is_end_of_file() && !st.ok()) {
         LOG(WARNING) << "Failed to do checksum. tablet=" << tablet->full_name() << ", error:=" << st.to_string();
-        return OLAP_ERR_CHECKSUM_ERROR;
+        return st;
     }
 
     LOG(INFO) << "success to finish compute checksum. checksum=" << checksum;
     *_checksum = checksum;
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 } // namespace starrocks

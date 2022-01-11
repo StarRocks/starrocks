@@ -6,6 +6,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "serde/column_array_serde.h"
+#include "storage/olap_define.h"
 
 namespace starrocks::vectorized {
 
