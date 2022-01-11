@@ -278,7 +278,7 @@ public class StmtExecutor {
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
                     for (String key : optHints.keySet()) {
-                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))));
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
                     }
                     context.setSessionVariable(sessionVariable);
                 }
@@ -537,7 +537,7 @@ public class StmtExecutor {
 
     private void forwardToMaster() throws Exception {
         boolean isQuery = parsedStmt instanceof QueryStmt;
-        masterOpExecutor = new MasterOpExecutor(originStmt, context, redirectStatus, isQuery);
+        masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus, isQuery);
         LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
         masterOpExecutor.execute();
     }

@@ -252,7 +252,7 @@ public class VariableMgr {
     // Input:
     //      sessionVariable: the variable of current session
     //      setVar: variable information that needs to be set
-    public static void setVar(SessionVariable sessionVariable, SetVar setVar) throws DdlException {
+    public static void setVar(SessionVariable sessionVariable, SetVar setVar, boolean onlySetSessionVar) throws DdlException {
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable());
@@ -273,7 +273,7 @@ public class VariableMgr {
             }
         }
 
-        if (setVar.getType() == SetType.GLOBAL) {
+        if (!onlySetSessionVar && setVar.getType() == SetType.GLOBAL) {
             wlock.lock();
             try {
                 setValue(ctx.getObj(), ctx.getField(), value);
