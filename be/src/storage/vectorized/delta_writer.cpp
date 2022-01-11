@@ -15,7 +15,7 @@ namespace starrocks::vectorized {
 
 StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, false);
     RETURN_IF_ERROR(writer->_init());
     return std::move(writer);
 }
@@ -33,7 +33,7 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
           _flush_token(nullptr) {}
 
 DeltaWriter::~DeltaWriter() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     switch (_get_state()) {
     case kUninitialized:
     case kCommitted:
@@ -64,7 +64,7 @@ void DeltaWriter::_garbage_collection() {
 }
 
 Status DeltaWriter::_init() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
@@ -189,7 +189,7 @@ Status DeltaWriter::_init() {
 }
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     Status st;
     auto state = _get_state();
     switch (state) {
@@ -220,7 +220,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
 }
 
 Status DeltaWriter::close() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     Status st;
     auto state = _get_state();
     switch (state) {
@@ -254,7 +254,7 @@ void DeltaWriter::_reset_mem_table() {
 }
 
 Status DeltaWriter::commit() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = _get_state();
     switch (state) {
     case kUninitialized:
