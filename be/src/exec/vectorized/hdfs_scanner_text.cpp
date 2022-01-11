@@ -67,6 +67,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
                                                      scan_range->offset, scan_range->length, scan_range->file_length);
     if (scan_range->offset != 0) {
         // Always skip first record of scan range with non-zero offset.
+        // Notice that the first record will read by previous scan range.
         CSVReader::Record dummy;
         RETURN_IF_ERROR(_reader->next_record(&dummy));
     }
