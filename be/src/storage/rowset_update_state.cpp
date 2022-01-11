@@ -34,7 +34,7 @@ Status RowsetUpdateState::load(Tablet* tablet, Rowset* rowset) {
     }
     std::call_once(_load_once_flag, [&] {
         _tablet_id = tablet->tablet_id();
-        _status = _do_load(rowset);
+        _status = _do_load(tablet, rowset);
         if (!_status.ok()) {
             LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id
                          << " stack:" << get_stack_trace();
