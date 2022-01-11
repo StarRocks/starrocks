@@ -2,6 +2,8 @@
 
 #include "mysql_scan_node.h"
 
+#include <fmt/format.h>
+
 #include <sstream>
 
 #include "column/binary_column.h"
@@ -90,7 +92,7 @@ Status MysqlScanNode::open(RuntimeState* state) {
         slot_by_id[slot->id()] = slot;
     }
 
-    std::unordered_map<std::string, std::list<std::string>> filters_in;
+    std::unordered_map<std::string, std::vector<std::string>> filters_in;
     std::unordered_map<std::string, bool> filters_null_in_set;
 
     // In Filter have been put into _conjunct_ctxs,
@@ -114,7 +116,7 @@ Status MysqlScanNode::open(RuntimeState* state) {
                 // we support numerical type, char type and date type.
                 switch (type) {
                     // In Filter is must handle by VectorizedInConstPredicate type.
-#define READ_CONST_PREDICATE(TYPE, APPEND_TO_SQL)                                        \
+#define READ_CONST_PREDICATE(TYPE, APPEND_TO_SQL)                                             \
     case TYPE: {                                                                              \
         if (typeid(*root_expr) == typeid(VectorizedInConstPredicate<TYPE>)) {                 \
             const auto* pred = down_cast<const VectorizedInConstPredicate<TYPE>*>(root_expr); \
@@ -124,31 +126,30 @@ Status MysqlScanNode::open(RuntimeState* state) {
             }                                                                                 \
             auto& field_name = iter->second->col_name();                                      \
             filters_null_in_set[field_name] = pred->null_in_set();                            \
-            std::list<std::string> list_values;                                               \
+            std::vector<std::string> vector_values;                                           \
+            vector_values.reserve(1024);                                                      \
             for (const auto& value : hash_set) {                                              \
                 APPEND_TO_SQL                                                                 \
             }                                                                                 \
-            filters_in.emplace(field_name, list_values);                                      \
+            filters_in.emplace(field_name, vector_values);                                    \
         }                                                                                     \
         break;                                                                                \
     }
 
-#define DIRECT_APPEND_TO_SQL list_values.emplace_back(std::to_string(value));
+#define DIRECT_APPEND_TO_SQL vector_values.emplace_back(std::to_string(value));
                     APPLY_FOR_NUMERICAL_TYPE(READ_CONST_PREDICATE, DIRECT_APPEND_TO_SQL)
 #undef APPLY_FOR_NUMERICAL_TYPE
 #undef DIRECT_APPEND_TO_SQL
 
 #define CONVERT_APPEND_TO_SQL          \
     std::stringstream ss;              \
-    ss << '"';                         \
     for (char c : value.to_string()) { \
         if (c == '"') {                \
             ss << '\\';                \
         }                              \
         ss << c;                       \
     }                                  \
-    ss << '"';                         \
-    list_values.emplace_back(ss.str());
+    vector_values.emplace_back(fmt::format("'{}'", ss.str()));
                     APPLY_FOR_VARCHAR_DATE_TYPE(READ_CONST_PREDICATE, CONVERT_APPEND_TO_SQL)
 #undef APPLY_FOR_VARCHAR_DATE_TYPE
 #undef CONVERT_APPEND_TO_SQL

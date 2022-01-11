@@ -59,7 +59,7 @@ public:
     // query for STARROCKS
     Status query(const std::string& table, const std::vector<std::string>& fields,
                  const std::vector<std::string>& filters,
-                 const std::unordered_map<std::string, std::list<std::string>>& filters_in,
+                 const std::unordered_map<std::string, std::vector<std::string>>& filters_in,
                  std::unordered_map<std::string, bool>& filters_null_in_set, int64_t limit);
     Status get_next_row(char*** buf, unsigned long** lengths, bool* eos);
 

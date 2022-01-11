@@ -111,7 +111,7 @@ Status MysqlScanner::query(const std::string& query) {
 
 Status MysqlScanner::query(const std::string& table, const std::vector<std::string>& fields,
                            const std::vector<std::string>& filters,
-                           const std::unordered_map<std::string, std::list<std::string>>& filters_in,
+                           const std::unordered_map<std::string, std::vector<std::string>>& filters_in,
                            std::unordered_map<std::string, bool>& filters_null_in_set, int64_t limit) {
     if (!_is_open) {
         return Status::InternalError("Query before open.");
