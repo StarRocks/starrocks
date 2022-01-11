@@ -942,7 +942,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
 #if BE_TEST
                         LOG(INFO) << ss.str();
 #else
-                        state->append_error_msg_to_file("", ss.str());
+                        state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
 #endif
                     }
                 }
