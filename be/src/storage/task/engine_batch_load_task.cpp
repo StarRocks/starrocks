@@ -56,7 +56,7 @@ EngineBatchLoadTask::EngineBatchLoadTask(TPushReq& push_req, std::vector<TTablet
 
 EngineBatchLoadTask::~EngineBatchLoadTask() = default;
 
-OLAPStatus EngineBatchLoadTask::execute() {
+Status EngineBatchLoadTask::execute() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     AgentStatus status = STARROCKS_SUCCESS;
@@ -83,8 +83,8 @@ OLAPStatus EngineBatchLoadTask::execute() {
             }
         }
     } else if (_push_req.push_type == TPushType::DELETE) {
-        OLAPStatus delete_data_status = _delete_data(_push_req, _tablet_infos);
-        if (delete_data_status != OLAPStatus::OLAP_SUCCESS) {
+        Status delete_data_status = _delete_data(_push_req, _tablet_infos);
+        if (!delete_data_status.ok()) {
             LOG(WARNING) << "delete data failed. status: " << delete_data_status << ", signature: " << _signature;
             status = STARROCKS_ERROR;
         }
@@ -92,7 +92,7 @@ OLAPStatus EngineBatchLoadTask::execute() {
         status = STARROCKS_TASK_REQUEST_ERROR;
     }
     *_res_status = status;
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 AgentStatus EngineBatchLoadTask::_init() {
@@ -131,12 +131,12 @@ AgentStatus EngineBatchLoadTask::_process() {
     if (status == STARROCKS_SUCCESS) {
         // Load delta file
         time_t push_begin = time(nullptr);
-        OLAPStatus push_status = _push(_push_req, _tablet_infos);
+        Status push_status = _push(_push_req, _tablet_infos);
         time_t push_finish = time(nullptr);
         LOG(INFO) << "Push finish, cost time: " << (push_finish - push_begin);
-        if (push_status == OLAPStatus::OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
+        if (push_status.is_already_exist()) {
             status = STARROCKS_PUSH_HAD_LOADED;
-        } else if (push_status != OLAPStatus::OLAP_SUCCESS) {
+        } else if (!push_status.ok()) {
             status = STARROCKS_ERROR;
         }
     }
@@ -144,23 +144,22 @@ AgentStatus EngineBatchLoadTask::_process() {
     return status;
 }
 
-OLAPStatus EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
-    OLAPStatus res = OLAP_SUCCESS;
+Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
     LOG(INFO) << "begin to process push. "
               << " transaction_id=" << request.transaction_id << " tablet_id=" << request.tablet_id
               << ", version=" << request.version;
 
     if (tablet_info_vec == nullptr) {
-        LOG(WARNING) << "invalid output parameter which is nullptr pointer.";
+        LOG(WARNING) << "The input tablet_info_vec is a null pointer";
         StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
-        return OLAP_ERR_CE_CMD_PARAMS_ERROR;
+        return Status::InternalError("The input tablet_info_vec is a null pointer");
     }
 
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
     if (tablet == nullptr) {
-        LOG(WARNING) << "false to find tablet. tablet=" << request.tablet_id << ", schema_hash=" << request.schema_hash;
+        LOG(WARNING) << "Not found tablet: " << request.tablet_id;
         StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
-        return OLAP_ERR_TABLE_NOT_FOUND;
+        return Status::NotFound(fmt::format("Not found tablet: {}", request.tablet_id));
     }
 
     PushType type = PUSH_NORMAL_V2;
@@ -171,67 +170,54 @@ OLAPStatus EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabl
     DCHECK(request.__isset.transaction_id);
     SCOPED_RAW_TIMER(&duration_ns);
     vectorized::PushHandler push_handler;
-    Status st = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
-    if (!st.ok()) {
-        LOG(WARNING) << "fail to process streaming ingestion. res=" << st.to_string()
-                     << ", transaction_id=" << request.transaction_id << ", tablet=" << tablet->full_name();
-        res = OLAP_ERR_PUSH_INIT_ERROR;
-    }
-    write_bytes = push_handler.write_bytes();
-    write_rows = push_handler.write_rows();
-
-    if (res != OLAP_SUCCESS) {
-        LOG(WARNING) << "fail to push delta. res=" << res << ", transaction_id=" << request.transaction_id
+    Status res = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
+    if (!res.ok()) {
+        LOG(WARNING) << "Fail to load file. res=" << res << ", transaction_id=" << request.transaction_id
                      << ", tablet=" << tablet->full_name()
                      << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
         StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
     } else {
-        LOG(INFO) << "success to push delta"
+        LOG(INFO) << "Finish to load file."
                   << ". transaction_id=" << request.transaction_id << ", tablet=" << tablet->full_name()
                   << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+        write_bytes = push_handler.write_bytes();
+        write_rows = push_handler.write_rows();
         StarRocksMetrics::instance()->push_requests_success_total.increment(1);
         StarRocksMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
         StarRocksMetrics::instance()->push_request_write_bytes.increment(write_bytes);
         StarRocksMetrics::instance()->push_request_write_rows.increment(write_rows);
     }
+
     return res;
 }
 
-OLAPStatus EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
+Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
     LOG(INFO) << "begin to process delete data. request=" << ThriftDebugString(request);
     StarRocksMetrics::instance()->delete_requests_total.increment(1);
 
-    OLAPStatus res = OLAP_SUCCESS;
-
     if (tablet_info_vec == nullptr) {
-        LOG(WARNING) << "invalid tablet info parameter which is nullptr pointer.";
-        return OLAP_ERR_CE_CMD_PARAMS_ERROR;
+        LOG(WARNING) << "The input tablet_info_vec is a null pointer";
+        return Status::InternalError("The input tablet_info_vec is a null pointer");
     }
 
     // 1. Get all tablets with same tablet_id
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
     if (tablet == nullptr) {
-        LOG(WARNING) << "can't find tablet. tablet=" << request.tablet_id << ", schema_hash=" << request.schema_hash;
-        return OLAP_ERR_TABLE_NOT_FOUND;
+        LOG(WARNING) << "Not found tablet: " << request.tablet_id;
+        return Status::NotFound(fmt::format("Not found tablet: ", request.tablet_id));
     }
 
     // 2. Process delete data by push interface
     DCHECK(request.__isset.transaction_id);
     vectorized::PushHandler push_handler;
-    Status st = push_handler.process_streaming_ingestion(tablet, request, PUSH_FOR_DELETE, tablet_info_vec);
-    if (!st.ok()) {
-        LOG(WARNING) << "fail to process streaming ingestion. res=" << st.to_string()
-                     << ", transaction_id=" << request.transaction_id << ", tablet=" << tablet->full_name();
-        res = OLAP_ERR_PUSH_INIT_ERROR;
-    }
-
-    if (res != OLAP_SUCCESS) {
-        LOG(WARNING) << "fail to push empty version for delete data. res=" << res << " tablet=" << tablet->full_name();
+    Status res = push_handler.process_streaming_ingestion(tablet, request, PUSH_FOR_DELETE, tablet_info_vec);
+    if (!res.ok()) {
+        LOG(WARNING) << "Fail to delete data. res: " << res << ", tablet: " << tablet->full_name();
         StarRocksMetrics::instance()->delete_requests_failed.increment(1);
         return res;
     }
 
-    LOG(INFO) << "finish to process delete data. res=" << res;
+    LOG(INFO) << "Finish to delete data. tablet:" << tablet->full_name();
     return res;
 }
 

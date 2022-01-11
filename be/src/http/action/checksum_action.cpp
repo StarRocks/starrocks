@@ -113,11 +113,11 @@ int64_t ChecksumAction::do_checksum(int64_t tablet_id, int64_t version, int32_t 
         return -1L;
     }
 
-    OLAPStatus res = OLAP_SUCCESS;
+    Status res = Status::OK();
     uint32_t checksum;
     EngineChecksumTask engine_task(mem_tracker, tablet_id, schema_hash, version, &checksum);
     res = engine_task.execute();
-    if (res != OLAP_SUCCESS) {
+    if (!res.ok()) {
         LOG(WARNING) << "checksum failed. status: " << res << ", signature: " << tablet_id;
         return -1L;
     } else {
