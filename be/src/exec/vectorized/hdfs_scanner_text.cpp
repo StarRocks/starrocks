@@ -9,7 +9,28 @@
 
 namespace starrocks::vectorized {
 
-Status HdfsTextScanner::HdfsScannerCSVReader::_fill_buffer() {
+class HdfsScannerCSVReader : public CSVReader {
+public:
+    HdfsScannerCSVReader(std::shared_ptr<RandomAccessFile> file, char record_delimiter, string field_delimiter,
+                         size_t offset, size_t remain_length, size_t file_length)
+            : CSVReader(record_delimiter, field_delimiter) {
+        _file = file;
+        _offset = offset;
+        _remain_length = remain_length;
+        _file_length = file_length;
+    }
+
+    Status _fill_buffer() override;
+
+private:
+    std::shared_ptr<RandomAccessFile> _file;
+    size_t _offset = 0;
+    size_t _remain_length = 0;
+    size_t _file_length = 0;
+    bool _should_stop_scan = false;
+};
+
+Status HdfsScannerCSVReader::_fill_buffer() {
     if (_should_stop_scan) {
         return Status::EndOfFile("HdfsScannerCSVReader");
     }
@@ -71,6 +92,9 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         CSVReader::Record dummy;
         RETURN_IF_ERROR(_reader->next_record(&dummy));
     }
+#ifndef BE_TEST
+    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
+#endif
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto slot = _scanner_params.materialize_slots[i];
         ConverterPtr conv = csv::get_converter(slot->type(), true);

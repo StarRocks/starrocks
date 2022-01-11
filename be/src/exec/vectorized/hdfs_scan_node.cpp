@@ -97,6 +97,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     _scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
+    _hdfs_io_profile.init(_runtime_profile.get());
 
     _mem_pool = std::make_unique<MemPool>();
 
@@ -223,6 +224,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
 
     HdfsScanner* scanner = nullptr;
     if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::PARQUET) {
+        _parquet_profile.init(_runtime_profile.get());
         scanner = _pool->add(new HdfsParquetScanner());
     } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::ORC) {
         scanner = _pool->add(new HdfsOrcScanner());
@@ -680,25 +682,7 @@ void HdfsScanNode::_init_counter(RuntimeState* state) {
     _io_timer = ADD_TIMER(_runtime_profile, "IoTime");
     _io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
     _column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
-    _level_decode_timer = ADD_TIMER(_runtime_profile, "LevelDecodeTime");
-    _value_decode_timer = ADD_TIMER(_runtime_profile, "ValueDecodeTime");
-    _page_read_timer = ADD_TIMER(_runtime_profile, "PageReadTime");
     _column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
-
-    _bytes_total_read = ADD_COUNTER(_runtime_profile, "BytesTotalRead", TUnit::BYTES);
-    _bytes_read_local = ADD_COUNTER(_runtime_profile, "BytesReadLocal", TUnit::BYTES);
-    _bytes_read_short_circuit = ADD_COUNTER(_runtime_profile, "BytesReadShortCircuit", TUnit::BYTES);
-    _bytes_read_dn_cache = ADD_COUNTER(_runtime_profile, "BytesReadDataNodeCache", TUnit::BYTES);
-    _bytes_read_remote = ADD_COUNTER(_runtime_profile, "BytesReadRemote", TUnit::BYTES);
-
-    // reader init
-    _footer_read_timer = ADD_TIMER(_runtime_profile, "ReaderInitFooterRead");
-    _column_reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInitColumnReaderInit");
-
-    // dict filter
-    _group_chunk_read_timer = ADD_TIMER(_runtime_profile, "GroupChunkRead");
-    _group_dict_filter_timer = ADD_TIMER(_runtime_profile, "GroupDictFilter");
-    _group_dict_decode_timer = ADD_TIMER(_runtime_profile, "GroupDictDecode");
 }
 
 } // namespace starrocks::vectorized

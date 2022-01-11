@@ -10,15 +10,8 @@
 #include <mutex>
 #include <thread>
 
-#include "common/status.h"
 #include "env/env_hdfs.h"
-#include "exec/exec_node.h"
-#include "exec/parquet/file_reader.h"
 #include "exec/vectorized/hdfs_scan_node.h"
-#include "exprs/expr.h"
-#include "runtime/runtime_state.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
 
@@ -197,59 +190,13 @@ void HdfsScanner::update_counter() {
         get_hdfs_statistics(hdfs_file, &hdfs_stats);
     }
 
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_total_read, hdfs_stats.bytes_total_read);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_local, hdfs_stats.bytes_read_local);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_short_circuit, hdfs_stats.bytes_read_short_circuit);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_dn_cache, hdfs_stats.bytes_read_dn_cache);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_remote, hdfs_stats.bytes_read_remote);
+    auto& root = _scanner_params.parent->_hdfs_io_profile;
+    COUNTER_UPDATE(root.bytes_total_read, hdfs_stats.bytes_total_read);
+    COUNTER_UPDATE(root.bytes_read_local, hdfs_stats.bytes_read_local);
+    COUNTER_UPDATE(root.bytes_read_short_circuit, hdfs_stats.bytes_read_short_circuit);
+    COUNTER_UPDATE(root.bytes_read_dn_cache, hdfs_stats.bytes_read_dn_cache);
+    COUNTER_UPDATE(root.bytes_read_remote, hdfs_stats.bytes_read_remote);
 #endif
-}
-
-Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    return Status::OK();
-}
-
-Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
-    // create file reader
-    _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _scanner_params.fs.get(),
-                                                    _scanner_params.scan_ranges[0]->file_length);
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
-#endif
-    RETURN_IF_ERROR(_reader->init(_file_read_param));
-    return Status::OK();
-}
-
-Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    Status status = _reader->get_next(chunk);
-    return status;
-}
-
-void HdfsParquetScanner::update_counter() {
-    HdfsScanner::update_counter();
-
-#ifndef BE_TEST
-    COUNTER_UPDATE(_scanner_params.parent->_rows_read_counter, _stats.raw_rows_read);
-    COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read);
-    COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_value_decode_timer, _stats.value_decode_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_level_decode_timer, _stats.level_decode_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_page_read_timer, _stats.page_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_footer_read_timer, _stats.footer_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_column_reader_init_timer, _stats.column_reader_init_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_group_chunk_read_timer, _stats.group_chunk_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_group_dict_filter_timer, _stats.group_dict_filter_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_group_dict_decode_timer, _stats.group_dict_decode_ns);
-#endif
-}
-
-void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {
-    update_counter();
-    _reader.reset();
 }
 
 void HdfsFileReaderParam::set_columns_from_file(const std::unordered_set<std::string>& names) {
@@ -338,6 +285,19 @@ bool HdfsFileReaderParam::can_use_dict_filter_on_slot(SlotDescriptor* slot) cons
         }
     }
     return true;
+}
+
+static const std::string kHdfsIOProfileSectionPrefix = "HdfsIO";
+
+void HdfsIOProfile::init(RuntimeProfile* root) {
+    if (_toplev != nullptr) return;
+    _toplev = ADD_TIMER(root, kHdfsIOProfileSectionPrefix);
+    bytes_total_read = ADD_CHILD_COUNTER(root, "BytesTotalRead", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+    bytes_read_local = ADD_CHILD_COUNTER(root, "BytesReadLocal", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+    bytes_read_short_circuit =
+            ADD_CHILD_COUNTER(root, "BytesReadShortCircuit", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+    bytes_read_dn_cache = ADD_CHILD_COUNTER(root, "BytesReadDataNodeCache", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+    bytes_read_remote = ADD_CHILD_COUNTER(root, "BytesReadRemote", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
 }
 
 } // namespace starrocks::vectorized
