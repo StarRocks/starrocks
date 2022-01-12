@@ -41,40 +41,43 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, int32_t shuffle_id, int32_t channel_id, bool enable_exchange_pass_through,
+            PlanNodeId dest_node_id, int32_t num_shuffles, int32_t channel_id, bool enable_exchange_pass_through,
             PassThroughChunkBuffer* pass_through_chunk_buffer)
             : _parent(parent),
               _brpc_dest_addr(brpc_dest),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
-              _shuffle_id(shuffle_id),
               _channel_id(channel_id),
               _enable_exchange_pass_through(enable_exchange_pass_through),
-              _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id) {}
+              _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id),
+              _chunks(num_shuffles),
+              _chunk_requests(num_shuffles),
+              _current_request_bytes(num_shuffles, 0) {}
 
     // Initialize channel.
     // Returns OK if successful, error indication otherwise.
     Status init(RuntimeState* state);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
-    Status send_one_chunk(const vectorized::Chunk* chunk, bool eos);
+    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t shuffle_id, bool flush, bool eos);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     // When the chunk is sent really rather than bachend, *is_real_sent will
     // be set to true.
-    Status send_one_chunk(const vectorized::Chunk* chunk, bool eos, bool* is_real_sent);
+    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t shuffle_id, bool flush, bool eos, bool* is_real_sent);
 
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(PTransmitChunkParamsPtr chunk_request, const butil::IOBuf& attachment);
+    Status send_chunk_request(PTransmitChunkParamsPtr chunk_request, int32_t shuffle_id,
+                              const butil::IOBuf& attachment);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
     // indexes contains row index of chunk and this function will copy from input
     // 'from' and copy 'size' rows
-    Status add_rows_selective(vectorized::Chunk* chunk, const uint32_t* row_indexes, uint32_t from, uint32_t size,
-                              RuntimeState* state);
+    Status add_rows_selective(vectorized::Chunk* chunk, int32_t shuffle_id, const uint32_t* row_indexes, uint32_t from,
+                              uint32_t size, RuntimeState* state);
 
     // Flush buffered rows and close channel. This function don't wait the response
     // of close operation, client should call close_wait() to finish channel's close.
@@ -102,17 +105,16 @@ private:
     const TNetworkAddress _brpc_dest_addr;
     const TUniqueId _fragment_instance_id;
     const PlanNodeId _dest_node_id;
-    const int32_t _shuffle_id;
     const int32_t _channel_id;
 
     const bool _enable_exchange_pass_through;
     PassThroughContext _pass_through_context;
 
-    std::unique_ptr<vectorized::Chunk> _chunk;
     bool _is_first_chunk = true;
-    PTransmitChunkParamsPtr _chunk_request;
     doris::PBackendService_Stub* _brpc_stub = nullptr;
-    size_t _current_request_bytes = 0;
+    std::vector<std::unique_ptr<vectorized::Chunk>> _chunks;
+    std::vector<PTransmitChunkParamsPtr> _chunk_requests;
+    std::vector<size_t> _current_request_bytes;
     bool _is_inited = false;
     bool _use_pass_through = false;
 };
@@ -159,38 +161,44 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chunk, const uint32_t* indexes,
-                                                         uint32_t from, uint32_t size, RuntimeState* state) {
-    if (UNLIKELY(_chunk == nullptr)) {
-        _chunk = chunk->clone_empty_with_tuple();
+Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chunk, int32_t shuffle_id,
+                                                         const uint32_t* indexes, uint32_t from, uint32_t size,
+                                                         RuntimeState* state) {
+    if (UNLIKELY(_chunks[shuffle_id] == nullptr)) {
+        _chunks[shuffle_id] = chunk->clone_empty_with_tuple();
     }
 
-    if (_chunk->num_rows() + size > state->chunk_size()) {
-        RETURN_IF_ERROR(send_one_chunk(_chunk.get(), false));
+    if (_chunks[shuffle_id]->num_rows() + size > state->chunk_size()) {
+        RETURN_IF_ERROR(send_one_chunk(_chunks[shuffle_id].get(), shuffle_id, false, false));
         // we only clear column data, because we need to reuse column schema
-        _chunk->set_num_rows(0);
+        _chunks[shuffle_id]->set_num_rows(0);
     }
 
-    _chunk->append_selective(*chunk, indexes, from, size);
+    _chunks[shuffle_id]->append_selective(*chunk, indexes, from, size);
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, bool eos) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t shuffle_id, bool flush,
+                                                     bool eos) {
     bool is_real_sent = false;
-    return send_one_chunk(chunk, eos, &is_real_sent);
+    return send_one_chunk(chunk, shuffle_id, flush, eos, &is_real_sent);
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, bool eos, bool* is_real_sent) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t shuffle_id, bool flush,
+                                                     bool eos, bool* is_real_sent) {
     *is_real_sent = false;
-    if (_chunk_request == nullptr) {
-        _chunk_request = std::make_shared<PTransmitChunkParams>();
-        _chunk_request->set_node_id(_dest_node_id);
-        _chunk_request->set_sender_id(_parent->_sender_id);
-        _chunk_request->set_be_number(_parent->_be_number);
+    if (_chunk_requests[shuffle_id] == nullptr) {
+        _chunk_requests[shuffle_id] = std::make_shared<PTransmitChunkParams>();
+        _chunk_requests[shuffle_id]->set_node_id(_dest_node_id);
+        _chunk_requests[shuffle_id]->set_sender_id(_parent->_sender_id);
+        _chunk_requests[shuffle_id]->set_be_number(_parent->_be_number);
         if (_parent->_is_pipeline_level_shuffle) {
-            _chunk_request->set_shuffle_id(_shuffle_id);
+            _chunk_requests[shuffle_id]->set_shuffle_id(shuffle_id);
         }
     }
+
+    // if num_shuffles > 1, then we must flush first chunk immediately
+    bool flush_first_chunk = false;
 
     // If chunk is not null, append it to request
     if (chunk != nullptr) {
@@ -198,34 +206,36 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
             // -1 means disable pipeline level shuffle
             _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
-                                               _parent->_is_pipeline_level_shuffle ? _shuffle_id : -1);
-            _current_request_bytes += chunk_size;
+                                               _parent->_is_pipeline_level_shuffle ? shuffle_id : -1);
+            _current_request_bytes[shuffle_id] += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
         } else {
-            auto pchunk = _chunk_request->add_chunks();
+            auto pchunk = _chunk_requests[shuffle_id]->add_chunks();
+            flush_first_chunk = _is_first_chunk && _chunks.size() > 1;
             RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
-            _current_request_bytes += pchunk->data().size();
+            _current_request_bytes[shuffle_id] += pchunk->data().size();
         }
     }
 
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
     // last packet
-    if (_current_request_bytes > _parent->_request_bytes_threshold || eos) {
-        _chunk_request->set_eos(eos);
-        _chunk_request->set_use_pass_through(_use_pass_through);
+    if (_current_request_bytes[shuffle_id] > _parent->_request_bytes_threshold || flush_first_chunk || flush || eos) {
+        _chunk_requests[shuffle_id]->set_eos(eos);
+        _chunk_requests[shuffle_id]->set_use_pass_through(_use_pass_through);
         butil::IOBuf attachment;
-        _parent->construct_brpc_attachment(_chunk_request, attachment);
-        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment};
+        _parent->construct_brpc_attachment(_chunk_requests[shuffle_id], attachment);
+        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_requests[shuffle_id]),
+                                  attachment};
         _parent->_buffer->add_request(info);
-        _current_request_bytes = 0;
-        _chunk_request.reset();
+        _current_request_bytes[shuffle_id] = 0;
+        _chunk_requests[shuffle_id].reset();
         *is_real_sent = true;
     }
 
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr chunk_request,
+Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr chunk_request, int32_t shuffle_id,
                                                          const butil::IOBuf& attachment) {
     chunk_request->set_node_id(_dest_node_id);
     chunk_request->set_sender_id(_parent->_sender_id);
@@ -233,7 +243,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
     if (_parent->_is_pipeline_level_shuffle) {
-        chunk_request->set_shuffle_id(_shuffle_id);
+        chunk_request->set_shuffle_id(shuffle_id);
     }
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment};
@@ -249,7 +259,12 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     }
 
     if (!fragment_ctx->is_canceled()) {
-        RETURN_IF_ERROR(send_one_chunk(_chunk != nullptr ? _chunk.get() : nullptr, true));
+        for (auto shuffle_id = 0; shuffle_id < _chunks.size(); ++shuffle_id) {
+            if (_chunks[shuffle_id] != nullptr) {
+                RETURN_IF_ERROR(send_one_chunk(_chunks[shuffle_id].get(), shuffle_id, true, false));
+            }
+        }
+        RETURN_IF_ERROR(send_one_chunk(nullptr, ExchangeSinkOperator::default_shuffle_id, true, true));
     }
 
     return Status::OK();
@@ -262,8 +277,8 @@ void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* 
 ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                            const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
                                            const std::vector<TPlanFragmentDestination>& destinations,
-                                           bool is_pipeline_level_shuffle, const int32_t dest_dop, int32_t sender_id,
-                                           PlanNodeId dest_node_id,
+                                           bool is_pipeline_level_shuffle, const int32_t num_shuffles,
+                                           int32_t sender_id, PlanNodeId dest_node_id,
                                            const std::vector<ExprContext*>& partition_expr_ctxs,
                                            bool enable_exchange_pass_through, FragmentContext* const fragment_ctx)
         : Operator(factory, id, "exchange_sink", plan_node_id),
@@ -271,7 +286,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
           _part_type(part_type),
           _destinations(destinations),
           _is_pipeline_level_shuffle(is_pipeline_level_shuffle),
-          _dest_dop(dest_dop),
+          _num_shuffles(num_shuffles > 0 ? num_shuffles : 1),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(partition_expr_ctxs),
@@ -284,45 +299,17 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
     // fragment_instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
     std::optional<std::shared_ptr<Channel>> pseudo_channel;
 
-    // Pipeline level shuffle shouldn't change distribution of be level shuffle
-    // In other words, same hash value mapping to same destination with or without pipeline level shuffle
-    // because global runtime filter depend on this distribution
-    // For example
-    // a. without pipeline shuffle
-    //      channel0(dest0), channel1(dest1), channel2(dest2)
-    //      (0 mod 3 = 0) -> channel0 -> dest0
-    //      (1 mod 3 = 1) -> channel1 -> dest1
-    //      (2 mod 3 = 2) -> channel2 -> dest2
-    //      (3 mod 3 = 0) -> channel0 -> dest0
-    //      (4 mod 3 = 1) -> channel1 -> dest1
-    //      (5 mod 3 = 2) -> channel2 -> dest2
-    // b. with pipeline shuffle
-    //      channel0(dest0), channel1(dest1), channel2(dest2)
-    //      channel3(dest0), channel4(dest1), channel5(dest2)
-    //      (0 mod 6 = 0) -> channel0 -> dest0
-    //      (1 mod 6 = 1) -> channel1 -> dest1
-    //      (2 mod 6 = 2) -> channel2 -> dest2
-    //      (3 mod 6 = 3) -> channel3 -> dest0
-    //      (4 mod 6 = 4) -> channel4 -> dest1
-    //      (5 mod 6 = 5) -> channel5 -> dest2
-    size_t max_shuffle_id = 1;
-    if (_is_pipeline_level_shuffle) {
-        max_shuffle_id = _dest_dop;
-    }
-    for (auto cnt = 0; cnt < max_shuffle_id; ++cnt) {
-        for (const auto& destination : destinations) {
-            const auto& fragment_instance_id = destination.fragment_instance_id;
-            if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
-                _channels.emplace_back(pseudo_channel.value());
-            } else {
-                const auto channel_id = _channels.size();
-                const auto shuffle_id = channel_id % max_shuffle_id;
-                _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id,
-                                                   shuffle_id, channel_id, enable_exchange_pass_through,
-                                                   pass_through_chunk_buffer));
-                if (fragment_instance_id.lo == -1) {
-                    pseudo_channel = _channels.back();
-                }
+    for (const auto& destination : destinations) {
+        const auto& fragment_instance_id = destination.fragment_instance_id;
+        if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
+            _channels.emplace_back(pseudo_channel.value());
+        } else {
+            const auto channel_id = _channels.size();
+            _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id,
+                                               _num_shuffles, channel_id, enable_exchange_pass_through,
+                                               pass_through_chunk_buffer));
+            if (fragment_instance_id.lo == -1) {
+                pseudo_channel = _channels.back();
             }
         }
     }
@@ -418,7 +405,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     if (num_rows == 0) {
         return Status::OK();
     }
-    if (_part_type == TPartitionType::UNPARTITIONED || _channels.size() == 1) {
+    if (_part_type == TPartitionType::UNPARTITIONED || (_num_shuffles == 1 && _channels.size() == 1)) {
         if (_chunk_request == nullptr) {
             _chunk_request = std::make_shared<PTransmitChunkParams>();
         }
@@ -427,7 +414,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         int has_not_pass_through = false;
         for (auto idx : _channel_indices) {
             if (_channels[idx]->use_pass_through()) {
-                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk.get(), false));
+                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk.get(), default_shuffle_id, false, false));
             } else {
                 has_not_pass_through = true;
             }
@@ -449,7 +436,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                 for (auto idx : _channel_indices) {
                     if (!_channels[idx]->use_pass_through()) {
                         PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, attachment));
+                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, default_shuffle_id, attachment));
                     }
                 }
                 _current_request_bytes = 0;
@@ -462,7 +449,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         // 1. Get request of that channel
         auto& channel = _channels[_curr_random_channel_idx];
         bool real_sent = false;
-        RETURN_IF_ERROR(channel->send_one_chunk(chunk.get(), false, &real_sent));
+        RETURN_IF_ERROR(channel->send_one_chunk(chunk.get(), default_shuffle_id, false, false, &real_sent));
         if (real_sent) {
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % _channels.size();
         }
@@ -492,38 +479,48 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                 }
             }
 
-            // Compute row indexes for each channel
-            _channel_row_idx_start_points.assign(num_channels + 1, 0);
+            // Compute row indexes for each channel's each shuffle
+            _channel_row_idx_start_points.assign(num_channels * _num_shuffles + 1, 0);
+
+            std::vector<uint32_t> channel_ids(num_rows);
+            std::vector<uint32_t> shuffle_ids(num_rows);
             for (size_t i = 0; i < num_rows; ++i) {
-                size_t channel_index = _hash_values[i] % num_channels;
-                _channel_row_idx_start_points[channel_index]++;
-                _hash_values[i] = channel_index;
+                auto channel_id = _hash_values[i] % num_channels;
+                auto shuffle_id = _hash_values[i] % _num_shuffles;
+                channel_ids[i] = channel_id;
+                shuffle_ids[i] = shuffle_id;
+                _channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id]++;
             }
             // NOTE:
             // we make the last item equal with number of rows of this chunk
-            for (int32_t i = 1; i <= num_channels; ++i) {
+            for (int32_t i = 1; i <= num_channels * _num_shuffles; ++i) {
                 _channel_row_idx_start_points[i] += _channel_row_idx_start_points[i - 1];
             }
 
             for (int32_t i = num_rows - 1; i >= 0; --i) {
-                _row_indexes[_channel_row_idx_start_points[_hash_values[i]] - 1] = i;
-                _channel_row_idx_start_points[_hash_values[i]]--;
+                auto channel_id = channel_ids[i];
+                auto shuffle_id = shuffle_ids[i];
+                _row_indexes[_channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id] - 1] = i;
+                _channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id]--;
             }
         }
 
-        for (int32_t i : _channel_indices) {
-            size_t from = _channel_row_idx_start_points[i];
-            size_t size = _channel_row_idx_start_points[i + 1] - from;
-            if (size == 0) {
-                // no data for this channel continue;
-                continue;
-            }
+        for (int32_t channel_id : _channel_indices) {
+            for (int32_t shuffle_id = 0; shuffle_id < _num_shuffles; ++shuffle_id) {
+                size_t from = _channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id];
+                size_t size = _channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id + 1] - from;
+                if (size == 0) {
+                    // no data for this channel continue;
+                    continue;
+                }
 
-            if (_channels[i]->get_fragment_instance_id().lo == -1) {
-                // dest bucket is no used, continue
-                continue;
+                if (_channels[channel_id]->get_fragment_instance_id().lo == -1) {
+                    // dest bucket is no used, continue
+                    continue;
+                }
+                RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(chunk.get(), shuffle_id, _row_indexes.data(),
+                                                                          from, size, state));
             }
-            RETURN_IF_ERROR(_channels[i]->add_rows_selective(chunk.get(), _row_indexes.data(), from, size, state));
         }
     }
     return Status::OK();
@@ -537,7 +534,7 @@ void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& channel : _channels) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(copy, attachment);
+            channel->send_chunk_request(copy, default_shuffle_id, attachment);
         }
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -622,7 +619,7 @@ void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chu
 
 ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer, TPartitionType::type part_type,
-        const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle, int32_t dest_dop,
+        const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle, int32_t num_shuffles,
         int32_t sender_id, PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
         bool enable_exchange_pass_through, FragmentContext* const fragment_ctx)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
@@ -630,7 +627,7 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
           _part_type(part_type),
           _destinations(destinations),
           _is_pipeline_level_shuffle(is_pipeline_level_shuffle),
-          _dest_dop(dest_dop),
+          _num_shuffles(num_shuffles),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(std::move(partition_expr_ctxs)),
@@ -639,7 +636,7 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<ExchangeSinkOperator>(this, _id, _plan_node_id, _buffer, _part_type, _destinations,
-                                                  _is_pipeline_level_shuffle, _dest_dop, _sender_id, _dest_node_id,
+                                                  _is_pipeline_level_shuffle, _num_shuffles, _sender_id, _dest_node_id,
                                                   _partition_expr_ctxs, _enable_exchange_pass_through, _fragment_ctx);
 }
 

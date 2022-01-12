@@ -33,7 +33,7 @@ public:
     ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                          const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
                          const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
-                         const int32_t dest_dop, int32_t sender_id, PlanNodeId dest_node_id,
+                         const int32_t num_shuffles, int32_t sender_id, PlanNodeId dest_node_id,
                          const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
                          FragmentContext* const fragment_ctx);
 
@@ -68,6 +68,8 @@ public:
 private:
     class Channel;
 
+    static const int32_t default_shuffle_id = 0;
+
     const std::shared_ptr<SinkBuffer>& _buffer;
 
     const TPartitionType::type _part_type;
@@ -77,7 +79,7 @@ private:
     // then we shuffle for different parallelism at sender side(ExchangeSinkOperator) if _is_pipeline_level_shuffle is true
     const bool _is_pipeline_level_shuffle;
     // Invalid if _is_pipeline_level_shuffle is false
-    const int32_t _dest_dop;
+    const int32_t _num_shuffles;
     // Sender instance id, unique within a fragment.
     const int32_t _sender_id;
     const PlanNodeId _dest_node_id;
@@ -140,7 +142,7 @@ private:
     // And the last item is the number of rows of the current shuffle chunk.
     // It will easy to get number of rows belong to one channel by doing
     // _channel_row_idx_start_points[i + 1] - _channel_row_idx_start_points[i]
-    std::vector<uint16_t> _channel_row_idx_start_points;
+    std::vector<uint32_t> _channel_row_idx_start_points;
     // Record the row indexes for the current shuffle index. Sender will arrange the row indexes
     // according to channels. For example, if there are 3 channels, this _row_indexes will put
     // channel 0's row first, then channel 1's row indexes, then put channel 2's row indexes in
@@ -155,7 +157,7 @@ public:
     ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer,
                                 TPartitionType::type part_type,
                                 const std::vector<TPlanFragmentDestination>& destinations,
-                                bool is_pipeline_level_shuffle, int32_t dest_dop, int32_t sender_id,
+                                bool is_pipeline_level_shuffle, int32_t num_shuffles, int32_t sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
                                 bool enable_exchange_pass_through, FragmentContext* const fragment_ctx);
 
@@ -173,7 +175,7 @@ private:
 
     const std::vector<TPlanFragmentDestination>& _destinations;
     const bool _is_pipeline_level_shuffle;
-    const int32_t _dest_dop;
+    const int32_t _num_shuffles;
     int32_t _sender_id;
     const PlanNodeId _dest_node_id;
 

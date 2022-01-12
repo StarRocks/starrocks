@@ -10,6 +10,7 @@
 #include <unordered_set>
 
 #include "column/chunk.h"
+#include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -40,8 +41,8 @@ struct ClosureContext {
 // TODO(hcf) how to export brpc error
 class SinkBuffer {
 public:
-    SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations, bool is_dest_merge,
-               size_t num_sinkers, bool is_pipeline_level_shuffle, int32_t dest_dop);
+    SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
+               bool is_dest_merge, size_t num_sinkers);
     ~SinkBuffer();
 
     void add_request(const TransmitChunkInfo& request);
@@ -60,24 +61,17 @@ private:
     void _process_send_window(const TUniqueId& instance_id, const int64_t sequence);
     void _try_to_send_rpc(const TUniqueId& instance_id);
 
+    FragmentContext* _fragment_ctx;
     const MemTracker* _mem_tracker;
     const int32_t _brpc_timeout_ms;
     const bool _is_dest_merge;
-
-    // If the pipeline of dest be is ExchangeSourceOperator -> AggregateBlockingSinkOperator(with group by)
-    // then we shuffle for different parallelism at sender side(ExchangeSinkOperator) if _is_pipeline_level_shuffle is true
-    // so each sinker may send eos _dest_dop times
-    const bool _is_pipeline_level_shuffle;
-    // Set to dop if _need_shuffle_for_paralleliasm is true
-    // Set to 1 if _need_shuffle_for_paralleliasm is false
-    const int32_t _num_eos_per_sinker;
 
     /// Taking into account of efficiency, all the following maps
     /// use int64_t as key, which is the field type of TUniqueId::lo
     /// because TUniqueId::hi is exactly the same in one query
 
-    // num eos per instance, num_sinker_per_instance * _num_eos_per_sinker
-    phmap::flat_hash_map<int64_t, int64_t> _num_eoses;
+    // num eos per instance
+    phmap::flat_hash_map<int64_t, int64_t> _num_sinkers;
     phmap::flat_hash_map<int64_t, int64_t> _request_seqs;
     // Considering the following situation
     // Sending request 1, 2, 3 in order with one possible order of response 1, 3, 2,

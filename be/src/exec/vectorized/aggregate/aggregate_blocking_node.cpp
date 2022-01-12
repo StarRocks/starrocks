@@ -170,7 +170,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
         // If finalize aggregate with group by clause, then it can be paralized
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
             // There are two ways of shuffle
-            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED
+            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHFFULE_HASH_PARTITIONED
             // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator

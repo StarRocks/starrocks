@@ -4,14 +4,12 @@
 
 namespace starrocks::pipeline {
 
-SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations,
-                       bool is_dest_merge, size_t num_sinkers, bool is_pipeline_level_shuffle,
-                       int32_t num_eos_per_sinker)
-        : _mem_tracker(state->instance_mem_tracker()),
-          _brpc_timeout_ms(std::min(3600, state->query_options().query_timeout) * 1000),
+SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
+                       bool is_dest_merge, size_t num_sinkers)
+        : _fragment_ctx(fragment_ctx),
+          _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
+          _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
           _is_dest_merge(is_dest_merge),
-          _is_pipeline_level_shuffle(is_pipeline_level_shuffle),
-          _num_eos_per_sinker(is_pipeline_level_shuffle ? num_eos_per_sinker : 1),
           _num_uncancelled_sinkers(num_sinkers) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
@@ -20,11 +18,11 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
             continue;
         }
 
-        auto it = _num_eoses.find(instance_id.lo);
-        if (it != _num_eoses.end()) {
-            it->second += num_sinkers * _num_eos_per_sinker;
+        auto it = _num_sinkers.find(instance_id.lo);
+        if (it != _num_sinkers.end()) {
+            it->second += num_sinkers;
         } else {
-            _num_eoses[instance_id.lo] = num_sinkers * _num_eos_per_sinker;
+            _num_sinkers[instance_id.lo] = num_sinkers;
 
             _request_seqs[instance_id.lo] = 0;
             // request_seq starts from 0, so the max_continuous_acked_seq should be -1
@@ -43,7 +41,7 @@ SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDesti
     }
 
     _num_remaining_eos = 0;
-    for (auto& [_, num] : _num_eoses) {
+    for (auto& [_, num] : _num_sinkers) {
         _num_remaining_eos += num;
     }
 }
@@ -176,12 +174,12 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
                 if (--_num_remaining_eos == 0) {
                     _is_finishing = true;
                 }
-                --_num_eoses[instance_id.lo];
+                --_num_sinkers[instance_id.lo];
             });
             // Only the last eos is sent to ExchangeSourceOperator. it must be guaranteed that
             // eos is the last packet to send to finish the input stream of the corresponding of
             // ExchangeSourceOperator and eos is sent exactly-once.
-            if (_num_eoses[instance_id.lo] > 1) {
+            if (_num_sinkers[instance_id.lo] > 1) {
                 if (request.params->chunks_size() == 0) {
                     // Once the request is added to SinkBuffer, its ownership will also be transferred,
                     // so SinkBuffer needs to be responsible for the release of resources
@@ -214,6 +212,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
             --_total_in_flight_rpc;
+            _fragment_ctx->cancel(Status::InternalError("transmit chunk rpc failed"));
             LOG(WARNING) << "transmit chunk rpc failed";
         });
         closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
@@ -225,6 +224,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             }
             if (!status.ok()) {
                 _is_finishing = true;
+                _fragment_ctx->cancel(status);
                 LOG(WARNING) << "transmit chunk rpc failed, " << status.message();
             } else {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);

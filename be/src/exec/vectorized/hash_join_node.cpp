@@ -377,7 +377,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
             // Both HashJoin{Build, Probe}Operator are parallelized
             // There are two ways of shuffle
-            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED
+            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHFFULE_HASH_PARTITIONED
             // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator
