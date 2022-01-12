@@ -23,7 +23,7 @@ all: subdirs
 .PHONY: all
 
 # build all subdir
-SUBDIR = script proto thrift
+SUBDIR = script proto thrift java
 subdirs: ${SUBDIR}
 .PHONY: subdirs ${SUBDIR}
 ${SUBDIR}:
