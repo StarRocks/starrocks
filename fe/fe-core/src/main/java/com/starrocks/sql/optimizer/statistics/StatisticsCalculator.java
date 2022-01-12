@@ -164,25 +164,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             statistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
         }
 
-        /*
-        Projection projection = node.getProjection();
-        if (projection != null) {
-            Statistics.Builder pruneBuilder = Statistics.builder();
-            pruneBuilder.addColumnStatistics(statistics.getColumnStatistics());
-            pruneBuilder.setOutputRowCount(statistics.getOutputRowCount());
-
-            Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
-            for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
-                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
-                pruneBuilder.addColumnStatistic(columnRefOperator,
-                        ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
-            }
-
-            context.setStatistics(pruneBuilder.build());
-        } else {
-            context.setStatistics(statistics);
-        }
-         */
         context.setStatistics(statistics);
         return null;
     }
