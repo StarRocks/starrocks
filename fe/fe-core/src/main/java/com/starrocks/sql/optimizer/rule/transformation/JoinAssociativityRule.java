@@ -147,7 +147,6 @@ public class JoinAssociativityRule extends TransformationRule {
                 .setPredicate(newTopJoinPredicate)
                 .build();
 
-        //ColumnRefSet newTopJoinRequiredColumns = topJoin.getOutputColumns(new ExpressionContext(input));
         ColumnRefSet newTopJoinRequiredColumns = new ColumnRefSet();
         newTopJoinRequiredColumns.union(newTopJoin.getRequiredChildInputColumns());
         newTopJoinRequiredColumns.union(topJoinOpt.getOutputColumns());
@@ -173,7 +172,8 @@ public class JoinAssociativityRule extends TransformationRule {
         OptExpression newTopJoinLeftChildOpt = buildNewTopLeftChild(context, optA, leftExpression);
         //build new right child join
         OptExpression newBottomJoinOpt =
-                buildNewBottomJoin(newBottomJoinOutputColumns, newBottomJoinOnPredicate, optB, optC, rightExpression);
+                buildNewBottomJoin(context, newBottomJoinOutputColumns, newBottomJoinInputColumns,
+                        newBottomJoinOnPredicate, optB, optC, rightExpression);
 
         OptExpression newTopJoinOpt = OptExpression.create(newTopJoin, newTopJoinLeftChildOpt, newBottomJoinOpt);
 
@@ -188,12 +188,6 @@ public class JoinAssociativityRule extends TransformationRule {
         ColumnRefSet right = new ColumnRefSet();
         right.union(newBottomJoinOutputColumns);
         right.union(new ArrayList<>(rightExpression.keySet()));
-
-        ColumnRefSet all = new ColumnRefSet();
-        all.union(left);
-        all.union(right);
-        ColumnRefSet a = all;
-        ColumnRefSet b = topJoinOpt.getOutputColumns();
 
         return Lists.newArrayList(newTopJoinOpt);
     }
@@ -215,7 +209,9 @@ public class JoinAssociativityRule extends TransformationRule {
     }
 
     private OptExpression buildNewBottomJoin(
+            OptimizerContext context,
             List<ColumnRefOperator> newBottomJoinOutputColumns,
+            ColumnRefSet newBottomJoinInputColumns,
             List<ScalarOperator> newBottomJoinOnPredicate,
             OptExpression optB, OptExpression optC,
             HashMap<ColumnRefOperator, ScalarOperator> rightExpression) {
@@ -226,6 +222,12 @@ public class JoinAssociativityRule extends TransformationRule {
         outputColumns.union(newBottomJoinOutputColumns);
         for (ScalarOperator expr : rightExpression.values()) {
             outputColumns.union(expr.getUsedColumns());
+        }
+        if (outputColumns.isEmpty()) {
+            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(newBottomJoinInputColumns.getStream()
+                    .mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList()));
+            outputColumns.union(smallestColumn);
+            rightExpression.put(smallestColumn, smallestColumn);
         }
 
         LogicalJoinOperator newBottomJoin = new LogicalJoinOperator.Builder()
