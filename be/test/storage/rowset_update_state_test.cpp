@@ -311,7 +311,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     ASSERT_EQ(version, _tablet->updates()->version_history_count());
     ASSERT_EQ(N, read_tablet(_tablet, 3));
 
-    // check and reslove conflict
+    // check and resolve conflict
     EditVersion latest_applied_version(3, 0);
     auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(_tablet->tablet_id());
