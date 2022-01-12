@@ -94,14 +94,27 @@ public class CTASAnalyzer {
             }
         }
 
-        ScalarType stringType = Type.STRING;
-        stringType.setAssignedStrLenInColDefinition();
         for (int i = 0; i < allFields.size(); i++) {
             Type type = allFields.get(i).getType();
-            if (PrimitiveType.VARCHAR == type.getPrimitiveType()) {
+            if (PrimitiveType.VARCHAR == type.getPrimitiveType() || PrimitiveType.CHAR == type.getPrimitiveType()) {
+                int len = ScalarType.MAX_VARCHAR_LENGTH;
+                if (type instanceof ScalarType) {
+                    ScalarType scalarType = (ScalarType) type;
+                    if (scalarType.getLength() > 0 && scalarType.isAssignedStrLenInColDefinition()) {
+                        len = scalarType.getLength();
+                    }
+                }
+                ScalarType stringType = ScalarType.createVarcharType(len);
+                stringType.setAssignedStrLenInColDefinition();
                 type = stringType;
-            } else if (PrimitiveType.DOUBLE == type.getPrimitiveType()) {
-                type = Type.DEFAULT_DECIMAL128;
+            } else if (PrimitiveType.FLOAT == type.getPrimitiveType() ||
+                    PrimitiveType.DOUBLE == type.getPrimitiveType()) {
+                type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+            } else if (PrimitiveType.DECIMAL128 == type.getPrimitiveType()) {
+                type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128,
+                        type.getPrecision(), type.getDecimalDigits());
+            } else {
+                type = ScalarType.createType(type.getPrimitiveType());
             }
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                     null, true, ColumnDef.DefaultValueDef.NOT_SET, "");
