@@ -300,7 +300,7 @@ public class PreAggregateTurnOnRule {
             ColumnRefSet rightOutputColumns = optExpression.getInputs().get(1).getOutputColumns();
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftOutputColumns,
-                    rightOutputColumns, Utils.extractConjuncts(hashJoinOperator.getJoinPredicate()));
+                    rightOutputColumns, Utils.extractConjuncts(hashJoinOperator.getOnPredicate()));
             // cross join can not do pre-aggregation
             if (hashJoinOperator.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
                 context.notPreAggregationJoin = true;
@@ -334,8 +334,8 @@ public class PreAggregateTurnOnRule {
             boolean checkLeft = leftOutputColumns.containsAll(aggregationColumns);
             boolean checkRight = rightOutputColumns.containsAll(aggregationColumns);
             // Add join on predicate and predicate to context
-            if (hashJoinOperator.getJoinPredicate() != null) {
-                context.joinPredicates.add(hashJoinOperator.getJoinPredicate().clone());
+            if (hashJoinOperator.getOnPredicate() != null) {
+                context.joinPredicates.add(hashJoinOperator.getOnPredicate().clone());
             }
             if (hashJoinOperator.getPredicate() != null) {
                 context.joinPredicates.add(hashJoinOperator.getPredicate().clone());
