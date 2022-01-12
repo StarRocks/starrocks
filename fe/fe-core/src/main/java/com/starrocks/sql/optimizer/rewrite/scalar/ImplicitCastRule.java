@@ -122,8 +122,10 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
+        boolean isEquivalenceOrUnequivalence =
+                predicate.getBinaryType().isEquivalence() || predicate.getBinaryType().isUnequivalence();
         Type compatibleType =
-                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType().isEquivalence(), type1, type2);
+                TypeManager.getCompatibleTypeForBinary(isEquivalenceOrUnequivalence, type1, type2);
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);
