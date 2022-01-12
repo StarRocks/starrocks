@@ -279,7 +279,9 @@ public:
                 if (status.is_end_of_file()) {
                     break;
                 } else {
-                    return Status::InternalError("reader get_next error.");
+                    LOG(WARNING) << "reader get next error. tablet=" << tablet.tablet_id()
+                                 << ", err=" << status.to_string();
+                    return Status::InternalError(fmt::format("reader get_next error: {}", status.to_string()));
                 }
             }
 
