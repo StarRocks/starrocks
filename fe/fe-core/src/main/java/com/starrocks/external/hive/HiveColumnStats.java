@@ -25,6 +25,11 @@ public class HiveColumnStats {
     public HiveColumnStats() {
     }
 
+    public boolean isDefaultValue() {
+        return avgSize == -0.1f && numNulls == -1L && numDistinctValues == -1L && minValue == Double.NEGATIVE_INFINITY
+                && maxValue == Double.POSITIVE_INFINITY;
+    }
+
     @Override
     public String toString() {
         return String.format("avgSize: %.2f, numNulls: %d, numDistinctValues: %d, minValue: %.2f, maxValue: %.2f",
