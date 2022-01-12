@@ -340,11 +340,11 @@ Status RowsetUpdateState::_check_conflict(Tablet* tablet, Rowset* rowset, uint32
         }
     }
 
-    int64_t t_reslove_conflict = MonotonicMillis();
+    int64_t t_resolve_conflict = MonotonicMillis();
     LOG(INFO) << Substitute(
-            "check partial rowset conflict tablet:$0 rowset:$1 #column:$2 getrowid:$3ms #reslove_conflict $4ms",
+            "check partial rowset conflict tablet:$0 rowset:$1 #column:$2 getrowid:$3ms #resolve_conflict $4ms",
             tablet->tablet_id(), rowset_id, read_column_ids.size(), (t_get_rowids - t_start) / 1000000,
-            (t_reslove_conflict - t_get_rowids) / 1000000);
+            (t_resolve_conflict - t_get_rowids) / 1000000);
 
     return Status::OK();
 }
