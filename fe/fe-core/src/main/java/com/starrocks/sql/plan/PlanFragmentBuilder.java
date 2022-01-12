@@ -1939,10 +1939,7 @@ public class PlanFragmentBuilder {
             PlanFragment setOperationFragment =
                     new PlanFragment(context.getPlanCtx().getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
             List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
-            // record children output columns could generate nullable columns
-            List<Boolean> childrenOutputNullableList = new ArrayList<>(
-                    Arrays.asList(new Boolean[setOperation.getChildOutputColumns().get(0).size()]));
-            Collections.fill(childrenOutputNullableList, Boolean.FALSE);
+
             for (int i = 0; i < optExpr.getInputs().size(); i++) {
                 List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(i);
                 PlanFragment fragment = visit(optExpr.getInputs().get(i), context);
@@ -1950,12 +1947,9 @@ public class PlanFragmentBuilder {
                 List<Expr> materializedExpressions = Lists.newArrayList();
 
                 // keep output column order
-                for (int childIndex = 0; childIndex < childOutput.size(); ++childIndex) {
-                    ColumnRefOperator ref = childOutput.get(childIndex);
+                for (ColumnRefOperator ref : childOutput) {
                     SlotDescriptor slotDescriptor = context.getDescTbl().getSlotDesc(new SlotId(ref.getId()));
                     materializedExpressions.add(new SlotRef(slotDescriptor));
-                    childrenOutputNullableList.set(childIndex,
-                            childrenOutputNullableList.get(childIndex) | slotDescriptor.getIsNullable());
                 }
 
                 materializedResultExprLists.add(materializedExpressions);
@@ -1977,12 +1971,9 @@ public class PlanFragmentBuilder {
 
             // reset column is nullable, for handle union select xx join select xxx...
             setOperationNode.setHasNullableGenerateChild();
-            for (int outputColumnIndex = 0; outputColumnIndex < setOperation.getOutputColumnRefOp().size();
-                    ++outputColumnIndex) {
-                ColumnRefOperator columnRefOperator = setOperation.getOutputColumnRefOp().get(outputColumnIndex);
+            for (ColumnRefOperator columnRefOperator : setOperation.getOutputColumnRefOp()) {
                 SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(columnRefOperator.getId()));
                 slotDesc.setIsNullable(slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild());
-                slotDesc.setIsNullable(slotDesc.getIsNullable() | childrenOutputNullableList.get(outputColumnIndex));
             }
             setOperationTuple.computeMemLayout();
 
