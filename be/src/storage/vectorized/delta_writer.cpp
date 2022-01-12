@@ -74,14 +74,17 @@ Status DeltaWriter::_init() {
     if (_tablet->updates() != nullptr) {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
-            auto msg = Substitute("Update memory limit exceed tablet:$0 $1 > $2", _tablet->tablet_id(),
-                                  tracker->consumption(), tracker->limit());
+            auto msg = Substitute("Update memory limit exceed tablet:$0 $1 > $2 top_tablets:$3", _tablet->tablet_id(),
+                                  tracker->consumption(), tracker->limit(),
+                                  _storage_engine->update_manager()->topn_memory_stats(5));
             LOG(WARNING) << msg;
             return Status::MemoryLimitExceeded(msg);
         }
         if (_tablet->updates()->is_error()) {
-            LOG(WARNING) << "Fail to init delta writer. tablet in error tablet:" << _tablet->tablet_id();
-            return Status::ServiceUnavailable("Tablet in error state");
+            auto msg = Substitute("Fail to init delta writer. tablet $0 error: $1", _tablet->tablet_id(),
+                                  _tablet->updates()->get_error_msg());
+            LOG(WARNING) << msg;
+            return Status::ServiceUnavailable(msg);
         }
     }
     if (_tablet->version_count() > config::tablet_max_versions) {
