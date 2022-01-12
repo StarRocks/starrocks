@@ -5325,6 +5325,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  11 <-> day[([2: id_datetime, DATETIME, false]); args: DATETIME; result: TINYINT; args nullable: false; result nullable: false]"));
     }
 
+    @Test
     public void testEqFloatCast() throws Exception {
         String sql = "select 'a' = t1e from test_all_type";
         String plan = getFragmentPlan(sql);
