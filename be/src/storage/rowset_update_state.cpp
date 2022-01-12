@@ -13,6 +13,7 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
+#include "util/stack_util.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -21,13 +22,27 @@ using vectorized::ChunkHelper;
 
 RowsetUpdateState::RowsetUpdateState() = default;
 
-RowsetUpdateState::~RowsetUpdateState() = default;
+RowsetUpdateState::~RowsetUpdateState() {
+    if (!_status.ok()) {
+        LOG(WARNING) << "bad RowsetUpdateState released tablet:" << _tablet_id;
+    }
+}
 
 Status RowsetUpdateState::load(Tablet* tablet, Rowset* rowset) {
     if (UNLIKELY(!_status.ok())) {
         return _status;
     }
-    std::call_once(_load_once_flag, [&] { _status = _do_load(tablet, rowset); });
+    std::call_once(_load_once_flag, [&] {
+        _tablet_id = tablet->tablet_id();
+        _status = _do_load(tablet, rowset);
+        if (!_status.ok()) {
+            LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
+                         << get_stack_trace();
+            if (_status.is_mem_limit_exceeded()) {
+                LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
+            }
+        }
+    });
     return _status;
 }
 
