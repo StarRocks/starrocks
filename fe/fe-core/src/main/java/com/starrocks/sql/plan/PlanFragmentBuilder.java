@@ -1234,7 +1234,7 @@ public class PlanFragmentBuilder {
             List<BinaryPredicateOperator> eqOnPredicates = getEqConj(
                     leftChildColumns,
                     rightChildColumns,
-                    Utils.extractConjuncts(node.getJoinPredicate()));
+                    Utils.extractConjuncts(node.getOnPredicate()));
 
             if (node.getJoinType().isCrossJoin() ||
                     (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())) {
@@ -1249,8 +1249,8 @@ public class PlanFragmentBuilder {
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
                 joinNode.addConjuncts(conjuncts);
-                List<Expr> onConjuncts = Utils.extractConjuncts(node.getJoinPredicate()).stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(node.getJoinPredicate(),
+                List<Expr> onConjuncts = Utils.extractConjuncts(node.getOnPredicate()).stream()
+                        .map(e -> ScalarOperatorToExpr.buildExecExpression(node.getOnPredicate(),
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
                 joinNode.addConjuncts(onConjuncts);
@@ -1339,7 +1339,7 @@ public class PlanFragmentBuilder {
                     }
                 }
 
-                List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getJoinPredicate());
+                List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getOnPredicate());
                 otherJoin.removeAll(eqOnPredicates);
                 List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -1536,7 +1536,7 @@ public class PlanFragmentBuilder {
             ColumnRefSet rightChildColumns = optExpression.getInputs().get(1).getOutputColumns();
             List<BinaryPredicateOperator> equalOnPredicate =
                     JoinPredicateUtils.getEqConj(leftChildColumns, rightChildColumns,
-                            Utils.extractConjuncts(joinNode.getJoinPredicate()));
+                            Utils.extractConjuncts(joinNode.getOnPredicate()));
 
             List<Integer> leftOnPredicateColumns = new ArrayList<>();
             List<Integer> rightOnPredicateColumns = new ArrayList<>();
