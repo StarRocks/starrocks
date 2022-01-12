@@ -265,8 +265,7 @@ public:
                   << " algorithm=" << compaction_algorithm_to_string(cfg.algorithm)
                   << " column_group_size=" << column_groups.size() << " input("
                   << "entry=" << _entries.size() << " rows=" << stats.raw_rows_read
-                  << " del=" << stats.rows_del_vec_filtered
-                  << " actual=" << stats.raw_rows_read
+                  << " del=" << stats.rows_del_vec_filtered << " actual=" << stats.raw_rows_read
                   << " bytes=" << PrettyPrinter::print(total_input_size, TUnit::BYTES) << ") output(rows=" << total_rows
                   << " chunk=" << total_chunk
                   << " bytes=" << PrettyPrinter::print(writer->total_data_size(), TUnit::BYTES)
@@ -390,8 +389,8 @@ private:
         }
 
         if (stats->raw_rows_read != *total_rows) {
-            string msg = Substitute("update compaction rows read($0) != rows written($1)",
-                                    stats->raw_rows_read, *total_rows);
+            string msg = Substitute("update compaction rows read($0) != rows written($1)", stats->raw_rows_read,
+                                    *total_rows);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
