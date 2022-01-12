@@ -312,14 +312,14 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     ASSERT_EQ(N, read_tablet(_tablet, 3));
 
     // check and reslove conflict
-    EditVersion lastest_applied_version = _tablet->updates()->lastest_applied_version();
+    EditVersion latest_applied_version(3, 0);
     auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(_tablet->tablet_id());
     auto& index = index_entry->value();
     st = index.load(_tablet.get());
     std::vector<uint32_t> read_column_ids = {2};
     state.test_check_conflict(_tablet.get(), partial_rowset.get(), partial_rowset->rowset_meta()->get_rowset_seg_id(),
-                              lastest_applied_version, read_column_ids, index);
+                              latest_applied_version, read_column_ids, index);
 
     // check data of write column
     const std::vector<PartialUpdateState>& new_parital_update_states = state.parital_update_states();
