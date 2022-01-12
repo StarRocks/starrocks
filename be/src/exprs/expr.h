@@ -243,7 +243,7 @@ protected:
     virtual void close();
 
     /// Cache entry for the library implementing this function.
-    UserFunctionCacheEntry* _cache_entry = nullptr;
+    std::shared_ptr<UserFunctionCacheEntry> _cache_entry = nullptr;
 
     // function opcode
 
