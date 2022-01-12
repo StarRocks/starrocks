@@ -5326,7 +5326,7 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testEqFloatCast() throws Exception {
+    public void testEqDoubleCast() throws Exception {
         String sql = "select 'a' = t1e from test_all_type";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);

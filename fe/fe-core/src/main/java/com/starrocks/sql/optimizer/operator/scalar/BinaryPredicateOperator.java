@@ -98,7 +98,7 @@ public class BinaryPredicateOperator extends PredicateOperator {
             return this == NE;
         }
 
-        public boolean isEquivalenceOrUnequivalence() {
+        public boolean isNotRangeComparison() {
             return isEquivalence() || isUnequivalence();
         }
 
