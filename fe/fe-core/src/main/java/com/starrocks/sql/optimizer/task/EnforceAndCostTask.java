@@ -215,7 +215,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         ColumnRefSet leftChildColumns = groupExpression.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = groupExpression.getChildOutputColumns(1);
         List<BinaryPredicateOperator> equalOnPredicate =
-                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getJoinPredicate()));
+                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
         if (Utils.canOnlyDoBroadcast(node, equalOnPredicate, node.getJoinHint())) {
             return true;
         }
