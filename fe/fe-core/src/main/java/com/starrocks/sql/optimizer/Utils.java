@@ -339,8 +339,7 @@ public class Utils {
                 HiveTable hiveTable = (HiveTable) scanOperator.getTable();
                 try {
                     Map<String, HiveColumnStats> hiveColumnStatisticMap = hiveTable.getTableLevelColumnStats(colNames);
-                    return hiveColumnStatisticMap.entrySet().stream()
-                            .anyMatch(entry -> entry.getValue().isDefaultValue());
+                    return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
                 } catch (Exception e) {
                     LOG.warn("hive table {} get column failed. error : {}", hiveTable.getName(), e);
                     return true;

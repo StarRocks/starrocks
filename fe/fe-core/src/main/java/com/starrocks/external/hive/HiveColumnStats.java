@@ -15,19 +15,24 @@ import org.apache.logging.log4j.Logger;
 public class HiveColumnStats {
     private static final Logger LOG = LogManager.getLogger(HiveColumnStats.class);
 
+    private enum StatisticType {
+        UNKNOWN,
+        ESTIMATE
+    }
+
     // only valid for string type
     private double avgSize = -1.0f;
     private long numNulls = -1L;
     private long numDistinctValues = -1L;
     private double minValue = Double.NEGATIVE_INFINITY;
     private double maxValue = Double.POSITIVE_INFINITY;
+    private StatisticType type = StatisticType.UNKNOWN;
 
     public HiveColumnStats() {
     }
 
-    public boolean isDefaultValue() {
-        return avgSize == -0.1f && numNulls == -1L && numDistinctValues == -1L && minValue == Double.NEGATIVE_INFINITY
-                && maxValue == Double.POSITIVE_INFINITY;
+    public boolean isUnknown() {
+        return this.type == StatisticType.UNKNOWN;
     }
 
     @Override
@@ -165,6 +170,9 @@ public class HiveColumnStats {
             default:
                 LOG.warn("unexpected column type {}", hiveType);
                 break;
+        }
+        if (isCompatible) {
+            type = StatisticType.ESTIMATE;
         }
         return isCompatible;
     }
