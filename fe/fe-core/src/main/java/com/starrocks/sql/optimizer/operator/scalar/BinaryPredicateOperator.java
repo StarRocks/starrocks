@@ -98,6 +98,10 @@ public class BinaryPredicateOperator extends PredicateOperator {
             return this == NE;
         }
 
+        public boolean isEquivalenceOrUnequivalence() {
+            return isEquivalence() || isEquivalenceOrUnequivalence();
+        }
+
         public boolean isRange() {
             return type.equals(LT.type)
                     || type.equals(LE.type)

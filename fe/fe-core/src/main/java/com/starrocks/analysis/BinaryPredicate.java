@@ -161,6 +161,10 @@ public class BinaryPredicate extends Predicate implements Writable {
         public boolean isUnequivalence() {
             return this == NE;
         }
+
+        public boolean isEquivalenceOrUnequivalence() {
+            return isEquivalence() || isEquivalenceOrUnequivalence();
+        }
     }
 
     private Operator op;
