@@ -5318,4 +5318,48 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
                 "id:0, fid:50303, could_apply_dict_optimize:false), has_nullable_child:false, is_nullable:true"));
     }
+
+    @Test
+    public void testUnionChildProjectHasNullable() throws Exception {
+        String sql = "SELECT \n" +
+                "  DISTINCT * \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      DISTINCT DAY(\"292269055-12-03 00:47:04\") \n" +
+                "    FROM \n" +
+                "      t1\n" +
+                "    WHERE \n" +
+                "      true \n" +
+                "    UNION ALL \n" +
+                "    SELECT \n" +
+                "      DISTINCT DAY(\"292269055-12-03 00:47:04\") \n" +
+                "    FROM \n" +
+                "      t1\n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "        (true) IS NULL\n" +
+                "      )\n" +
+                "  ) t;";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("8:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: [9: day, TINYINT, true]\n" +
+                "  |  cardinality: 0\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [4, TINYINT, true]\n" +
+                "  |      [8, TINYINT, true]\n" +
+                "  |  pass-through-operands: all"));
+    }
+
+    @Test
+    public void testNullableSameWithChildrenFunctions() throws Exception {
+        String sql = "select distinct day(id_datetime) from test_all_type_partition_by_datetime";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(" 1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  11 <-> day[([2: id_datetime, DATETIME, false]); args: DATETIME; result: TINYINT; args nullable: false; result nullable: false]"));
+    }
 }

@@ -718,7 +718,7 @@ public class PlanTestBase {
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type_partition_by_datetime` (\n" +
                 "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
-                "  `id_datetime` datetime NULL COMMENT \"\",\n" +
+                "  `id_datetime` datetime NOT NULL COMMENT \"\",\n" +
                 "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
                 "  `t1c` int(11) NULL COMMENT \"\",\n" +
                 "  `t1d` bigint(20) NULL COMMENT \"\",\n" +
