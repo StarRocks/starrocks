@@ -168,11 +168,11 @@ void RawValue::print_value(const void* value, const TypeDescriptor& type, int sc
         break;
 
     case TYPE_DECIMALV2:
-        *stream << reinterpret_cast<const PackedInt128*>(value)->value;
+        *stream << unaligned_load<int128_t>(value);
         break;
 
     case TYPE_LARGEINT:
-        *stream << reinterpret_cast<const PackedInt128*>(value)->value;
+        *stream << unaligned_load<int128_t>(value);
         break;
 
     default:
@@ -261,7 +261,8 @@ void RawValue::write(const void* value, void* dst, const TypeDescriptor& type, M
     }
 
     case TYPE_LARGEINT: {
-        *reinterpret_cast<PackedInt128*>(dst) = *reinterpret_cast<const PackedInt128*>(value);
+        int128_t tmp = unaligned_load<int128_t>(value);
+        unaligned_store<int128_t>(dst, tmp);
         break;
     }
 
@@ -286,7 +287,8 @@ void RawValue::write(const void* value, void* dst, const TypeDescriptor& type, M
         break;
 
     case TYPE_DECIMALV2:
-        *reinterpret_cast<PackedInt128*>(dst) = *reinterpret_cast<const PackedInt128*>(value);
+        int128_t tmp = unaligned_load<int128_t>(value);
+        unaligned_store<int128_t>(dst, tmp);
         break;
 
     case TYPE_OBJECT:
@@ -334,7 +336,8 @@ void RawValue::write(const void* value, const TypeDescriptor& type, void* dst, u
         *reinterpret_cast<int64_t*>(dst) = *reinterpret_cast<const int64_t*>(value);
         break;
     case TYPE_LARGEINT:
-        *reinterpret_cast<PackedInt128*>(dst) = *reinterpret_cast<const PackedInt128*>(value);
+        int128_t tmp = unaligned_load<int128_t>(value);
+        unaligned_store<int128_t>(dst, tmp);
         break;
     case TYPE_FLOAT:
         *reinterpret_cast<float*>(dst) = *reinterpret_cast<const float*>(value);
@@ -362,7 +365,8 @@ void RawValue::write(const void* value, const TypeDescriptor& type, void* dst, u
         break;
 
     case TYPE_DECIMALV2:
-        *reinterpret_cast<PackedInt128*>(dst) = *reinterpret_cast<const PackedInt128*>(value);
+        int128_t tmp = unaligned_load<int128_t>(value);
+        unaligned_store<int128_t>(dst, tmp);
         break;
 
     default:

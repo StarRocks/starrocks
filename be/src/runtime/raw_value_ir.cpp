@@ -103,14 +103,14 @@ int RawValue::compare(const void* v1, const void* v2, const TypeDescriptor& type
         return (*decimal_value1 > *decimal_value2) ? 1 : (*decimal_value1 < *decimal_value2 ? -1 : 0);
 
     case TYPE_DECIMALV2: {
-        DecimalV2Value decimal_value1(reinterpret_cast<const PackedInt128*>(v1)->value);
-        DecimalV2Value decimal_value2(reinterpret_cast<const PackedInt128*>(v2)->value);
+        DecimalV2Value decimal_value1(unaligned_load<int128_t>(v1));
+        DecimalV2Value decimal_value2(unaligned_load<int128_t>(v2));
         return (decimal_value1 > decimal_value2) ? 1 : (decimal_value1 < decimal_value2 ? -1 : 0);
     }
 
     case TYPE_LARGEINT: {
-        __int128 large_int_value1 = reinterpret_cast<const PackedInt128*>(v1)->value;
-        __int128 large_int_value2 = reinterpret_cast<const PackedInt128*>(v2)->value;
+        __int128 large_int_value1 = unaligned_load<int128_t>(v1);
+        __int128 large_int_value2 = unaligned_load<int128_t>(v2);
         return large_int_value1 > large_int_value2 ? 1 : (large_int_value1 < large_int_value2 ? -1 : 0);
     }
 
