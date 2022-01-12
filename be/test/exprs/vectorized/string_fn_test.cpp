@@ -615,81 +615,105 @@ PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
     auto delim = BinaryColumn::create();
     auto field = Int32Column::create();
 
+    // 0
     str->append("hello word");
     delim->append(" ");
     field->append(1);
 
+    // 1
     str->append("hello word");
     delim->append(" ");
     field->append(2);
 
+    // 2
     str->append("hello word");
     delim->append(" ");
     field->append(3);
 
+    // 3
     str->append("hello word");
     delim->append("hello");
     field->append(1);
 
+    // 4
     str->append("hello word");
     delim->append("hello");
     field->append(2);
 
+    // 5
     str->append("abcdabda");
     delim->append("a");
     field->append(1);
 
+    // 6
     str->append("abcdabda");
     delim->append("a");
     field->append(2);
 
+    // 7
     str->append("abcdabda");
     delim->append("a");
     field->append(3);
 
+    // 8
     str->append("abcdabda");
     delim->append("a");
     field->append(4);
 
+    // 9
     str->append("2019年9月8日");
     delim->append("月");
     field->append(1);
 
+    // 10
     str->append("abcdabda");
     delim->append("");
     field->append(1);
 
+    // 11
     str->append("abc###123###234");
     delim->append("##");
     field->append(2);
 
+    // 12
     str->append("abc###123###234");
     delim->append("##");
     field->append(3);
 
+    // 13
     str->append("abcde");
     delim->append("");
     field->append(2);
 
+    // 14
     str->append("abcde");
     delim->append("");
     field->append(10);
 
+    // 15
     str->append("abcde");
     delim->append("abcdef");
     field->append(10);
 
+    // 16
     str->append("abcde");
     delim->append("abcdef");
     field->append(2);
 
+    // 17
     str->append("");
     delim->append("abcdef");
     field->append(2);
 
+    // 18
     str->append("");
     delim->append("");
     field->append(2);
+
+    // 19
+    str->append("abcd");
+    delim->append("");
+    field->append(5);
 
     columns.emplace_back(str);
     columns.emplace_back(delim);
@@ -708,15 +732,16 @@ PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
     ASSERT_EQ("bd", v->get(7).get<Slice>().to_string());
     ASSERT_EQ("", v->get(8).get<Slice>().to_string());
     ASSERT_EQ("2019年9", v->get(9).get<Slice>().to_string());
-    ASSERT_EQ("", v->get(10).get<Slice>().to_string());
+    ASSERT_EQ("a", v->get(10).get<Slice>().to_string());
     ASSERT_EQ("#123", v->get(11).get<Slice>().to_string());
     ASSERT_EQ("#234", v->get(12).get<Slice>().to_string());
-    ASSERT_EQ("", v->get(13).get<Slice>().to_string());
-    ASSERT_EQ("", v->get(14).get<Slice>().to_string());
+    ASSERT_EQ("b", v->get(13).get<Slice>().to_string());
+    ASSERT_TRUE(v->get(14).is_null());
     ASSERT_TRUE(v->get(15).is_null());
     ASSERT_TRUE(v->get(16).is_null());
     ASSERT_TRUE(v->get(17).is_null());
-    ASSERT_EQ("", v->get(18).get<Slice>().to_string());
+    ASSERT_TRUE(v->get(18).is_null());
+    ASSERT_TRUE(v->get(19).is_null());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, leftTest) {
