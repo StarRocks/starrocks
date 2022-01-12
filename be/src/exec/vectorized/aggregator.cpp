@@ -7,12 +7,11 @@
 #include "runtime/current_thread.h"
 
 namespace starrocks {
-
 namespace vectorized {
 Status init_udaf_context(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                          starrocks_udf::FunctionContext* context);
-} // namespace vectorized
 
+} // namespace vectorized
 Aggregator::Aggregator(const TPlanNode& tnode) : _tnode(tnode) {}
 
 Status Aggregator::open(RuntimeState* state) {
@@ -23,6 +22,7 @@ Status Aggregator::open(RuntimeState* state) {
     }
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
+#ifdef STARROCKS_WITH_HDFS
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         if (_tnode.agg_node.aggregate_functions[i].nodes[0].fn.binary_type == TFunctionBinaryType::SRJAR) {
             const auto& fn = _tnode.agg_node.aggregate_functions[i].nodes[0].fn;
@@ -31,6 +31,7 @@ Status Aggregator::open(RuntimeState* state) {
             RETURN_IF_ERROR(st);
         }
     }
+#endif
 
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);

@@ -806,7 +806,9 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
+#ifdef STARROCKS_WITH_HDFS
         return newJavaUDAFFunction(is_null);
+#endif
     }
     return nullptr;
 }
