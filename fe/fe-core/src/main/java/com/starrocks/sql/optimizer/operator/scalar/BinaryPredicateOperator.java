@@ -99,7 +99,7 @@ public class BinaryPredicateOperator extends PredicateOperator {
         }
 
         public boolean isEquivalenceOrUnequivalence() {
-            return isEquivalence() || isEquivalenceOrUnequivalence();
+            return isEquivalence() || isUnequivalence();
         }
 
         public boolean isRange() {
