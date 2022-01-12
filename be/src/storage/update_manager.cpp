@@ -223,6 +223,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     if (st.ok()) {
         _update_state_cache.release(state_entry);
     } else {
+        LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
         _update_state_cache.remove(state_entry);
     }
     if (st.ok()) {
@@ -233,12 +234,23 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         if (st.ok()) {
             _index_cache.release(index_entry);
         } else {
+            LOG(WARNING) << "load primary index error: " << st << " tablet: " << tablet->tablet_id();
             _index_cache.remove(index_entry);
         }
     }
     VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
     return st;
+}
+
+void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
+    string rowset_unique_id = rowset->rowset_id().to_string();
+    VLOG(1) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
+            << " rowset:" << rowset_unique_id;
+    auto state_entry = _update_state_cache.get(Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+    if (state_entry != nullptr) {
+        _update_state_cache.remove(state_entry);
+    }
 }
 
 } // namespace starrocks

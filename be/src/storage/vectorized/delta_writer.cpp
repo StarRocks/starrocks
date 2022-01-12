@@ -270,8 +270,16 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     if (_cur_rowset == nullptr) {
         return Status::InternalError("Fail to build rowset");
     }
+
+    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+        RETURN_IF_ERROR(_storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get()));
+    }
+
     OLAPStatus res = _storage_engine->txn_manager()->commit_txn(_req.partition_id, _tablet, _req.txn_id, _req.load_id,
                                                                 _cur_rowset, false);
+    if (res != OLAP_SUCCESS) {
+        _storage_engine->update_manager()->on_rowset_cancel(_tablet.get(), _cur_rowset.get());
+    }
     if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
         return Status::InternalError("Fail to commit transaction");
     }
@@ -291,9 +299,6 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
 
 #endif
 
-    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-        RETURN_IF_ERROR(_storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get()));
-    }
     _delta_written_success = true;
 
     const FlushStatistic& stat = _flush_token->get_stats();

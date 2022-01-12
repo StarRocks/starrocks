@@ -12,6 +12,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/tablet_reader.h"
+#include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -738,7 +739,11 @@ PrimaryIndex::PrimaryIndex() = default;
 
 PrimaryIndex::~PrimaryIndex() {
     if (_tablet_id != 0) {
-        LOG(INFO) << "primary index released tablet:" << _tablet_id << " memory: " << memory_usage();
+        if (!_status.ok()) {
+            LOG(WARNING) << "bad primary index released tablet:" << _tablet_id << " memory: " << memory_usage();
+        } else {
+            LOG(INFO) << "primary index released tablet:" << _tablet_id << " memory: " << memory_usage();
+        }
     }
 }
 
@@ -760,6 +765,13 @@ Status PrimaryIndex::load(Tablet* tablet) {
     }
     _status = _do_load(tablet);
     _loaded = true;
+    if (!_status.ok()) {
+        LOG(WARNING) << "load PrimaryIndex error: " << _status << " tablet:" << _tablet_id << " stack:\n"
+                     << get_stack_trace();
+        if (_status.is_mem_limit_exceeded()) {
+            LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
+        }
+    }
     return _status;
 }
 
