@@ -338,11 +338,8 @@ void RawValue::write(const void* value, const TypeDescriptor& type, void* dst, u
         *reinterpret_cast<int64_t*>(dst) = *reinterpret_cast<const int64_t*>(value);
         break;
     case TYPE_LARGEINT: {
-        case TYPE_LARGEINT: {
-            int128_t tmp = unaligned_load<int128_t>(value);
-            unaligned_store<int128_t>(dst, tmp);
-            break;
-        }
+        int128_t tmp = unaligned_load<int128_t>(value);
+        unaligned_store<int128_t>(dst, tmp);
         break;
     }
     
