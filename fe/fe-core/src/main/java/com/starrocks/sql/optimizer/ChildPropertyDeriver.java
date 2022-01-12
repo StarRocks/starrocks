@@ -116,7 +116,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
         List<BinaryPredicateOperator> equalOnPredicate =
-                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getJoinPredicate()));
+                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
 
         if (Utils.canOnlyDoBroadcast(node, equalOnPredicate, hint)) {
             tryReplicatedCrossJoin(context);

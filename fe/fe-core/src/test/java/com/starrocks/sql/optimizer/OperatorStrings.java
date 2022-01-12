@@ -264,7 +264,7 @@ public class OperatorStrings {
 
             PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("").append(join.getJoinType()).append(" (");
-            sb.append("join-predicate [").append(join.getJoinPredicate()).append("] ");
+            sb.append("join-predicate [").append(join.getOnPredicate()).append("] ");
             sb.append("post-join-predicate [").append(join.getPredicate()).append("]");
             sb.append(")");
 

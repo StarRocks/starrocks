@@ -306,7 +306,7 @@ public class CostModel {
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftStatistics.getUsedColumns(),
                     rightStatistics.getUsedColumns(),
-                    Utils.extractConjuncts(join.getJoinPredicate()));
+                    Utils.extractConjuncts(join.getOnPredicate()));
 
             if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
