@@ -40,7 +40,7 @@ public:
     Decoder() = default;
     virtual ~Decoder() = default;
 
-    virtual Status set_dict(size_t num_values, Decoder* decoder) {
+    virtual Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) {
         return Status::NotSupported("set_dict is not supported");
     }
 

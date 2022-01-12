@@ -37,7 +37,8 @@ Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::strin
     if (rowset_meta->rowset_type() == BETA_ROWSET) {
         *rowset =
                 BetaRowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
-        return (*rowset)->init() == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to init rowset");
+        RETURN_IF_ERROR((*rowset)->init());
+        return Status::OK();
     }
     return Status::NotSupported("unsupported rowset type");
 }

@@ -286,19 +286,15 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         return Status::InternalError("tablet is migrating or has been migrated");
     }
 
-    OLAPStatus res = OLAP_SUCCESS;
+    Status res = Status::OK();
     PUniqueId load_id;
     load_id.set_hi(0);
     load_id.set_lo(0);
     tablet->obtain_push_lock();
     {
         DeferOp release_push_lock([&tablet] { return tablet->release_push_lock(); });
-        res = StorageEngine::instance()->txn_manager()->prepare_txn(request.partition_id, tablet,
-                                                                    request.transaction_id, load_id);
-        if (res != OLAP_SUCCESS) {
-            return Status::InternalError("Fail to prepare txn");
-        }
-
+        RETURN_IF_ERROR(StorageEngine::instance()->txn_manager()->prepare_txn(request.partition_id, tablet,
+                                                                              request.transaction_id, load_id));
         // prepare txn will be always successful
         // if current tablet is under schema change, origin tablet is successful and
         // new tablet is not successful, it maybe a fatal error because new tablet has
@@ -342,11 +338,8 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                     PUniqueId load_id;
                     load_id.set_hi(0);
                     load_id.set_lo(0);
-                    res = StorageEngine::instance()->txn_manager()->prepare_txn(request.partition_id, related_tablet,
-                                                                                request.transaction_id, load_id);
-                    if (res != OLAP_SUCCESS) {
-                        return Status::InternalError("Fail to prepare txn");
-                    }
+                    RETURN_IF_ERROR(StorageEngine::instance()->txn_manager()->prepare_txn(
+                            request.partition_id, related_tablet, request.transaction_id, load_id));
                     // prepare txn will always be successful
                     tablet_vars->push_back(TabletVars());
                     TabletVars& new_item = tablet_vars->back();
@@ -375,7 +368,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                                                              request.delete_conditions, &del_pred);
             del_preds.push(del_pred);
             tablet_var.tablet->release_header_lock();
-            if (res != OLAP_SUCCESS) {
+            if (!res.ok()) {
                 LOG(WARNING) << "Fail to generate delete condition. res=" << res
                              << ", tablet=" << tablet_var.tablet->full_name();
                 return Status::InternalError("Fail to generate delete condition");
@@ -400,10 +393,10 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                 continue;
             }
 
-            OLAPStatus rollback_status = StorageEngine::instance()->txn_manager()->rollback_txn(
+            Status rollback_status = StorageEngine::instance()->txn_manager()->rollback_txn(
                     request.partition_id, tablet_var.tablet, request.transaction_id);
             // has to check rollback status to ensure not delete a committed rowset
-            if (rollback_status == OLAP_SUCCESS) {
+            if (rollback_status.ok()) {
                 // actually, olap_index may has been deleted in delete_transaction()
                 StorageEngine::instance()->add_unused_rowset(tablet_var.rowset_to_add);
             }
@@ -421,10 +414,10 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
             tablet_var.rowset_to_add->rowset_meta()->set_delete_predicate(del_preds.front());
             del_preds.pop();
         }
-        OLAPStatus commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
+        Status commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
                 request.partition_id, tablet_var.tablet, request.transaction_id, load_id, tablet_var.rowset_to_add,
                 false);
-        if (commit_status != OLAP_SUCCESS && commit_status != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
+        if (!commit_status.ok() && !commit_status.is_already_exist()) {
             LOG(WARNING) << "fail to commit txn. res=" << commit_status << ", table=" << tablet->full_name()
                          << ", transaction_id=" << request.transaction_id;
             st = Status::InternalError("Fail to commit txn");

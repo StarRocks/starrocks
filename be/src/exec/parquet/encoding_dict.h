@@ -78,9 +78,9 @@ public:
     ~DictDecoder() override = default;
 
     // initialize dictionary
-    Status set_dict(size_t num_values, Decoder* decoder) override {
+    Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
         _dict.resize(num_values);
-        _indexes.resize(config::vector_chunk_size);
+        _indexes.resize(chunk_size);
         RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)&_dict[0]));
         return Status::OK();
     }
@@ -140,9 +140,9 @@ public:
     DictDecoder() = default;
     ~DictDecoder() override = default;
 
-    Status set_dict(size_t num_values, Decoder* decoder) override {
-        _indexes.resize(config::vector_chunk_size);
-        _slices.resize(config::vector_chunk_size);
+    Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
+        _indexes.resize(chunk_size);
+        _slices.resize(chunk_size);
         std::vector<Slice> slices(num_values);
         RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)&slices[0]));
 

@@ -4141,12 +4141,12 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select v1 from t0 where not (v1 > 2 and if(v2 > 2, FALSE, TRUE))";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (NOT if(2: v2 > 2, FALSE, TRUE))"));
+        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (NOT (if(2: v2 > 2, FALSE, TRUE)))"));
 
         sql = "select v1 from t0 where not (v1 > 2 or v2 is null or if(v3 > 2, FALSE, TRUE))";
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(
-                planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT if(3: v3 > 2, FALSE, TRUE)"));
+                planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT (if(3: v3 > 2, FALSE, TRUE))"));
     }
 
     @Test
@@ -4668,6 +4668,16 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("aggregate: multi_distinct_sum[([11: id_bool, BOOLEAN, true]); " +
                 "args: BOOLEAN; result: VARCHAR;"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testCountDistinctFloatTwoPhase() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct t1e) from test_all_type";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("aggregate: multi_distinct_count[([5: t1e, FLOAT, true]); " +
+                "args: FLOAT; result: VARCHAR; args nullable: true; result nullable: false"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
