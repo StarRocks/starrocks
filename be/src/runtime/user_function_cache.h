@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -31,22 +32,21 @@ namespace starrocks {
 
 struct UserFunctionCacheEntry;
 
-// Used to cache a user function. Theses functions inlcude
-// UDF(User Definfed Function) and UDAF(User Defined Aggregate
-// Function), and maybe inlucde UDTF(User Defined Table
-// Function) in future. A user defined function may be splitted
-// into several functions, for example, UDAF is splitted into
-// InitFn, MergeFn, FinalizeFn...
-// In StarRocks, we call UDF/UDAF/UDTF UserFunction, and we call
-// implement function Fucntion.
-// An UserFunction have a function id, we can find library with
-// this id. When we add user function into cache, we need to
-// download from URL and check its checksum. So if we find a function
-// with id, this function library is valid. And when user wants to
+// This class is used for caching user-defined functions.
+// We will support UDF/UDAF/UDTF and user-defined window functions.
+// A user-defined function has a unique function id, and we get the
+// corresponding function based on the function id. If the function does
+// not exist or if the md5 does not match, then the corresponding lib will be
+// downloaded from the specified URL. when user wants to
 // change its implementation(URL), StarRocks will generate a new function
 // id.
 class UserFunctionCache {
 public:
+    static constexpr const char* JAVA_UDF_SUFFIX = ".jar";
+    static constexpr int UDF_TYPE_UNKNOWN = -1;
+    static constexpr int UDF_TYPE_JAVA = 1;
+
+    using UserFunctionCacheEntryPtr = std::shared_ptr<UserFunctionCacheEntry>;
     // local_dir is the directory which contain cached library.
     UserFunctionCache();
     ~UserFunctionCache();
@@ -56,36 +56,27 @@ public:
 
     static UserFunctionCache* instance();
 
-    // Return function pointer for given fid and symbol.
-    // If fid is 0, lookup symbol from this starrocks-be process.
-    // Otherwise find symbol in UserFunction's library.
-    // Found function pointer is returned in fn_ptr, and cache entry
-    // is returned by entry. Client must call release_entry to release
-    // cache entry if didn't need it.
-    // If *entry is not true means that we should find symbol in this
-    // entry.
-    Status get_function_ptr(int64_t fid, const std::string& symbol, const std::string& url, const std::string& checksum,
-                            void** fn_ptr, UserFunctionCacheEntry** entry);
-    void release_entry(UserFunctionCacheEntry* entry);
+    Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, std::string* libpath);
+
+    static int get_function_type(const std::string& url);
 
 private:
     Status _load_cached_lib();
     Status _load_entry_from_lib(const std::string& dir, const std::string& file);
     Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
-                            UserFunctionCacheEntry** output_entry);
-    Status _load_cache_entry(const std::string& url, UserFunctionCacheEntry* entry);
-    Status _download_lib(const std::string& url, UserFunctionCacheEntry* entry);
-    Status _load_cache_entry_internal(UserFunctionCacheEntry* entry);
-
-    std::string _make_lib_file(int64_t function_id, const std::string& checksum);
-    void _destroy_cache_entry(UserFunctionCacheEntry* entry);
+                            UserFunctionCacheEntryPtr* output_entry);
+    Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry);
+    Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);
+    Status _load_cache_entry_internal(UserFunctionCacheEntryPtr& entry);
+    std::string _make_lib_file(int64_t function_id, const std::string& checksum, const std::string& shuffix);
+    void _destroy_cache_entry(UserFunctionCacheEntryPtr& entry);
 
 private:
     std::string _lib_dir;
     void* _current_process_handle = nullptr;
 
     std::mutex _cache_lock;
-    std::unordered_map<int64_t, UserFunctionCacheEntry*> _entry_map;
+    std::unordered_map<int64_t, std::shared_ptr<UserFunctionCacheEntry>> _entry_map;
 };
 
 } // namespace starrocks
