@@ -48,8 +48,12 @@ ColumnPtr StringFunctions::split_part(FunctionContext* context, const starrocks:
         Slice haystack = haystack_viewer.value(i);
         Slice delimiter = delimiter_viewer.value(i);
         if (delimiter.size == 0) {
-            // if delimiter is a empty char, return empty char directly
-            res.append(Slice("", 0));
+            // Keep Consistent with split.
+            if (part_number > haystack.size) {
+                res.append_null();
+            } else {
+                res.append(Slice(haystack.data + part_number - 1, 1));
+            }
         } else if (delimiter.size == 1) {
             // if delimiter is a char, use memchr to split
             // Record the two adjacent offsets when matching delimiter.
