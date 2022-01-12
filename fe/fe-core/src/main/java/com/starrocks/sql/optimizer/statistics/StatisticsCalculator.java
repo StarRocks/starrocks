@@ -13,6 +13,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -26,6 +27,9 @@ import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.external.iceberg.cost.IcebergColumnStats;
+import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
+import com.starrocks.external.iceberg.cost.IcebergTableStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -238,11 +242,40 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        // TODO: get statistics from iceberg catalog or metadata
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
-        builder.setOutputRowCount(1);
+        IcebergTableStats stats = IcebergTableStatisticCalculator.getTableStatistics(
+                // TODO: pass predicate to get table statistics
+                new ArrayList<>(),
+                ((IcebergTable) table).getIcebergTable());
+        Statistics.Builder builder = estimateIcebergScanColumns(table, colRefToColumnMetaMap, stats);
+        builder.setOutputRowCount(stats.getRowCount());
         context.setStatistics(builder.build());
         return visitOperator(node, context);
+    }
+
+    private Statistics.Builder estimateIcebergScanColumns(Table table,
+                                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                          IcebergTableStats stats) {
+        Statistics.Builder builder = Statistics.builder();
+        List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
+        for (int i = 0; i < requiredColumns.size(); ++i) {
+            IcebergColumnStats columnStats = stats.getColumnStatistics()
+                    .get(requiredColumns.get(i).getName());
+            LOG.debug("Test Column min value " + columnStats.getMinValue()
+                    + ", Max value " + columnStats.getMaxValue() + ", column " + requiredColumns.get(i).getName());
+            ColumnStatistic statistic = new ColumnStatistic(
+                    columnStats.getMinValue(),
+                    columnStats.getMaxValue(),
+                    columnStats.getNumNulls(),
+                    columnStats.getAvgSize() < 0 ?
+                            requiredColumns.get(i).getType().getTypeSize() :
+                            columnStats.getAvgSize(),
+                    columnStats.getNumDistinctValues() != -1 ? columnStats.getNumDistinctValues() : 1);
+            builder.addColumnStatistic(requiredColumns.get(i), statistic);
+            optimizerContext.getDumpInfo()
+                    .addTableStatistics(table, requiredColumns.get(i).getName(), statistic);
+        }
+
+        return builder;
     }
 
     @Override
@@ -814,8 +847,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
         List<ColumnStatistic> estimateColumnStatistics = childOutputColumns.get(0).stream().map(columnRefOperator ->
                 context.getChildStatistics(0).getColumnStatistic(columnRefOperator)).collect(Collectors.toList());
+        childOutputColumns.get(0).stream().map(columnRefOperator -> {
+            LOG.debug("Test left node " + columnRefOperator.getName());
+            return null;
+        });
 
         for (int outputIdx = 0; outputIdx < outputColumnRef.size(); ++outputIdx) {
+            LOG.debug("Test Output column " + outputColumnRef.get(outputIdx).getName());
             double estimateRowCount = context.getChildrenStatistics().get(0).getOutputRowCount();
             for (int childIdx = 1; childIdx < context.arity(); ++childIdx) {
                 ColumnRefOperator childOutputColumn = childOutputColumns.get(childIdx).get(outputIdx);
