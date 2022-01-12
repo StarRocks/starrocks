@@ -268,14 +268,15 @@ Status RowsetUpdateState::_check_conflict(Tablet* tablet, Rowset* rowset, uint32
         return Status::InternalError("write column is empty");
     }
 
-    // _read_version is equal to lastest_applied_version which means there is no
-    // other rowset is applied after construct write_columns
+    // _read_version is equal to lastest_applied_version which means there is no other rowset is applied
+    // the data of write_columns can be write to segment file directly
     if (lastest_applied_version == _read_version) {
         return Status::OK();
     }
 
     LOG(INFO) << "lastest_applied_version: " << lastest_applied_version.to_string()
               << " vs read_version: " << _read_version.to_string();
+
     // get rss_rowids to identify conflict exist or not
     int64_t t_start = MonotonicMillis();
     uint32_t num_segments = _upserts.size();
@@ -368,15 +369,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
             read_column_ids.push_back(i);
         }
     }
-    vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
-    vector<std::unique_ptr<vectorized::Column>> write_columns(read_column_ids.size());
-    for (auto i = 0; i < read_column_ids.size(); i++) {
-        const auto read_column_id = read_column_ids[i];
-        auto tablet_column = tschema.column(read_column_id);
-        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-        read_columns[i] = column->clone_empty();
-        write_columns[i] = column->clone_empty();
-    }
+
     size_t num_segments = rowset->num_segments();
     DCHECK(num_segments == _upserts.size());
     vector<std::pair<string, string>> rewrite_files;
