@@ -179,27 +179,8 @@ build_openssl() {
     LDFLAGS="-L${TP_LIB_DIR}" \
     CFLAGS="-fPIC" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -zlib -shared no-asm ${OPENSSL_PLATFORM}
-    make -j$PARALLEL && make install
-    if [ -f $TP_INSTALL_DIR/lib64/libcrypto.a ]; then
-        mkdir -p $TP_INSTALL_DIR/lib && \
-        cp $TP_INSTALL_DIR/lib64/libcrypto.a $TP_INSTALL_DIR/lib/libcrypto.a && \
-        cp $TP_INSTALL_DIR/lib64/libssl.a $TP_INSTALL_DIR/lib/libssl.a
-    fi
-    # NOTE(zc): remove this dynamic library files to make libcurl static link.
-    # If I don't remove this files, I don't known how to make libcurl link static library
-    if [ -f $TP_INSTALL_DIR/lib64/libcrypto.so ]; then
-        rm -rf $TP_INSTALL_DIR/lib64/libcrypto.so*
-    fi
-    if [ -f $TP_INSTALL_DIR/lib64/libssl.so ]; then
-        rm -rf $TP_INSTALL_DIR/lib64/libssl.so*
-    fi
-    if [ -f $TP_INSTALL_DIR/lib/libcrypto.so ]; then
-        rm -rf $TP_INSTALL_DIR/lib/libcrypto.so*
-    fi
-    if [ -f $TP_INSTALL_DIR/lib/libssl.so ]; then
-        rm -rf $TP_INSTALL_DIR/lib/libssl.so*
-    fi
+    ./Configure --prefix=$TP_INSTALL_DIR -zlib -no-shared ${OPENSSL_PLATFORM}
+    make -j$PARALLEL && make install_sw
 }
 
 # thrift
@@ -730,11 +711,20 @@ build_hyperscan() {
 }
 
 #mariadb-connector-c
+# static link plugins refer to:
+# https://mariadb.com/kb/en/configuration-settings-for-building-connectorc/
 build_mariadb() {
     check_if_source_exist $MARIADB_SOURCE
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
     mkdir -p build && cd build
-    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release                \
+                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}  \
+                  -DCLIENT_PLUGIN_SHA256_PASSWORD=STATIC    \
+                  -DCLIENT_PLUGIN_AUTH_GSSAPI=STATIC        \
+                  -DCLIENT_PLUGIN_CLEARTEXT=STATIC          \
+                  -DCLIENT_PLUGIN_DIALOG=STATIC             \
+                  -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}      \
+                  -DOPENSSL_LIBRARYIES=${TP_INSTALL_DIR}/lib
     make -j$PARALLEL && make install
 }
 

@@ -339,6 +339,7 @@ if [ ! -f $PATCHED_MARK ] && [ $GPERFTOOLS_SOURCE = "gperftools-gperftools-2.7" 
     touch $PATCHED_MARK
 fi
 cd -
+echo "Finished patching $GPERFTOOLS_SOURCE"
 
 # patch openssl-1.0.2k
 # This patch is based on https://github.com/openssl/openssl/pull/11464.
@@ -349,4 +350,14 @@ if [ ! -f $PATCHED_MARK ] && [ $OPENSSL_SOURCE = "openssl-1.0.2k" ]; then
 fi
 cd -
 
-echo "Finished patching $GPERFTOOLS_SOURCE"
+# patch mariadb-connector-c-3.2.5
+cd $TP_SOURCE_DIR/$MARIADB_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
+    patch -p0 < $TP_PATCH_DIR/mariadb-connector-c-3.2.5-for-starrocks-static-link.patch
+    touch $PATCHED_MARK
+    echo "Finished patching $MARIADB_SOURCE"
+else
+    echo "$MARIADB_SOURCE not patched"
+fi
+cd -
+
