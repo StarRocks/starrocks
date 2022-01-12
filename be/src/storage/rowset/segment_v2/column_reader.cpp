@@ -404,6 +404,7 @@ Status ColumnReader::bloom_filter(const std::vector<const vectorized::ColumnPred
 Status ColumnReader::_load_ordinal_index(bool use_page_cache, bool kept_in_memory) {
     Status st;
     if (_flags[kHasOrdinalIndexMetaPos]) {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         std::unique_ptr<OrdinalIndexPB> index_meta(_ordinal_index.meta);
         _flags.set(kHasOrdinalIndexMetaPos, false);
         _mem_tracker->release(index_meta->SpaceUsedLong());
@@ -419,6 +420,7 @@ Status ColumnReader::_load_ordinal_index(bool use_page_cache, bool kept_in_memor
 Status ColumnReader::_load_zone_map_index(bool use_page_cache, bool kept_in_memory) {
     Status st;
     if (_flags[kHasZoneMapIndexMetaPos]) {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         std::unique_ptr<ZoneMapIndexPB> index_meta(_zone_map_index.meta);
         _flags.set(kHasZoneMapIndexMetaPos, false);
         _mem_tracker->release(index_meta->SpaceUsedLong());
@@ -434,6 +436,7 @@ Status ColumnReader::_load_zone_map_index(bool use_page_cache, bool kept_in_memo
 Status ColumnReader::_load_bitmap_index(bool use_page_cache, bool kept_in_memory) {
     Status st;
     if (_flags[kHasBitmapIndexMetaPos]) {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         std::unique_ptr<BitmapIndexPB> index_meta(_bitmap_index.meta);
         _flags.set(kHasBitmapIndexMetaPos, false);
         _mem_tracker->release(index_meta->SpaceUsedLong());
@@ -448,6 +451,7 @@ Status ColumnReader::_load_bitmap_index(bool use_page_cache, bool kept_in_memory
 Status ColumnReader::_load_bloom_filter_index(bool use_page_cache, bool kept_in_memory) {
     Status st;
     if (_flags[kHasBloomFilterIndexMetaPos]) {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         std::unique_ptr<BloomFilterIndexPB> index_meta(_bloom_filter_index.meta);
         _flags.set(kHasBloomFilterIndexMetaPos, false);
         _mem_tracker->release(index_meta->SpaceUsedLong());

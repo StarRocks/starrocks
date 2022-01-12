@@ -71,6 +71,7 @@ Tablet::Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
 Tablet::~Tablet() {}
 
 Status Tablet::_init_once_action() {
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
     if (keys_type() == PRIMARY_KEYS) {
         _updates = std::make_unique<TabletUpdates>(*this);
