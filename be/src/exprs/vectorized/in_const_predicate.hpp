@@ -196,7 +196,7 @@ public:
         }
 
         if (lhs->is_constant()) {
-            return ConstColumn::create(result, 1);
+            return ConstColumn::create(result, size);
         }
         return result;
     }
