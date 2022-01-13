@@ -540,12 +540,11 @@ inline void ColumnValueRange<T>::convert_to_fixed_value() {
         // if _low_value == _high_value == type::max
         // v will overflow after increase, so we have to
         // do some special treatment
-        if (_low_value == _high_value) {
+        if (_low_value <= _high_value) {
             _fixed_values.insert(_high_value);
-        } else {
-            for (T v = _low_value; v <= _high_value; helper::increase(v)) {
-                _fixed_values.insert(v);
-            }
+        }
+        for (T v = _low_value; v < _high_value; helper::increase(v)) {
+            _fixed_values.insert(v);
         }
 
         _fixed_op = FILTER_IN;
