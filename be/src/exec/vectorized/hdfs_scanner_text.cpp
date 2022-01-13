@@ -138,10 +138,9 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     CSVReader::Fields fields;
 
     int num_columns = chunk->get()->num_columns();
-    _column_name_ptrs.clear();
+    _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
-        ColumnPtr column_ptr = chunk->get()->get_column_by_index(i);
-        _column_name_ptrs.emplace(column_ptr.get()->get_name(), column_ptr.get());
+        _column_raw_ptrs[i] = chunk->get()->get_column_by_index(i).get();
     }
 
     csv::Converter::Options options;
@@ -165,22 +164,22 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
 
         bool has_error = false;
-        for (int j = 0, k = 0; j < _scanner_params.materialize_slots.size(); j++) {
+        for (int j = 0; j < _scanner_params.materialize_slots.size(); j++) {
+            int index = _scanner_params.materialize_index_in_chunk[j];
             const Slice& field = fields[_scanner_params.materialize_slots[j]->id() - 1];
             options.type_desc = &(_scanner_params.materialize_slots[j]->type());
-            Column* column = _column_name_ptrs.find(_scanner_params.materialize_slots[j]->col_name())->second;
-            if (!_converters[k]->read_string(column, field, options)) {
+            if (!_converters[j]->read_string(_column_raw_ptrs[index], field, options)) {
                 chunk->get()->set_num_rows(num_rows);
                 has_error = true;
                 break;
             }
-            k++;
         }
         num_rows += !has_error;
         if (!has_error) {
-            for (int i = 0; i < _file_read_param.partition_columns.size(); ++i) {
-                Column* column = _column_name_ptrs.find(_file_read_param.partition_columns[i].col_name)->second;
-                ColumnPtr partition_value = _file_read_param.partition_values[i];
+            for (int p = 0; p< _file_read_param.partition_columns.size(); ++p) {
+                int index = _scanner_params.partition_index_in_chunk[p];
+                Column* column = _column_raw_ptrs[index];
+                ColumnPtr partition_value = _file_read_param.partition_values[p];
                 DCHECK(partition_value->is_constant());
                 auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_value);
                 ColumnPtr data_column = const_column->data_column();

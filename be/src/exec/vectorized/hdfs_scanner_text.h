@@ -23,7 +23,7 @@ private:
     using ConverterPtr = std::unique_ptr<csv::Converter>;
     char _record_delimiter;
     string _field_delimiter;
-    std::map<std::string, Column*> _column_name_ptrs;
+    std::vector<Column*> _column_raw_ptrs;
     std::vector<ConverterPtr> _converters;
     std::shared_ptr<CSVReader> _reader = nullptr;
 };
