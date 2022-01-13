@@ -88,7 +88,8 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
-            return CostEstimate.of(statistics.getComputeSize(), 0, 0);
+            return CostEstimate.of(statistics.getComputeSize(), statistics.getComputeSize(),
+                    statistics.getComputeSize());
         }
 
         @Override
