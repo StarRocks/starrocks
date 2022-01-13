@@ -125,7 +125,7 @@ mysql> select * from table1 order by citycode;
 示例:
 
 ```Plain Text
-mysql> select sum(table1.pv) from table1 join table2 where table1.siteid = table2.siteid;
+mysql> select sum(table1.pv) from table1 join table2 on table1.siteid = table2.siteid;
 
 +--------------------+
 | sum(`table1`.`pv`) |
