@@ -173,6 +173,9 @@ void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t driv
     auto iter = _chunk_queue.begin();
     while (iter != _chunk_queue.end()) {
         if (iter->driver_sequence == driver_sequence) {
+            if (iter->closure != nullptr) {
+                iter->closure->Run();
+            }
             iter = _chunk_queue.erase(iter);
         } else {
             ++iter;
