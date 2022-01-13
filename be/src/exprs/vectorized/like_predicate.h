@@ -139,6 +139,8 @@ private:
     static void remove_escape_character(std::string* search_string);
 
 private:
+    static inline char _DUMMY_STRING_USE_WITH_HS_SCAN = 'A';
+
     class LikePredicateState;
     static Status hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
                                                const Slice& slice);
