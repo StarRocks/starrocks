@@ -180,9 +180,9 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
                 typeid(*operators_with_sink[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
                 auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(operators_with_sink[0].get());
                 auto& texchange_node = exchange_op->texchange_node();
-                if (texchange_node.__isset.partition_type &&
-                    (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
-                     texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED)) {
+                DCHECK(texchange_node.__isset.partition_type);
+                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
                     need_local_shuffle = false;
                 }
             }

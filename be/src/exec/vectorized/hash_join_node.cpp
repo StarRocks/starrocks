@@ -70,6 +70,18 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
+    if (tnode.hash_join_node.__isset.partition_exprs) {
+        for (const auto& partition_expr : tnode.hash_join_node.partition_exprs) {
+            for (auto i = 0; i < eq_join_conjuncts.size(); ++i) {
+                const auto& eq_join_conjunct = eq_join_conjuncts[i];
+                if (eq_join_conjunct.left == partition_expr || eq_join_conjunct.right == partition_expr) {
+                    _probe_equivalence_partition_expr_ctxs.push_back(_probe_expr_ctxs[i]);
+                    _build_equivalence_partition_expr_ctxs.push_back(_build_expr_ctxs[i]);
+                }
+            }
+        }
+    }
+
     RETURN_IF_ERROR(
             Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts, &_other_join_conjunct_ctxs));
 
@@ -388,9 +400,9 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                 typeid(*rhs_operators[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
                 auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(rhs_operators[0].get());
                 auto& texchange_node = exchange_op->texchange_node();
-                if (texchange_node.__isset.partition_type &&
-                    (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
-                     texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED)) {
+                DCHECK(texchange_node.__isset.partition_type);
+                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
                     part_type = texchange_node.partition_type;
                     rhs_need_local_shuffle = false;
                 }
@@ -400,9 +412,9 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                 typeid(*lhs_operators[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
                 auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(lhs_operators[0].get());
                 auto& texchange_node = exchange_op->texchange_node();
-                if (texchange_node.__isset.partition_type &&
-                    (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
-                     texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED)) {
+                DCHECK(texchange_node.__isset.partition_type);
+                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
                     part_type = texchange_node.partition_type;
                     lhs_need_local_shuffle = false;
                 }
@@ -410,21 +422,33 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
             // Make sure that local shuffle use the same hash function as the remote exchange sink do
             if (rhs_need_local_shuffle) {
-                rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators,
-                                                                                  _build_expr_ctxs, part_type);
+                if (part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    DCHECK(!_build_equivalence_partition_expr_ctxs.empty());
+                    rhs_operators = context->maybe_interpolate_local_shuffle_exchange(
+                            runtime_state(), rhs_operators, _build_equivalence_partition_expr_ctxs, part_type);
+                } else {
+                    rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators,
+                                                                                      _build_expr_ctxs, part_type);
+                }
             }
             if (lhs_need_local_shuffle) {
-                lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators,
-                                                                                  _probe_expr_ctxs, part_type);
+                if (part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    DCHECK(!_probe_equivalence_partition_expr_ctxs.empty());
+                    lhs_operators = context->maybe_interpolate_local_shuffle_exchange(
+                            runtime_state(), lhs_operators, _probe_equivalence_partition_expr_ctxs, part_type);
+                } else {
+                    lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators,
+                                                                                      _probe_expr_ctxs, part_type);
+                }
             }
         }
     }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
-    HashJoinerParam param(pool, _hash_join_node, _id, _type, limit(), std::move(_is_null_safes), _build_expr_ctxs,
-                          _probe_expr_ctxs, std::move(_other_join_conjunct_ctxs), std::move(_conjunct_ctxs),
-                          child(1)->row_desc(), child(0)->row_desc(), _row_descriptor, child(1)->type(),
-                          child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters);
+    HashJoinerParam param(pool, _hash_join_node, _id, _type, limit(), _is_null_safes, _build_expr_ctxs,
+                          _probe_expr_ctxs, _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(),
+                          child(0)->row_desc(), _row_descriptor, child(1)->type(), child(0)->type(),
+                          child(1)->conjunct_ctxs().empty(), _build_runtime_filters);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param, num_partitions);
 
     // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,

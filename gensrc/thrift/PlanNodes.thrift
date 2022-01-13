@@ -413,6 +413,7 @@ struct THashJoinNode {
   51: optional bool build_runtime_filters_from_planner;
 
   52: optional TJoinDistributionMode distribution_mode;
+  53: optional list<Exprs.TExpr> partition_exprs
 }
 
 struct TMergeJoinNode {
