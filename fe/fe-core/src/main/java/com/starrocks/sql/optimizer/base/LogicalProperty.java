@@ -85,8 +85,11 @@ public class LogicalProperty implements Property {
             if (node instanceof LogicalOlapScanOperator) {
                 return ((LogicalOlapScanOperator) node).getSelectedTabletId().size();
             } else {
-                // other scan operator, this is not 1 because avoid to generate 1 phase agg
-                return 2;
+                // It's very hard to estimate how many tablets scanned by this operator, because some operator
+                // even does not have the concept of tablets. Since this number will affect parallelism,
+                // so the value should not be too low.
+                // A thing to be noted that, this tablet number is better not to be 1, to avoid generate 1 phase agg.
+                return 32;
             }
         }
 
