@@ -123,7 +123,7 @@ StarRocks支持两级分区存储, 第一层为RANGE分区(partition), 第二层
 * HASH分桶(bucket) : 根据hash值将数据划分成不同的bucket。
 
 * 建议采用区分度大的列做分桶, 避免出现数据倾斜
-* 为方便数据恢复, 建议单个bucket的size不要太大, 保持在10GB左右, 所以建表或增加partition时请合理考虑buckets数目, 其中不同partition可指定不同的buckets数。
+* 为方便数据恢复, 建议单个bucket的size不要太大, 单个bucket中数据压缩后大小保持在100M-1GB左右,所以建表或增加partition时请合理考虑buckets数目, 其中不同partition可指定不同的buckets数。
 * random分桶的方式不建议采用，建表时烦请指定明确的hash分桶列。
 
 ### 稀疏索引和bloomfilter
