@@ -51,7 +51,7 @@ private:
     int64_t _actual_num_rows = 0;
     vectorized::ChunkPtr _cur_chunk = nullptr;
 
-    bool _is_finished = false;
+    bool _input_finished = false;
 };
 
 class AssertNumRowsOperatorFactory final : public OperatorFactory {

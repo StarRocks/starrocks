@@ -1651,6 +1651,11 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalAssertOneRow(OptExpression optExpression, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpression.inputAt(0), context);
 
+            // AssertNode will fill null row if child result is empty, should create new tuple use null type column
+            for (TupleId id : inputFragment.getPlanRoot().getTupleIds()) {
+                context.getDescTbl().getTupleDesc(id).getSlots().forEach(s -> s.setIsNullable(true));
+            }
+
             PhysicalAssertOneRowOperator assertOneRow = (PhysicalAssertOneRowOperator) optExpression.getOp();
             AssertNumRowsNode node =
                     new AssertNumRowsNode(context.getPlanCtx().getNextNodeId(), inputFragment.getPlanRoot(),
