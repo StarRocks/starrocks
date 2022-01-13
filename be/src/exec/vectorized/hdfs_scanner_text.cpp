@@ -113,19 +113,35 @@ void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
 }
 
 Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    return _parse_csv(runtime_state->chunk_size(), chunk);
+    CHECK(chunk != nullptr);
+    Status status = parse_csv(runtime_state->chunk_size(), chunk);
+    RETURN_IF_ERROR(status);
+
+    ChunkPtr ck = *chunk;
+    // do stats before we filter rows which does not match.
+    _stats.raw_rows_read += ck->num_rows();
+    for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
+        // do evaluation.
+        SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
+        ExecNode::eval_conjuncts(it.second, ck.get());
+        if (ck->num_rows() == 0) {
+            return Status::OK();
+        }
+    }
+    return Status::OK();
 }
 
-Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
+Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     DCHECK_EQ(0, chunk->get()->num_rows());
     Status status;
     CSVReader::Record record;
     CSVReader::Fields fields;
 
     int num_columns = chunk->get()->num_columns();
-    _column_raw_ptrs.resize(num_columns);
+    _column_name_ptrs.clear();
     for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = chunk->get()->get_column_by_index(i).get();
+        ColumnPtr column_ptr = chunk->get()->get_column_by_index(i);
+        _column_name_ptrs.emplace(column_ptr.get()->get_name(), column_ptr.get());
     }
 
     csv::Converter::Options options;
@@ -152,7 +168,8 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
         for (int j = 0, k = 0; j < _scanner_params.materialize_slots.size(); j++) {
             const Slice& field = fields[_scanner_params.materialize_slots[j]->id() - 1];
             options.type_desc = &(_scanner_params.materialize_slots[j]->type());
-            if (!_converters[k]->read_string(_column_raw_ptrs[k], field, options)) {
+            Column* column = _column_name_ptrs.find(_scanner_params.materialize_slots[j]->col_name())->second;
+            if (!_converters[k]->read_string(column, field, options)) {
                 chunk->get()->set_num_rows(num_rows);
                 has_error = true;
                 break;
@@ -160,6 +177,20 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
             k++;
         }
         num_rows += !has_error;
+        if (!has_error) {
+            for (int i = 0; i < _file_read_param.partition_columns.size(); ++i) {
+                Column* column = _column_name_ptrs.find(_file_read_param.partition_columns[i].col_name)->second;
+                ColumnPtr partition_value = _file_read_param.partition_values[i];
+                DCHECK(partition_value->is_constant());
+                auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_value);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    column->append_nulls(1);
+                } else {
+                    column->append(*data_column, 0, 1);
+                }
+            }
+        }
     }
     return chunk->get()->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }

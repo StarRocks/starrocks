@@ -17,13 +17,13 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-    Status _parse_csv(int chunk_size, ChunkPtr* chunk);
+    Status parse_csv(int chunk_size, ChunkPtr* chunk);
 
 private:
     using ConverterPtr = std::unique_ptr<csv::Converter>;
     char _record_delimiter;
     string _field_delimiter;
-    std::vector<Column*> _column_raw_ptrs;
+    std::map<std::string, Column*> _column_name_ptrs;
     std::vector<ConverterPtr> _converters;
     std::shared_ptr<CSVReader> _reader = nullptr;
 };
