@@ -425,6 +425,10 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
      * */
     private void tryBucketShuffle(PhysicalHashJoinOperator node, HashDistributionSpec leftShuffleDistribution,
                                   HashDistributionSpec rightShuffleDistribution) {
+        if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
+            return;
+        }
+
         JoinOperator nodeJoinType = node.getJoinType();
         if (nodeJoinType.isCrossJoin()) {
             return;
