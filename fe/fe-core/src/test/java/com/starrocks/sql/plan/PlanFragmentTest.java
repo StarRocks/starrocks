@@ -5272,6 +5272,14 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("PREDICATES: 20: tt = '123', " +
                 "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1"));
     }
+
+    @Test
+    public void testSubqueryLimit() throws Exception {
+        String sql = "select * from t0 where 2 = (select v4 from t1 limit 1);";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:ASSERT NUMBER OF ROWS\n" +
+                "  |  assert number of rows: LE 1"));
+    }
     
     @Test
     public void testEqStringCast() throws Exception {
