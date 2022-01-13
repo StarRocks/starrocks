@@ -343,7 +343,7 @@ void RawValue::write(const void* value, const TypeDescriptor& type, void* dst, u
         unaligned_store<int128_t>(dst, tmp);
         break;
     }
-    
+
     case TYPE_FLOAT:
         *reinterpret_cast<float*>(dst) = *reinterpret_cast<const float*>(value);
         break;
