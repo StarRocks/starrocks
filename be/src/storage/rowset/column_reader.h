@@ -22,7 +22,6 @@
 #pragma once
 
 #include <algorithm>
-#include <bitset>
 #include <cstddef> // for size_t
 #include <cstdint> // for uint32_t
 #include <memory>  // for unique_ptr
@@ -101,6 +100,13 @@ public:
 
     ~ColumnReader();
 
+    // Disable copy and assignment
+    ColumnReader(const ColumnReader&) = delete;
+    void operator=(const ColumnReader&) = delete;
+    // Disable move copy and move assignment
+    ColumnReader(ColumnReader&&) = delete;
+    void operator=(ColumnReader&&) = delete;
+
     // create a new column iterator. Caller should free the returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_iterator()
     Status new_iterator(ColumnIterator** iterator);
@@ -173,6 +179,23 @@ private:
         Reader* reader;
     };
 
+    template <int Size>
+    struct SmallBitset {
+        SmallBitset() { memset(bits, 0, sizeof(bits)); }
+
+        bool operator[](int i) const { return bits[i / 8] & (1 << (i % 8)); }
+
+        void set(int i, bool v) {
+            if (v) {
+                bits[i / 8] |= (1 << (i % 8));
+            } else {
+                bits[i / 8] &= ~(1 << (i % 8));
+            }
+        }
+
+        uint8_t bits[(Size + 7) / 8];
+    };
+
     constexpr static size_t kHasZoneMapIndexMetaPos = 0;
     constexpr static size_t kHasZoneMapIndexReaderPos = 1;
     constexpr static size_t kHasOrdinalIndexMetaPos = 2;
@@ -184,13 +207,6 @@ private:
     constexpr static size_t kIsNullablePos = 8;
     constexpr static size_t kHasAllDictEncodedPos = 9;
     constexpr static size_t kAllDictEncodedPos = 10;
-
-    // Disable copy and assignment
-    ColumnReader(const ColumnReader&) = delete;
-    void operator=(const ColumnReader&) = delete;
-    // Disable move copy and move assignment
-    ColumnReader(ColumnReader&&) = delete;
-    void operator=(ColumnReader&&) = delete;
 
     Status _init(ColumnMetaPB* meta);
 
@@ -250,7 +266,7 @@ private:
     StarRocksCallOnce<Status> _bitmap_index_once;
     StarRocksCallOnce<Status> _bloomfilter_index_once;
 
-    std::bitset<16> _flags;
+    SmallBitset<16> _flags;
 };
 
 } // namespace starrocks
