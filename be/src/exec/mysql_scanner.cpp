@@ -110,7 +110,9 @@ Status MysqlScanner::query(const std::string& query) {
 }
 
 Status MysqlScanner::query(const std::string& table, const std::vector<std::string>& fields,
-                           const std::vector<std::string>& filters, int64_t limit) {
+                           const std::vector<std::string>& filters,
+                           const std::unordered_map<std::string, std::vector<std::string>>& filters_in,
+                           std::unordered_map<std::string, bool>& filters_null_in_set, int64_t limit) {
     if (!_is_open) {
         return Status::InternalError("Query before open.");
     }
@@ -127,7 +129,9 @@ Status MysqlScanner::query(const std::string& table, const std::vector<std::stri
 
     _sql_str += " FROM " + table;
 
+    bool is_filter_initial = false;
     if (!filters.empty()) {
+        is_filter_initial = true;
         _sql_str += " WHERE ";
 
         for (int i = 0; i < filters.size(); ++i) {
@@ -136,6 +140,41 @@ Status MysqlScanner::query(const std::string& table, const std::vector<std::stri
             }
 
             _sql_str += " (" + filters[i] + ") ";
+        }
+    }
+
+    // In Filter part.
+    if (filters_in.size() > 0) {
+        if (!is_filter_initial) {
+            is_filter_initial = true;
+            _sql_str += " WHERE (";
+        } else {
+            _sql_str += " AND (";
+        }
+
+        bool is_first_conjunct = true;
+        for (auto& iter : filters_in) {
+            if (!is_first_conjunct) {
+                _sql_str += " AND (";
+            }
+            is_first_conjunct = false;
+            if (iter.second.size() > 0) {
+                auto curr = iter.second.begin();
+                auto end = iter.second.end();
+                _sql_str += iter.first + " in (";
+                _sql_str += *curr;
+                ++curr;
+
+                // collect optional values.
+                while (curr != end) {
+                    _sql_str += ", " + *curr;
+                    ++curr;
+                }
+                if (filters_null_in_set[iter.first]) {
+                    _sql_str += ", null";
+                }
+                _sql_str += ")) ";
+            }
         }
     }
 
