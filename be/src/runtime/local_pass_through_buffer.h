@@ -48,7 +48,7 @@ public:
     PassThroughContext(PassThroughChunkBuffer* chunk_buffer, TUniqueId fragment_instance_id, PlanNodeId node_id)
             : _chunk_buffer(chunk_buffer), _fragment_instance_id(fragment_instance_id), _node_id(node_id) {}
     void init();
-    void append_chunk(int sender_id, const vectorized::Chunk* chunk, size_t chunk_size, int32_t shuffle_id);
+    void append_chunk(int sender_id, const vectorized::Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
 
 private:

@@ -59,25 +59,30 @@ public:
     Status init(RuntimeState* state);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
-    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t shuffle_id, bool flush, bool eos);
+    // Since _chunk_requests buffer chunks of each pipeline_driver, wo we need
+    // to force flush when close channel, and then finally send eos packet
+    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence, bool flush, bool eos);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
+    // Since _chunk_requests buffer chunks of each pipeline_driver, wo we need
+    // to force flush when close channel, and then finally send eos packet
     // When the chunk is sent really rather than bachend, *is_real_sent will
     // be set to true.
-    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t shuffle_id, bool flush, bool eos, bool* is_real_sent);
+    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence, bool flush, bool eos,
+                          bool* is_real_sent);
 
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(PTransmitChunkParamsPtr chunk_request, int32_t shuffle_id,
+    Status send_chunk_request(PTransmitChunkParamsPtr chunk_request, int32_t driver_sequence,
                               const butil::IOBuf& attachment);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
     // indexes contains row index of chunk and this function will copy from input
     // 'from' and copy 'size' rows
-    Status add_rows_selective(vectorized::Chunk* chunk, int32_t shuffle_id, const uint32_t* row_indexes, uint32_t from,
-                              uint32_t size, RuntimeState* state);
+    Status add_rows_selective(vectorized::Chunk* chunk, int32_t driver_sequence, const uint32_t* row_indexes,
+                              uint32_t from, uint32_t size, RuntimeState* state);
 
     // Flush buffered rows and close channel. This function don't wait the response
     // of close operation, client should call close_wait() to finish channel's close.
@@ -161,39 +166,39 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chunk, int32_t shuffle_id,
+Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chunk, int32_t driver_sequence,
                                                          const uint32_t* indexes, uint32_t from, uint32_t size,
                                                          RuntimeState* state) {
-    if (UNLIKELY(_chunks[shuffle_id] == nullptr)) {
-        _chunks[shuffle_id] = chunk->clone_empty_with_tuple();
+    if (UNLIKELY(_chunks[driver_sequence] == nullptr)) {
+        _chunks[driver_sequence] = chunk->clone_empty_with_slot();
     }
 
-    if (_chunks[shuffle_id]->num_rows() + size > state->chunk_size()) {
-        RETURN_IF_ERROR(send_one_chunk(_chunks[shuffle_id].get(), shuffle_id, false, false));
+    if (_chunks[driver_sequence]->num_rows() + size > state->chunk_size()) {
+        RETURN_IF_ERROR(send_one_chunk(_chunks[driver_sequence].get(), driver_sequence, false, false));
         // we only clear column data, because we need to reuse column schema
-        _chunks[shuffle_id]->set_num_rows(0);
+        _chunks[driver_sequence]->set_num_rows(0);
     }
 
-    _chunks[shuffle_id]->append_selective(*chunk, indexes, from, size);
+    _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t shuffle_id, bool flush,
-                                                     bool eos) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence,
+                                                     bool flush, bool eos) {
     bool is_real_sent = false;
-    return send_one_chunk(chunk, shuffle_id, flush, eos, &is_real_sent);
+    return send_one_chunk(chunk, driver_sequence, flush, eos, &is_real_sent);
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t shuffle_id, bool flush,
-                                                     bool eos, bool* is_real_sent) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence,
+                                                     bool flush, bool eos, bool* is_real_sent) {
     *is_real_sent = false;
-    if (_chunk_requests[shuffle_id] == nullptr) {
-        _chunk_requests[shuffle_id] = std::make_shared<PTransmitChunkParams>();
-        _chunk_requests[shuffle_id]->set_node_id(_dest_node_id);
-        _chunk_requests[shuffle_id]->set_sender_id(_parent->_sender_id);
-        _chunk_requests[shuffle_id]->set_be_number(_parent->_be_number);
+    if (_chunk_requests[driver_sequence] == nullptr) {
+        _chunk_requests[driver_sequence] = std::make_shared<PTransmitChunkParams>();
+        _chunk_requests[driver_sequence]->set_node_id(_dest_node_id);
+        _chunk_requests[driver_sequence]->set_sender_id(_parent->_sender_id);
+        _chunk_requests[driver_sequence]->set_be_number(_parent->_be_number);
         if (_parent->_is_pipeline_level_shuffle) {
-            _chunk_requests[shuffle_id]->set_shuffle_id(shuffle_id);
+            _chunk_requests[driver_sequence]->set_driver_sequence(driver_sequence);
         }
     }
 
@@ -206,36 +211,37 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
             // -1 means disable pipeline level shuffle
             _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
-                                               _parent->_is_pipeline_level_shuffle ? shuffle_id : -1);
-            _current_request_bytes[shuffle_id] += chunk_size;
+                                               _parent->_is_pipeline_level_shuffle ? driver_sequence : -1);
+            _current_request_bytes[driver_sequence] += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
         } else {
-            auto pchunk = _chunk_requests[shuffle_id]->add_chunks();
+            auto pchunk = _chunk_requests[driver_sequence]->add_chunks();
             flush_first_chunk = _is_first_chunk && _chunks.size() > 1;
             RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
-            _current_request_bytes[shuffle_id] += pchunk->data().size();
+            _current_request_bytes[driver_sequence] += pchunk->data().size();
         }
     }
 
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
     // last packet
-    if (_current_request_bytes[shuffle_id] > _parent->_request_bytes_threshold || flush_first_chunk || flush || eos) {
-        _chunk_requests[shuffle_id]->set_eos(eos);
-        _chunk_requests[shuffle_id]->set_use_pass_through(_use_pass_through);
+    if (_current_request_bytes[driver_sequence] > _parent->_request_bytes_threshold || flush_first_chunk || flush ||
+        eos) {
+        _chunk_requests[driver_sequence]->set_eos(eos);
+        _chunk_requests[driver_sequence]->set_use_pass_through(_use_pass_through);
         butil::IOBuf attachment;
-        _parent->construct_brpc_attachment(_chunk_requests[shuffle_id], attachment);
-        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_requests[shuffle_id]),
+        _parent->construct_brpc_attachment(_chunk_requests[driver_sequence], attachment);
+        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_requests[driver_sequence]),
                                   attachment};
         _parent->_buffer->add_request(info);
-        _current_request_bytes[shuffle_id] = 0;
-        _chunk_requests[shuffle_id].reset();
+        _current_request_bytes[driver_sequence] = 0;
+        _chunk_requests[driver_sequence].reset();
         *is_real_sent = true;
     }
 
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr chunk_request, int32_t shuffle_id,
+Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr chunk_request, int32_t driver_sequence,
                                                          const butil::IOBuf& attachment) {
     chunk_request->set_node_id(_dest_node_id);
     chunk_request->set_sender_id(_parent->_sender_id);
@@ -243,7 +249,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
     if (_parent->_is_pipeline_level_shuffle) {
-        chunk_request->set_shuffle_id(shuffle_id);
+        chunk_request->set_driver_sequence(driver_sequence);
     }
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment};
@@ -259,12 +265,12 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     }
 
     if (!fragment_ctx->is_canceled()) {
-        for (auto shuffle_id = 0; shuffle_id < _chunks.size(); ++shuffle_id) {
-            if (_chunks[shuffle_id] != nullptr) {
-                RETURN_IF_ERROR(send_one_chunk(_chunks[shuffle_id].get(), shuffle_id, true, false));
+        for (auto driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
+            if (_chunks[driver_sequence] != nullptr) {
+                RETURN_IF_ERROR(send_one_chunk(_chunks[driver_sequence].get(), driver_sequence, true, false));
             }
         }
-        RETURN_IF_ERROR(send_one_chunk(nullptr, ExchangeSinkOperator::default_shuffle_id, true, true));
+        RETURN_IF_ERROR(send_one_chunk(nullptr, ExchangeSinkOperator::default_driver_sequence, true, true));
     }
 
     return Status::OK();
@@ -374,6 +380,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
         RETURN_IF_ERROR(_channel->init(state));
     }
 
+    _channel_ids.resize(state->chunk_size());
+    _driver_sequences.resize(state->chunk_size());
     _row_indexes.resize(state->chunk_size());
 
     return Status::OK();
@@ -414,7 +422,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         int has_not_pass_through = false;
         for (auto idx : _channel_indices) {
             if (_channels[idx]->use_pass_through()) {
-                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk.get(), default_shuffle_id, false, false));
+                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk.get(), default_driver_sequence, false, false));
             } else {
                 has_not_pass_through = true;
             }
@@ -436,7 +444,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                 for (auto idx : _channel_indices) {
                     if (!_channels[idx]->use_pass_through()) {
                         PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, default_shuffle_id, attachment));
+                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, default_driver_sequence, attachment));
                     }
                 }
                 _current_request_bytes = 0;
@@ -449,7 +457,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         // 1. Get request of that channel
         auto& channel = _channels[_curr_random_channel_idx];
         bool real_sent = false;
-        RETURN_IF_ERROR(channel->send_one_chunk(chunk.get(), default_shuffle_id, false, false, &real_sent));
+        RETURN_IF_ERROR(channel->send_one_chunk(chunk.get(), default_driver_sequence, false, false, &real_sent));
         if (real_sent) {
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % _channels.size();
         }
@@ -482,14 +490,12 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             // Compute row indexes for each channel's each shuffle
             _channel_row_idx_start_points.assign(num_channels * _num_shuffles + 1, 0);
 
-            std::vector<uint32_t> channel_ids(num_rows);
-            std::vector<uint32_t> shuffle_ids(num_rows);
             for (size_t i = 0; i < num_rows; ++i) {
                 auto channel_id = _hash_values[i] % num_channels;
-                auto shuffle_id = _hash_values[i] % _num_shuffles;
-                channel_ids[i] = channel_id;
-                shuffle_ids[i] = shuffle_id;
-                _channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id]++;
+                auto driver_sequence = _hash_values[i] % _num_shuffles;
+                _channel_ids[i] = channel_id;
+                _driver_sequences[i] = driver_sequence;
+                _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence]++;
             }
             // NOTE:
             // we make the last item equal with number of rows of this chunk
@@ -498,17 +504,17 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             }
 
             for (int32_t i = num_rows - 1; i >= 0; --i) {
-                auto channel_id = channel_ids[i];
-                auto shuffle_id = shuffle_ids[i];
-                _row_indexes[_channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id] - 1] = i;
-                _channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id]--;
+                auto channel_id = _channel_ids[i];
+                auto driver_sequence = _driver_sequences[i];
+                _row_indexes[_channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence] - 1] = i;
+                _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence]--;
             }
         }
 
         for (int32_t channel_id : _channel_indices) {
-            for (int32_t shuffle_id = 0; shuffle_id < _num_shuffles; ++shuffle_id) {
-                size_t from = _channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id];
-                size_t size = _channel_row_idx_start_points[channel_id * _num_shuffles + shuffle_id + 1] - from;
+            for (int32_t driver_sequence = 0; driver_sequence < _num_shuffles; ++driver_sequence) {
+                size_t from = _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence];
+                size_t size = _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence + 1] - from;
                 if (size == 0) {
                     // no data for this channel continue;
                     continue;
@@ -518,8 +524,8 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                     // dest bucket is no used, continue
                     continue;
                 }
-                RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(chunk.get(), shuffle_id, _row_indexes.data(),
-                                                                          from, size, state));
+                RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(chunk.get(), driver_sequence,
+                                                                          _row_indexes.data(), from, size, state));
             }
         }
     }
@@ -534,7 +540,7 @@ void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& channel : _channels) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(copy, default_shuffle_id, attachment);
+            channel->send_chunk_request(copy, default_driver_sequence, attachment);
         }
         _current_request_bytes = 0;
         _chunk_request.reset();

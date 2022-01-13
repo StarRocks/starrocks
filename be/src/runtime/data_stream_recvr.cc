@@ -73,7 +73,7 @@ public:
     Status get_chunk(vectorized::Chunk** chunk);
 
     // Same as get_chunk, but this version will not wait if there is non buffer chunks
-    Status get_chunk_for_pipeline(vectorized::Chunk** chunk, const int32_t shuffle_id);
+    Status get_chunk_for_pipeline(vectorized::Chunk** chunk, const int32_t driver_sequence);
 
     // check if data has come, work with try_get_chunk.
     bool has_chunk();
@@ -105,9 +105,9 @@ public:
     // Must be called once to cleanup any queued resources.
     void close();
 
-    void short_circuit_for_pipeline(const int32_t shuffle_id);
+    void short_circuit_for_pipeline(const int32_t driver_sequence);
 
-    bool has_output_for_pipeline(const int32_t shuffle_id) const;
+    bool has_output_for_pipeline(const int32_t driver_sequence) const;
 
     bool is_finished() const;
 
@@ -116,7 +116,7 @@ private:
         int64_t chunk_bytes = 0;
         // -1 means disable pipeline level shuffle
         // >=0 means enable pipeline level shuffle
-        int32_t shuffle_id = -1;
+        int32_t driver_sequence = -1;
         ChunkUniquePtr chunk_ptr;
         // When the memory of the ChunkQueue exceeds the limit,
         // we have to hold closure of the request, so as not to let the sender continue to send data.
@@ -160,19 +160,19 @@ private:
     // key of second level is request sequence
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkQueue>> _buffered_chunk_queues;
 
-    std::unordered_set<int32_t> _short_circuit_shuffle_ids;
+    std::unordered_set<int32_t> _short_circuit_driver_sequences;
 };
 
 DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int num_senders)
         : _recvr(parent_recvr), _is_cancelled(false), _num_remaining_senders(num_senders) {}
 
-void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t shuffle_id) {
+void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t driver_sequence) {
     std::lock_guard<std::mutex> l(_lock);
-    _short_circuit_shuffle_ids.insert(shuffle_id);
+    _short_circuit_driver_sequences.insert(driver_sequence);
 
     auto iter = _chunk_queue.begin();
     while (iter != _chunk_queue.end()) {
-        if (iter->shuffle_id == shuffle_id) {
+        if (iter->driver_sequence == driver_sequence) {
             iter = _chunk_queue.erase(iter);
         } else {
             ++iter;
@@ -180,7 +180,7 @@ void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t shuf
     }
 }
 
-bool DataStreamRecvr::SenderQueue::has_output_for_pipeline(const int32_t shuffle_id) const {
+bool DataStreamRecvr::SenderQueue::has_output_for_pipeline(const int32_t driver_sequence) const {
     std::lock_guard<std::mutex> l(_lock);
     if (_is_cancelled) {
         return false;
@@ -192,7 +192,7 @@ bool DataStreamRecvr::SenderQueue::has_output_for_pipeline(const int32_t shuffle
 
     auto iter = _chunk_queue.begin();
     while (iter != _chunk_queue.end()) {
-        if (iter->shuffle_id == -1 || iter->shuffle_id == shuffle_id) {
+        if (iter->driver_sequence == -1 || iter->driver_sequence == driver_sequence) {
             return true;
         }
         ++iter;
@@ -282,7 +282,7 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::get_chunk_for_pipeline(vectorized::Chunk** chunk, const int32_t shuffle_id) {
+Status DataStreamRecvr::SenderQueue::get_chunk_for_pipeline(vectorized::Chunk** chunk, const int32_t driver_sequence) {
     std::lock_guard<std::mutex> l(_lock);
 
     if (_is_cancelled) {
@@ -295,7 +295,7 @@ Status DataStreamRecvr::SenderQueue::get_chunk_for_pipeline(vectorized::Chunk** 
 
     auto iter = _chunk_queue.begin();
     while (iter != _chunk_queue.end()) {
-        if (iter->shuffle_id == -1 || iter->shuffle_id == shuffle_id) {
+        if (iter->driver_sequence == -1 || iter->driver_sequence == driver_sequence) {
             *chunk = iter->chunk_ptr.release();
             auto* closure = iter->closure;
             _recvr->_num_buffered_bytes -= iter->chunk_bytes;
@@ -425,7 +425,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
     ChunkQueue chunks;
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
-    int32_t shuffle_id = request.has_shuffle_id() ? request.shuffle_id() : -1;
+    int32_t driver_sequence = request.has_driver_sequence() ? request.driver_sequence() : -1;
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -434,9 +434,14 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         DCHECK(swap_chunks.size() == swap_bytes.size());
         size_t bytes = 0;
         for (size_t i = 0; i < swap_chunks.size(); i++) {
-            // The sending and receiving of local pass do not necessarily correspond to one-to-one
-            // So one receiving may receive two or more sending messages, and we need to use the chunk's shuffle_id
-            // but not the request's shuffle_id
+            // The sending and receiving of chunks from _pass_through_context may out of order, and
+            // considering the following sequences:
+            // 1. add chunk_1 to _pass_through_context and send request_1
+            // 2. add chunk_2 to _pass_through_context and send request_2
+            // 3. receive request_1 and get both chunk_1 and chunk_2
+            // 4. receive request_2 and get nothing
+            // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
+            // but not the request's driver_sequence
             ChunkItem item{static_cast<int64_t>(swap_bytes[i]), swap_chunks[i].second, std::move(swap_chunks[i].first),
                            nullptr};
             chunks.emplace_back(std::move(item));
@@ -450,7 +455,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             int64_t chunk_bytes = pchunk.data().size();
             ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-            ChunkItem item{chunk_bytes, shuffle_id, std::move(chunk), nullptr};
+            ChunkItem item{chunk_bytes, driver_sequence, std::move(chunk), nullptr};
             chunks.emplace_back(std::move(item));
             total_chunk_bytes += chunk_bytes;
         }
@@ -469,9 +474,9 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         }
 
         for (auto& item : chunks) {
-            // This chunks may contains different shuffle_id
-            if (item.shuffle_id >= 0 &&
-                _short_circuit_shuffle_ids.find(item.shuffle_id) != _short_circuit_shuffle_ids.end()) {
+            // This chunks may contains different driver_sequence
+            if (item.driver_sequence >= 0 &&
+                _short_circuit_driver_sequences.find(item.driver_sequence) != _short_circuit_driver_sequences.end()) {
                 continue;
             }
             _chunk_queue.emplace_back(std::move(item));
@@ -539,7 +544,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
-    int32_t shuffle_id = request.has_shuffle_id() ? request.shuffle_id() : -1;
+    int32_t driver_sequence = request.has_driver_sequence() ? request.driver_sequence() : -1;
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -548,9 +553,14 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
         DCHECK(swap_chunks.size() == swap_bytes.size());
         size_t bytes = 0;
         for (size_t i = 0; i < swap_chunks.size(); i++) {
-            // The sending and receiving of local pass do not necessarily correspond to one-to-one
-            // So one receiving may receive two or more sending messages, and we need to use the chunk's shuffle_id
-            // but not the request's shuffle_id
+            // The sending and receiving of chunks from _pass_through_context may out of order, and
+            // considering the following sequences:
+            // 1. add chunk_1 to _pass_through_context and send request_1
+            // 2. add chunk_2 to _pass_through_context and send request_2
+            // 3. receive request_1 and get both chunk_1 and chunk_2
+            // 4. receive request_2 and get nothing
+            // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
+            // but not the request's driver_sequence
             ChunkItem item{static_cast<int64_t>(swap_bytes[i]), swap_chunks[i].second, std::move(swap_chunks[i].first),
                            nullptr};
             local_chunk_queue.emplace_back(std::move(item));
@@ -564,7 +574,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
             ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
-            ChunkItem item{chunk_bytes, shuffle_id, std::move(chunk), nullptr};
+            ChunkItem item{chunk_bytes, driver_sequence, std::move(chunk), nullptr};
 
             // TODO(zc): review this chunk_bytes
             local_chunk_queue.emplace_back(std::move(item));
@@ -608,9 +618,9 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
             // Now, all the packets with sequance <= unprocessed_sequence have been received
             // so chunks of unprocessed_sequence can be flushed to ready queue
             for (auto& item : unprocessed_chunk_queue) {
-                // This chunks may contains different shuffle_id
-                if (item.shuffle_id >= 0 &&
-                    _short_circuit_shuffle_ids.find(item.shuffle_id) != _short_circuit_shuffle_ids.end()) {
+                // This chunks may contains different driver_sequence
+                if (item.driver_sequence >= 0 && _short_circuit_driver_sequences.find(item.driver_sequence) !=
+                                                         _short_circuit_driver_sequences.end()) {
                     continue;
                 }
                 _chunk_queue.emplace_back(std::move(item));
@@ -903,22 +913,23 @@ Status DataStreamRecvr::get_chunk(std::unique_ptr<vectorized::Chunk>* chunk) {
     return status;
 }
 
-Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk, const int32_t shuffle_id) {
+Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk,
+                                               const int32_t driver_sequence) {
     DCHECK(!_is_merging);
     DCHECK_EQ(_sender_queues.size(), 1);
     vectorized::Chunk* tmp_chunk = nullptr;
-    Status status = _sender_queues[0]->get_chunk_for_pipeline(&tmp_chunk, shuffle_id);
+    Status status = _sender_queues[0]->get_chunk_for_pipeline(&tmp_chunk, driver_sequence);
     chunk->reset(tmp_chunk);
     return status;
 }
 
-void DataStreamRecvr::short_circuit_for_pipeline(const int32_t shuffle_id) {
-    return _sender_queues[0]->short_circuit_for_pipeline(shuffle_id);
+void DataStreamRecvr::short_circuit_for_pipeline(const int32_t driver_sequence) {
+    return _sender_queues[0]->short_circuit_for_pipeline(driver_sequence);
 }
 
-bool DataStreamRecvr::has_output_for_pipeline(const int32_t shuffle_id) const {
+bool DataStreamRecvr::has_output_for_pipeline(const int32_t driver_sequence) const {
     DCHECK(!_is_merging);
-    return _sender_queues[0]->has_output_for_pipeline(shuffle_id);
+    return _sender_queues[0]->has_output_for_pipeline(driver_sequence);
 }
 
 bool DataStreamRecvr::is_finished() const {

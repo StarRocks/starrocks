@@ -73,7 +73,7 @@ message PTransmitChunkParams {
     optional bool use_pass_through = 9 [default = false] ;
 
     // Pipeline level shuffle's id
-    optional int32 shuffle_id = 10;
+    optional int32 driver_sequence = 10;
 };
 
 message PTransmitDataResult {

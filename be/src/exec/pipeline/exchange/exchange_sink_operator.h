@@ -68,7 +68,7 @@ public:
 private:
     class Channel;
 
-    static const int32_t default_shuffle_id = 0;
+    static const int32_t default_driver_sequence = 0;
 
     const std::shared_ptr<SinkBuffer>& _buffer;
 
@@ -138,6 +138,8 @@ private:
     const std::vector<ExprContext*>& _partition_expr_ctxs; // compute per-row partition values
     vectorized::Columns _partitions_columns;
     std::vector<uint32_t> _hash_values;
+    std::vector<uint32_t> _channel_ids;
+    std::vector<uint32_t> _driver_sequences;
     // This array record the channel start point in _row_indexes
     // And the last item is the number of rows of the current shuffle chunk.
     // It will easy to get number of rows belong to one channel by doing
