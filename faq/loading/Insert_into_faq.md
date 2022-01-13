@@ -10,7 +10,7 @@ OLAP不建议使用insert单条写入，都是批量写入的。单条写入和�
 
 ```plain text
 streaming_load_rpc_max_alive_time_sec=2400
-tablet_writer_open_rpc_timeout_sec=120
+tablet_writer_rpc_timeout_sec=1200
 ```
 
 ## insert into select 操作数据量大的时候会执行失败 ：execute timeout
