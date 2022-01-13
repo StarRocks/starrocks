@@ -754,7 +754,7 @@ public class Catalog {
                     // to see which thread held this lock for long time.
                     Thread owner = lock.getOwner();
                     if (owner != null) {
-                        LOG.warn("catalog lock is held by: {}", Util.dumpThread(owner, 10));
+                        LOG.warn("catalog lock is held by: {}", Util.dumpThread(owner, 50));
                     }
 
                     if (mustLock) {
