@@ -290,7 +290,6 @@ mysql> ALTER SYSTEM ADD BACKEND "host:port";
 如出现错误，需要删除BE节点，应用下列命令：
 
 * `alter system decommission backend "be_host:be_heartbeat_service_port";`
-* `alter system dropp backend "be_host:be_heartbeat_service_port";`
 
 具体参考[扩容缩容](../administration/Scale_up_down.md)。
 <br/>
