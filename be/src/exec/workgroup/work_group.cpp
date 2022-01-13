@@ -67,6 +67,14 @@ double WorkGroup::get_cpu_actual_use_ratio() const {
     return static_cast<double>(get_real_runtime_ns()) / sum_cpu_runtime_ns;
 }
 
+double WorkGroup::get_cpu_unadjusted_actual_use_ratio() const {
+    int64_t sum_cpu_runtime_ns = WorkGroupManager::instance()->get_sum_unadjusted_cpu_runtime_ns();
+    if (sum_cpu_runtime_ns == 0) {
+        return 0;
+    }
+    return static_cast<double>(_unadjusted_real_runtime_ns) / sum_cpu_runtime_ns;
+}
+
 WorkGroupManager::WorkGroupManager() {}
 WorkGroupManager::~WorkGroupManager() {}
 void WorkGroupManager::destroy() {

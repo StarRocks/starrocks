@@ -74,11 +74,15 @@ public:
     int64_t get_real_runtime_ns() const { return _vruntime_ns * _cpu_limit; }
     // Accumulate virtual runtime divided by _cpu_limit, so that the larger _cpu_limit,
     // the more cpu time can be consumed proportionally.
-    void increment_real_runtime_ns(int64_t real_runtime_ns) { _vruntime_ns += real_runtime_ns / _cpu_limit; }
+    void increment_real_runtime_ns(int64_t real_runtime_ns) {
+        _vruntime_ns += real_runtime_ns / _cpu_limit;
+        _unadjusted_real_runtime_ns += real_runtime_ns;
+    }
     void set_vruntime_ns(int64_t vruntime_ns) { _vruntime_ns = vruntime_ns; }
 
     double get_cpu_expected_use_ratio() const;
     double get_cpu_actual_use_ratio() const;
+    double get_cpu_unadjusted_actual_use_ratio() const;
 
     static constexpr int DEFAULT_WG_ID = 0;
 
@@ -95,6 +99,9 @@ private:
 
     pipeline::DriverQueuePtr _driver_queue = nullptr;
     int64_t _vruntime_ns = 0;
+    // vruntime and real_runtime is adjusted when the driver put back to ready_wgs,
+    // _unadjusted_real_runtime_ns is used to record the unadjusted real runtime.
+    int64_t _unadjusted_real_runtime_ns = 0;
 
     // it's proper to define Context as a Thrift or protobuf struct.
     // WorkGroupContext _context;
@@ -122,6 +129,10 @@ public:
     size_t get_sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
     int64_t get_sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
+    void increment_sum_unadjusted_cpu_runtime_ns(int64_t cpu_runtime_ns) {
+        _sum_unadjusted_cpu_runtime_ns += cpu_runtime_ns;
+    }
+    int64_t get_sum_unadjusted_cpu_runtime_ns() const { return _sum_unadjusted_cpu_runtime_ns; }
 
 private:
     std::mutex _mutex;
@@ -131,6 +142,7 @@ private:
 
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
+    std::atomic<int64_t> _sum_unadjusted_cpu_runtime_ns = 0;
 };
 
 class DefaultWorkGroupInitialization {
