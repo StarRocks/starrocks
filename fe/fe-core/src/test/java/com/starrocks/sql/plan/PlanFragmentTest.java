@@ -5347,7 +5347,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testNotEqStringCast() throws Exception {
         String sql = "select 'a' != v1 from t0";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) != 'a'\n"));
     }
 
@@ -5378,18 +5377,68 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |      [1, TINYINT, false]\n" +
                 "  |      [2, TINYINT, true]"));
 
-        sql = "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
+        sql =
+                "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      [1, DECIMAL64(12,2), true]\n" +
                 "  |      [2, DECIMAL64(12,2), true]"));
 
-        sql = "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
+        sql =
+                "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      [1, DECIMAL64(12,2), true]\n" +
                 "  |      [2, DECIMAL64(12,2), true]"));
+    }
+
+    @Test
+    public void testSemiJoinReorder() throws Exception {
+        String sql = "SELECT \n" +
+                "  v2 \n" +
+                "FROM \n" +
+                "  t0 \n" +
+                "WHERE \n" +
+                "  v1 IN (\n" +
+                "    SELECT \n" +
+                "      v2 \n" +
+                "    FROM \n" +
+                "      t0 \n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "        v2 IN (\n" +
+                "          SELECT \n" +
+                "            v1\n" +
+                "          FROM \n" +
+                "            t0\n" +
+                "        ) \n" +
+                "        OR (\n" +
+                "          v2 IN (\n" +
+                "            SELECT \n" +
+                "              v1\n" +
+                "            FROM \n" +
+                "              t0\n" +
+                "          )\n" +
+                "        )\n" +
+                "      ) \n" +
+                "      AND (\n" +
+                "        v3 IN (\n" +
+                "          SELECT \n" +
+                "            v1 \n" +
+                "          FROM \n" +
+                "            t0\n" +
+                "        )\n" +
+                "      )\n" +
+                "  );";
+        // check no exception
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 10:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 5: v2 = 11: v1\n" +
+                "  |  other predicates: (10: expr) OR (11: v1 IS NOT NULL)"));
     }
 }
