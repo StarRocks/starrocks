@@ -71,10 +71,10 @@ LIBEVENT_SOURCE=libevent-24236aed01798303745470e6c498bf606e88724a
 LIBEVENT_MD5SUM="c6c4e7614f03754b8c67a17f68177649"
 
 # openssl
-OPENSSL_DOWNLOAD="https://www.openssl.org/source/old/1.0.2/openssl-1.0.2k.tar.gz"
-OPENSSL_NAME=openssl-1.0.2k.tar.gz
-OPENSSL_SOURCE=openssl-1.0.2k
-OPENSSL_MD5SUM="f965fc0bf01bf882b31314b61391ae65"
+OPENSSL_DOWNLOAD="https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz"
+OPENSSL_NAME=openssl-OpenSSL_1_1_1m.tar.gz
+OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
+OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
 
 # thrift
 THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz"
@@ -149,10 +149,10 @@ SIMDJSON_SOURCE=simdjson-1.0.2
 SIMDJSON_MD5SUM="5bb34cca7087a99c450dbdfe406bdc7d"
 
 # curl
-CURL_DOWNLOAD="https://curl.haxx.se/download/curl-7.54.1.tar.gz"
-CURL_NAME=curl-7.54.1.tar.gz
-CURL_SOURCE=curl-7.54.1
-CURL_MD5SUM="21a6e5658fd55103a90b11de7b2a8a8c"
+CURL_DOWNLOAD="https://curl.se/download/curl-7.79.0.tar.gz"
+CURL_NAME=curl-7.79.0.tar.gz
+CURL_SOURCE=curl-7.79.0
+CURL_MD5SUM="b40e4dc4bbc9e109c330556cd58c8ec8"
 
 # RE2
 RE2_DOWNLOAD="https://github.com/google/re2/archive/2017-05-01.tar.gz"
@@ -270,10 +270,10 @@ RAGEL_SOURCE="ragel-6.10"
 RAGEL_MD5SUM="748cae8b50cffe9efcaa5acebc6abf0d"
 
 # mariadb-connector-c
-MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.1.14.tar.gz"
-MARIADB_NAME="mariadb-connector-c-3.1.14.tar.gz"
-MARIADB_SOURCE="mariadb-connector-c-3.1.14"
-MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
+MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.2.5.tar.gz"
+MARIADB_NAME="mariadb-connector-c-3.2.5.tar.gz"
+MARIADB_SOURCE="mariadb-connector-c-3.2.5"
+MARIADB_MD5SUM="9ab9205418a933b0a7920e7cf424cc36"
 
 # aliyun_oss_jars
 ALIYUN_OSS_JARS_DOWNLOAD="http://cdn-thirdparty.starrocks.com/aliyun-oss-sdk-3.7.2.tar.gz"
