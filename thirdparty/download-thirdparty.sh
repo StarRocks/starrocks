@@ -341,15 +341,6 @@ fi
 cd -
 echo "Finished patching $GPERFTOOLS_SOURCE"
 
-# patch openssl-1.0.2k
-# This patch is based on https://github.com/openssl/openssl/pull/11464.
-cd $TP_SOURCE_DIR/$OPENSSL_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $OPENSSL_SOURCE = "openssl-1.0.2k" ]; then
-    patch -p1 < $TP_PATCH_DIR/openssl-1.0.2k.patch
-    touch $PATCHED_MARK
-fi
-cd -
-
 # patch mariadb-connector-c-3.2.5
 cd $TP_SOURCE_DIR/$MARIADB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
