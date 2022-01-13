@@ -419,7 +419,7 @@ under the License.
             <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
-                <version>3.5.1</version>
+                <version>3.16.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.squareup/protoparser -->
@@ -497,7 +497,7 @@ under the License.
             <dependency>
                 <groupId>com.github.oshi</groupId>
                 <artifactId>oshi-core</artifactId>
-                <version>4.0.0</version>
+                <version>4.9.5</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.jboss.xnio/xnio-nio -->

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hdfs_scanner.h"
 
@@ -8,6 +8,7 @@
 
 #include "column/column_helper.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
+#include "exec/vectorized/hdfs_scanner_parquet.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/chunk_helper.h"

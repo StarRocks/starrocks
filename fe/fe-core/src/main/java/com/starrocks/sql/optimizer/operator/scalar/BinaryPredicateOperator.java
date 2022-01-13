@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
@@ -92,6 +92,14 @@ public class BinaryPredicateOperator extends PredicateOperator {
 
         public boolean isEquivalence() {
             return this == EQ || this == EQ_FOR_NULL;
+        }
+
+        public boolean isUnequivalence() {
+            return this == NE;
+        }
+
+        public boolean isNotRangeComparison() {
+            return isEquivalence() || isUnequivalence();
         }
 
         public boolean isRange() {

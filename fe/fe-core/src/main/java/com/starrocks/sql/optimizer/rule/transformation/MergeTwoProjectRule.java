@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -34,7 +34,8 @@ public class MergeTwoProjectRule extends TransformationRule {
             resultMap.put(entry.getKey(), entry.getValue().accept(rewriter, null));
         }
 
-        OptExpression optExpression = new OptExpression(new LogicalProjectOperator(resultMap));
+        OptExpression optExpression = new OptExpression(
+                new LogicalProjectOperator(resultMap, Math.min(firstProject.getLimit(), secondProject.getLimit())));
         optExpression.getInputs().addAll(input.getInputs().get(0).getInputs());
         return Lists.newArrayList(optExpression);
     }

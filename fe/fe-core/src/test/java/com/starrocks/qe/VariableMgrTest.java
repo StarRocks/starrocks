@@ -107,28 +107,28 @@ public class VariableMgrTest {
         // Set global variable
         SetVar setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(1234L));
         setVar.analyze(null);
-        VariableMgr.setVar(var, setVar);
+        VariableMgr.setVar(var, setVar, false);
         Assert.assertEquals(1234L, var.getMaxExecMemByte());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals(1234L, var.getMaxExecMemByte());
 
         SetVar setVar2 = new SetVar(SetType.GLOBAL, "parallel_fragment_exec_instance_num", new IntLiteral(5L));
         setVar2.analyze(null);
-        VariableMgr.setVar(var, setVar2);
+        VariableMgr.setVar(var, setVar2, false);
         Assert.assertEquals(5L, var.getParallelExecInstanceNum());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals(5L, var.getParallelExecInstanceNum());
 
         SetVar setVar3 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("Asia/Shanghai"));
         setVar3.analyze(null);
-        VariableMgr.setVar(var, setVar3);
+        VariableMgr.setVar(var, setVar3, false);
         Assert.assertEquals("Asia/Shanghai", var.getTimeZone());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals("Asia/Shanghai", var.getTimeZone());
 
         setVar3 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("CST"));
         setVar3.analyze(null);
-        VariableMgr.setVar(var, setVar3);
+        VariableMgr.setVar(var, setVar3, false);
         Assert.assertEquals("CST", var.getTimeZone());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals("CST", var.getTimeZone());
@@ -136,12 +136,20 @@ public class VariableMgrTest {
         // Set session variable
         setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(1234L));
         setVar.analyze(null);
-        VariableMgr.setVar(var, setVar);
+        VariableMgr.setVar(var, setVar, false);
+        Assert.assertEquals(1234L, var.getMaxExecMemByte());
+
+        // onlySessionVar
+        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(4321L));
+        setVar.analyze(null);
+        VariableMgr.setVar(var, setVar, true);
+        Assert.assertEquals(4321L, var.getMaxExecMemByte());
+        var = VariableMgr.newSessionVariable();
         Assert.assertEquals(1234L, var.getMaxExecMemByte());
 
         setVar3 = new SetVar(SetType.SESSION, "time_zone", new StringLiteral("Asia/Jakarta"));
         setVar3.analyze(null);
-        VariableMgr.setVar(var, setVar3);
+        VariableMgr.setVar(var, setVar3, false);
         Assert.assertEquals("Asia/Jakarta", var.getTimeZone());
 
         // Get from name
@@ -151,23 +159,23 @@ public class VariableMgrTest {
         SetVar setVar4 = new SetVar(SetType.SESSION, "sql_mode", new StringLiteral(
                 SqlModeHelper.encode("PIPES_AS_CONCAT").toString()));
         setVar4.analyze(null);
-        VariableMgr.setVar(var, setVar4);
+        VariableMgr.setVar(var, setVar4, false);
         Assert.assertEquals(2L, var.getSqlMode());
 
         // Test checkTimeZoneValidAndStandardize
         SetVar setVar5 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("+8:00"));
         setVar5.analyze(null);
-        VariableMgr.setVar(var, setVar5);
+        VariableMgr.setVar(var, setVar5, false);
         Assert.assertEquals("+08:00", VariableMgr.newSessionVariable().getTimeZone());
 
         SetVar setVar6 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("8:00"));
         setVar6.analyze(null);
-        VariableMgr.setVar(var, setVar6);
+        VariableMgr.setVar(var, setVar6, false);
         Assert.assertEquals("+08:00", VariableMgr.newSessionVariable().getTimeZone());
 
         SetVar setVar7 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("-8:00"));
         setVar7.analyze(null);
-        VariableMgr.setVar(var, setVar7);
+        VariableMgr.setVar(var, setVar7, false);
         Assert.assertEquals("-08:00", VariableMgr.newSessionVariable().getTimeZone());
     }
 
@@ -215,7 +223,7 @@ public class VariableMgrTest {
 
         // Set global variable
         SetVar setVar = new SetVar(SetType.SESSION, "version_comment", null);
-        VariableMgr.setVar(null, setVar);
+        VariableMgr.setVar(null, setVar, false);
         Assert.fail("No exception throws.");
     }
 }

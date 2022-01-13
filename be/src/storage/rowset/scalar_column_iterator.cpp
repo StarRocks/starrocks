@@ -419,6 +419,7 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseR
     vectorized::SparseRange read_range;
 
     DCHECK_EQ(range.begin(), _current_ordinal);
+    // similar to ScalarColumnIterator::next_batch
     while (iter.has_more()) {
         if (_page->remaining() == 0 && iter.begin() == end_ord) {
             _opts.stats->block_seek_num += 1;
@@ -428,12 +429,10 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseR
                 break;
             }
             end_ord = _page->first_ordinal() + _page->num_rows();
-            contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         } else if (iter.begin() >= end_ord) {
             _opts.stats->block_seek_num += 1;
             RETURN_IF_ERROR(seek_to_ordinal(iter.begin()));
             end_ord = _page->first_ordinal() + _page->num_rows();
-            contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         }
 
         _current_ordinal = iter.begin();
@@ -444,12 +443,14 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseR
         }
 
         if (iter.begin() >= end_ord) {
+            contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
             RETURN_IF_ERROR(_page->read_dict_codes(dst, read_range));
             read_range.clear();
         }
     }
 
     if (!read_range.empty()) {
+        contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         RETURN_IF_ERROR(_page->read_dict_codes(dst, read_range));
         read_range.clear();
     }

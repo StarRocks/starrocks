@@ -32,7 +32,7 @@ public:
     EnginePublishVersionTask(TPublishVersionRequest& publish_version_req, vector<TTabletId>* error_tablet_ids);
     ~EnginePublishVersionTask() override = default;
 
-    OLAPStatus finish() override;
+    Status finish() override;
 
 private:
     const TPublishVersionRequest& _publish_version_req;

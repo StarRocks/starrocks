@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -17,6 +17,7 @@ public:
     DEFINE_VECTORIZED_FN(array_remove);
 
     DEFINE_VECTORIZED_FN(array_contains);
+    DEFINE_VECTORIZED_FN(array_position);
 
     DEFINE_VECTORIZED_FN(array_sum_boolean);
     DEFINE_VECTORIZED_FN(array_sum_tinyint);

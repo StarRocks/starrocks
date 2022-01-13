@@ -289,7 +289,6 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
         if (!create_status.ok()) {
             LOG(WARNING) << "create table failed. status: " << create_status.to_string()
                          << ", signature: " << agent_task_req.signature;
-            // TODO liutao09 distinguish the OLAPStatus
             status_code = TStatusCode::RUNTIME_ERROR;
         } else {
             ++_s_report_version;
@@ -454,8 +453,8 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
         EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(),
                                           agent_task_req.alter_tablet_req_v2, signature, task_type, &error_msgs,
                                           process_name);
-        OLAPStatus sc_status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-        if (sc_status != OLAP_SUCCESS) {
+        Status sc_status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+        if (!sc_status.ok()) {
             status = STARROCKS_ERROR;
         } else {
             status = STARROCKS_SUCCESS;
@@ -639,15 +638,14 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
         LOG(INFO) << "get publish version task, signature:" << agent_task_req.signature;
 
-        Status st;
         std::vector<TTabletId> error_tablet_ids;
         uint32_t retry_time = 0;
-        OLAPStatus res = OLAP_SUCCESS;
+        Status res = Status::OK();
         while (retry_time < PUBLISH_VERSION_MAX_RETRY) {
             error_tablet_ids.clear();
             EnginePublishVersionTask engine_task(publish_version_req, &error_tablet_ids);
             res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-            if (res == OLAP_SUCCESS) {
+            if (res.ok()) {
                 break;
             } else {
                 LOG(WARNING) << "publish version error, retry. [transaction_id=" << publish_version_req.transaction_id
@@ -658,18 +656,17 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         }
 
         TFinishTaskRequest finish_task_request;
-        if (res != OLAP_SUCCESS) {
+        if (!res.ok()) {
             StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
             // if publish failed, return failed, FE will ignore this error and
             // check error tablet ids and FE will also republish this task
-            LOG(WARNING) << "publish version failed. signature:" << agent_task_req.signature << ", error_code=" << res;
-            st = Status::RuntimeError(strings::Substitute("publish version failed. error=$0", res));
+            LOG(WARNING) << "Fail to publish version. signature:" << agent_task_req.signature;
             finish_task_request.__set_error_tablet_ids(error_tablet_ids);
         } else {
             LOG(INFO) << "publish_version success. signature:" << agent_task_req.signature;
         }
 
-        st.to_thrift(&finish_task_request.task_status);
+        res.to_thrift(&finish_task_request.task_status);
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -849,8 +846,8 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
                 status_code = TStatusCode::RUNTIME_ERROR;
             } else {
                 EngineStorageMigrationTask engine_task(clone_req.tablet_id, clone_req.schema_hash, dest_store);
-                OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-                if (res != OLAP_SUCCESS) {
+                Status res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+                if (!res.ok()) {
                     status_code = TStatusCode::RUNTIME_ERROR;
                     LOG(WARNING) << "storage migrate failed. status:" << res
                                  << ", signature:" << agent_task_req.signature;
@@ -875,8 +872,8 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
             EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req,
                                         worker_pool_this->_master_info, agent_task_req.signature, &error_msgs,
                                         &tablet_infos, &status);
-            OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-            if (res != OLAP_SUCCESS) {
+            Status res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+            if (!res.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req.signature;
                 error_msgs.emplace_back("clone failed.");
@@ -970,8 +967,8 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
             }
 
             EngineStorageMigrationTask engine_task(tablet_id, schema_hash, stores[0]);
-            OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-            if (res != OLAP_SUCCESS) {
+            Status res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+            if (!res.ok()) {
                 LOG(WARNING) << "storage media migrate failed. status: " << res
                              << ", signature: " << agent_task_req.signature;
                 status_code = TStatusCode::RUNTIME_ERROR;
@@ -1037,8 +1034,8 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         } else {
             EngineChecksumTask engine_task(mem_tracker, check_consistency_req.tablet_id,
                                            check_consistency_req.schema_hash, check_consistency_req.version, &checksum);
-            OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-            if (res != OLAP_SUCCESS) {
+            Status res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+            if (!res.ok()) {
                 LOG(WARNING) << "check consistency failed. status: " << res
                              << ", signature: " << agent_task_req.signature;
                 status_code = TStatusCode::RUNTIME_ERROR;
@@ -1406,8 +1403,8 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
         TStatus task_status;
 
         std::string& snapshot_path = release_snapshot_request.snapshot_path;
-        OLAPStatus release_snapshot_status = SnapshotManager::instance()->release_snapshot(snapshot_path);
-        if (release_snapshot_status != OLAP_SUCCESS) {
+        Status release_snapshot_status = SnapshotManager::instance()->release_snapshot(snapshot_path);
+        if (!release_snapshot_status.ok()) {
             status_code = TStatusCode::RUNTIME_ERROR;
             LOG(WARNING) << "Fail to release snapshot snapshot_path=" << snapshot_path
                          << " status=" << release_snapshot_status;

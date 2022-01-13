@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.cost;
 
@@ -310,7 +310,7 @@ public class CostModel {
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftStatistics.getUsedColumns(),
                     rightStatistics.getUsedColumns(),
-                    Utils.extractConjuncts(join.getJoinPredicate()));
+                    Utils.extractConjuncts(join.getOnPredicate()));
 
             if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))

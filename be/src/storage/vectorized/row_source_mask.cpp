@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/row_source_mask.h"
 
@@ -6,6 +6,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "serde/column_array_serde.h"
+#include "storage/olap_define.h"
 
 namespace starrocks::vectorized {
 

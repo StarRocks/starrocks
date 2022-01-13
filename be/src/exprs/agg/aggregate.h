@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -52,8 +52,8 @@ public:
     virtual void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const = 0;
 
     // batch serialize aggregate state to reduce virtual function call
-    virtual void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offsets,
-                                 Column* to) const = 0;
+    virtual void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                                 size_t state_offsets, Column* to) const = 0;
 
     // Change the aggregation state to final result if necessary
     virtual void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const = 0;
@@ -182,10 +182,10 @@ class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> 
         }
     }
 
-    void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                         Column* to) const override {
+    void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                         size_t state_offset, Column* to) const override {
         for (size_t i = 0; i < chunk_size; i++) {
-            static_cast<const Derived*>(this)->serialize_to_column(nullptr, agg_states[i] + state_offset, to);
+            static_cast<const Derived*>(this)->serialize_to_column(ctx, agg_states[i] + state_offset, to);
         }
     }
 

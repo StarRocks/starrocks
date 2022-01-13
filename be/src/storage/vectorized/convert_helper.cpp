@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/convert_helper.h"
 
@@ -585,9 +585,7 @@ public:
             source = src.get_slice().to_string();
         }
         CppType value;
-        if (dst_typeinfo->from_string(&value, source) != OLAP_SUCCESS) {
-            return Status::InvalidArgument(Substitute("Failed to convert $0 to type $1", source, Type));
-        }
+        RETURN_IF_ERROR(dst_typeinfo->from_string(&value, source));
         dst.set(value);
         return Status::OK();
     }

@@ -115,6 +115,7 @@ public class ExportJob implements Writable {
     private String clusterName;
     private long tableId;
     private BrokerDesc brokerDesc;
+    // exportPath has "/" suffix
     private String exportPath;
     private String exportTempPath;
     private String fileNamePrefix;
@@ -183,7 +184,7 @@ public class ExportJob implements Writable {
 
         exportPath = stmt.getPath();
         Preconditions.checkArgument(!Strings.isNullOrEmpty(exportPath));
-        exportTempPath = this.exportPath + "/__starrocks_export_tmp_" + queryId.toString() + "/";
+        exportTempPath = this.exportPath + "__starrocks_export_tmp_" + queryId.toString();
         fileNamePrefix = stmt.getFileNamePrefix();
         Preconditions.checkArgument(!Strings.isNullOrEmpty(fileNamePrefix));
         if (includeQueryId) {

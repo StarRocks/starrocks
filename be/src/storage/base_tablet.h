@@ -60,7 +60,7 @@ public:
     std::string tablet_id_path() const;
 
     TabletState tablet_state() const { return _state; }
-    OLAPStatus set_tablet_state(TabletState state);
+    Status set_tablet_state(TabletState state);
 
     // Property encapsulated in TabletMeta
     inline const TabletMetaSharedPtr tablet_meta();

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -99,10 +99,10 @@ public:
         }
     }
 
-    void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                         Column* to) const override {
+    void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                         size_t state_offset, Column* to) const override {
         for (size_t i = 0; i < chunk_size; i++) {
-            serialize_to_column(nullptr, agg_states[i] + state_offset, to);
+            serialize_to_column(ctx, agg_states[i] + state_offset, to);
         }
     }
 

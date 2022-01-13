@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -52,6 +52,8 @@ public:
     Status set_cached_del_vec(const TabletSegmentId& tsid, const DelVectorPtr& delvec);
 
     Status on_rowset_finished(Tablet* tablet, Rowset* rowset);
+
+    void on_rowset_cancel(Tablet* tablet, Rowset* rowset);
 
     ThreadPool* apply_thread_pool() { return _apply_thread_pool.get(); }
 

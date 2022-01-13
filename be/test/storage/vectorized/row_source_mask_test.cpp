@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/row_source_mask.h"
 
 #include "common/config.h"
 #include "gtest/gtest.h"
+#include "storage/olap_define.h"
 #include "util/file_utils.h"
 
 namespace starrocks::vectorized {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hdfs_scanner_text.h"
 
@@ -9,11 +9,42 @@
 
 namespace starrocks::vectorized {
 
-Status HdfsTextScanner::HdfsScannerCSVReader::_fill_buffer() {
+class HdfsScannerCSVReader : public CSVReader {
+public:
+    HdfsScannerCSVReader(std::shared_ptr<RandomAccessFile> file, char record_delimiter, string field_delimiter,
+                         size_t offset, size_t remain_length, size_t file_length)
+            : CSVReader(record_delimiter, field_delimiter) {
+        _file = file;
+        _offset = offset;
+        _remain_length = remain_length;
+        _file_length = file_length;
+    }
+
+    Status _fill_buffer() override;
+
+private:
+    std::shared_ptr<RandomAccessFile> _file;
+    size_t _offset = 0;
+    size_t _remain_length = 0;
+    size_t _file_length = 0;
+    bool _should_stop_scan = false;
+};
+
+Status HdfsScannerCSVReader::_fill_buffer() {
+    if (_should_stop_scan) {
+        return Status::EndOfFile("HdfsScannerCSVReader");
+    }
+
     DCHECK(_buff.free_space() > 0);
-    Slice s(_buff.limit(), _buff.free_space());
+    Slice s;
+    if (_remain_length <= 0) {
+        s = Slice(_buff.limit(), _buff.free_space());
+    } else {
+        s = Slice(_buff.limit(), std::min(_buff.free_space(), _remain_length));
+    }
     Status st = _file->read(_offset, &s);
     _offset += s.size;
+    _remain_length -= s.size;
     // According to the specification of `Env::read`, when reached the end of
     // a file, the returned status will be OK instead of EOF, but here we check
     // EOF also for safety.
@@ -32,6 +63,14 @@ Status HdfsTextScanner::HdfsScannerCSVReader::_fill_buffer() {
         // is valid, according the RFC, add the record delimiter ourself.
         _buff.append(_record_delimiter);
     }
+
+    // For each scan range we always read the first record of next scan range,so _remain_length
+    // may be negative here. Once we have read the first record of next scan range we
+    // should stop scan in the next round.
+    if ((_remain_length < 0 && _buff.find(_record_delimiter, 0) != nullptr) || (_offset >= _file_length)) {
+        _should_stop_scan = true;
+    }
+
     return Status::OK();
 }
 
@@ -44,8 +83,18 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
+    const THdfsScanRange* scan_range = _scanner_params.scan_ranges[0];
     _reader = std::make_unique<HdfsScannerCSVReader>(_scanner_params.fs, _record_delimiter, _field_delimiter,
-                                                     _scanner_params.scan_ranges[0]->offset);
+                                                     scan_range->offset, scan_range->length, scan_range->file_length);
+    if (scan_range->offset != 0) {
+        // Always skip first record of scan range with non-zero offset.
+        // Notice that the first record will read by previous scan range.
+        CSVReader::Record dummy;
+        RETURN_IF_ERROR(_reader->next_record(&dummy));
+    }
+#ifndef BE_TEST
+    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
+#endif
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto slot = _scanner_params.materialize_slots[i];
         ConverterPtr conv = csv::get_converter(slot->type(), true);
@@ -64,11 +113,10 @@ void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
 }
 
 Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    return _parse_csv(chunk);
+    return _parse_csv(runtime_state->chunk_size(), chunk);
 }
 
-Status HdfsTextScanner::_parse_csv(ChunkPtr* chunk) {
-    const int capacity = config::vector_chunk_size;
+Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
     DCHECK_EQ(0, chunk->get()->num_rows());
     Status status;
     CSVReader::Record record;
@@ -82,7 +130,7 @@ Status HdfsTextScanner::_parse_csv(ChunkPtr* chunk) {
 
     csv::Converter::Options options;
 
-    for (size_t num_rows = chunk->get()->num_rows(); num_rows < capacity; /**/) {
+    for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = _reader->next_record(&record);
         if (status.is_end_of_file()) {
             break;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -56,7 +56,8 @@ public class PruneProjectRule extends TransformationRule {
                     logicalOperator.getOutputColumns(new ExpressionContext(input.inputAt(0))).getStream().
                             mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList()));
             projectMap.put(smallestColumn, smallestColumn);
-            return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(projectMap), input.getInputs()));
+            return Lists.newArrayList(OptExpression
+                    .create(new LogicalProjectOperator(projectMap, logicalOperator.getLimit()), input.getInputs()));
         }
 
         return Collections.emptyList();

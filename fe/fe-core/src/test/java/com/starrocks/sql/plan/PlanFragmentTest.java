@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -11,7 +11,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
@@ -1075,7 +1074,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testJoinCastFloat() throws Exception {
         String sql = "select * from t1, t3 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("equal join conjunct: 18: cast = 17: cast"));
+        Assert.assertTrue(plan.contains("equal join conjunct: 7: t1a = 17: cast"));
     }
 
     @Test
@@ -1159,15 +1158,14 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEquivalenceTest() throws Exception {
         String sql = "select * from t0 as x1 join t0 as x2 on x1.v2 = x2.v2 where x2.v2 = 'zxcv';";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n"
-                + "     TABLE: t0\n"
-                + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(2: v2 AS DOUBLE) = CAST('zxcv' AS DOUBLE)"));
-
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: CAST(2: v2 AS VARCHAR(1048576)) = 'zxcv'"));
         Assert.assertTrue(plan.contains("  1:OlapScanNode\n"
                 + "     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(5: v2 AS DOUBLE) = CAST('zxcv' AS DOUBLE)\n"));
+                + "     PREDICATES: CAST(5: v2 AS VARCHAR(1048576)) = 'zxcv'\n"));
     }
 
     @Test
@@ -1259,11 +1257,10 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from t0 join t1 on t0.v1 = t1.v4 and cast(t0.v1 as STRING) = t0.v1";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("|  equal join conjunct: 1: v1 = 4: v4"));
-        Assert.assertTrue(plan.contains("     TABLE: t0\n"
-                + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(CAST(1: v1 AS VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH
-                + ")) AS DOUBLE) = CAST(1: v1 AS DOUBLE)\n"
-                + "     partitions=0/1"));
+        Assert.assertTrue(plan.contains("     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(1048576))\n" +
+                "     partitions=0/1\n"));
     }
 
     @Test
@@ -2568,10 +2565,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "join join2 on join1.id = join2.value\n" +
                 "and join2.value in ('abc');";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(
-                explainString.contains("equal join conjunct: 7: cast = 8: cast"));
-        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS DOUBLE)"));
-        Assert.assertTrue(explainString.contains("<slot 8> : CAST(6: value AS DOUBLE)"));
+        Assert.assertTrue(explainString.contains("equal join conjunct: 7: cast = 6: value"));
+        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR(1048576))"));
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -4146,12 +4141,12 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select v1 from t0 where not (v1 > 2 and if(v2 > 2, FALSE, TRUE))";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (NOT if(2: v2 > 2, FALSE, TRUE))"));
+        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (NOT (if(2: v2 > 2, FALSE, TRUE)))"));
 
         sql = "select v1 from t0 where not (v1 > 2 or v2 is null or if(v3 > 2, FALSE, TRUE))";
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(
-                planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT if(3: v3 > 2, FALSE, TRUE)"));
+                planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT (if(3: v3 > 2, FALSE, TRUE))"));
     }
 
     @Test
@@ -4677,6 +4672,16 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testCountDistinctFloatTwoPhase() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct t1e) from test_all_type";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("aggregate: multi_distinct_count[([5: t1e, FLOAT, true]); " +
+                "args: FLOAT; result: VARCHAR; args nullable: true; result nullable: false"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testCastDecimalZero() throws Exception {
         Config.enable_decimal_v3 = true;
         String sql = "select (CASE WHEN CAST(t0.v1 AS BOOLEAN ) THEN 0.00 END) BETWEEN (0.07) AND (0.04) from t0;";
@@ -4748,10 +4753,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
-                "  |  <slot 26> : CAST(49 AS DOUBLE)\n" +
+                "  |  <slot 26> : CAST(49 AS VARCHAR(1048576))\n" +
                 "  |  \n" +
                 "  0:OlapScanNode"));
     }
@@ -4978,6 +4984,23 @@ public class PlanFragmentTest extends PlanTestBase {
         System.out.println(sql);
     }
 
+    @Test
+    public void testShuffleBucketErrorJoinPredicateOrder() throws Exception {
+        String sql = "select * from t0 left join[shuffle] (\n" +
+                "    select t1.* from t1 left join[shuffle] t2 \n" +
+                "    on t1.v4 = t2.v7 \n" +
+                "    and t1.v6 = t2.v9 \n" +
+                "    and t1.v5 = t2.v8) as j2\n" +
+                "on t0.v3 = j2.v6\n" +
+                "  and t0.v1 = j2.v4\n" +
+                "  and t0.v2 = j2.v5;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  9:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)"));
+        Assert.assertTrue(plan.contains("  6:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)"));
+    }
+    
     @Test
     public void testDeriveOutputColumns() throws Exception {
         String sql = "select \n" +
@@ -5256,5 +5279,73 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  4:ASSERT NUMBER OF ROWS\n" +
                 "  |  assert number of rows: LE 1"));
+    }
+    
+    @Test
+    public void testEqStringCast() throws Exception {
+        String sql = "select 'a' = v1 from t0";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) = 'a'\n"));
+    }
+
+    @Test
+    public void testUnionChildProjectHasNullable() throws Exception {
+        String sql = "SELECT \n" +
+                "  DISTINCT * \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      DISTINCT DAY(\"292269055-12-03 00:47:04\") \n" +
+                "    FROM \n" +
+                "      t1\n" +
+                "    WHERE \n" +
+                "      true \n" +
+                "    UNION ALL \n" +
+                "    SELECT \n" +
+                "      DISTINCT DAY(\"292269055-12-03 00:47:04\") \n" +
+                "    FROM \n" +
+                "      t1\n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "        (true) IS NULL\n" +
+                "      )\n" +
+                "  ) t;";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("8:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: [9: day, TINYINT, true]\n" +
+                "  |  cardinality: 0\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [4, TINYINT, true]\n" +
+                "  |      [8, TINYINT, true]\n" +
+                "  |  pass-through-operands: all"));
+    }
+
+    @Test
+    public void testNullableSameWithChildrenFunctions() throws Exception {
+        String sql = "select distinct day(id_datetime) from test_all_type_partition_by_datetime";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(" 1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  11 <-> day[([2: id_datetime, DATETIME, false]); args: DATETIME; result: TINYINT; args nullable: false; result nullable: false]"));
+    }
+
+    @Test
+    public void testEqDoubleCast() throws Exception {
+        String sql = "select 'a' = t1e from test_all_type";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("CAST(5: t1e AS DOUBLE) = CAST('a' AS DOUBLE)\n"));
+    }
+
+    @Test
+    public void testNotEqStringCast() throws Exception {
+        String sql = "select 'a' != v1 from t0";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) != 'a'\n"));
     }
 }

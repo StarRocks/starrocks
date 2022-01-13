@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -120,12 +120,6 @@ public:
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1;
 #endif
 
-#ifdef NDEBUG
-    static constexpr size_t memory_check_batch_size = 65535;
-#else
-    static constexpr size_t memory_check_batch_size = 1;
-#endif
-
 private:
     RuntimeState* _state = nullptr;
     bool _is_closed = false;
@@ -233,4 +227,19 @@ private:
     Analytor* _agg_node;
 };
 
+class AnalytorFactory;
+using AnalytorFactoryPtr = std::shared_ptr<AnalytorFactory>;
+class AnalytorFactory {
+public:
+    AnalytorFactory(size_t dop, const TPlanNode& tnode, const RowDescriptor& child_row_desc,
+                    const TupleDescriptor* result_tuple_desc)
+            : _analytors(dop), _tnode(tnode), _child_row_desc(child_row_desc), _result_tuple_desc(result_tuple_desc) {}
+    AnalytorPtr create(int i);
+
+private:
+    Analytors _analytors;
+    const TPlanNode& _tnode;
+    const RowDescriptor& _child_row_desc;
+    const TupleDescriptor* _result_tuple_desc;
+};
 } // namespace starrocks

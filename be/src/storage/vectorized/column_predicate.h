@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -215,55 +215,55 @@ ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, ColumnId id,
     case OLAP_FIELD_TYPE_DECIMAL: {
         decimal12_t value;
         auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK_EQ(OLAP_SUCCESS, st);
+        DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_DECIMAL>(type_info, id, value);
     }
     case OLAP_FIELD_TYPE_DECIMAL_V2: {
         DecimalV2Value value;
         auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK_EQ(OLAP_SUCCESS, st);
+        DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_DECIMAL_V2>(type_info, id, value);
     }
     case OLAP_FIELD_TYPE_DECIMAL32: {
         int32_t value;
         auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK_EQ(OLAP_SUCCESS, st);
+        DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_DECIMAL32>(type_info, id, value);
     }
     case OLAP_FIELD_TYPE_DECIMAL64: {
         int64_t value;
         auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK_EQ(OLAP_SUCCESS, st);
+        DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_DECIMAL64>(type_info, id, value);
     }
     case OLAP_FIELD_TYPE_DECIMAL128: {
         int128_t value;
         auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK_EQ(OLAP_SUCCESS, st);
+        DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_DECIMAL128>(type_info, id, value);
     }
     case OLAP_FIELD_TYPE_DATE: {
         uint24_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK_EQ(OLAP_SUCCESS, st);
+        DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_DATE>(type_info, id, value);
     }
     case OLAP_FIELD_TYPE_DATE_V2: {
         int32_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK_EQ(OLAP_SUCCESS, st);
+        DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_DATE_V2>(type_info, id, value);
     }
     case OLAP_FIELD_TYPE_DATETIME: {
         uint64_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK_EQ(OLAP_SUCCESS, st);
+        DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_DATETIME>(type_info, id, value);
     }
     case OLAP_FIELD_TYPE_TIMESTAMP: {
         int64_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK_EQ(OLAP_SUCCESS, st);
+        DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_TIMESTAMP>(type_info, id, value);
     }
     case OLAP_FIELD_TYPE_CHAR:

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -1509,6 +1509,12 @@ public class ViewPlanTest extends PlanTestBase {
                 "t1.l_orderkey = t2.o_orderkey and t2.O_ORDERDATE = t1.L_SHIPDATE join [shuffle] orders t3 " +
                 "on t1.l_orderkey = t3.o_orderkey and t3.O_ORDERDATE = t1.L_SHIPDATE join [shuffle] orders t4 on\n" +
                 "t1.l_orderkey = t4.o_orderkey and t4.O_ORDERDATE = t1.L_SHIPDATE;";
+        testView(sql);
+    }
+
+    @Test
+    public void test311() throws Exception {
+        String sql = "SELECT v1 FROM t0 WHERE NOT ((v2 > 93 AND v1 < 27) OR v1 >= 22);";
         testView(sql);
     }
 

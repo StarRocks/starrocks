@@ -278,15 +278,6 @@ inline const Status& to_status(const StatusOr<T>& st) {
         }                                                               \
     } while (0);
 
-#define RETURN_CODE_IF_ERROR_WITH_WARN(stmt, ret_code, warning_prefix)         \
-    do {                                                                       \
-        const Status& _s = (stmt);                                             \
-        if (UNLIKELY(!_s.ok())) {                                              \
-            LOG(WARNING) << (warning_prefix) << ", error: " << _s.to_string(); \
-            return ret_code;                                                   \
-        }                                                                      \
-    } while (0);
-
 #define RETURN_IF_ERROR_WITH_WARN(stmt, warning_prefix)                        \
     do {                                                                       \
         const Status& _s = (stmt);                                             \

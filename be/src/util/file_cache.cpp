@@ -58,6 +58,13 @@ void FileCache<FileType>::insert(const std::string& file_name, FileType* file,
     *file_handle = OpenedFileHandle<FileType>(_cache.get(), lru_handle);
 }
 
+template <class FileType>
+void FileCache<FileType>::erase(const std::string& file_name) {
+    DCHECK(_cache != nullptr);
+    CacheKey key(file_name);
+    _cache->erase(key);
+}
+
 // Explicit specialization for callers outside this compilation unit.
 template class FileCache<RandomAccessFile>;
 
