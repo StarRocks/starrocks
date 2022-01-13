@@ -56,6 +56,20 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
         }
     }
 
+    // assert num rows node only use for un-correlate scalar subquery, return empty chunk is error, least fill one rows
+    if (_assertion == TAssertion::LE && _num_rows_returned == 0) {
+        _input_chunks.clear();
+
+        vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+        for (const auto& desc : row_desc().tuple_descriptors()) {
+            for (const auto& slot : desc->slots()) {
+                chunk->append_column(ColumnHelper::create_const_null_column(_desired_num_rows), slot->id());
+            }
+        }
+
+        _input_chunks.emplace_back(std::move(chunk));
+    }
+
     int64_t usage = 0;
     for (auto& item : _input_chunks) {
         usage += item->memory_usage();
