@@ -168,6 +168,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&io_dispatcher_thread_pool));
     _io_dispatcher = new workgroup::IoDispatcher(std::move(io_dispatcher_thread_pool));
+    _io_dispatcher->initialize(1); // just for debug
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);

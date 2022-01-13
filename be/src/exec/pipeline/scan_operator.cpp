@@ -13,6 +13,8 @@
 
 namespace starrocks::pipeline {
 
+using starrocks::workgroup::WorkGroupManager;
+
 Status ScanOperator::prepare(RuntimeState* state) {
     SourceOperator::prepare(state);
     DCHECK(_io_threads != nullptr);
@@ -139,7 +141,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state) {
     task.priority = 20;
     bool assign_ok = false;
     if (_workgroup != nullptr) {
-        if (_workgroup->try_offer_io_task(task)) {
+        if (WorkGroupManager::instance()->try_offer_io_task(_workgroup, task)) {
             _io_task_retry_cnt = 0;
             assign_ok = true;
         }

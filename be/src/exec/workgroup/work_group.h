@@ -20,6 +20,7 @@ class TWorkGroup;
 namespace workgroup {
 
 class WorkGroup;
+class WorkGroupManager;
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 
 class WorkGroupQueue {
@@ -91,6 +92,10 @@ public:
     void pick_and_run_io_task();
 
 public:
+    // Return current io task queue size 
+    // need be lock when invoking
+    size_t io_task_queue_size();
+
     // should be call read chunk from disk
     void increase_chunk_num(int32_t chunk_num);
 
@@ -135,8 +140,8 @@ private:
 
     //  some variables for io schedule
     std::atomic<size_t> _cur_hold_total_chunk_num = 0; // total chunk num wait for consume
-    std::atomic<size_t> _increase_chunk_num_period = 0;
-    std::atomic<size_t> _decrease_chunk_num_period = 0;
+    std::atomic<size_t> _increase_chunk_num_period = 1;
+    std::atomic<size_t> _decrease_chunk_num_period = 1;
 
     std::atomic<bool> _is_estimate = false;
 
@@ -162,9 +167,13 @@ public:
     void remove_workgroup(int wg_id);
 
     // get next workgroup for io
-    WorkGroupPtr pick_next_wg_for_io();
+    WorkGroup* pick_next_wg_for_io();
 
     void adjust_weight_if_need();
+
+    void schedule_io_task();
+
+    bool try_offer_io_task(WorkGroup* wg, const PriorityThreadPool::Task& task);
 
     WorkGroupQueue& get_cpu_queue();
 
@@ -179,12 +188,13 @@ public:
     int64_t get_sum_unadjusted_cpu_runtime_ns() const { return _sum_unadjusted_cpu_runtime_ns; }
 
 private:
-    WorkGroupPtr get_next_wg();
+    WorkGroup* get_next_wg();
     size_t get_next_wg_index();
 
 private:
     std::mutex _mutex;
 
+    std::mutex _global_io_mutex;
     std::condition_variable _cv;
 
     std::unordered_map<int, WorkGroupPtr> _workgroups;
@@ -193,15 +203,17 @@ private:
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
     std::atomic<bool> _is_adjusted;
-    size_t _schedule_num_period;
-    std::atomic<size_t> _cur_schedule_num = 0;
+    const size_t _schedule_num_period;
+    std::atomic<int> _cur_schedule_num = 0;
+    size_t _cur_schedule_num_period = 0;
 
-    std::vector<WorkGroupPtr> _io_wgs;
+    std::vector<workgroup::WorkGroup*> _io_wgs;
     std::unordered_set<workgroup::WorkGroup*> _ready_wgs;
 
+    std::atomic<size_t> _total_task_num = 0;
 
     std::atomic<size_t> _cur_index = 0;
-    std::vector<WorkGroupPtr> _cur_wait_run_wgs;
+    std::vector<workgroup::WorkGroup*> _cur_wait_run_wgs;
     std::atomic<bool> _is_scheduled = false;
 };
 
