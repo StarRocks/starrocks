@@ -113,7 +113,7 @@ int AesUtil::encrypt(AesMode mode, const unsigned char* source, uint32_t source_
         return AES_BAD_DATA;
     }
 
-    EVP_CIPHER_CTX *aes_ctx = EVP_CIPHER_CTX_new();
+    EVP_CIPHER_CTX* aes_ctx = EVP_CIPHER_CTX_new();
     int length = 0;
     int ret = do_encrypt(aes_ctx, cipher, source, source_length, encrypt_key, iv, padding, encrypt, &length);
     EVP_CIPHER_CTX_free(aes_ctx);
@@ -159,7 +159,7 @@ int AesUtil::decrypt(AesMode mode, const unsigned char* encrypt, uint32_t encryp
         return AES_BAD_DATA;
     }
 
-    EVP_CIPHER_CTX *aes_ctx = EVP_CIPHER_CTX_new();
+    EVP_CIPHER_CTX* aes_ctx = EVP_CIPHER_CTX_new();
     int length = 0;
     int ret = do_decrypt(aes_ctx, cipher, encrypt, encrypt_length, encrypt_key, iv, padding, decrypt_content, &length);
     EVP_CIPHER_CTX_free(aes_ctx);
