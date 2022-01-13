@@ -1195,14 +1195,15 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEquivalenceTest() throws Exception {
         String sql = "select * from t0 as x1 join t0 as x2 on x1.v2 = x2.v2 where x2.v2 = 'zxcv';";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: CAST(2: v2 AS VARCHAR(1048576)) = 'zxcv'"));
+                "     PREDICATES: CAST(2: v2 AS VARCHAR) = 'zxcv'"));
         Assert.assertTrue(plan.contains("  1:OlapScanNode\n"
                 + "     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(5: v2 AS VARCHAR(1048576)) = 'zxcv'\n"));
+                + "     PREDICATES: CAST(5: v2 AS VARCHAR) = 'zxcv'\n"));
     }
 
     @Test
@@ -1294,10 +1295,11 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEquivalenceLoopDependency() throws Exception {
         String sql = "select * from t0 join t1 on t0.v1 = t1.v4 and cast(t0.v1 as STRING) = t0.v1";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("|  equal join conjunct: 1: v1 = 4: v4"));
         Assert.assertTrue(plan.contains("     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(1048576))\n" +
+                "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR)\n" +
                 "     partitions=0/1\n"));
     }
 
@@ -2675,7 +2677,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "and join2.value in ('abc');";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("equal join conjunct: 7: cast = 6: value"));
-        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR(1048576))"));
+        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR)"));
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -5652,6 +5654,22 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select 'a' = v1 from t0";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) = 'a'\n"));
+        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR) = 'a'\n"));
+    }
+
+    @Test
+    public void testEqDoubleCast() throws Exception {
+        String sql = "select 'a' = t1e from test_all_type";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("CAST(5: t1e AS DOUBLE) = CAST('a' AS DOUBLE)\n"));
+    }
+
+    @Test
+    public void testNotEqStringCast() throws Exception {
+        String sql = "select 'a' != v1 from t0";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR) != 'a'\n"));
     }
 }

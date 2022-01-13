@@ -94,6 +94,14 @@ public class BinaryPredicateOperator extends PredicateOperator {
             return this == EQ || this == EQ_FOR_NULL;
         }
 
+        public boolean isUnequivalence() {
+            return this == NE;
+        }
+
+        public boolean isNotRangeComparison() {
+            return isEquivalence() || isUnequivalence();
+        }
+
         public boolean isRange() {
             return type.equals(LT.type)
                     || type.equals(LE.type)
