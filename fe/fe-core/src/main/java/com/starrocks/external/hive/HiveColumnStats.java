@@ -84,11 +84,11 @@ public class HiveColumnStats {
 
     public boolean init(String hiveType, ColumnStatisticsData statsData) {
         hiveType = Utils.getTypeKeyword(hiveType);
-        boolean isCompatible = false;
+        boolean isValid = false;
         switch (hiveType.toUpperCase()) {
             case "BOOLEAN":
-                isCompatible = statsData.isSetBooleanStats();
-                if (isCompatible) {
+                isValid = statsData.isSetBooleanStats();
+                if (isValid) {
                     BooleanColumnStatsData boolStats = statsData.getBooleanStats();
                     numNulls = boolStats.getNumNulls();
                     // If we have numNulls, we can infer NDV from that.
@@ -106,8 +106,8 @@ public class HiveColumnStats {
             case "INT":
             case "BIGINT":
             case "TIMESTAMP": // Hive use LongColumnStatsData for timestamps.
-                isCompatible = statsData.isSetLongStats();
-                if (isCompatible) {
+                isValid = statsData.isSetLongStats();
+                if (isValid) {
                     LongColumnStatsData longStats = statsData.getLongStats();
                     numDistinctValues = longStats.getNumDVs();
                     numNulls = longStats.getNumNulls();
@@ -121,8 +121,8 @@ public class HiveColumnStats {
                 break;
             case "FLOAT":
             case "DOUBLE":
-                isCompatible = statsData.isSetDoubleStats();
-                if (isCompatible) {
+                isValid = statsData.isSetDoubleStats();
+                if (isValid) {
                     DoubleColumnStatsData doubleStats = statsData.getDoubleStats();
                     numDistinctValues = doubleStats.getNumDVs();
                     numNulls = doubleStats.getNumNulls();
@@ -135,8 +135,8 @@ public class HiveColumnStats {
                 }
                 break;
             case "DATE":
-                isCompatible = statsData.isSetDateStats();
-                if (isCompatible) {
+                isValid = statsData.isSetDateStats();
+                if (isValid) {
                     DateColumnStatsData dateStats = statsData.getDateStats();
                     numDistinctValues = dateStats.getNumDVs();
                     numNulls = dateStats.getNumNulls();
@@ -151,8 +151,8 @@ public class HiveColumnStats {
             case "CHAR":
             case "VARCHAR":
             case "STRING":
-                isCompatible = statsData.isSetStringStats();
-                if (isCompatible) {
+                isValid = statsData.isSetStringStats();
+                if (isValid) {
                     StringColumnStatsData stringStats = statsData.getStringStats();
                     numDistinctValues = stringStats.getNumDVs();
                     numNulls = stringStats.getNumNulls();
@@ -160,8 +160,8 @@ public class HiveColumnStats {
                 }
                 break;
             case "DECIMAL":
-                isCompatible = statsData.isSetDecimalStats();
-                if (isCompatible) {
+                isValid = statsData.isSetDecimalStats();
+                if (isValid) {
                     DecimalColumnStatsData decimalStats = statsData.getDecimalStats();
                     numNulls = decimalStats.getNumNulls();
                     numDistinctValues = decimalStats.getNumDVs();
@@ -171,10 +171,10 @@ public class HiveColumnStats {
                 LOG.warn("unexpected column type {}", hiveType);
                 break;
         }
-        if (isCompatible) {
+        if (isValid) {
             type = StatisticType.ESTIMATE;
         }
-        return isCompatible;
+        return isValid;
     }
 
     public double getAvgSize() {
