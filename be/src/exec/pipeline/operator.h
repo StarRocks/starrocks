@@ -110,51 +110,6 @@ public:
     virtual void close(RuntimeState* state) {}
     std::string get_name() const { return _name + "_" + std::to_string(_id); }
 
-    // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
-    // util the corresponding local rf generated.
-    const LocalRFWaitingSet& rf_waiting_set() const { return _rf_waiting_set; }
-
-    // invoked by ExecNode::init_runtime_filter_for_operator to initialize fields involving runtime filter
-    void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
-                             const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
-                             const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,
-                             std::vector<SlotId>&& filter_null_value_columns,
-                             std::vector<TupleSlotMapping>&& tuple_slot_mappings) {
-        _runtime_filter_hub = runtime_filter_hub;
-        _tuple_ids = tuple_ids;
-        _rf_waiting_set = rf_waiting_set;
-        _row_desc = row_desc;
-        _runtime_filter_collector = runtime_filter_collector;
-        _filter_null_value_columns = std::move(filter_null_value_columns);
-        _tuple_slot_mappings = std::move(tuple_slot_mappings);
-    }
-    // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
-    // to bound its runtime in-filters.
-    void prepare_runtime_in_filters(RuntimeState* state) {
-        // TODO(satanson): at present, prepare_runtime_in_filters is called in the PipelineDriverPoller thread sequentially,
-        //  std::call_once's cost can be ignored, in the future, if mulitple PipelineDriverPollers are employed to dectect
-        //  and wake blocked driver, std::call_once is sound but may be blocked.
-        std::call_once(_prepare_runtime_in_filters_once, [this, state]() { this->_prepare_runtime_in_filters(state); });
-    }
-
-    RuntimeFilterHub* runtime_filter_hub() { return _runtime_filter_hub; }
-
-    std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
-    RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
-        if (_runtime_filter_collector) {
-            return _runtime_filter_collector->get_rf_probe_collector();
-        } else {
-            return nullptr;
-        }
-    }
-    const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
-
-    void set_runtime_state(RuntimeState* state) { this->_state = state; }
-
-    RuntimeState* runtime_state() { return _state; }
-
-    RowDescriptor* row_desc() { return &_row_desc; }
-
 protected:
     int32_t _id = 0;
     std::string _name;
