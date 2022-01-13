@@ -14,8 +14,11 @@ namespace pipeline {
 
 class PipelineBuilderContext {
 public:
-    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism)
-            : _fragment_context(fragment_context), _degree_of_parallelism(degree_of_parallelism) {}
+    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism,
+                           std::map<TPlanNodeId, int>&& per_scan_node_dop)
+            : _fragment_context(fragment_context),
+              _degree_of_parallelism(degree_of_parallelism),
+              _per_scan_node_dop(std::move(per_scan_node_dop)) {}
 
     void add_pipeline(const OpFactories& operators) {
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipe_id(), operators));
@@ -57,6 +60,14 @@ public:
 
     FragmentContext* fragment_context() { return _fragment_context; }
 
+    size_t get_dop_of_scan_node(TPlanNodeId id) const {
+        if (_per_scan_node_dop.count(id)) {
+            return _per_scan_node_dop.at(id);
+        } else {
+            return _degree_of_parallelism;
+        }
+    }
+
 private:
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
@@ -64,6 +75,7 @@ private:
     uint32_t _next_operator_id = 0;
     int32_t _next_pseudo_plan_node_id = Operator::s_pseudo_plan_node_id_upper_bound;
     size_t _degree_of_parallelism = 1;
+    std::map<TPlanNodeId, int> _per_scan_node_dop;
 };
 
 class PipelineBuilder {
