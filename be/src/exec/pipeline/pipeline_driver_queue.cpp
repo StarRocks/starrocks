@@ -130,8 +130,9 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
     int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
     auto* wg = driver->workgroup();
     wg->driver_queue()->update_statistics(driver);
-    wg->increment_real_runtime_ns(driver->driver_acct().get_last_time_spent());
+    wg->increment_real_runtime_ns(runtime_ns);
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
+    workgroup::WorkGroupManager::instance()->increment_sum_unadjusted_cpu_runtime_ns(runtime_ns);
 }
 
 size_t DriverQueueWithWorkGroup::size() {
@@ -154,8 +155,10 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
             auto* min_wg = _find_min_wg();
             if (min_wg != nullptr) {
                 int64_t origin_real_runtime_ns = wg->get_real_runtime_ns();
-                wg->set_vruntime_ns(
-                        std::max(wg->get_vruntime_ns(), min_wg->get_vruntime_ns() - _ideal_runtime_ns(wg) / 2));
+                int64_t new_vruntime_ns = std::min(
+                        min_wg->get_vruntime_ns() - _ideal_runtime_ns(wg) / 2,
+                        min_wg->get_vruntime_ns() * int64_t(min_wg->get_cpu_limit()) / int64_t(wg->get_cpu_limit()));
+                wg->set_vruntime_ns(std::max(wg->get_vruntime_ns(), new_vruntime_ns));
                 int64_t diff_real_runtime_ns = wg->get_real_runtime_ns() - origin_real_runtime_ns;
                 workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(diff_real_runtime_ns);
             }
