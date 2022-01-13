@@ -189,7 +189,7 @@ bin/gen-ssb.sh 1000 data_dir
 
     StarRocks的建表这里都采取的NOT NULL关键字，因为在SSB生成的标准数据集合中并没有空字段。
 
-以下为建表语句，无需执行，可通过执行create_db_table脚本进行建表，建表语句中进行了默认分桶数配置。针对我们三台BE的环境我们采取的建表方式如下：
+以下为建表语句，无需执行，可通过执行create_db_table脚本(脚本路径：ssb-poc-0.9.3/ssb-poc/output/bin/create_db_table.sh)进行建表，建表语句中进行了默认分桶数配置。针对我们三台BE的环境我们采取的建表方式如下：
 
 ~~~sql
 # lineorder表建表语句，测试数据量级是100G时
