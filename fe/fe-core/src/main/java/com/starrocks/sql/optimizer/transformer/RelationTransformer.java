@@ -18,6 +18,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.catalog.Type;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -25,6 +26,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.relation.ExceptRelation;
 import com.starrocks.sql.analyzer.relation.IntersectRelation;
 import com.starrocks.sql.analyzer.relation.JoinRelation;
@@ -67,6 +69,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
@@ -168,6 +171,26 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
 
             // Note: must copy here
             childOutputColumns.add(Lists.newArrayList(outputColumn));
+            if (optExprBuilder.getRoot().getOp() instanceof LogicalValuesOperator) {
+                LogicalValuesOperator valuesOperator = (LogicalValuesOperator) optExprBuilder.getRoot().getOp();
+                List<ScalarOperator> row = valuesOperator.getRows().get(0);
+                for (int i = 0; i < setOperationRelation.getRelationFields().getAllFields().size(); ++i) {
+                    Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
+                    Type relationType = relation.getRelationFields().getFieldByIndex(i).getType();
+                    if (!outputType.equals(relationType)) {
+                        try {
+                            if (relationType.isNull()) {
+                                row.get(i).setType(outputType);
+                            } else {
+                                row.set(i, ((ConstantOperator) row.get(i)).castTo(outputType));
+                            }
+                            valuesOperator.getColumnRefSet().get(i).setType(outputType);
+                        } catch (Exception e) {
+                            throw new SemanticException(e.toString());
+                        }
+                    }
+                }
+            }
 
             if (!(optExprBuilder.getRoot().getOp() instanceof LogicalProjectOperator) &&
                     !(optExprBuilder.getRoot().getOp() instanceof LogicalValuesOperator)) {

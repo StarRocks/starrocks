@@ -5362,4 +5362,35 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  11 <-> day[([2: id_datetime, DATETIME, false]); args: DATETIME; result: TINYINT; args nullable: false; result nullable: false]"));
     }
+
+    @Test
+    public void testUnionNullConstant() throws Exception {
+        String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "  |  child exprs: \n" +
+                "  |      [1, NULL_TYPE, true]\n" +
+                "  |      [3, NULL_TYPE, true]"));
+
+        sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(" 0:UNION\n" +
+                "  |  child exprs: \n" +
+                "  |      [1, TINYINT, false]\n" +
+                "  |      [3, TINYINT, true]"));
+
+        sql = "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "  |  child exprs: \n" +
+                "  |      [1, DECIMAL64(12,2), true]\n" +
+                "  |      [3, DECIMAL64(12,2), true]"));
+
+        sql = "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "  |  child exprs: \n" +
+                "  |      [1, DECIMAL64(12,2), true]\n" +
+                "  |      [3, DECIMAL64(12,2), true]"));
+    }
 }
