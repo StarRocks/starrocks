@@ -8,7 +8,7 @@
 
 namespace starrocks {
 namespace vectorized {
-Status init_udaf_context(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
+Status init_udaf_context(int id, const std::string& url, const std::string& checksum, const std::string& symbol,
                          starrocks_udf::FunctionContext* context);
 
 } // namespace vectorized
@@ -26,12 +26,15 @@ Status Aggregator::open(RuntimeState* state) {
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         if (_tnode.agg_node.aggregate_functions[i].nodes[0].fn.binary_type == TFunctionBinaryType::SRJAR) {
             const auto& fn = _tnode.agg_node.aggregate_functions[i].nodes[0].fn;
-            auto st = vectorized::init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+            auto st = vectorized::init_udaf_context(fn.id, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
                                                     _agg_fn_ctxs[i]);
             RETURN_IF_ERROR(st);
         }
     }
 #endif
+
+    // AggregateFunction::create needs to call create in JNI,
+    // but prepare is executed in bthread, which will cause the JNI code to crash
 
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);

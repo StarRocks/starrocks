@@ -98,21 +98,6 @@ public:
     static AggregateFunctionPtr MakeLeadLagWindowFunction();
 };
 
-struct AggregateFunctionDesc {
-    int fid;
-    std::string name;
-    PrimitiveType arg_type;
-    PrimitiveType return_type;
-    std::string checksum;
-    std::string url;
-    bool is_null;
-    int agg_func_set_version = 1;
-    int binary_type;
-    starrocks_udf::FunctionContext* ctx;
-};
-
-extern const AggregateFunction* get_aggregate_function(const AggregateFunctionDesc* desc);
-
 extern const AggregateFunction* get_aggregate_function(
         const std::string& name, PrimitiveType arg_type, PrimitiveType return_type, bool is_null,
         TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN, int agg_func_set_version = 1);
