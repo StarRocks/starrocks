@@ -82,8 +82,8 @@ Status HttpService::start() {
 
     DownloadAction* error_log_download_action =
             new DownloadAction(_env, _env->load_path_mgr()->get_load_error_file_dir());
-    _ev_http_server->register_handler(HttpMethod::GET, "/api/get_error_log", error_log_download_action);
-    _ev_http_server->register_handler(HttpMethod::HEAD, "/api/get_error_log", error_log_download_action);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/_load_error_log", error_log_download_action);
+    _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_load_error_log", error_log_download_action);
     _http_handlers.emplace_back(error_log_download_action);
 
     // Register BE health action
