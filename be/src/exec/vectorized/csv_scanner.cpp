@@ -189,9 +189,9 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         if (fields.size() != _num_fields_in_csv) {
             if (_counter->num_rows_filtered++ < 50) {
                 std::stringstream error_msg;
-                error_msg << "Value count does not match column count."
-                          << "Expect " << fields.size() << " but got" << _num_fields_in_csv;
-                _report_error("", error_msg.str());
+                error_msg << "Value count does not match column count. "
+                          << "Expect " << fields.size() << ", but got " << _num_fields_in_csv;
+                _report_error(record.to_string(), error_msg.str());
             }
             continue;
         }
@@ -215,9 +215,9 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                 chunk->set_num_rows(num_rows);
                 if (_counter->num_rows_filtered++ < 50) {
                     std::stringstream error_msg;
-                    error_msg << "Value '" << field.to_string() << "' is out of range."
+                    error_msg << "Value '" << field.to_string() << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-                    _report_error("", error_msg.str());
+                    _report_error(record.to_string(), error_msg.str());
                 }
                 has_error = true;
                 break;
