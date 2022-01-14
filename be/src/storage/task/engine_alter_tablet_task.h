@@ -31,7 +31,7 @@ namespace starrocks {
 // add "Engine" as task prefix to prevent duplicate name with agent task
 class EngineAlterTabletTask : public EngineTask {
 public:
-    OLAPStatus execute() override;
+    Status execute() override;
 
 public:
     EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& alter_tablet_request, int64_t signature,

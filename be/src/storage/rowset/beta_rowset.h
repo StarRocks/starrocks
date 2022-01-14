@@ -85,11 +85,11 @@ public:
     static std::string segment_srcrssid_file_path(const std::string& segment_dir, const RowsetId& rowset_id,
                                                   int segment_id);
 
-    OLAPStatus remove() override;
+    Status remove() override;
 
     Status link_files_to(const std::string& dir, RowsetId new_rowset_id) override;
 
-    OLAPStatus copy_files_to(const std::string& dir) override;
+    Status copy_files_to(const std::string& dir) override;
 
     bool check_path(const std::string& path) override;
 
@@ -105,7 +105,7 @@ public:
 
 protected:
     // init segment groups
-    OLAPStatus init() override;
+    Status init() override;
 
     Status do_load() override;
 

@@ -69,6 +69,7 @@ Tablet::Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
 Tablet::~Tablet() {}
 
 Status Tablet::_init_once_action() {
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
     if (keys_type() == PRIMARY_KEYS) {
         _updates = std::make_unique<TabletUpdates>(*this);
@@ -464,7 +465,7 @@ Status Tablet::capture_consistent_versions(const Version& spec_version, std::vec
         LOG(ERROR) << "should not call capture_consistent_versions on updatable tablet";
         return Status::NotSupported("updatable tablet does not support capture_consistent_versions");
     }
-    if (_timestamped_version_tracker.capture_consistent_versions(spec_version, version_path) != OLAP_SUCCESS) {
+    if (!_timestamped_version_tracker.capture_consistent_versions(spec_version, version_path).ok()) {
         std::vector<Version> missed_versions;
         calc_missed_versions_unlocked(spec_version.second, &missed_versions);
         if (missed_versions.empty()) {

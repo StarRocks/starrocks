@@ -76,7 +76,7 @@ public:
     Status set_cluster_id(int32_t cluster_id);
     void health_check();
 
-    OLAPStatus get_shard(uint64_t* shard);
+    Status get_shard(uint64_t* shard);
 
     KVStore* get_meta() { return _kv_store; }
 
@@ -96,7 +96,7 @@ public:
     static std::string get_root_path_from_schema_hash_path_in_trash(const std::string& schema_hash_dir_in_trash);
 
     // load data from meta and data files
-    OLAPStatus load();
+    Status load();
 
     // this function scans the paths in data dir to collect the paths to check
     // this is a producer function. After scan, it will notify the perform_path_gc function to gc
@@ -124,7 +124,7 @@ private:
     Status _init_file_system();
     Status _init_meta(bool read_only = false);
 
-    OLAPStatus _read_and_write_test_file();
+    Status _read_and_write_test_file();
     Status _read_cluster_id(const std::string& cluster_id_path, int32_t* cluster_id);
     Status _write_cluster_id_to_path(const std::string& path, int32_t cluster_id);
     Status _add_version_info_to_cluster_id(const std::string& path);

@@ -20,24 +20,7 @@ public:
     Status _parse_csv(int chunk_size, ChunkPtr* chunk);
 
 private:
-    class HdfsScannerCSVReader : public CSVReader {
-    public:
-        HdfsScannerCSVReader(std::shared_ptr<RandomAccessFile> file, char record_delimiter, string field_delimiter,
-                             size_t offset)
-                : CSVReader(record_delimiter, field_delimiter) {
-            _file = file;
-            _offset = offset;
-        }
-
-        Status _fill_buffer() override;
-
-    private:
-        std::shared_ptr<RandomAccessFile> _file;
-        size_t _offset = 0;
-    };
-
     using ConverterPtr = std::unique_ptr<csv::Converter>;
-
     char _record_delimiter;
     string _field_delimiter;
     std::vector<Column*> _column_raw_ptrs;

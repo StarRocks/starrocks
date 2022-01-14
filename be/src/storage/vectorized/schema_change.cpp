@@ -1078,16 +1078,16 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         return status;
     }
 
-    OLAPStatus res = OLAP_SUCCESS;
+    Status res = Status::OK();
     {
         // set state to ready
         std::unique_lock new_wlock(new_tablet->get_header_lock());
         res = new_tablet->set_tablet_state(TabletState::TABLET_RUNNING);
-        if (res != OLAP_SUCCESS) {
+        if (!res.ok()) {
             LOG(WARNING) << "failed to alter tablet. base_tablet=" << base_tablet->full_name()
                          << ", drop new_tablet=" << new_tablet->full_name();
             // do not drop the new tablet and its data. GC thread will
-            return Status::InternalError("failed to set tablet state");
+            return res;
         }
         new_tablet->save_meta();
     }

@@ -232,6 +232,8 @@ public:
     // Does not modify 'block' on error.
     virtual Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) = 0;
 
+    virtual void erase_block_cache(const std::string& path) = 0;
+
     // Retrieves the IDs of all blocks under management by this block manager.
     // These include ReadableBlocks as well as WritableBlocks.
     //

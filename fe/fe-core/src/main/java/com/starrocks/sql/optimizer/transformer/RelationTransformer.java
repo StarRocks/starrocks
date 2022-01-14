@@ -214,10 +214,14 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                 List<ScalarOperator> row = valuesOperator.getRows().get(0);
                 for (int i = 0; i < setOperationRelation.getRelationFields().getAllFields().size(); ++i) {
                     Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
-                    if (!outputType.equals(relation.getRelationFields().getFieldByIndex(i).getType())
-                            && !((ConstantOperator) row.get(i)).isNull()) {
+                    Type relationType = relation.getRelationFields().getFieldByIndex(i).getType();
+                    if (!outputType.equals(relationType)) {
                         try {
-                            row.set(i, ((ConstantOperator) row.get(i)).castTo(outputType));
+                            if (relationType.isNull()) {
+                                row.get(i).setType(outputType);
+                            } else {
+                                row.set(i, ((ConstantOperator) row.get(i)).castTo(outputType));
+                            }
                             valuesOperator.getColumnRefSet().get(i).setType(outputType);
                         } catch (Exception e) {
                             throw new SemanticException(e.toString());

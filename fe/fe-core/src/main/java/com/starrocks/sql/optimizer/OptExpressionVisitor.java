@@ -94,7 +94,7 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
-    public R visitMultiJoin(OptExpression optExpression, C context) {
+    public R visitLogicalProjectJoin(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 

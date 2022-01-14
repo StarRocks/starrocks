@@ -84,6 +84,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
     //       LEFT     AssertOneRows
     public List<OptExpression> transformUnCorrelateCheckOneRows(OptExpression input, LogicalApplyOperator apply,
                                                                 OptimizerContext context) {
+        // assert one rows will check rows, and fill null row if result is empty
         OptExpression assertOptExpression = new OptExpression(LogicalAssertOneRowOperator.createLessEqOne(""));
         assertOptExpression.getInputs().add(input.getInputs().get(1));
 

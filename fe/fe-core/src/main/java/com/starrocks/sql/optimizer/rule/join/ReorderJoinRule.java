@@ -200,7 +200,7 @@ public class ReorderJoinRule extends Rule {
         }
 
         @Override
-        public OptExpression visitMultiJoin(OptExpression optExpression, Void context) {
+        public OptExpression visitLogicalProjectJoin(OptExpression optExpression, Void context) {
             visit(optExpression, context);
 
             LogicalProjectJoinOperator logicalProjectJoinOperator = (LogicalProjectJoinOperator) optExpression.getOp();
@@ -251,7 +251,7 @@ public class ReorderJoinRule extends Rule {
         }
 
         @Override
-        public OptExpression visitMultiJoin(OptExpression optExpression, ColumnRefSet requireColumns) {
+        public OptExpression visitLogicalProjectJoin(OptExpression optExpression, ColumnRefSet requireColumns) {
             LogicalProjectJoinOperator logicalProjectJoinOperator = (LogicalProjectJoinOperator) optExpression.getOp();
             ColumnRefSet outputColumns = logicalProjectJoinOperator.getOutputColumns();
 

@@ -42,7 +42,7 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
             if (UNLIKELY(_mem_value == nullptr)) {
                 return Status::InternalError("Mem usage has exceed the limit of BE");
             }
-            OLAPStatus s = OLAP_SUCCESS;
+            Status status = Status::OK();
             if (_type_info->type() == OLAP_FIELD_TYPE_CHAR) {
                 auto length = static_cast<int32_t>(_schema_length);
                 char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
@@ -65,13 +65,9 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                 (static_cast<Slice*>(_mem_value))->size = length;
                 (static_cast<Slice*>(_mem_value))->data = string_buffer;
             } else if (_type_info->type() == OLAP_FIELD_TYPE_ARRAY) {
-                // TODO llj for Array default value
                 return Status::NotSupported("Array default type is unsupported");
             } else {
-                s = _type_info->from_string(_mem_value, _default_value);
-            }
-            if (s != OLAP_SUCCESS) {
-                return Status::InternalError(fmt::format("get value of type from default value failed. status:{}", s));
+                RETURN_IF_ERROR(_type_info->from_string(_mem_value, _default_value));
             }
         }
     } else if (_is_nullable) {

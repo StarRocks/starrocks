@@ -73,12 +73,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     DCHECK(_runtime_state->chunk_size() > 0);
 
     _runtime_state->set_be_number(request.backend_num);
-    if (request.__isset.import_label) {
-        _runtime_state->set_import_label(request.import_label);
-    }
-    if (request.__isset.db_name) {
-        _runtime_state->set_db_name(request.db_name);
-    }
     if (request.__isset.load_job_id) {
         _runtime_state->set_load_job_id(request.load_job_id);
     }

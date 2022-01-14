@@ -135,6 +135,8 @@ public:
     // and return file_handle
     void insert(const std::string& file_name, FileType* file, OpenedFileHandle<FileType>* file_handle);
 
+    void erase(const std::string& file_name);
+
 private:
     // Name of the cache.
     std::string _cache_name;

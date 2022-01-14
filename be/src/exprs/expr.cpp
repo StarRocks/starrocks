@@ -45,8 +45,10 @@
 #include "exprs/vectorized/in_predicate.h"
 #include "exprs/vectorized/info_func.h"
 #include "exprs/vectorized/is_null_predicate.h"
+#include "exprs/vectorized/java_function_call_expr.h"
 #include "exprs/vectorized/literal.h"
 #include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "runtime/user_function_cache.h"
@@ -274,7 +276,13 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     }
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
     case TExprNodeType::FUNCTION_CALL: {
-        if (texpr_node.fn.name.function_name == "if") {
+        if (texpr_node.fn.binary_type == TFunctionBinaryType::SRJAR) {
+#ifdef STARROCKS_WITH_HDFS
+            *expr = pool->add(new vectorized::JavaFunctionCallExpr(texpr_node));
+#else
+            return Status::InternalError("you should rebuild StarRocks with WITH_HDFS option ON");
+#endif
+        } else if (texpr_node.fn.name.function_name == "if") {
             *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "nullif") {
             *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_null_if_expr(texpr_node));
@@ -570,10 +578,7 @@ void Expr::close() {
       LibCache::instance()->decrement_use_count(_cache_entry);
       _cache_entry = nullptr;
       }*/
-    if (_cache_entry != nullptr) {
-        UserFunctionCache::instance()->release_entry(_cache_entry);
-        _cache_entry = nullptr;
-    }
+    _cache_entry.reset();
 }
 
 void Expr::close(const std::vector<Expr*>& exprs) {

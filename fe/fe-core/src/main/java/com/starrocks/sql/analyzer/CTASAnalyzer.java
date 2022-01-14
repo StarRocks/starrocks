@@ -15,6 +15,7 @@ import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
@@ -94,15 +95,8 @@ public class CTASAnalyzer {
             }
         }
 
-        ScalarType stringType = Type.STRING;
-        stringType.setAssignedStrLenInColDefinition();
         for (int i = 0; i < allFields.size(); i++) {
-            Type type = allFields.get(i).getType();
-            if (PrimitiveType.VARCHAR == type.getPrimitiveType()) {
-                type = stringType;
-            } else if (PrimitiveType.DOUBLE == type.getPrimitiveType()) {
-                type = Type.DEFAULT_DECIMAL128;
-            }
+            Type type = transformType(allFields.get(i).getType());
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                     null, true, ColumnDef.DefaultValueDef.NOT_SET, "");
             createTableStmt.addColumnDef(columnDef);
@@ -155,6 +149,41 @@ public class CTASAnalyzer {
         insertStmt.setQueryStmt(queryStmt);
 
         return relation;
+    }
+
+    // For char and varchar types, use the inferred length if the length can be inferred,
+    // otherwise use the longest varchar value.
+    // For double and float types, since they may be selected as key columns,
+    // the key column must be an exact value, so we unified into a default decimal type.
+    private Type transformType(Type srcType) {
+        Type newType;
+        if (srcType.isScalarType()) {
+            if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() || PrimitiveType.CHAR == srcType.getPrimitiveType()) {
+                int len = ScalarType.MAX_VARCHAR_LENGTH;
+                if (srcType instanceof ScalarType) {
+                    ScalarType scalarType = (ScalarType) srcType;
+                    if (scalarType.getLength() > 0 && scalarType.isAssignedStrLenInColDefinition()) {
+                        len = scalarType.getLength();
+                    }
+                }
+                ScalarType stringType = ScalarType.createVarcharType(len);
+                stringType.setAssignedStrLenInColDefinition();
+                newType = stringType;
+            } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
+                    PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
+                newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType()) {
+                newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128,
+                        srcType.getPrecision(), srcType.getDecimalDigits());
+            } else {
+                newType = ScalarType.createType(srcType.getPrimitiveType());
+            }
+        } else if (srcType.isArrayType()) {
+            newType = new ArrayType(transformType(((ArrayType) srcType).getItemType()));
+        } else {
+            throw new SemanticException("Unsupported CTAS transform type: %s", srcType.getPrimitiveType());
+        }
+        return newType;
     }
 
 }

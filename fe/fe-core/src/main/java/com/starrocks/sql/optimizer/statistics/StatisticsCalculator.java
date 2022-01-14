@@ -221,7 +221,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
-                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         // TODO: get statistics from iceberg catalog or metadata
         Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         builder.setOutputRowCount(1);
@@ -266,12 +266,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     table.getTableLevelColumnStats(requiredColumns.stream().
                             map(ColumnRefOperator::getName).collect(Collectors.toList()));
             List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                    computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                            computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                     .collect(Collectors.toList());
             columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                    new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                            hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                            hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
+                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("hive table {} get column failed. error : {}", table.getName(), e);
@@ -650,18 +650,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalJoin(LogicalJoinOperator node, ExpressionContext context) {
-        return computeJoinNode(context, node.getOnPredicate(), node.getPredicate(), node.getJoinType(),
-                node.getLimit());
+        return computeJoinNode(context, node.getJoinType(), node.getOnPredicate());
     }
 
     @Override
     public Void visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
-        return computeJoinNode(context, node.getJoinPredicate(), node.getPredicate(), node.getJoinType(),
-                node.getLimit());
+        return computeJoinNode(context, node.getJoinType(), node.getOnPredicate());
     }
 
-    private Void computeJoinNode(ExpressionContext context, ScalarOperator joinOnPredicate, ScalarOperator predicate,
-                                 JoinOperator joinType, long limit) {
+    private Void computeJoinNode(ExpressionContext context, JoinOperator joinType, ScalarOperator joinOnPredicate) {
         Preconditions.checkState(context.arity() == 2);
 
         Statistics leftStatistics = context.getChildStatistics(0);
@@ -756,7 +753,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         List<ScalarOperator> notEqJoin = Utils.extractConjuncts(joinOnPredicate);
         notEqJoin.removeAll(eqOnPredicates);
-        notEqJoin.add(predicate);
 
         Statistics estimateStatistics = estimateStatistics(notEqJoin, joinStats);
         context.setStatistics(estimateStatistics);
@@ -779,8 +775,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitMultiJoin(LogicalProjectJoinOperator node, ExpressionContext context) {
-        computeJoinNode(context, node.getOnPredicate(), node.getPredicate(), node.getJoinOperator().getJoinType(),
-                node.getLimit());
+        computeJoinNode(context, node.getJoinOperator().getJoinType(), node.getOnPredicate());
         LogicalProjectOperator projectOperator = node.getProjectOperator();
 
         Statistics.Builder builder = Statistics.builder();

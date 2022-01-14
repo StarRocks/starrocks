@@ -352,7 +352,16 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_to_read,
                                                     const std::vector<SlotDescriptor*>& slot_descs) {
     if (_empty_parser) {
-        RETURN_IF_ERROR(_read_and_parse_json());
+        auto st = _read_and_parse_json();
+        if (!st.ok()) {
+            if (st.is_end_of_file()) {
+                return st;
+            }
+            // Parse error.
+            _counter->num_rows_filtered++;
+            _state->append_error_msg_to_file("", st.to_string());
+            return st;
+        }
     }
     simdjson::ondemand::object row;
 
@@ -411,7 +420,16 @@ Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_t
 Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
                                           const std::vector<SlotDescriptor*>& slot_descs) {
     if (_empty_parser) {
-        RETURN_IF_ERROR(_read_and_parse_json());
+        auto st = _read_and_parse_json();
+        if (!st.ok()) {
+            if (st.is_end_of_file()) {
+                return st;
+            }
+            // Parse error.
+            _counter->num_rows_filtered++;
+            _state->append_error_msg_to_file("", st.to_string());
+            return st;
+        }
     }
     simdjson::ondemand::object row;
 

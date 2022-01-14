@@ -315,6 +315,10 @@ public abstract class Type implements Cloneable {
         return isFixedPointType() || isFloatingPointType() || isDecimalV2() || isDecimalV3();
     }
 
+    public boolean isExactNumericType() {
+        return isFixedPointType() || isDecimalV2() || isDecimalV3();
+    }
+
     public boolean isNativeType() {
         return isFixedPointType() || isFloatingPointType() || isBoolean();
     }
