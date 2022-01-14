@@ -86,6 +86,7 @@ public class ColumnDef {
     private final TypeDef typeDef;
     private AggregateType aggregateType;
     private boolean isKey;
+    private Boolean isAllowNullTristate;
     private boolean isAllowNull;
     private DefaultValueDef defaultValueDef;
     private final String comment;
@@ -95,18 +96,23 @@ public class ColumnDef {
     }
 
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
-                     boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
+                     Boolean isAllowNullTristate, DefaultValueDef defaultValueDef, String comment) {
         this.name = name;
         this.typeDef = typeDef;
         this.isKey = isKey;
         this.aggregateType = aggregateType;
-        this.isAllowNull = isAllowNull;
+        this.isAllowNullTristate = isAllowNullTristate;
+        this.isAllowNull = isAllowNullTristate == null ? true : isAllowNullTristate;
         this.defaultValueDef = defaultValueDef;
         this.comment = comment;
     }
 
     public boolean isAllowNull() {
         return isAllowNull;
+    }
+
+    public void setIsAllowNullForPrimaryKeySql() {
+        isAllowNull = isAllowNullTristate == null ? false : isAllowNullTristate;
     }
 
     // only for test
