@@ -249,6 +249,73 @@ TEST_F(LikeTest, patternEmptyLike) {
                         .ok());
 }
 
+TEST_F(LikeTest, patternStrAndPatternBothEmptyLike) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1);
+
+    for (int j = 0; j < 20; ++j) {
+        str->append("");
+    }
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+
+    context->impl()->set_constant_columns(columns);
+
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns);
+
+    ASSERT_TRUE(result->is_numeric());
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    for (int l = 0; l < 20; ++l) {
+        ASSERT_TRUE(v->get_data()[l]);
+    }
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, patternStrAndPatternBothEmptyExplicitNullPtrLike) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1);
+
+    const char* null_ptr = nullptr;
+    for (int j = 0; j < 20; ++j) {
+        str->append(Slice(null_ptr, 0));
+    }
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+
+    context->impl()->set_constant_columns(columns);
+
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns);
+
+    ASSERT_TRUE(result->is_numeric());
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    for (int l = 0; l < 20; ++l) {
+        ASSERT_TRUE(v->get_data()[l]);
+    }
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
 TEST_F(LikeTest, patternOnlyNullLike) {
     auto context = FunctionContext::create_test_context();
     std::unique_ptr<FunctionContext> ctx(context);
