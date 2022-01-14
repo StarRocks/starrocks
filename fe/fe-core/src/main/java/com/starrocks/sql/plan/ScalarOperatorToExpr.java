@@ -410,7 +410,6 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitCastOperator(CastOperator operator, FormatterContext context) {
             CastExpr expr = new CastExpr(operator.getType(), buildExecExpression(operator.getChild(0), context));
-            LOG.warn(String.format("[SATANSON] castExpr=%s", expr.toSql()));
             expr.setImplicit(context.implicitCast);
             return expr;
         }

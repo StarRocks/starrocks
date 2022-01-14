@@ -64,10 +64,18 @@ public class CastExprPruneTest extends PlanTestBase {
                 " WHERE (((0.00) BETWEEN (CASE WHEN (subt1.c_1_5) BETWEEN (subt1.c_1_5) AND (subt1.c_1_5) THEN CAST(151971657 AS DECIMAL32 ) " +
                 " WHEN false THEN CASE WHEN NULL THEN 0.03 ELSE 0.02 END ELSE 0.04 END) AND (0.04) ) IS NULL)";
         String explain = getFragmentPlan(sql);
-        String snippet = "  6:OlapScanNode\n" +
+        String snippet = "  0:OlapScanNode\n" +
                 "     TABLE: tab1\n" +
-                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join\n" +
-                "     PREDICATES: CAST(151971657 AS DECIMAL32(9,9)) <= 0 IS NULL";
+                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                "     PREDICATES: TRUE\n" +
+                "     partitions=0/1\n" +
+                "     rollup: tab1\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0";
+        System.out.println(explain);
         Assert.assertTrue(explain.contains(snippet));
     }
 }
