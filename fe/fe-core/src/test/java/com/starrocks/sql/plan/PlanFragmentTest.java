@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -38,6 +39,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.util.HashMap;
+import java.util.List;
 
 public class PlanFragmentTest extends PlanTestBase {
     @BeforeClass
@@ -5296,5 +5298,16 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "CAST(CAST(8: id_datetime AS DATE) AS DATETIME) >= '1970-01-01 12:00:00', CAST(CAST(8: id_datetime AS DATE) AS DATETIME) <= '1970-01-01 18:00:00'"));
+    }
+
+    @Test
+    public void testConstantNullable() throws Exception {
+        String sql = "SELECT MICROSECONDS_SUB(\"1969-12-25\", NULL) FROM t1";
+        ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        List<ColumnRefOperator> outColumns = plan.getOutputColumns();
+
+        Assert.assertEquals(1, outColumns.size());
+        Assert.assertEquals(Type.DATETIME, outColumns.get(0).getType());
+        Assert.assertTrue(outColumns.get(0).isNullable());
     }
 }
