@@ -30,6 +30,8 @@
   + [Json数据导入](/loading/Json_loading.md)
   + [Flink connector](/loading/Flink-connector-starrocks.md)
   + [DataX writer](/loading/DataX-starrocks-writer.md)
+  + [CloudCanal数据导入](/loading/CloudCanal-loading.md)
+
 + 数据提取
   + [数据导出](/unloading/Export.md)
   + [Spark Connector](/unloading/Spark_connector.md)
@@ -331,6 +333,7 @@
       + [Insert Into](/faq/loading/Insert_into_faq.md)
       + [Flink connector](/faq/loading/Flink_connector_faq.md)
       + [DataX](/faq/loading/DataX_faq.md)
+      + [CloudCanal数据导入](/faq/loading/CloudCanal_load_faq.md)
       + [其他](/faq/loading/Others.md)
     + [导出](/faq/Exporting_faq.md)
   + [SQL FAQ](/faq/Sql_faq.md)
