@@ -68,11 +68,12 @@ public class TransactionState implements Writable {
     public static final TxnStateComparator TXN_ID_COMPARATOR = new TxnStateComparator();
 
     public enum LoadJobSourceType {
-        FRONTEND(1),        // old dpp load, mini load, insert stmt(not streaming type) use this type
-        BACKEND_STREAMING(2),         // streaming load use this type
-        INSERT_STREAMING(3), // insert stmt (streaming type) use this type
-        ROUTINE_LOAD_TASK(4), // routine load task use this type
-        BATCH_LOAD_JOB(5); // load job v2 for broker load
+        FRONTEND(1),                    // old dpp load, mini load, insert stmt(not streaming type) use this type
+        BACKEND_STREAMING(2),           // streaming load use this type
+        INSERT_STREAMING(3),            // insert stmt (streaming type) use this type
+        ROUTINE_LOAD_TASK(4),           // routine load task use this type
+        BATCH_LOAD_JOB(5),              // load job v2 for broker load
+        DELETE(6);                      // synchronization delete job use this type
 
         private final int flag;
 
@@ -96,6 +97,8 @@ public class TransactionState implements Writable {
                     return ROUTINE_LOAD_TASK;
                 case 5:
                     return BATCH_LOAD_JOB;
+                case 6:
+                    return DELETE;
                 default:
                     return null;
             }
@@ -563,7 +566,7 @@ public class TransactionState implements Writable {
         sb.append(", finish time: ").append(finishTime);
         sb.append(", reason: ").append(reason);
         if (txnCommitAttachment != null) {
-            sb.append(" attactment: ").append(txnCommitAttachment);
+            sb.append(" attachment: ").append(txnCommitAttachment);
         }
         return sb.toString();
     }
@@ -598,8 +601,8 @@ public class TransactionState implements Writable {
         out.writeLong(finishTime);
         Text.writeString(out, reason);
         out.writeInt(errorReplicas.size());
-        for (long errorReplciaId : errorReplicas) {
-            out.writeLong(errorReplciaId);
+        for (long errorReplicaId : errorReplicas) {
+            out.writeLong(errorReplicaId);
         }
 
         if (txnCommitAttachment == null) {
@@ -611,8 +614,8 @@ public class TransactionState implements Writable {
         out.writeLong(callbackId);
         out.writeLong(timeoutMs);
         out.writeInt(tableIdList.size());
-        for (int i = 0; i < tableIdList.size(); i++) {
-            out.writeLong(tableIdList.get(i));
+        for (Long tableId : tableIdList) {
+            out.writeLong(tableId);
         }
     }
 

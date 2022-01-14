@@ -22,7 +22,6 @@
 package com.starrocks.load;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -198,6 +197,8 @@ public class DeleteHandler implements Writable {
                 transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                         Lists.newArrayList(table.getId()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                        // For version compatibility, keep this set to FRONTEND,
+                        // and set it to DELETE in the next release
                         TransactionState.LoadJobSourceType.FRONTEND, jobId, Config.stream_load_default_timeout_second);
 
                 MultiDeleteInfo deleteInfo =
@@ -286,7 +287,6 @@ public class DeleteHandler implements Writable {
                 ok = countDownLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
-                ok = false;
             }
 
             if (!ok) {
@@ -324,7 +324,7 @@ public class DeleteHandler implements Writable {
                                 deleteJob.checkAndUpdateQuorum();
                                 Thread.sleep(1000);
                                 nowQuorumTimeMs = System.currentTimeMillis();
-                                LOG.debug("wait for quorum finished delete job: {}, txn id: {}" + deleteJob.getId(),
+                                LOG.debug("wait for quorum finished delete job: {}, txn id: {}", deleteJob.getId(),
                                         transactionId);
                             }
                         } catch (MetaNotFoundException e) {
@@ -337,8 +337,7 @@ public class DeleteHandler implements Writable {
                         commitJob(deleteJob, db, timeoutMs);
                         break;
                     default:
-                        Preconditions.checkState(false, "wrong delete job state: " + state.name());
-                        break;
+                        throw new IllegalStateException("wrong delete job state: " + state.name());
                 }
             } else {
                 commitJob(deleteJob, db, timeoutMs);
@@ -381,8 +380,7 @@ public class DeleteHandler implements Writable {
                 throw new QueryStateException(MysqlStateType.OK, sb.toString());
             }
             default:
-                Preconditions.checkState(false, "wrong transaction status: " + status.name());
-                break;
+                throw new IllegalStateException("wrong transaction status: " + status.name());
         }
     }
 
@@ -426,9 +424,7 @@ public class DeleteHandler implements Writable {
     private void clearJob(DeleteJob job) {
         if (job != null) {
             long signature = job.getTransactionId();
-            if (idToDeleteJob.containsKey(signature)) {
-                idToDeleteJob.remove(signature);
-            }
+            idToDeleteJob.remove(signature);
             for (PushTask pushTask : job.getPushTasks()) {
                 AgentTaskQueue.removePushTask(pushTask.getBackendId(), pushTask.getSignature(),
                         pushTask.getVersion(), pushTask.getVersionHash(),
@@ -468,13 +464,15 @@ public class DeleteHandler implements Writable {
      * @return
      */
     public boolean cancelJob(DeleteJob job, CancelType cancelType, String reason) {
+        if (job == null) {
+            LOG.warn("cancel a null job, cancelType: {}, reason: {}", cancelType.name(), reason);
+            return true;
+        }
         LOG.info("start to cancel delete job, transactionId: {}, cancelType: {}", job.getTransactionId(),
                 cancelType.name());
         GlobalTransactionMgr globalTransactionMgr = Catalog.getCurrentGlobalTransactionMgr();
         try {
-            if (job != null) {
-                globalTransactionMgr.abortTransaction(job.getDeleteInfo().getDbId(), job.getTransactionId(), reason);
-            }
+            globalTransactionMgr.abortTransaction(job.getDeleteInfo().getDbId(), job.getTransactionId(), reason);
         } catch (Exception e) {
             TransactionState state =
                     globalTransactionMgr.getTransactionState(job.getDeleteInfo().getDbId(), job.getTransactionId());
@@ -483,7 +481,7 @@ public class DeleteHandler implements Writable {
             } else if (state.getTransactionStatus() == TransactionStatus.COMMITTED ||
                     state.getTransactionStatus() == TransactionStatus.VISIBLE) {
                 LOG.warn("cancel delete job {} failed because it has been committed, transactionId: {}",
-                        job.getTransactionId());
+                        job.getId(), job.getTransactionId());
                 return false;
             } else {
                 LOG.warn("errors while abort transaction", e);
