@@ -321,7 +321,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     @Override
     public boolean isNullable() {
-        return type.equals(Type.NULL);
+        return type.equals(Type.NULL) || isNull;
     }
 
     public ConstantOperator castTo(Type desc) throws Exception {
