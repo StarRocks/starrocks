@@ -747,6 +747,8 @@ public abstract class Type implements Cloneable {
                 return 10;
             case BIGINT:
                 return 19;
+            case LARGEINT:
+                return 39;
             case FLOAT:
                 return 7;
             case DOUBLE:

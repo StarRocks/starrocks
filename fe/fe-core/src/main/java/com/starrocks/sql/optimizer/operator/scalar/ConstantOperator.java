@@ -393,8 +393,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                     throw new SemanticException("Forbidden cast to decimal(precision=0, scale=0)");
                 }
             } catch (AnalysisException e) {
-                throw e;
-                //return ConstantOperator.createNull(desc);
+                return ConstantOperator.createNull(desc);
             }
 
             return ConstantOperator.createDecimal(decimal, desc);

@@ -11,6 +11,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HiveColumnStats;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -445,6 +447,80 @@ public class Utils {
                     return Optional.of(result);
                 }
             }
+        } catch (Exception ignored) {
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isIntegerOrDecimalType(Type t) {
+        return t.isIntegerType() || t.isLargeint() || t.isDecimalV3();
+    }
+
+    // isAssignable means that assigning or casting rhs to lhs never overflows.
+    // only both integer part width and fraction part width of lhs is not narrower than counterparts
+    // of rhs, then rhs can be assigned to lhs. for integer types, integer part width is computed by
+    // calling Type::getPrecision and its scale is 0.
+    private static boolean isAssignable(ScalarType lhs, ScalarType rhs) {
+        int lhsIntPartWidth;
+        int lhsScale;
+        int rhsIntPartWidth;
+        int rhsScale;
+        if (lhs.isIntegerType() || lhs.isLargeIntType()) {
+            lhsIntPartWidth = lhs.getPrecision();
+            lhsScale = 0;
+        } else {
+            lhsIntPartWidth = lhs.getScalarPrecision() - lhs.getScalarScale();
+            lhsScale = lhs.getScalarScale();
+        }
+
+        if (rhs.isIntegerType() || lhs.isLargeIntType()) {
+            rhsIntPartWidth = rhs.getPrecision();
+            rhsScale = 0;
+        } else {
+            rhsIntPartWidth = rhs.getScalarPrecision() - rhs.getScalarScale();
+            rhsScale = rhs.getScalarScale();
+        }
+
+        // when lhs is integer, for instance, tinyint, lhsIntPartWidth is 3, it cannot holds
+        // a DECIMAL(3, 0).
+        if (lhs.isIntegerType() && rhs.isDecimalOfAnyVersion()) {
+            return lhsIntPartWidth > rhsIntPartWidth && lhsScale >= rhsScale;
+        } else {
+            return lhsIntPartWidth >= rhsIntPartWidth && lhsScale >= rhsScale;
+        }
+    }
+
+    // tryDecimalCastConstant is employed by ReduceCastRule to reduce BinaryPredicateOperator involving DecimalV3
+    // ReduceCastRule try to reduce 'CAST(Expr<T> as U) BINOP LITERAL<S>' to
+    // 'EXPR<T> BINOP CAST(LITERAL<S> as T>', only T->U casting and S->T casting are both legal, then this
+    // reduction is legal, so for numerical types, S is not wider than T and T is not wider than U. for examples:
+    //     CAST(IntLiteral(100,TINYINT) as DECIMAL32(9,9)) < IntLiteral(0x7f50, SMALLINT) cannot be reduced.
+    //     CAST(IntLiteral(100,SMALLINT) as DECIMAL64(13,10)) < IntLiteral(101, TINYINT) can be reduced.
+    public static Optional<ScalarOperator> tryDecimalCastConstant(CastOperator lhs, ConstantOperator rhs) {
+        Type lhsType = lhs.getType();
+        Type rhsType = rhs.getType();
+        Type childType = lhs.getChild(0).getType();
+
+        // Only handle Integer or DecimalV3 types
+        if (!isIntegerOrDecimalType(lhsType) ||
+                !isIntegerOrDecimalType(rhsType) ||
+                !isIntegerOrDecimalType(childType)) {
+            return Optional.empty();
+        }
+        // Guarantee that both childType casting to lhsType and rhsType casting to childType are
+        // lossless
+        if (!isAssignable((ScalarType) lhsType, (ScalarType) childType) ||
+                !isAssignable((ScalarType) childType, (ScalarType) rhsType)) {
+            return Optional.empty();
+        }
+
+        if (rhs.isNull()) {
+            return Optional.of(ConstantOperator.createNull(childType));
+        }
+
+        try {
+            ConstantOperator result = rhs.castTo(childType);
+            return Optional.of(result);
         } catch (Exception ignored) {
         }
         return Optional.empty();

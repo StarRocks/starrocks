@@ -7,6 +7,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
@@ -68,9 +69,15 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
         ScalarOperator castChild = child1.getChild(0);
 
-        // Cast is allowed to change the precision in Decimal, so it should not be allowed to eliminate Cast
-        if (castChild.getType().isDecimalOfAnyVersion()) {
-            return operator;
+        // BinaryPredicate involving Decimal
+        if (castChild.getType().isDecimalOfAnyVersion()
+                || child1.getType().isDecimalOfAnyVersion()
+                || child2.getType().isDecimalOfAnyVersion()) {
+            Optional<ScalarOperator> resultChild2 =
+                    Utils.tryDecimalCastConstant((CastOperator) child1, (ConstantOperator) child2);
+            return resultChild2
+                    .map(scalarOperator -> new BinaryPredicateOperator(operator.getBinaryType(), castChild, scalarOperator))
+                    .orElse(operator);
         }
 
         if (!(castChild.getType().isNumericType() && child2.getType().isNumericType())) {
