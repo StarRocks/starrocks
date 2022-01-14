@@ -94,23 +94,23 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(type, groupBys, aggregations.keySet());
+        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet());
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalHashAggregateOperator)) {
-            return false;
-        }
-
-        PhysicalHashAggregateOperator rhs = (PhysicalHashAggregateOperator) obj;
-        if (this == rhs) {
+    public boolean equals(Object o) {
+        if (this == o) {
             return true;
         }
-
-        return type.equals(rhs.type) &&
-                groupBys.equals(rhs.groupBys) &&
-                aggregations.keySet().equals(rhs.aggregations.keySet());
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalHashAggregateOperator that = (PhysicalHashAggregateOperator) o;
+        return type == that.type && Objects.equals(aggregations, that.aggregations) &&
+                Objects.equals(groupBys, that.groupBys);
     }
 
     @Override
