@@ -34,8 +34,8 @@ void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index,
     append(src, index, size);
 }
 
-Status ConstColumn::replace_rows(const Column& src, const uint32_t* replace_idxes) {
-    return _data->replace_rows(src, replace_idxes);
+Status ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    return _data->update_rows(src, indexes);
 }
 
 void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {

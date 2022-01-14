@@ -43,12 +43,12 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
 }
 
 template <typename T>
-Status FixedLengthColumnBase<T>::replace_rows(const Column& src, const uint32_t* replace_indexes) {
+Status FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     size_t replace_num = src.size();
     for (uint32_t i = 0; i < replace_num; ++i) {
-        DCHECK_LT(replace_indexes[i], _data.size());
-        _data[replace_indexes[i]] = src_data[i];
+        DCHECK_LT(indexes[i], _data.size());
+        _data[indexes[i]] = src_data[i];
     }
     return Status::OK();
 }

@@ -186,13 +186,13 @@ void BinaryColumn::_build_slices() const {
     _slices_cache = true;
 }
 
-Status BinaryColumn::replace_rows(const Column& src, const uint32_t* replace_idxes) {
+Status BinaryColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& src_column = down_cast<const BinaryColumn&>(src);
     size_t replace_num = src.size();
     bool need_resize = false;
     for (size_t i = 0; i < replace_num; ++i) {
-        DCHECK_LT(replace_idxes[i], _offsets.size());
-        uint32_t cur_len = _offsets[replace_idxes[i] + 1] - _offsets[replace_idxes[i]];
+        DCHECK_LT(indexes[i], _offsets.size());
+        uint32_t cur_len = _offsets[indexes[i] + 1] - _offsets[indexes[i]];
         uint32_t new_len = src_column._offsets[i + 1] - src_column._offsets[i];
         if (cur_len != new_len) {
             need_resize = true;
@@ -206,22 +206,22 @@ Status BinaryColumn::replace_rows(const Column& src, const uint32_t* replace_idx
         const auto& src_offsets = src_column.get_offset();
         for (size_t i = 0; i < replace_num; ++i) {
             uint32_t str_size = src_offsets[i + 1] - src_offsets[i];
-            strings::memcpy_inlined(dest_bytes + _offsets[replace_idxes[i]], src_bytes.data() + src_offsets[i],
-                                    str_size);
+            strings::memcpy_inlined(dest_bytes + _offsets[indexes[i]], src_bytes.data() + src_offsets[i], str_size);
         }
         _slices_cache = false;
     } else {
         auto new_binary_column = BinaryColumn::create();
         size_t idx_begin = 0;
         for (size_t i = 0; i < replace_num; i++) {
-            DCHECK_GE(_offsets.size() - 1, replace_idxes[i]);
-            size_t count = replace_idxes[i] - idx_begin;
+            DCHECK_GE(_offsets.size() - 1, indexes[i]);
+            size_t count = indexes[i] - idx_begin;
             new_binary_column->append(*this, idx_begin, count);
             new_binary_column->append(src, i, 1);
-            idx_begin = replace_idxes[i] + 1;
+            idx_begin = indexes[i] + 1;
         }
-        if (_offsets.size() - idx_begin - 1 > 0) {
-            new_binary_column->append(*this, idx_begin, _offsets.size() - idx_begin - 1);
+        int32_t remain_count = _offsets.size() - idx_begin - 1;
+        if (remain_count > 0) {
+            new_binary_column->append(*this, idx_begin, remain_count);
         }
         swap_column(*new_binary_column.get());
     }

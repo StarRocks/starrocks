@@ -123,14 +123,14 @@ void ArrayColumn::append_default(size_t count) {
     _offsets->append_value_multiple_times(&offset, count);
 }
 
-Status ArrayColumn::replace_rows(const Column& src, const uint32_t* replace_idxes) {
+Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& array_column = down_cast<const ArrayColumn&>(src);
 
     const UInt32Column& src_offsets = array_column.offsets();
     size_t replace_num = src.size();
     bool need_resize = false;
     for (size_t i = 0; i < replace_num; ++i) {
-        if (_offsets->get_data()[replace_idxes[i] + 1] - _offsets->get_data()[replace_idxes[i]] !=
+        if (_offsets->get_data()[indexes[i] + 1] - _offsets->get_data()[indexes[i]] !=
             src_offsets.get_data()[i + 1] - src_offsets.get_data()[i]) {
             need_resize = true;
             break;
@@ -141,20 +141,20 @@ Status ArrayColumn::replace_rows(const Column& src, const uint32_t* replace_idxe
         std::vector<uint32_t> element_idxes;
         for (size_t i = 0; i < replace_num; ++i) {
             size_t element_count = src_offsets.get_data()[i + 1] - src_offsets.get_data()[i];
-            size_t element_offset = _offsets->get_data()[replace_idxes[i]];
+            size_t element_offset = _offsets->get_data()[indexes[i]];
             for (size_t j = 0; j < element_count; j++) {
                 element_idxes.emplace_back(element_offset + j);
             }
         }
-        RETURN_IF_ERROR(_elements->replace_rows(array_column.elements(), element_idxes.data()));
+        RETURN_IF_ERROR(_elements->update_rows(array_column.elements(), element_idxes.data()));
     } else {
         MutableColumnPtr new_array_column = clone_empty();
         size_t idx_begin = 0;
         for (size_t i = 0; i < replace_num; ++i) {
-            size_t count = replace_idxes[i] - idx_begin;
+            size_t count = indexes[i] - idx_begin;
             new_array_column->append(*this, idx_begin, count);
             new_array_column->append(src, i, 1);
-            idx_begin = replace_idxes[i] + 1;
+            idx_begin = indexes[i] + 1;
         }
         int32_t remain_count = _offsets->size() - idx_begin - 1;
         if (remain_count > 0) {

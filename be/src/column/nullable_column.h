@@ -142,9 +142,7 @@ public:
 
     void append_default(size_t count) override { append_nulls(count); }
 
-    bool need_resize(const Column& src, const uint32_t* replace_idxe);
-
-    Status replace_rows(const Column& src, const uint32_t* replace_idxes) override;
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t max_one_element_serialize_size() const override {
         return sizeof(bool) + _data_column->max_one_element_serialize_size();

@@ -125,12 +125,12 @@ void ObjectColumn<T>::append_default(size_t count) {
 }
 
 template <typename T>
-Status ObjectColumn<T>::replace_rows(const Column& src, const uint32_t* replace_idxes) {
+Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     size_t replace_num = src.size();
     for (size_t i = 0; i < replace_num; i++) {
-        DCHECK_LT(replace_idxes[i], _pool.size());
-        _pool[replace_idxes[i]] = *obj_col.get_object(i);
+        DCHECK_LT(indexes[i], _pool.size());
+        _pool[indexes[i]] = *obj_col.get_object(i);
     }
     _cache_ok = false;
     return Status::OK();

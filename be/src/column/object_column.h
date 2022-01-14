@@ -100,7 +100,7 @@ public:
 
     void append_default(size_t count) override;
 
-    Status replace_rows(const Column& src, const uint32_t* replace_idxes) override;
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override;
     uint32_t serialize_default(uint8_t* pos) override;

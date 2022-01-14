@@ -151,61 +151,18 @@ void NullableColumn::append_value_multiple_times(const void* value, size_t count
     null_column_data().insert(null_column_data().end(), count, 0);
 }
 
-bool NullableColumn::need_resize(const Column& src, const uint32_t* replace_idxes) {
-    size_t replace_num = src.size();
-    if (src.is_nullable()) {
-        const auto& c = down_cast<const NullableColumn&>(src);
-        for (size_t i = 0; i < replace_num; ++i) {
-            if (_null_column->get_data()[replace_idxes[i]] != c._null_column->get_data()[i]) {
-                return true;
-            }
-        }
-    } else {
-        for (size_t i = 0; i < replace_num; ++i) {
-            if (_null_column->get_data()[replace_idxes[i]]) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-Status NullableColumn::replace_rows(const Column& src, const uint32_t* replace_idxes) {
+Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
-
-    //bool resize = need_resize(src, replace_idxes);
-
     size_t replace_num = src.size();
-    /*
-    if (resize) {
-        MutableColumnPtr new_nullable_column = clone_empty();
-        size_t idx_begin = 0;
-        for (size_t i = 0; i < replace_num; ++i) {
-            size_t count = replace_idxes[i] - idx_begin;
-            new_nullable_column->append(*this, idx_begin, count);
-            new_nullable_column->append(src, i, 1);
-            idx_begin = replace_idxes[i] + 1;
-        }
-        swap_column(*new_nullable_column.get());
-    } else {
-        if (src.is_nullable()) {
-            const auto& c = down_cast<const NullableColumn&>(src);
-            _data_column->replace_rows(*c._data_column, replace_idxes);
-        } else {
-            _data_column->replace_rows(src, replace_idxes);
-        }
-    }
-    */
-
     if (src.is_nullable()) {
         const auto& c = down_cast<const NullableColumn&>(src);
-        RETURN_IF_ERROR(_null_column->replace_rows(*c._null_column, replace_idxes));
-        RETURN_IF_ERROR(_data_column->replace_rows(*c._data_column, replace_idxes));
+        RETURN_IF_ERROR(_null_column->update_rows(*c._null_column, indexes));
+        RETURN_IF_ERROR(_data_column->update_rows(*c._data_column, indexes));
     } else {
         auto new_null_column = NullColumn::create();
         new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
-        RETURN_IF_ERROR(_null_column->replace_rows(*new_null_column.get(), replace_idxes));
-        RETURN_IF_ERROR(_data_column->replace_rows(src, replace_idxes));
+        RETURN_IF_ERROR(_null_column->update_rows(*new_null_column.get(), indexes));
+        RETURN_IF_ERROR(_data_column->update_rows(src, indexes));
     }
 
     return Status::OK();
