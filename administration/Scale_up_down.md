@@ -61,6 +61,6 @@ DROP会立刻删除BE节点，丢失的副本由FE调度补齐；DECOMMISSION先
 
 Drop backend是一个危险操作所以需要二次确认后执行
 
-* `alter system dropp backend "be_host:be_heartbeat_service_port";`
+* `alter system drop backend "be_host:be_heartbeat_service_port";`
 
 FE和BE扩容之后的状态，也可以通过查看[集群状态](../administration/Cluster_administration.md#确认集群健康状态)一节中的页面进行查看。
