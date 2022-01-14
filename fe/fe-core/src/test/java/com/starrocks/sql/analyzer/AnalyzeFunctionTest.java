@@ -1,16 +1,25 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
+import java.util.List;
 import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
     // use a unique dir so that it won't be conflict with other unit test which
@@ -74,5 +83,19 @@ public class AnalyzeFunctionTest {
         analyzeFail("select ndv(h1) from test_object");
         analyzeFail("select approx_count_distinct(b1) from test_object");
         analyzeFail("select ndv(b1) from test_object");
+    }
+
+    @Test
+    public void testFuncNullable() {
+        QueryRelation queryRelation = analyzeSuccess("SELECT MICROSECONDS_SUB(\"1969-12-25\", NULL) FROM t1");
+
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        LogicalPlan logicalPlan =
+                new RelationTransformer(columnRefFactory, getConnectContext()).transform(queryRelation);
+        List<ColumnRefOperator> outColumns = logicalPlan.getOutputColumn();
+
+        Assert.assertEquals(1, outColumns.size());
+        Assert.assertEquals(Type.DATETIME, outColumns.get(0).getType());
+        Assert.assertTrue(outColumns.get(0).isNullable());
     }
 }
