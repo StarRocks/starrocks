@@ -78,6 +78,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
     public static final String STREAMING_PREAGGREGATION_MODE = "streaming_preaggregation_mode";
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
+    public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
@@ -124,7 +125,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // disable join reorder
     public static final String DISABLE_JOIN_REORDER = "disable_join_reorder";
 
-    public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE = "enable_filter_unused_columns_in_scan_stage";
+    public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
+            "enable_filter_unused_columns_in_scan_stage";
 
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
@@ -295,6 +297,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
+
+    @VariableMgr.VarAttr(name = DISABLE_BUCKET_JOIN)
+    private boolean disableBucketJoin = false;
 
     @VariableMgr.VarAttr(name = CBO_USE_CORRELATED_JOIN_ESTIMATE)
     private boolean useCorrelatedJoinEstimate = true;
@@ -542,6 +547,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableColocateJoin;
     }
 
+    public boolean isDisableBucketJoin() {
+        return disableBucketJoin;
+    }
+
     public int getParallelExecInstanceNum() {
         return parallelExecInstanceNum;
     }
@@ -765,7 +774,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableExchangePassThrough() {
         return enableExchangePassThrough;
     }
-
 
     /**
      * check cbo_cte_reuse && enable_pipeline
