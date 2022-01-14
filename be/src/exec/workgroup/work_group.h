@@ -92,7 +92,7 @@ public:
     void pick_and_run_io_task();
 
 public:
-    // Return current io task queue size 
+    // Return current io task queue size
     // need be lock when invoking
     size_t io_task_queue_size();
 

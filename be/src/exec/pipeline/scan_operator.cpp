@@ -117,6 +117,9 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     }
 
     eval_runtime_bloom_filters(chunk.value().get());
+    if (_workgroup != nullptr) {
+        _workgroup->decrease_chunk_num(1);
+    }
 
     return chunk;
 }

@@ -159,16 +159,16 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _driver_dispatcher = new pipeline::GlobalDriverDispatcher(std::move(driver_dispatcher_thread_pool));
     _driver_dispatcher->initialize(max_thread_num);
 
-    // 
+    //
     std::unique_ptr<ThreadPool> io_dispatcher_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("io_dispatcher") // pipeline dispatcher
                             .set_min_threads(0)
-                            .set_max_threads(1)         // just for debug
+                            .set_max_threads(2) // just for debug
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&io_dispatcher_thread_pool));
     _io_dispatcher = new workgroup::IoDispatcher(std::move(io_dispatcher_thread_pool));
-    _io_dispatcher->initialize(1); // just for debug
+    _io_dispatcher->initialize(2); // just for debug
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);

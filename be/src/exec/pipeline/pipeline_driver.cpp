@@ -193,10 +193,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         }
         _first_unfinished = _new_first_unfinished;
 
-        if (_workgroup != nullptr) {
-            _workgroup->decrease_chunk_num(1);
-        }
-
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
             set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);

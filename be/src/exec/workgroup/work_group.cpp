@@ -3,8 +3,8 @@
 #include "exec/workgroup/work_group.h"
 
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/exec_env.h"
 #include "glog/logging.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 namespace workgroup {
@@ -174,8 +174,8 @@ void WorkGroup::estimate_trend_factor_period() {
     // _expect_factor mean we except io resource ratio of this WorkGroup to suit to 70 percent cpu limit
     // so _expect_factor = decrease_factor / increase_factor * 70
 
-    double decrease_factor =
-            _decrease_chunk_num_period / get_cpu_actual_use_ratio() * get_cpu_expected_use_ratio() / get_cpu_actual_use_ratio();
+    double decrease_factor = _decrease_chunk_num_period / get_cpu_actual_use_ratio() * get_cpu_expected_use_ratio() /
+                             get_cpu_actual_use_ratio();
     double increase_factor = _increase_chunk_num_period / get_cpu_actual_use_ratio();
 
     _expect_factor = decrease_factor / increase_factor * get_cpu_expected_use_ratio();
@@ -183,17 +183,16 @@ void WorkGroup::estimate_trend_factor_period() {
     // diff_factor mean diff between actually need io resource percent and limit percent of cpu
     // if it is nagative, it mean resouse less and need more
     // if it is positive, it mean resouse is enough and can be reduce
-    _diff_factor = get_cpu_expected_use_ratio() - _expect_factor;
+    //_diff_factor = get_cpu_expected_use_ratio() - _expect_factor;
+    _diff_factor = _select_factor - _expect_factor;
 
     // just for debug
-    LOG(WARNING) << "estimate_trend_factor_period: " << name() 
+    LOG(WARNING) << "estimate_trend_factor_period: " << name()
                  << " decrease_chunk_num_period: " << _decrease_chunk_num_period
                  << " get_cpu_actual_use_ratio: " << get_cpu_actual_use_ratio()
                  << " get_cpu_expected_use_ratio: " << get_cpu_expected_use_ratio()
-                 << " increase_chunk_num_period: " << _increase_chunk_num_period
-                 << " expect_factor: " << _expect_factor
-                 << " decrease_factor: " << decrease_factor
-                 << " increase_factor: " << increase_factor
+                 << " increase_chunk_num_period: " << _increase_chunk_num_period << " expect_factor: " << _expect_factor
+                 << " decrease_factor: " << decrease_factor << " increase_factor: " << increase_factor
                  << " diff_factor: " << _diff_factor;
 
     // it only use for this period to calculate factors
@@ -217,10 +216,10 @@ void WorkGroupManager::adjust_weight_if_need() {
         return;
     }
 
-    // lock 
+    // lock
     _io_wgs.clear();
     for (const auto& wg : _ready_wgs) {
-       _io_wgs.push_back(wg); 
+        _io_wgs.push_back(wg);
     }
 
     // calculate all wg factors
@@ -246,7 +245,7 @@ void WorkGroupManager::adjust_weight_if_need() {
         _cur_schedule_num_period = _schedule_num_period;
     }
 
-    // just for debug 
+    // just for debug
     LOG(WARNING) << "positive_total_diff_factor: " << positive_total_diff_factor
                  << " negative_total_diff_factor: " << negative_total_diff_factor;
 
@@ -257,7 +256,7 @@ void WorkGroupManager::adjust_weight_if_need() {
             wg->set_select_factor(wg->get_cpu_expected_use_ratio());
         }
         schedule_io_task();
-        _cur_schedule_num = _cur_schedule_num_period ;
+        _cur_schedule_num = _cur_schedule_num_period;
         _is_scheduled.store(false, std::memory_order_release);
         return;
     }
@@ -278,8 +277,8 @@ void WorkGroupManager::adjust_weight_if_need() {
                 wg->update_select_factor(0 - negative_total_diff_factor * wg->get_diff_factor() /
                                                      negative_total_diff_factor);
             } else if (wg->get_diff_factor() > 0) {
-                wg->update_select_factor(0 - negative_total_diff_factor * wg->get_diff_factor() /
-                                                     positive_total_diff_factor);
+                wg->update_select_factor(negative_total_diff_factor * wg->get_diff_factor() /
+                                         positive_total_diff_factor);
             }
         }
     } else {
@@ -297,6 +296,13 @@ void WorkGroupManager::adjust_weight_if_need() {
             }
         }
     }
+
+    // just for debug
+    LOG(WARNING) << "adjust weigth ==========================";
+    for (auto const& wg : _io_wgs) {
+        LOG(WARNING) << "name " << wg->name() << " select_factor: " << wg->get_select_factor();
+    }
+
     schedule_io_task();
     _cur_schedule_num = _cur_schedule_num_period;
     _is_scheduled.store(false, std::memory_order_release);
@@ -354,11 +360,11 @@ WorkGroup* WorkGroupManager::pick_next_wg_for_io() {
     } while (wg->io_task_queue_size() == 0);
 
     if (wg->io_task_queue_size() == 1) {
-       _ready_wgs.erase(wg); 
+        _ready_wgs.erase(wg);
     }
     _total_task_num--;
 
-    // just for debug 
+    // just for debug
     LOG(WARNING) << "select: " << wg->name();
     return wg;
 }
@@ -374,11 +380,11 @@ bool WorkGroupManager::try_offer_io_task(WorkGroup* wg, const PriorityThreadPool
         is_ok = wg->try_offer_io_task(task);
         if (is_ok) {
             _ready_wgs.emplace(wg);
-        }    
+        }
     } else {
         is_ok = wg->try_offer_io_task(task);
     }
-    
+
     if (is_ok) {
         _total_task_num++;
         _cv.notify_one();

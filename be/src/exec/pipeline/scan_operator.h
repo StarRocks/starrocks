@@ -14,7 +14,7 @@ namespace starrocks {
 namespace workgroup {
 class WorkGroup;
 class WorkGroupManager;
-}
+} // namespace workgroup
 namespace vectorized {
 class RuntimeFilterProbeCollector;
 }
