@@ -176,7 +176,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
         num_rows += !has_error;
         if (!has_error) {
-            //Partition column not stored in text file, we should append these columns
+            // Partition column not stored in text file, we should append these columns
             // when we select partition column.
             int num_part_columns = _file_read_param.partition_columns.size();
             for (int p = 0; p < num_part_columns; ++p) {
