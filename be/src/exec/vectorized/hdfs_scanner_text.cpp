@@ -114,8 +114,7 @@ void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
 
 Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     CHECK(chunk != nullptr);
-    Status status = parse_csv(runtime_state->chunk_size(), chunk);
-    RETURN_IF_ERROR(status);
+    RETURN_IF_ERROR(parse_csv(runtime_state->chunk_size(), chunk));
 
     ChunkPtr ck = *chunk;
     // do stats before we filter rows which does not match.
@@ -164,7 +163,8 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
 
         bool has_error = false;
-        for (int j = 0; j < _scanner_params.materialize_slots.size(); j++) {
+        int num_materialize_columns = _scanner_params.materialize_slots.size();
+        for (int j = 0; j < num_materialize_columns; j++) {
             int index = _scanner_params.materialize_index_in_chunk[j];
             const Slice& field = fields[_scanner_params.materialize_slots[j]->id() - 1];
             options.type_desc = &(_scanner_params.materialize_slots[j]->type());
@@ -176,7 +176,10 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
         num_rows += !has_error;
         if (!has_error) {
-            for (int p = 0; p< _file_read_param.partition_columns.size(); ++p) {
+            //Partition column not stored in text file, we should append these columns
+            // when we select partition column.
+            int num_part_columns = _file_read_param.partition_columns.size();
+            for (int p = 0; p < num_part_columns; ++p) {
                 int index = _scanner_params.partition_index_in_chunk[p];
                 Column* column = _column_raw_ptrs[index];
                 ColumnPtr partition_value = _file_read_param.partition_values[p];
