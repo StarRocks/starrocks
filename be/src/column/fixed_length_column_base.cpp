@@ -43,6 +43,17 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
 }
 
 template <typename T>
+Status FixedLengthColumnBase<T>::replace_rows(const Column& src, const uint32_t* replace_indexes) {
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    size_t replace_num = src.size();
+    for (uint32_t i = 0; i < replace_num; ++i) {
+        DCHECK_LT(replace_indexes[i], _data.size());
+        _data[replace_indexes[i]] = src_data[i];
+    }
+    return Status::OK();
+}
+
+template <typename T>
 size_t FixedLengthColumnBase<T>::filter_range(const Column::Filter& filter, size_t from, size_t to) {
     auto size = ColumnHelper::filter_range<T>(filter, _data.data(), from, to);
     this->resize(size);

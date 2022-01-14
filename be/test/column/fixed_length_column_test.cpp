@@ -510,4 +510,35 @@ TEST(FixedLengthColumnTest, test_swap_column) {
     ASSERT_EQ(3, c2->get_data()[2]);
 }
 
+TEST(FixedLengthColumnTest, test_replace_rows) {
+    auto column = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i < 100; i++) {
+        column->append(i);
+    }
+
+    ASSERT_EQ(true, column->is_numeric());
+    ASSERT_EQ(100, column->size());
+    ASSERT_EQ(100 * 4, column->byte_size());
+
+    for (int i = 0; i < 100; i++) {
+        ASSERT_EQ(column->get_data()[i], i);
+    }
+
+    auto replace_column = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i < 10; i++) {
+        replace_column->append(i + 100);
+    }
+
+    std::vector<uint32_t> replace_idxes = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    ASSERT_TRUE(column->replace_rows(*replace_column.get(), replace_idxes.data()).ok());
+
+    for (int i = 0; i < 10; i++) {
+        ASSERT_EQ(column->get_data()[i], i + 100);
+    }
+
+    for (int i = 10; i < 100; i++) {
+        ASSERT_EQ(column->get_data()[i], i);
+    }
+}
+
 } // namespace starrocks::vectorized

@@ -814,4 +814,76 @@ PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
     ASSERT_EQ(hash_value_overflow, hash_value_overflow_test[2]);
 }
 
+PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
+    auto offsets = UInt32Column::create();
+    auto elements = Int32Column::create();
+    auto column = ArrayColumn::create(elements, offsets);
+
+    // insert [1, 2, 3], [4, 5, 6]
+    elements->append(1);
+    elements->append(2);
+    elements->append(3);
+    offsets->append(3);
+
+    elements->append(4);
+    elements->append(5);
+    elements->append(6);
+    offsets->append(6);
+
+    // append [7, 8, 9]
+    elements->append(7);
+    elements->append(8);
+    elements->append(9);
+    offsets->append(9);
+
+    // append [10, 11, 12]
+    elements->append(10);
+    elements->append(11);
+    elements->append(12);
+    offsets->append(12);
+
+    auto offset_col1 = UInt32Column::create();
+    auto element_col1 = Int32Column::create();
+    auto replace_col1 = ArrayColumn::create(element_col1, offset_col1);
+
+    // insert [101, 102], [103, 104]
+    element_col1->append(101);
+    element_col1->append(102);
+    offset_col1->append(2);
+
+    element_col1->append(103);
+    element_col1->append(104);
+    offset_col1->append(4);
+
+    std::vector<uint32_t> replace_idxes = {1, 3};
+    ASSERT_TRUE(column->replace_rows(*replace_col1.get(), replace_idxes.data()).ok());
+
+    ASSERT_EQ(4, column->size());
+    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
+    ASSERT_EQ("[101, 102]", column->debug_item(1));
+    ASSERT_EQ("[7, 8, 9]", column->debug_item(2));
+    ASSERT_EQ("[103, 104]", column->debug_item(3));
+
+    auto offset_col2 = UInt32Column::create();
+    auto element_col2 = Int32Column::create();
+    auto replace_col2 = ArrayColumn::create(element_col2, offset_col2);
+
+    // insert [201, 202], [203, 204]
+    element_col2->append(201);
+    element_col2->append(202);
+    offset_col2->append(2);
+
+    element_col2->append(203);
+    element_col2->append(204);
+    offset_col2->append(4);
+
+    ASSERT_TRUE(column->replace_rows(*replace_col2.get(), replace_idxes.data()).ok());
+
+    ASSERT_EQ(4, column->size());
+    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
+    ASSERT_EQ("[201, 202]", column->debug_item(1));
+    ASSERT_EQ("[7, 8, 9]", column->debug_item(2));
+    ASSERT_EQ("[203, 204]", column->debug_item(3));
+}
+
 } // namespace starrocks::vectorized

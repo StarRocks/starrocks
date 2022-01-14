@@ -167,6 +167,8 @@ public:
         _slices_cache = false;
     }
 
+    Status replace_rows(const Column& src, const uint32_t* replace_idxes) override;
+
     uint32_t max_one_element_serialize_size() const override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override;

@@ -186,6 +186,49 @@ void BinaryColumn::_build_slices() const {
     _slices_cache = true;
 }
 
+Status BinaryColumn::replace_rows(const Column& src, const uint32_t* replace_idxes) {
+    const auto& src_column = down_cast<const BinaryColumn&>(src);
+    size_t replace_num = src.size();
+    bool need_resize = false;
+    for (size_t i = 0; i < replace_num; ++i) {
+        DCHECK_LT(replace_idxes[i], _offsets.size());
+        uint32_t cur_len = _offsets[replace_idxes[i] + 1] - _offsets[replace_idxes[i]];
+        uint32_t new_len = src_column._offsets[i + 1] - src_column._offsets[i];
+        if (cur_len != new_len) {
+            need_resize = true;
+            break;
+        }
+    }
+
+    if (!need_resize) {
+        auto* dest_bytes = _bytes.data();
+        const auto& src_bytes = src_column.get_bytes();
+        const auto& src_offsets = src_column.get_offset();
+        for (size_t i = 0; i < replace_num; ++i) {
+            uint32_t str_size = src_offsets[i + 1] - src_offsets[i];
+            strings::memcpy_inlined(dest_bytes + _offsets[replace_idxes[i]], src_bytes.data() + src_offsets[i],
+                                    str_size);
+        }
+        _slices_cache = false;
+    } else {
+        auto new_binary_column = BinaryColumn::create();
+        size_t idx_begin = 0;
+        for (size_t i = 0; i < replace_num; i++) {
+            DCHECK_GE(_offsets.size() - 1, replace_idxes[i]);
+            size_t count = replace_idxes[i] - idx_begin;
+            new_binary_column->append(*this, idx_begin, count);
+            new_binary_column->append(src, i, 1);
+            idx_begin = replace_idxes[i] + 1;
+        }
+        if (_offsets.size() - idx_begin - 1 > 0) {
+            new_binary_column->append(*this, idx_begin, _offsets.size() - idx_begin - 1);
+        }
+        swap_column(*new_binary_column.get());
+    }
+
+    return Status::OK();
+}
+
 void BinaryColumn::assign(size_t n, size_t idx) {
     std::string value = std::string((char*)_bytes.data() + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
     _bytes.clear();
