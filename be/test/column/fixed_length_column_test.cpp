@@ -510,7 +510,7 @@ TEST(FixedLengthColumnTest, test_swap_column) {
     ASSERT_EQ(3, c2->get_data()[2]);
 }
 
-TEST(FixedLengthColumnTest, test_replace_rows) {
+TEST(FixedLengthColumnTest, test_update_rows) {
     auto column = FixedLengthColumn<int32_t>::create();
     for (int i = 0; i < 100; i++) {
         column->append(i);

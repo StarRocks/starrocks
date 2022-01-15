@@ -814,7 +814,7 @@ PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
     ASSERT_EQ(hash_value_overflow, hash_value_overflow_test[2]);
 }
 
-PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
+PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     auto offsets = UInt32Column::create();
     auto elements = Int32Column::create();
     auto column = ArrayColumn::create(elements, offsets);

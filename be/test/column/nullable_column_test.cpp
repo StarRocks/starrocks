@@ -198,7 +198,7 @@ PARALLEL_TEST(NullableColumnTest, test_clone_empty) {
     ASSERT_EQ(0, down_cast<NullableColumn*>(c2.get())->null_column()->size());
 }
 
-PARALLEL_TEST(NullableColumnTest, test_replace_rows) {
+PARALLEL_TEST(NullableColumnTest, test_update_rows) {
     auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
     column->append_datum((int32_t)1);
     column->append_datum((int32_t)2);

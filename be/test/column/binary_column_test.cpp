@@ -478,7 +478,7 @@ PARALLEL_TEST(BinaryColumnTest, test_clone_empty) {
     ASSERT_EQ(0, c2->size());
 }
 
-PARALLEL_TEST(BinaryColumnTest, test_replace_rows) {
+PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
