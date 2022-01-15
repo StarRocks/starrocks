@@ -15,6 +15,7 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
+#include "runtime/external_scan_context_mgr.h"
 #include "simd/simd.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
@@ -95,6 +96,7 @@ private:
             _read_chunk.reset();
             _dict_chunk.reset();
             _final_chunk.reset();
+            _adapt_chunk.reset();
         }
 
         Status seek_columns(ordinal_t pos) {
@@ -131,6 +133,7 @@ private:
             usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
             usage += (_dict_chunk.get() != _read_chunk.get()) ? _dict_chunk->memory_usage() : 0;
             usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
+            usage += (_final_chunk.get() != _adapt_chunk.get()) ? _adapt_chunk->memory_usage() : 0;
             return usage;
         }
 
@@ -150,6 +153,7 @@ private:
         std::shared_ptr<Chunk> _read_chunk;
         std::shared_ptr<Chunk> _dict_chunk;
         std::shared_ptr<Chunk> _final_chunk;
+        std::shared_ptr<Chunk> _adapt_chunk;
 
         // true iff |_is_dict_column| contains at least one `true`, i.e,
         // |_column_iterators| contains at least one `DictCodeColumnIterator`.
@@ -158,6 +162,9 @@ private:
         // if true, the last item of |_column_iterators| is a `RowIdColumnIterator` and
         // the last item of |_read_schema| and |_dict_decode_schema| is a row id field.
         bool _late_materialize{false};
+
+        // not all dict encdoe
+        bool _has_force_dict_encode{false};
     };
 
     Status _init();
@@ -196,6 +203,8 @@ private:
     Status _finish_late_materialization(ScanContext* ctx);
 
     Status _build_final_chunk(ScanContext* ctx);
+
+    Status _encode_to_global_id(ScanContext* ctx);
 
     void _switch_context(ScanContext* to);
 
@@ -362,10 +371,10 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             iter_opts.reader_type = _opts.reader_type;
             RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
 
-            // we have a global dict map but column was not encode by dict
-            if (_opts.global_dictmaps->count(cid) && !_column_iterators[cid]->all_page_dict_encoded()) {
-                DCHECK(false) << "column was not dict encode, but segment_iterator has a global dict map";
-                return Status::InternalError(fmt::format("cid:{} column has a non-dictionary coding page", cid));
+            _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
+            if (_opts.global_dictmaps->count(cid)) {
+                _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
+                _column_decoders[cid].check_code_convert_map();
             }
 
             // turn off low cardinality if not all data pages are dict-encoded.
@@ -647,6 +656,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
     _context->_final_chunk->reset();
+    _context->_adapt_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
 
@@ -727,6 +737,11 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
     }
 
+    if (_context->_has_force_dict_encode) {
+        RETURN_IF_ERROR(_encode_to_global_id(_context));
+        chunk = _context->_adapt_chunk.get();
+    }
+
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
@@ -758,7 +773,25 @@ void SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     DCHECK_GT(this->output_schema().num_fields(), 0);
-    to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size);
+
+    if (to->_has_force_dict_encode) {
+        // rebuild encoded schema
+        _encoded_schema.clear();
+        for (const auto& field : schema().fields()) {
+            if (_can_using_global_dict(field)) {
+                _encoded_schema.append(Field::convert_to_dict_field(*field));
+            } else {
+                _encoded_schema.append(field);
+            }
+        }
+        to->_final_chunk = ChunkHelper::new_chunk(this->_encoded_schema, _opts.chunk_size);
+    } else {
+        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size);
+    }
+
+    to->_adapt_chunk = to->_has_force_dict_encode ? ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size)
+                                                  : to->_final_chunk;
+
     _context = to;
 }
 
@@ -876,7 +909,9 @@ inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
 }
 
 bool SegmentIterator::_can_using_global_dict(const FieldPtr& field) const {
-    return _opts.global_dictmaps->find(field->id()) != _opts.global_dictmaps->end();
+    auto cid = field->id();
+    return _opts.global_dictmaps->find(cid) != _opts.global_dictmaps->end() &&
+           !_column_decoders[cid].need_force_encode_to_global_id();
 }
 
 template <bool late_materialization>
@@ -918,7 +953,9 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             auto f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
-                iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid], _opts.global_dictmaps->at(cid));
+                iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
+                                                        _column_decoders[cid].code_convert_data(),
+                                                        _opts.global_dictmaps->at(cid));
             } else {
                 iter = new DictCodeColumnIterator(cid, _column_iterators[cid]);
             }
@@ -963,6 +1000,12 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_is_dict_column.emplace_back(false);
         ctx->_late_materialize = true;
         ctx->_skip_dict_decode_indexes.push_back(false);
+    }
+
+    for (size_t i = 0; i < num_fields; ++i) {
+        const FieldPtr& f = _schema.field(i);
+        const ColumnId cid = f->id();
+        ctx->_has_force_dict_encode |= _column_decoders[cid].need_force_encode_to_global_id();
     }
 
     // build index map
@@ -1027,7 +1070,9 @@ Status SegmentIterator::_init_global_dict_decoder() {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         if (_can_using_global_dict(f)) {
-            auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid], _opts.global_dictmaps->at(cid));
+            auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
+                                                         _column_decoders[cid].code_convert_data(),
+                                                         _opts.global_dictmaps->at(cid));
             _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);
         }
@@ -1045,8 +1090,15 @@ void SegmentIterator::_rewrite_predicates() {
     // If the global dictionary optimization is enabled for the column,
     // then the output column is of type INT, and we need to rewrite the delete condition
     // so that the input is of type INT (the original input is of type String)
+    std::vector<uint8_t> disable_rewrites(_column_decoders.size());
+    for (size_t i = 0; i < _schema.num_fields(); i++) {
+        const FieldPtr& field = _schema.field(i);
+        ColumnId cid = field->id();
+        disable_rewrites[cid] = _column_decoders[cid].need_force_encode_to_global_id();
+    }
+
     for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
-        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps);
+        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_rewrites);
         crewriter.rewrite_predicate(&_obj_pool);
     }
 }
@@ -1146,6 +1198,24 @@ Status SegmentIterator::_build_final_chunk(ScanContext* ctx) {
     }
     bool may_has_del_row = ctx->_dict_chunk->delete_state() != DEL_NOT_SATISFIED;
     ctx->_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    return Status::OK();
+}
+
+Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
+    int num_columns = ctx->_final_chunk->num_columns();
+    auto final_chunk = ctx->_final_chunk;
+
+    for (size_t i = 0; i < num_columns; i++) {
+        const FieldPtr& f = _schema.field(i);
+        const ColumnId cid = f->id();
+        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
+        ColumnPtr& dst = ctx->_adapt_chunk->get_column_by_index(i);
+        if (_column_decoders[cid].need_force_encode_to_global_id()) {
+            RETURN_IF_ERROR(_column_decoders[cid].encode_to_global_id(col.get(), dst.get()));
+        } else {
+            col->swap_column(*dst);
+        }
+    }
     return Status::OK();
 }
 
@@ -1286,6 +1356,7 @@ void SegmentIterator::close() {
     _obj_pool.clear();
     _rblock.reset();
     _segment.reset();
+    _column_decoders.clear();
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
