@@ -260,12 +260,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         for (int i = 0; i < requiredColumns.size(); ++i) {
             IcebergColumnStats columnStats = stats.getColumnStatistics()
                     .get(requiredColumns.get(i).getName());
-            LOG.debug("Test Column min value " + columnStats.getMinValue()
-                    + ", Max value " + columnStats.getMaxValue() + ", column " + requiredColumns.get(i).getName());
             ColumnStatistic statistic = new ColumnStatistic(
                     columnStats.getMinValue(),
                     columnStats.getMaxValue(),
-                    columnStats.getNumNulls(),
+                    columnStats.getNumNulls() / stats.getRowCount(),
                     columnStats.getAvgSize() < 0 ?
                             requiredColumns.get(i).getType().getTypeSize() :
                             columnStats.getAvgSize(),

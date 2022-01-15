@@ -128,8 +128,6 @@ public class IcebergTableStatisticCalculator {
             Object min = summary.getMinValues().get(fieldId);
             Object max = summary.getMaxValues().get(fieldId);
             if (min instanceof Number && max instanceof Number) {
-                LOG.debug("Iceberg min value " + ((Number) min).doubleValue());
-                LOG.debug("Iceberg max value " + ((Number) max).doubleValue());
                 columnStats.setMinValue(((Number) min).doubleValue());
                 columnStats.setMaxValue(((Number) max).doubleValue());
             }
