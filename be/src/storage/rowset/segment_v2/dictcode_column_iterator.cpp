@@ -7,14 +7,11 @@
 
 namespace starrocks::segment_v2 {
 
-Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
-    DCHECK(_col_iter->all_page_dict_encoded());
+Status GlobalDictCodeColumnIterator::build_code_convert_map(ScalarColumnIterator* file_column_iter,
+                                                            GlobalDictMap* global_dict,
+                                                            std::vector<int16_t>* code_convert_map) {
+    DCHECK(file_column_iter->all_page_dict_encoded());
 
-    // we only have to build code mapping once
-    if (_local_to_global_holder.size() > 0) {
-        return Status::OK();
-    }
-    auto file_column_iter = down_cast<ScalarColumnIterator*>(_col_iter);
     int dict_size = file_column_iter->dict_size();
 
     auto column = vectorized::BinaryColumn::create();
@@ -24,21 +21,21 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
         dict_codes[i] = i;
     }
 
-    file_column_iter->decode_dict_codes(dict_codes, dict_size, column.get());
+    RETURN_IF_ERROR(file_column_iter->decode_dict_codes(dict_codes, dict_size, column.get()));
 
-    _local_to_global_holder.resize(dict_size + 2);
-    std::fill(_local_to_global_holder.begin(), _local_to_global_holder.end(), 0);
-    _local_to_global = _local_to_global_holder.data() + 1;
+    code_convert_map->resize(dict_size + 2);
+    std::fill(code_convert_map->begin(), code_convert_map->end(), 0);
+    auto* local_to_global = code_convert_map->data() + 1;
 
     for (int i = 0; i < dict_size; ++i) {
         auto slice = column->get_slice(i);
-        auto res = _global_dict->find(slice);
-        if (res == _global_dict->end()) {
+        auto res = global_dict->find(slice);
+        if (res == global_dict->end()) {
             if (slice.size > 0) {
-                return Status::InternalError(fmt::format("not found slice:{} in global dict", slice.data));
+                return Status::InternalError(fmt::format("not found slice:{} in global dict", slice.to_string()));
             }
         } else {
-            _local_to_global[dict_codes[i]] = res->second;
+            local_to_global[dict_codes[i]] = res->second;
         }
     }
     return Status::OK();
