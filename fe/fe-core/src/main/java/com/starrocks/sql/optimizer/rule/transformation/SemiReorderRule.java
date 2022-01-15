@@ -99,10 +99,10 @@ public class SemiReorderRule extends TransformationRule {
                     .entrySet()) {
                 boolean isProjectToColumnRef = entry.getValue().isColumnRef();
                 if (!isProjectToColumnRef &&
-                        leftChildJoinRightChildOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                        leftChildJoinRightChildOutputColumns.contains(entry.getValue().getUsedColumns())) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 } else if (!isProjectToColumnRef &&
-                        newSemiOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                        newSemiOutputColumns.contains(entry.getValue().getUsedColumns())) {
                     semiExpression.put(entry.getKey(), entry.getValue());
                 }
             }
