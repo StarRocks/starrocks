@@ -90,6 +90,7 @@ add_library(Olap STATIC
     rowset/segment_v2/column_iterator.cpp
     rowset/segment_v2/column_reader.cpp
     rowset/segment_v2/column_writer.cpp
+    rowset/column_decoder.cpp
     rowset/segment_v2/default_value_column_iterator.cpp
     rowset/segment_v2/dictcode_column_iterator.cpp
     rowset/segment_v2/encoding_info.cpp

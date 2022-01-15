@@ -64,7 +64,7 @@ public:
 
     // Returns the Schema of the result.
     // If a Field uses the global dictionary strategy, the field will be rewritten as INT
-    const Schema& encoded_schema() const { return _encoded_schema; }
+    const Schema& encoded_schema() const { return _encoded_schema.num_fields() == 0 ? _schema : _encoded_schema; }
 
     virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
         _encoded_schema.reserve(schema().num_fields());
