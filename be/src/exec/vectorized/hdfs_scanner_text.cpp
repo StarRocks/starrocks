@@ -124,7 +124,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
         SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
         ExecNode::eval_conjuncts(it.second, ck.get());
         if (ck->num_rows() == 0) {
-            return Status::OK();
+            break;
         }
     }
     return Status::OK();
