@@ -5344,13 +5344,13 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("8:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: [9: day, TINYINT, true]\n" +
+                "  |  group by: [5: day, INT, true]\n" +
                 "  |  cardinality: 0\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
-                "  |  child exprs:\n" +
-                "  |      [4, TINYINT, true]\n" +
-                "  |      [8, TINYINT, true]\n" +
+                "  |  child exprs: \n" +
+                "  |      [4, INT, true]\n" +
+                "  |      [9, INT, true]\n" +
                 "  |  pass-through-operands: all"));
     }
 
@@ -5360,7 +5360,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(" 1:Project\n" +
                 "  |  output columns:\n" +
-                "  |  11 <-> day[([2: id_datetime, DATETIME, false]); args: DATETIME; result: TINYINT; args nullable: false; result nullable: false]"));
+                "  |  11 <-> day[([2: id_datetime, DATETIME, false]); args: DATETIME; result: INT; args nullable: false; result nullable: false]"));
     }
 
     @Test
