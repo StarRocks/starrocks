@@ -61,7 +61,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneExceptColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneFilterColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneHDFSScanColumnRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneIcebergScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneJoinColumnsRule;
@@ -184,7 +183,6 @@ public class RuleSet {
                 PruneScanColumnRule.ES_SCAN,
                 PruneHDFSScanColumnRule.HIVE_SCAN,
                 PruneHDFSScanColumnRule.ICEBERG_SCAN,
-                new PruneIcebergScanColumnRule(),
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
                 new PruneAggregateColumnsRule(),
