@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <stack>
 #include <unordered_map>
 
 #include "column/binary_column.h"
@@ -170,6 +171,7 @@ private:
     Status _init();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
+    template <bool check_global_dict>
     Status _init_column_iterators(const Schema& schema);
     Status _get_row_ranges_by_keys();
     Status _get_row_ranges_by_zone_map();
@@ -225,11 +227,17 @@ private:
 
     Status _read_by_column(size_t n, Chunk* result, vector<rowid_t>* rowids);
 
+    void _push_init_ctxs();
+    void _pop_init_ctxs();
+
 private:
+    using RawColumnIterators = std::vector<ColumnIterator*>;
+    using ColumnDecoders = std::vector<ColumnDecoder>;
     std::shared_ptr<Segment> _segment;
     vectorized::SegmentReadOptions _opts;
-    std::vector<ColumnIterator*> _column_iterators;
-    std::vector<ColumnDecoder> _column_decoders;
+    RawColumnIterators _column_iterators;
+    ColumnDecoders _column_decoders;
+    std::stack<std::pair<RawColumnIterators, ColumnDecoders>> _init_ctxs;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
@@ -314,7 +322,7 @@ Status SegmentIterator::_init() {
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
-    RETURN_IF_ERROR(_init_column_iterators(_schema));
+    RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
     // filter by index stage
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
@@ -333,12 +341,15 @@ Status SegmentIterator::_init() {
     return Status::OK();
 }
 
+template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
 
     const size_t n = 1 + ChunkHelper::max_column_id(schema);
     _column_iterators.resize(n, nullptr);
-    _column_decoders.resize(n);
+    if constexpr (check_global_dict) {
+        _column_decoders.resize(n);
+    }
 
     bool has_predicate = !_opts.predicates.empty();
     _predicate_need_rewrite.resize(n, false);
@@ -360,7 +371,6 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             }
 
             RETURN_IF_ERROR(_segment->new_column_iterator(cid, &_column_iterators[cid]));
-            _column_decoders[cid].set_iterator(_column_iterators[cid]);
 
             _obj_pool.add(_column_iterators[cid]);
             ColumnIteratorOptions iter_opts;
@@ -371,10 +381,13 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             iter_opts.reader_type = _opts.reader_type;
             RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
 
-            _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
-            if (_opts.global_dictmaps->count(cid)) {
-                _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
-                _column_decoders[cid].check_code_convert_map();
+            if constexpr (check_global_dict) {
+                _column_decoders[cid].set_iterator(_column_iterators[cid]);
+                _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
+                if (_opts.global_dictmaps->count(cid)) {
+                    _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
+                    _column_decoders[cid].check_code_convert_map();
+                }
             }
 
             // turn off low cardinality if not all data pages are dict-encoded.
@@ -421,12 +434,16 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         rowid_t upper_rowid = num_rows();
 
         if (!range.upper().empty()) {
-            _init_column_iterators(range.lower().schema());
+            _push_init_ctxs();
+            _init_column_iterators<false>(range.lower().schema());
             RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
+            _pop_init_ctxs();
         }
         if (!range.lower().empty() && upper_rowid > 0) {
-            _init_column_iterators(range.lower().schema());
+            _push_init_ctxs();
+            _init_column_iterators<false>(range.lower().schema());
             RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
+            _pop_init_ctxs();
         }
         if (lower_rowid <= upper_rowid) {
             _scan_range.add(Range{lower_rowid, upper_rowid});
@@ -1337,6 +1354,17 @@ Status SegmentIterator::_apply_del_vector() {
         _opts.stats->rows_del_vec_filtered += input_rows - filtered_rows;
     }
     return Status::OK();
+}
+
+void SegmentIterator::_push_init_ctxs() {
+    _init_ctxs.emplace(std::move(_column_iterators), std::move(_column_decoders));
+}
+
+void SegmentIterator::_pop_init_ctxs() {
+    auto& [column_iterators, column_decoders] = _init_ctxs.top();
+    _column_iterators = std::move(column_iterators);
+    _column_decoders = std::move(column_decoders);
+    _init_ctxs.pop();
 }
 
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
