@@ -117,9 +117,15 @@ private:
 
     bool _is_first_chunk = true;
     doris::PBackendService_Stub* _brpc_stub = nullptr;
+
+    // If pipeline level shuffle is enable, the size of the _chunks/_chunk_requests/_current_request_bytes
+    // equals with dop of dest pipeline
+    // If pipeline level shuffle is disable, the size of _chunks/_chunk_requests/_current_request_bytes
+    // always be 1
     std::vector<std::unique_ptr<vectorized::Chunk>> _chunks;
     std::vector<PTransmitChunkParamsPtr> _chunk_requests;
     std::vector<size_t> _current_request_bytes;
+
     bool _is_inited = false;
     bool _use_pass_through = false;
 };

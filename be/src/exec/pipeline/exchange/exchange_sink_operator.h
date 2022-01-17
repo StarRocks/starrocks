@@ -78,7 +78,9 @@ private:
     // If the pipeline of dest be is ExchangeSourceOperator -> AggregateBlockingSinkOperator(with group by)
     // then we shuffle for different parallelism at sender side(ExchangeSinkOperator) if _is_pipeline_level_shuffle is true
     const bool _is_pipeline_level_shuffle;
-    // Invalid if _is_pipeline_level_shuffle is false
+    // Degree of pipeline level shuffle
+    // If _is_pipeline_level_shuffle is false, it is set to 1
+    // If _is_pipeline_level_shuffle is true, it is equal with dop of dest pipeline
     const int32_t _num_shuffles;
     // Sender instance id, unique within a fragment.
     const int32_t _sender_id;
