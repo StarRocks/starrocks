@@ -96,8 +96,8 @@ private:
         void close() {
             _read_chunk.reset();
             _dict_chunk.reset();
+            _pre_final_chunk.reset();
             _final_chunk.reset();
-            _adapt_global_dict_chunk.reset();
         }
 
         Status seek_columns(ordinal_t pos) {
@@ -133,9 +133,8 @@ private:
             int64_t usage = 0;
             usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
             usage += (_dict_chunk.get() != _read_chunk.get()) ? _dict_chunk->memory_usage() : 0;
-            usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
-            usage += (_final_chunk.get() != _adapt_global_dict_chunk.get()) ? _adapt_global_dict_chunk->memory_usage()
-                                                                            : 0;
+            usage += (_pre_final_chunk.get() != _dict_chunk.get()) ? _pre_final_chunk->memory_usage() : 0;
+            usage += (_pre_final_chunk.get() != _final_chunk.get()) ? _final_chunk->memory_usage() : 0;
             return usage;
         }
 
@@ -154,8 +153,8 @@ private:
 
         std::shared_ptr<Chunk> _read_chunk;
         std::shared_ptr<Chunk> _dict_chunk;
+        std::shared_ptr<Chunk> _pre_final_chunk;
         std::shared_ptr<Chunk> _final_chunk;
-        std::shared_ptr<Chunk> _adapt_global_dict_chunk;
 
         // true iff |_is_dict_column| contains at least one `true`, i.e,
         // |_column_iterators| contains at least one `DictCodeColumnIterator`.
@@ -205,7 +204,7 @@ private:
 
     Status _finish_late_materialization(ScanContext* ctx);
 
-    Status _build_final_chunk(ScanContext* ctx);
+    Status _build_pre_final_chunk(ScanContext* ctx);
 
     Status _encode_to_global_id(ScanContext* ctx);
 
@@ -665,8 +664,8 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
+    _context->_pre_final_chunk->reset();
     _context->_final_chunk->reset();
-    _context->_adapt_global_dict_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
 
@@ -704,12 +703,12 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
 
-    _build_final_chunk(_context);
-    chunk = _context->_final_chunk.get();
+    _build_pre_final_chunk(_context);
+    chunk = _context->_pre_final_chunk.get();
 
     bool need_switch_context = false;
     if (_context->_late_materialize) {
-        chunk = _context->_final_chunk.get();
+        chunk = _context->_pre_final_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
         RETURN_IF_ERROR(_finish_late_materialization(_context));
         if (_context->_next != nullptr && (chunk_size * 1000 > total_read * _late_materialization_ratio)) {
@@ -749,9 +748,9 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     if (_context->_has_force_dict_encode) {
         RETURN_IF_ERROR(_encode_to_global_id(_context));
-        chunk = _context->_adapt_global_dict_chunk.get();
     }
 
+    chunk = _context->_final_chunk.get();
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
@@ -794,14 +793,13 @@ void SegmentIterator::_switch_context(ScanContext* to) {
                 _encoded_schema.append(field);
             }
         }
-        to->_final_chunk = ChunkHelper::new_chunk(this->_encoded_schema, _opts.chunk_size);
+        to->_pre_final_chunk = ChunkHelper::new_chunk(this->_encoded_schema, _opts.chunk_size);
     } else {
-        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size);
+        to->_pre_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size);
     }
 
-    to->_adapt_global_dict_chunk = to->_has_force_dict_encode
-                                           ? ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size)
-                                           : to->_final_chunk;
+    to->_final_chunk = to->_has_force_dict_encode ? ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size)
+                                                  : to->_pre_final_chunk;
 
     _context = to;
 }
@@ -1187,7 +1185,7 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     for (size_t i = m - 1, j = start_pos; i < n; i++, j++) {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(j);
+        ColumnPtr& col = ctx->_pre_final_chunk->get_column_by_index(j);
         col->reserve(ordinals->size());
         col->resize(0);
 
@@ -1195,32 +1193,32 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
         DCHECK_EQ(ordinals->size(), col->size());
         may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
     }
-    ctx->_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
-    ctx->_final_chunk->check_or_die();
+    ctx->_pre_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    ctx->_pre_final_chunk->check_or_die();
 
     return Status::OK();
 }
 
-Status SegmentIterator::_build_final_chunk(ScanContext* ctx) {
+Status SegmentIterator::_build_pre_final_chunk(ScanContext* ctx) {
     // trim all use less columns
     Columns& input_columns = ctx->_dict_chunk->columns();
     for (size_t i = 0; i < ctx->_read_index_map.size(); i++) {
-        ctx->_final_chunk->get_column_by_index(i).swap(input_columns[ctx->_read_index_map[i]]);
+        ctx->_pre_final_chunk->get_column_by_index(i).swap(input_columns[ctx->_read_index_map[i]]);
     }
     bool may_has_del_row = ctx->_dict_chunk->delete_state() != DEL_NOT_SATISFIED;
-    ctx->_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    ctx->_pre_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     return Status::OK();
 }
 
 Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
-    int num_columns = ctx->_final_chunk->num_columns();
-    auto final_chunk = ctx->_final_chunk;
+    int num_columns = ctx->_pre_final_chunk->num_columns();
+    auto final_chunk = ctx->_pre_final_chunk;
 
     for (size_t i = 0; i < num_columns; i++) {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
-        ColumnPtr& dst = ctx->_adapt_global_dict_chunk->get_column_by_index(i);
+        ColumnPtr& col = ctx->_pre_final_chunk->get_column_by_index(i);
+        ColumnPtr& dst = ctx->_final_chunk->get_column_by_index(i);
         if (_column_decoders[cid].need_force_encode_to_global_id()) {
             RETURN_IF_ERROR(_column_decoders[cid].encode_to_global_id(col.get(), dst.get()));
         } else {
