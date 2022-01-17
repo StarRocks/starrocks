@@ -228,9 +228,6 @@ private:
 
     Status _read_by_column(size_t n, Chunk* result, vector<rowid_t>* rowids);
 
-    void _push_init_ctxs();
-    void _pop_init_ctxs();
-
 private:
     using RawColumnIterators = std::vector<ColumnIterator*>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
@@ -238,7 +235,6 @@ private:
     vectorized::SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     ColumnDecoders _column_decoders;
-    std::stack<std::pair<RawColumnIterators, ColumnDecoders>> _init_ctxs;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
@@ -327,13 +323,11 @@ Status SegmentIterator::_init() {
     // filter by index stage
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
-    _push_init_ctxs();
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_del_vector());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
-    _pop_init_ctxs();
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     _rewrite_predicates();
@@ -348,7 +342,7 @@ template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
 
-    const size_t n = 1 + ChunkHelper::max_column_id(schema);
+    const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n, nullptr);
     if constexpr (check_global_dict) {
         _column_decoders.resize(n);
@@ -1354,17 +1348,6 @@ Status SegmentIterator::_apply_del_vector() {
         _opts.stats->rows_del_vec_filtered += input_rows - filtered_rows;
     }
     return Status::OK();
-}
-
-void SegmentIterator::_push_init_ctxs() {
-    _init_ctxs.emplace(std::move(_column_iterators), std::move(_column_decoders));
-}
-
-void SegmentIterator::_pop_init_ctxs() {
-    auto& [column_iterators, column_decoders] = _init_ctxs.top();
-    _column_iterators = std::move(column_iterators);
-    _column_decoders = std::move(column_decoders);
-    _init_ctxs.pop();
 }
 
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
