@@ -86,6 +86,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -676,6 +677,8 @@ public class ShowExecutor {
                         matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
                                 CaseSensibility.COLUMN.getCaseSensibility());
                     }
+                    boolean isPrimaryKey = table.getType() == Table.TableType.OLAP
+                            && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS;
                     List<Column> columns = table.getBaseSchema();
                     for (Column col : columns) {
                         if (matcher != null && !matcher.match(col.getName())) {
@@ -686,7 +689,8 @@ public class ShowExecutor {
                         final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                         final String isKey = col.isKey() ? "YES" : "NO";
                         final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
-                        final String aggType = col.getAggregationType() == null ? "" : col.getAggregationType().toSql();
+                        final String aggType = col.getAggregationType() == null
+                                || isPrimaryKey ? "" : col.getAggregationType().toSql();
                         if (showStmt.isVerbose()) {
                             // Field Type Collation Null Key Default Extra
                             // Privileges Comment
