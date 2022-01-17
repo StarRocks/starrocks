@@ -452,44 +452,6 @@ public class Utils {
         return Optional.empty();
     }
 
-    private static boolean isIntegerOrDecimalType(Type t) {
-        return t.isIntegerType() || t.isLargeint() || t.isDecimalV3();
-    }
-
-    // isAssignable means that assigning or casting rhs to lhs never overflows.
-    // only both integer part width and fraction part width of lhs is not narrower than counterparts
-    // of rhs, then rhs can be assigned to lhs. for integer types, integer part width is computed by
-    // calling Type::getPrecision and its scale is 0.
-    private static boolean isAssignable2Decimal(ScalarType lhs, ScalarType rhs) {
-        int lhsIntPartWidth;
-        int lhsScale;
-        int rhsIntPartWidth;
-        int rhsScale;
-        if (lhs.isIntegerType() || lhs.isLargeIntType()) {
-            lhsIntPartWidth = lhs.getPrecision();
-            lhsScale = 0;
-        } else {
-            lhsIntPartWidth = lhs.getScalarPrecision() - lhs.getScalarScale();
-            lhsScale = lhs.getScalarScale();
-        }
-
-        if (rhs.isIntegerType() || lhs.isLargeIntType()) {
-            rhsIntPartWidth = rhs.getPrecision();
-            rhsScale = 0;
-        } else {
-            rhsIntPartWidth = rhs.getScalarPrecision() - rhs.getScalarScale();
-            rhsScale = rhs.getScalarScale();
-        }
-
-        // when lhs is integer, for instance, tinyint, lhsIntPartWidth is 3, it cannot holds
-        // a DECIMAL(3, 0).
-        if (lhs.isIntegerType() && rhs.isDecimalOfAnyVersion()) {
-            return lhsIntPartWidth > rhsIntPartWidth && lhsScale >= rhsScale;
-        } else {
-            return lhsIntPartWidth >= rhsIntPartWidth && lhsScale >= rhsScale;
-        }
-    }
-
     // tryDecimalCastConstant is employed by ReduceCastRule to reduce BinaryPredicateOperator involving DecimalV3
     // ReduceCastRule try to reduce 'CAST(Expr<T> as U) BINOP LITERAL<S>' to
     // 'EXPR<T> BINOP CAST(LITERAL<S> as T>', only T->U casting and S->T casting are both legal, then this
@@ -502,15 +464,15 @@ public class Utils {
         Type childType = lhs.getChild(0).getType();
 
         // Only handle Integer or DecimalV3 types
-        if (!isIntegerOrDecimalType(lhsType) ||
-                !isIntegerOrDecimalType(rhsType) ||
-                !isIntegerOrDecimalType(childType)) {
+        if (!lhsType.isExactNumericType() ||
+                !rhsType.isExactNumericType() ||
+                !childType.isExactNumericType()) {
             return Optional.empty();
         }
         // Guarantee that both childType casting to lhsType and rhsType casting to childType are
         // lossless
-        if (!isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType) ||
-                !isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+        if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType) ||
+                !Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
             return Optional.empty();
         }
 
