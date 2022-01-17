@@ -75,7 +75,7 @@ public:
     ~DataStreamRecvr();
 
     Status get_chunk(std::unique_ptr<vectorized::Chunk>* chunk);
-    Status get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk);
+    Status get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk, const int32_t driver_sequence);
 
     // Deregister from DataStreamMgr instance, which shares ownership of this instance.
     void close();
@@ -101,7 +101,9 @@ public:
         _sub_plan_query_statistics_recvr->insert(statistics, sender_id);
     }
 
-    bool has_output() const;
+    void short_circuit_for_pipeline(const int32_t driver_sequence);
+
+    bool has_output_for_pipeline(const int32_t driver_sequence) const;
 
     bool is_finished() const;
 

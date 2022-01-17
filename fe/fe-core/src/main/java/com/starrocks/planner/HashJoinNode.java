@@ -78,6 +78,7 @@ public class HashJoinNode extends PlanNode {
 
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     private final List<Integer> filter_null_value_columns = Lists.newArrayList();
+    private List<Expr> partitionExprs;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -248,6 +249,10 @@ public class HashJoinNode extends PlanNode {
         isShuffleHashBucket = runtimeBucketShuffle;
     }
 
+    public void setPartitionExprs(List<Expr> exprs) {
+        partitionExprs = exprs;
+    }
+
     @Override
     public void init(Analyzer analyzer) throws UserException {
         assignConjuncts(analyzer);
@@ -412,6 +417,9 @@ public class HashJoinNode extends PlanNode {
         }
         msg.hash_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
+        if (partitionExprs != null) {
+            msg.hash_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+        }
         msg.setFilter_null_value_columns(filter_null_value_columns);
     }
 
