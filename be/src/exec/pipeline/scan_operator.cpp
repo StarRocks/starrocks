@@ -167,7 +167,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state) {
     return Status::OK();
 }
 
-void ScanOperator::set_workgroup(starrocks::workgroup::WorkGroup* wg) {
+void ScanOperator::set_workgroup(starrocks::workgroup::WorkGroupPtr wg) {
     _workgroup = wg;
 }
 

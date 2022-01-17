@@ -9,12 +9,12 @@
 #include "runtime/global_dicts.h"
 #include "util/blocking_queue.hpp"
 #include "util/priority_thread_pool.hpp"
+#include "exec/workgroup/work_group.h"
 
 namespace starrocks {
 namespace workgroup {
 class WorkGroup;
-class WorkGroupManager;
-} // namespace workgroup
+}
 namespace vectorized {
 class RuntimeFilterProbeCollector;
 }
@@ -46,7 +46,7 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
 
-    void set_workgroup(starrocks::workgroup::WorkGroup* wg);
+    void set_workgroup(starrocks::workgroup::WorkGroupPtr wg);
 
 private:
     // This method is only invoked when current morsel is reached eof
@@ -70,7 +70,7 @@ private:
     // select * from table limit x;
     int64_t _limit; // -1: no limit
 
-    starrocks::workgroup::WorkGroup* _workgroup = nullptr;
+    starrocks::workgroup::WorkGroupPtr _workgroup = nullptr;
 };
 
 class ScanOperatorFactory final : public SourceOperatorFactory {

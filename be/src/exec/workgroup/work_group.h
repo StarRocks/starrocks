@@ -34,11 +34,37 @@ public:
 
 class IoWorkGroupQueue final : public WorkGroupQueue {
 public:
-    IoWorkGroupQueue() = default;
+    IoWorkGroupQueue() : _schedule_num_period(1024) {
+        _cur_wait_run_wgs.resize(_schedule_num_period, nullptr);
+    };
     ~IoWorkGroupQueue() = default;
     void add(const WorkGroupPtr& wg) override {}
     void remove(const WorkGroupPtr& wg) override {}
-    WorkGroupPtr pick_next() override { return nullptr; }
+    WorkGroupPtr pick_next() override;
+
+    bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
+
+private:
+    void adjust_weight_if_need();
+    void schedule_io_task();
+
+    size_t get_next_wg_index();
+    WorkGroupPtr get_next_wg();
+
+private:
+    std::mutex _global_io_mutex;
+    std::condition_variable _cv;
+
+    std::vector<WorkGroupPtr> _io_wgs;
+    std::unordered_set<WorkGroupPtr> _ready_wgs;
+    std::atomic<size_t> _total_task_num = 0;
+    std::atomic<size_t> _cur_index = 0;
+    std::vector<WorkGroupPtr> _cur_wait_run_wgs;
+    std::atomic<bool> _is_scheduled = false;
+
+    const size_t _schedule_num_period;
+    std::atomic<int> _cur_schedule_num = 0;
+    size_t _cur_schedule_num_period = 0;
 };
 
 class WorkGroupManager;
@@ -167,13 +193,8 @@ public:
     void remove_workgroup(int wg_id);
 
     // get next workgroup for io
-    WorkGroup* pick_next_wg_for_io();
-
-    void adjust_weight_if_need();
-
-    void schedule_io_task();
-
-    bool try_offer_io_task(WorkGroup* wg, const PriorityThreadPool::Task& task);
+    WorkGroupPtr pick_next_wg_for_io();
+    bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
 
     WorkGroupQueue& get_cpu_queue();
 
@@ -182,6 +203,7 @@ public:
     size_t get_sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
     int64_t get_sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
+<<<<<<< HEAD
     void increment_sum_unadjusted_cpu_runtime_ns(int64_t cpu_runtime_ns) {
         _sum_unadjusted_cpu_runtime_ns += cpu_runtime_ns;
     }
@@ -191,30 +213,15 @@ private:
     WorkGroup* get_next_wg();
     size_t get_next_wg_index();
 
+=======
+>>>>>>> fca542fc (save file)
 private:
     std::mutex _mutex;
-
-    std::mutex _global_io_mutex;
-    std::condition_variable _cv;
-
     std::unordered_map<int, WorkGroupPtr> _workgroups;
     IoWorkGroupQueue _wg_io_queue;
 
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
-    std::atomic<bool> _is_adjusted;
-    const size_t _schedule_num_period;
-    std::atomic<int> _cur_schedule_num = 0;
-    size_t _cur_schedule_num_period = 0;
-
-    std::vector<workgroup::WorkGroup*> _io_wgs;
-    std::unordered_set<workgroup::WorkGroup*> _ready_wgs;
-
-    std::atomic<size_t> _total_task_num = 0;
-
-    std::atomic<size_t> _cur_index = 0;
-    std::vector<workgroup::WorkGroup*> _cur_wait_run_wgs;
-    std::atomic<bool> _is_scheduled = false;
 };
 
 class DefaultWorkGroupInitialization {

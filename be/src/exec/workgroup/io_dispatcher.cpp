@@ -31,7 +31,6 @@ void IoDispatcher::run() {
         if (wg == nullptr) {
             continue;
         }
-
         wg->pick_and_run_io_task();
     }
 }

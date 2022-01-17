@@ -74,10 +74,7 @@ double WorkGroup::get_cpu_actual_use_ratio() const {
     return static_cast<double>(get_real_runtime_ns()) / sum_cpu_runtime_ns;
 }
 
-WorkGroupManager::WorkGroupManager() : _schedule_num_period(1024) {
-    _cur_schedule_num = 0;
-    _cur_wait_run_wgs.resize(_schedule_num_period, nullptr);
-}
+WorkGroupManager::WorkGroupManager() {}
 WorkGroupManager::~WorkGroupManager() {}
 void WorkGroupManager::destroy() {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -205,7 +202,7 @@ size_t WorkGroup::io_task_queue_size() {
     return _io_work_queue.get_size();
 }
 
-void WorkGroupManager::adjust_weight_if_need() {
+void IoWorkGroupQueue::adjust_weight_if_need() {
     if (--_cur_schedule_num > 0) {
         return;
     }
@@ -308,7 +305,7 @@ void WorkGroupManager::adjust_weight_if_need() {
     _is_scheduled.store(false, std::memory_order_release);
 }
 
-WorkGroup* WorkGroupManager::get_next_wg() {
+WorkGroupPtr IoWorkGroupQueue::get_next_wg() {
     size_t index = _cur_index;
     while (!_cur_index.compare_exchange_strong(index, index + 1)) {
         index = _cur_index;
@@ -324,7 +321,7 @@ WorkGroup* WorkGroupManager::get_next_wg() {
     return nullptr;
 }
 
-void WorkGroupManager::schedule_io_task() {
+void IoWorkGroupQueue::schedule_io_task() {
     // during schedule period, we pre calculate next period wg for speed up
     for (size_t i = 0; i < _cur_schedule_num_period; i++) {
         size_t idx = get_next_wg_index();
@@ -333,7 +330,7 @@ void WorkGroupManager::schedule_io_task() {
     _cur_index = 0;
 }
 
-size_t WorkGroupManager::get_next_wg_index() {
+size_t IoWorkGroupQueue::get_next_wg_index() {
     // we use Weighted round robin
     size_t index = -1;
     double total = 0;
@@ -348,12 +345,12 @@ size_t WorkGroupManager::get_next_wg_index() {
     return index;
 }
 
-WorkGroup* WorkGroupManager::pick_next_wg_for_io() {
+WorkGroupPtr IoWorkGroupQueue::pick_next() {
     std::unique_lock<std::mutex> lock(_global_io_mutex);
     while (_ready_wgs.empty()) {
         _cv.wait(lock);
     }
-    WorkGroup* wg = nullptr;
+    WorkGroupPtr wg = nullptr;
     do {
         adjust_weight_if_need();
         wg = get_next_wg();
@@ -367,13 +364,18 @@ WorkGroup* WorkGroupManager::pick_next_wg_for_io() {
     // just for debug
     LOG(WARNING) << "select: " << wg->name();
     return wg;
+
+}
+
+WorkGroupPtr WorkGroupManager::pick_next_wg_for_io() {
+    return _wg_io_queue.pick_next();
 }
 
 WorkGroupQueue& WorkGroupManager::get_io_queue() {
     return _wg_io_queue;
 }
 
-bool WorkGroupManager::try_offer_io_task(WorkGroup* wg, const PriorityThreadPool::Task& task) {
+bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
     std::lock_guard<std::mutex> lock(_global_io_mutex);
     bool is_ok = false;
     if (_ready_wgs.find(wg) == _ready_wgs.end()) {
@@ -391,6 +393,10 @@ bool WorkGroupManager::try_offer_io_task(WorkGroup* wg, const PriorityThreadPool
     }
 
     return is_ok;
+}
+
+bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
+    return _wg_io_queue.try_offer_io_task(wg, task);
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
