@@ -208,7 +208,6 @@ Status BinaryColumn::update_rows(const Column& src, const uint32_t* indexes) {
             uint32_t str_size = src_offsets[i + 1] - src_offsets[i];
             strings::memcpy_inlined(dest_bytes + _offsets[indexes[i]], src_bytes.data() + src_offsets[i], str_size);
         }
-        _slices_cache = false;
     } else {
         auto new_binary_column = BinaryColumn::create();
         size_t idx_begin = 0;
