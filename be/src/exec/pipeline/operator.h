@@ -141,7 +141,7 @@ protected:
     // Which plan node this operator belongs to
     const int32_t _plan_node_id;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    std::unique_ptr<MemTracker> _mem_tracker;
+    MemTracker* _mem_tracker = nullptr;
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
