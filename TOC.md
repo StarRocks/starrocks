@@ -30,7 +30,7 @@
   + [Json数据导入](/loading/Json_loading.md)
   + [Flink connector](/loading/Flink-connector-starrocks.md)
   + [DataX writer](/loading/DataX-starrocks-writer.md)
-  + [CloudCanal数据导入](/loading/CloudCanal-loading.md)
+  + [CloudCanal数据导入](/loading/CloudCanal_loading.md)
 + 数据提取
   + [数据导出](/unloading/Export.md)
   + [Spark Connector](/unloading/Spark_connector.md)
