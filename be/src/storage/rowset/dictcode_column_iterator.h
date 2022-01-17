@@ -161,8 +161,8 @@ public:
         return _col_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
     }
 
-    static Status build_code_convert_map(std::vector<int16_t>* code_convert_map, ScalarColumnIterator* file_column_iter,
-                                         GlobalDictMap* global_dict);
+    static Status build_code_convert_map(ScalarColumnIterator* file_column_iter, GlobalDictMap* global_dict,
+                                         std::vector<int16_t>* code_convert_map);
 
 private:
     void _init_local_dict_col();

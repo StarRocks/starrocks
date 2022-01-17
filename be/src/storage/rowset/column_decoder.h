@@ -30,8 +30,8 @@ public:
 
     void set_all_page_dict_encoded(bool all_page_dict_encoded) { _all_page_dict_encoded = all_page_dict_encoded; }
     void set_global_dict(vectorized::GlobalDictMap* global_dict) { _global_dict = global_dict; }
-    // Check if the local dictionary can be covered by the global dictionary
-    void check_code_convert_map();
+    // check global dict is superset of local dict
+    void check_global_dict();
 
     Status encode_to_global_id(vectorized::Column* datas, vectorized::Column* codes);
     bool need_force_encode_to_global_id() const {

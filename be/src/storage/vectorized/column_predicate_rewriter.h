@@ -62,19 +62,19 @@ public:
             : ConjunctivePredicatesRewriter(predicates, dict_maps, nullptr) {}
     ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps,
                                   std::vector<uint8_t>* disable_rewrite)
-            : _predicates(predicates), _dict_maps(dict_maps), _disable_rewrite(disable_rewrite) {}
+            : _predicates(predicates), _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
 
     void rewrite_predicate(ObjectPool* pool);
 
     bool column_need_rewrite(ColumnId cid) {
-        if (_disable_rewrite && (*_disable_rewrite)[cid]) return false;
+        if (_disable_dict_rewrite && (*_disable_dict_rewrite)[cid]) return false;
         return _dict_maps.count(cid);
     }
 
 private:
     ConjunctivePredicates& _predicates;
     const ColumnIdToGlobalDictMap& _dict_maps;
-    std::vector<uint8_t>* _disable_rewrite;
+    std::vector<uint8_t>* _disable_dict_rewrite;
 };
 
 } // namespace starrocks::vectorized

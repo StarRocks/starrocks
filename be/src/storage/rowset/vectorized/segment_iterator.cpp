@@ -97,7 +97,7 @@ private:
             _read_chunk.reset();
             _dict_chunk.reset();
             _final_chunk.reset();
-            _adapt_chunk.reset();
+            _adapt_global_dict_chunk.reset();
         }
 
         Status seek_columns(ordinal_t pos) {
@@ -134,7 +134,8 @@ private:
             usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
             usage += (_dict_chunk.get() != _read_chunk.get()) ? _dict_chunk->memory_usage() : 0;
             usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
-            usage += (_final_chunk.get() != _adapt_chunk.get()) ? _adapt_chunk->memory_usage() : 0;
+            usage += (_final_chunk.get() != _adapt_global_dict_chunk.get()) ? _adapt_global_dict_chunk->memory_usage()
+                                                                            : 0;
             return usage;
         }
 
@@ -154,7 +155,7 @@ private:
         std::shared_ptr<Chunk> _read_chunk;
         std::shared_ptr<Chunk> _dict_chunk;
         std::shared_ptr<Chunk> _final_chunk;
-        std::shared_ptr<Chunk> _adapt_chunk;
+        std::shared_ptr<Chunk> _adapt_global_dict_chunk;
 
         // true iff |_is_dict_column| contains at least one `true`, i.e,
         // |_column_iterators| contains at least one `DictCodeColumnIterator`.
@@ -386,7 +387,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
                 _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
                 if (_opts.global_dictmaps->count(cid)) {
                     _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
-                    _column_decoders[cid].check_code_convert_map();
+                    _column_decoders[cid].check_global_dict();
                 }
             }
 
@@ -673,7 +674,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
     _context->_final_chunk->reset();
-    _context->_adapt_chunk->reset();
+    _context->_adapt_global_dict_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
 
@@ -756,7 +757,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     if (_context->_has_force_dict_encode) {
         RETURN_IF_ERROR(_encode_to_global_id(_context));
-        chunk = _context->_adapt_chunk.get();
+        chunk = _context->_adapt_global_dict_chunk.get();
     }
 
     result->swap_chunk(*chunk);
@@ -806,8 +807,9 @@ void SegmentIterator::_switch_context(ScanContext* to) {
         to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size);
     }
 
-    to->_adapt_chunk = to->_has_force_dict_encode ? ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size)
-                                                  : to->_final_chunk;
+    to->_adapt_global_dict_chunk = to->_has_force_dict_encode
+                                           ? ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size)
+                                           : to->_final_chunk;
 
     _context = to;
 }
@@ -1107,15 +1109,15 @@ void SegmentIterator::_rewrite_predicates() {
     // If the global dictionary optimization is enabled for the column,
     // then the output column is of type INT, and we need to rewrite the delete condition
     // so that the input is of type INT (the original input is of type String)
-    std::vector<uint8_t> disable_rewrites(_column_decoders.size());
+    std::vector<uint8_t> disable_dict_rewrites(_column_decoders.size());
     for (size_t i = 0; i < _schema.num_fields(); i++) {
         const FieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
-        disable_rewrites[cid] = _column_decoders[cid].need_force_encode_to_global_id();
+        disable_dict_rewrites[cid] = _column_decoders[cid].need_force_encode_to_global_id();
     }
 
     for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
-        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_rewrites);
+        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_dict_rewrites);
         crewriter.rewrite_predicate(&_obj_pool);
     }
 }
@@ -1226,7 +1228,7 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
-        ColumnPtr& dst = ctx->_adapt_chunk->get_column_by_index(i);
+        ColumnPtr& dst = ctx->_adapt_global_dict_chunk->get_column_by_index(i);
         if (_column_decoders[cid].need_force_encode_to_global_id()) {
             RETURN_IF_ERROR(_column_decoders[cid].encode_to_global_id(col.get(), dst.get()));
         } else {

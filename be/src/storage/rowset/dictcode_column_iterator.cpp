@@ -7,9 +7,9 @@
 
 namespace starrocks {
 
-Status GlobalDictCodeColumnIterator::build_code_convert_map(std::vector<int16_t>* code_convert_map,
-                                                            ScalarColumnIterator* file_column_iter,
-                                                            GlobalDictMap* global_dict) {
+Status GlobalDictCodeColumnIterator::build_code_convert_map(ScalarColumnIterator* file_column_iter,
+                                                            GlobalDictMap* global_dict,
+                                                            std::vector<int16_t>* code_convert_map) {
     DCHECK(file_column_iter->all_page_dict_encoded());
 
     int dict_size = file_column_iter->dict_size();

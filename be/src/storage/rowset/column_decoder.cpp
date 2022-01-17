@@ -49,11 +49,11 @@ Status ColumnDecoder::encode_to_global_id(vectorized::Column* datas, vectorized:
     return Status::OK();
 }
 
-void ColumnDecoder::check_code_convert_map() {
+void ColumnDecoder::check_global_dict() {
     if (_global_dict && _all_page_dict_encoded) {
         std::vector<int16_t> code_convert_map;
         auto* scalar_iter = down_cast<ScalarColumnIterator*>(_iter);
-        Status st = GlobalDictCodeColumnIterator::build_code_convert_map(&code_convert_map, scalar_iter, _global_dict);
+        Status st = GlobalDictCodeColumnIterator::build_code_convert_map(scalar_iter, _global_dict, &code_convert_map);
         if (st.ok()) {
             _code_convert_map = std::move(code_convert_map);
         } else {
