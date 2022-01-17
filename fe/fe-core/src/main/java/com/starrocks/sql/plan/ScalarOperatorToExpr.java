@@ -47,6 +47,8 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.thrift.TExprOpcode;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -55,6 +57,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class ScalarOperatorToExpr {
+    private static final Logger LOG = LogManager.getLogger(ScalarOperatorToExpr.class);
     public static Expr buildExecExpression(ScalarOperator expression, FormatterContext descTbl) {
         return expression.accept(new Formatter(), descTbl);
     }
