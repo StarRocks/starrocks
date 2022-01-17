@@ -8,6 +8,9 @@
 #include <memory>
 #include <string>
 
+#include "column/column_builder.h"
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
 
@@ -139,6 +142,14 @@ private:
     static void remove_escape_character(std::string* search_string);
 
 private:
+    static ColumnPtr _predicate_const_regex(FunctionContext* context, ColumnBuilder<TYPE_BOOLEAN>* result,
+                                            const ColumnViewer<TYPE_VARCHAR>& value_viewer,
+                                            const ColumnPtr& value_column);
+
+    // This is used when pattern is empty string, &_DUMMY_STRING_FOR_EMPTY_PATTERN used as not null pointer
+    // to avoid crash with hs_scan.
+    static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
+
     class LikePredicateState;
     static Status hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
                                                const Slice& slice);
