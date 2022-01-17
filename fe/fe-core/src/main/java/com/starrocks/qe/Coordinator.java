@@ -1301,7 +1301,8 @@ public class Coordinator {
                     int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
-                    int numInstances = param.instanceExecParams.size();
+                    // param.instanceExecParams.size() maybe zero
+                    int numInstances = Math.max(1, param.instanceExecParams.size());
                     OlapScanNode scanNode = (OlapScanNode) leftMostNode;
                     int numScanRangesPerInstance = scanNode.getScanRangeLocations(0).size() / numInstances;
                     numScanRangesPerInstance = Math.max(1, numScanRangesPerInstance);
