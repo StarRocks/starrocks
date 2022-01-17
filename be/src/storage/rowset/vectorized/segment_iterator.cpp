@@ -327,11 +327,13 @@ Status SegmentIterator::_init() {
     // filter by index stage
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
+    _push_init_ctxs();
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_del_vector());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    _pop_init_ctxs();
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     _rewrite_predicates();
@@ -435,16 +437,12 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         rowid_t upper_rowid = num_rows();
 
         if (!range.upper().empty()) {
-            _push_init_ctxs();
             _init_column_iterators<false>(range.lower().schema());
             RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
-            _pop_init_ctxs();
         }
         if (!range.lower().empty() && upper_rowid > 0) {
-            _push_init_ctxs();
             _init_column_iterators<false>(range.lower().schema());
             RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
-            _pop_init_ctxs();
         }
         if (lower_rowid <= upper_rowid) {
             _scan_range.add(Range{lower_rowid, upper_rowid});
