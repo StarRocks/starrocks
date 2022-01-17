@@ -251,6 +251,18 @@ public:
         return _evict();
     }
 
+    std::vector<std::pair<Key, size_t>> get_entry_sizes() const {
+        std::lock_guard<std::mutex> lg(_lock);
+        std::vector<std::pair<Key, size_t>> ret(_map.size());
+        auto itr = _list.begin();
+        while (itr != _list.end()) {
+            Entry* entry = (*itr);
+            ret.emplace_back(entry->key(), entry->size());
+            itr++;
+        }
+        return ret;
+    }
+
 private:
     bool _evict() {
         auto itr = _list.begin();
@@ -273,7 +285,7 @@ private:
         return _size <= _capacity;
     }
 
-    std::mutex _lock;
+    mutable std::mutex _lock;
     List _list;
     Map _map;
     size_t _object_size;
