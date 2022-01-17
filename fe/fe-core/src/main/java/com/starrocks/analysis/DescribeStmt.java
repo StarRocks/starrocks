@@ -144,7 +144,7 @@ public class DescribeStmt extends ShowStmt {
                                     if (column.getAggregationType() != null && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                                         extras.add(column.getAggregationType().name());
                                     }
-                                    String defaultStr = column.isAllowNull() ? column.getMetaDefaultValue(extras) : "";
+                                    String defaultStr = column.getMetaDefaultValue(extras);
                                     String extraStr = StringUtils.join(extras, ",");
                                     List<String> row = Arrays.asList(
                                             column.getDisplayName(),
@@ -216,7 +216,7 @@ public class DescribeStmt extends ShowStmt {
                             if (bfColumns != null && bfColumns.contains(column.getName())) {
                                 extras.add("BLOOM_FILTER");
                             }
-                            String defaultStr = column.isAllowNull() ? column.getMetaDefaultValue(extras) : "";
+                            String defaultStr = column.getMetaDefaultValue(extras);
                             String extraStr = StringUtils.join(extras, ",");
                             List<String> row = Arrays.asList("",
                                     "",

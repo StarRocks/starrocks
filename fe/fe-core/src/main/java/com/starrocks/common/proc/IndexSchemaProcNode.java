@@ -72,7 +72,7 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
             if (bfColumns != null && bfColumns.contains(column.getName())) {
                 extras.add("BLOOM_FILTER");
             }
-            String defaultStr = column.isAllowNull() ? column.getMetaDefaultValue(extras) : "";
+            String defaultStr = column.getMetaDefaultValue(extras);
             String extraStr = StringUtils.join(extras, ",");
 
             List<String> rowList = Arrays.asList(column.getName(),
