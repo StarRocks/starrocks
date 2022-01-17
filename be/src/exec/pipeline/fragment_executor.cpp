@@ -67,6 +67,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     const auto& t_desc_tbl = request.desc_tbl;
     const auto& fragment = request.fragment;
 
+    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
     auto&& existing_query_ctx = QueryContextManager::instance()->get(query_id);
