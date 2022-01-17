@@ -38,6 +38,11 @@ MysqlScanner::MysqlScanner(const MysqlScannerParam& param)
 
 MysqlScanner::~MysqlScanner() {
     if (_my_result) {
+        // In some large data queries (such as select*), executing free_result directly
+        // will cause a blocking until mysql server returns all the data. Also the rpc thread
+        // of BE can get stuck under unknown reasons.
+        // So we need to execute a cancel to avoid this blocking.
+        mariadb_cancel(_my_conn);
         mysql_free_result(_my_result);
         _my_result = nullptr;
     }
