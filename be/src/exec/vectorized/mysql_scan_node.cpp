@@ -30,7 +30,12 @@ MysqlScanNode::MysqlScanNode(ObjectPool* pool, const TPlanNode& tnode, const Des
           _tuple_id(tnode.mysql_scan_node.tuple_id),
           _columns(tnode.mysql_scan_node.columns),
           _filters(tnode.mysql_scan_node.filters),
-          _tuple_desc(nullptr) {}
+          _tuple_desc(nullptr) {
+    _limit = -1;
+    if (tnode.mysql_scan_node.__isset.limit) {
+        _limit = tnode.mysql_scan_node.limit;
+    }
+}
 
 Status MysqlScanNode::prepare(RuntimeState* state) {
     VLOG(1) << "MysqlScanNode::Prepare";
@@ -80,7 +85,7 @@ Status MysqlScanNode::open(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(_mysql_scanner->open());
-    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters));
+    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters, _limit));
     // check materialize slot num
     int materialize_num = 0;
 
