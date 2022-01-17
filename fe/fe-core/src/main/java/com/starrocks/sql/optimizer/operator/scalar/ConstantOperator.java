@@ -381,8 +381,11 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             BigDecimal decimal = new BigDecimal(childString);
             try {
                 ScalarType scalarType = (ScalarType) desc;
-                DecimalLiteral.checkLiteralOverflow(decimal, scalarType);
-
+                try {
+                    DecimalLiteral.checkLiteralOverflow(decimal, scalarType);
+                } catch (AnalysisException ignored) {
+                    return ConstantOperator.createNull(desc);
+                }
                 int realScale = DecimalLiteral.getRealScale(decimal);
                 int scale = scalarType.getScalarScale();
                 if (scale <= realScale) {
@@ -392,8 +395,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 if (scalarType.getScalarScale() == 0 && scalarType.getScalarPrecision() == 0) {
                     throw new SemanticException("Forbidden cast to decimal(precision=0, scale=0)");
                 }
-            } catch (AnalysisException e) {
-                return ConstantOperator.createNull(desc);
+            } catch (Exception e) {
+                throw e;
+                //return ConstantOperator.createNull(desc);
             }
 
             return ConstantOperator.createDecimal(decimal, desc);

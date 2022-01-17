@@ -460,7 +460,7 @@ public class Utils {
     // only both integer part width and fraction part width of lhs is not narrower than counterparts
     // of rhs, then rhs can be assigned to lhs. for integer types, integer part width is computed by
     // calling Type::getPrecision and its scale is 0.
-    private static boolean isAssignable(ScalarType lhs, ScalarType rhs) {
+    private static boolean isAssignable2Decimal(ScalarType lhs, ScalarType rhs) {
         int lhsIntPartWidth;
         int lhsScale;
         int rhsIntPartWidth;
@@ -509,8 +509,8 @@ public class Utils {
         }
         // Guarantee that both childType casting to lhsType and rhsType casting to childType are
         // lossless
-        if (!isAssignable((ScalarType) lhsType, (ScalarType) childType) ||
-                !isAssignable((ScalarType) childType, (ScalarType) rhsType)) {
+        if (!isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType) ||
+                !isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
             return Optional.empty();
         }
 
