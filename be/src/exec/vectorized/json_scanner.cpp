@@ -615,6 +615,7 @@ Status JsonReader::_filter_row_with_jsonroot(simdjson::ondemand::object* row) {
 
 // read one json string from file read and parse it to json doc.
 Status JsonReader::_read_and_parse_json() {
+    SCOPED_RAW_TIMER(&_counter->file_read_ns);
     uint8_t* data{};
     size_t length = 0;
 

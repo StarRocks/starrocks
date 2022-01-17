@@ -359,6 +359,7 @@ int NodeChannel::try_send_chunk_and_fetch_status() {
 
         _add_batch_closure->reset();
         _add_batch_closure->cntl.set_timeout_ms(_rpc_timeout_ms);
+        _add_batch_closure->cntl.set_request_compress_type(brpc::COMPRESS_TYPE_SNAPPY);
 
         if (request.eos()) {
             for (auto pid : _parent->_partition_ids) {
