@@ -328,7 +328,7 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void test() throws Exception {
+    public void testDecodeLimitWithProject() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
@@ -336,5 +336,19 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("  12:Decode\n" +
                 "  |  <dict id 42> : <string id 18>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
+    }
+
+    @Test
+    public void testCountDistinctWithLimit() throws Exception {
+        // check use two stage agg
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/count_distinct_limit"), null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
+               "  |  STREAMING\n" +
+               "  |  output: multi_distinct_count(5: lo_suppkey)"));
+        Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
+               "  |  output: multi_distinct_count(18: count)\n" +
+               "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
     }
 }

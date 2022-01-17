@@ -583,6 +583,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         //Update the statistics of the GroupBy column
         Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap = new HashMap<>();
+        double rowCount = computeGroupByStatistics(groupBys, inputStatistics, groupStatisticsMap);
+
+        //Update Node Statistics
+        builder.addColumnStatistics(groupStatisticsMap);
+        rowCount = min(inputStatistics.getOutputRowCount(), rowCount);
+        builder.setOutputRowCount(rowCount);
+        // use inputStatistics and aggregateNode cardinality to estimate aggregate call operator column statistics.
+        // because of we need cardinality to estimate count function.
+        double estimateCount = rowCount;
+        aggregations.forEach((key, value) -> builder
+                .addColumnStatistic(key,
+                        ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount)));
+
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    public static double computeGroupByStatistics(List<ColumnRefOperator> groupBys, Statistics inputStatistics,
+                                         Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap) {
         for (ColumnRefOperator groupByColumn : groupBys) {
             ColumnStatistic groupByColumnStatics = inputStatistics.getColumnStatistic(groupByColumn);
             ColumnStatistic.Builder statsBuilder = buildFrom(groupByColumnStatics);
@@ -627,19 +646,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 }
             }
         }
-
-        //Update Node Statistics
-        builder.addColumnStatistics(groupStatisticsMap);
-        rowCount = min(inputStatistics.getOutputRowCount(), rowCount);
-        builder.setOutputRowCount(rowCount);
-        // use inputStatistics and aggregateNode cardinality to estimate aggregate call operator column statistics.
-        // because of we need cardinality to estimate count function.
-        double estimateCount = rowCount;
-        aggregations.forEach((key, value) -> builder
-                .addColumnStatistic(key, ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount)));
-
-        context.setStatistics(builder.build());
-        return visitOperator(node, context);
+        return rowCount;
     }
 
     @Override
