@@ -5395,6 +5395,19 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testBinaryPredicateNullable() throws Exception {
+        String sql = "select distinct L_ORDERKEY < L_PARTKEY from lineitem";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(" 2:AGGREGATE (update finalize)\n" +
+                "  |  group by: [18: expr, BOOLEAN, false]"));
+
+        sql = "select distinct v1 <=> v2 from t0";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  group by: [4: expr, BOOLEAN, false]"));
+    }
+
+    @Test
     public void testSemiJoinReorder() throws Exception {
         String sql = "SELECT \n" +
                 "  v2 \n" +
