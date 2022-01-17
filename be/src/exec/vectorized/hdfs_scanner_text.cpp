@@ -20,18 +20,52 @@ public:
         _file_length = file_length;
     }
 
+    void reset(size_t offset, size_t remain_length);
+
+    Status next_record(Record* record);
+
+protected:
     Status _fill_buffer() override;
 
 private:
     std::shared_ptr<RandomAccessFile> _file;
     size_t _offset = 0;
-    size_t _remain_length = 0;
+    int32_t _remain_length = 0;
     size_t _file_length = 0;
     bool _should_stop_scan = false;
 };
 
-Status HdfsScannerCSVReader::_fill_buffer() {
+void HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
+    _offset = offset;
+    _remain_length = remain_length;
+    _should_stop_scan = false;
+    _buff.skip(_buff.limit() - _buff.position());
+}
+
+Status HdfsScannerCSVReader::next_record(Record* record) {
     if (_should_stop_scan) {
+        return Status::EndOfFile("Should stop for this reader!");
+    }
+    char* d;
+    size_t pos = 0;
+    while ((d = _buff.find(_record_delimiter, pos)) == nullptr) {
+        pos = _buff.available();
+        _buff.compact();
+        if (_buff.free_space() == 0) {
+            RETURN_IF_ERROR(_expand_buffer());
+        }
+        RETURN_IF_ERROR(_fill_buffer());
+    }
+    size_t l = d - _buff.position();
+    *record = Record(_buff.position(), l);
+    _buff.skip(l + 1);
+    //               ^^ skip record delimiter.
+    _parsed_bytes += l + 1;
+    return Status::OK();
+}
+
+Status HdfsScannerCSVReader::_fill_buffer() {
+    if (_should_stop_scan || _offset >= _file_length) {
         return Status::EndOfFile("HdfsScannerCSVReader");
     }
 
@@ -40,7 +74,8 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     if (_remain_length <= 0) {
         s = Slice(_buff.limit(), _buff.free_space());
     } else {
-        s = Slice(_buff.limit(), std::min(_buff.free_space(), _remain_length));
+        size_t slice_len = _remain_length;
+        s = Slice(_buff.limit(), std::min(_buff.free_space(), slice_len));
     }
     Status st = _file->read(_offset, &s);
     _offset += s.size;
@@ -51,12 +86,15 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     if (st.is_end_of_file()) {
         s.size = 0;
     } else if (!st.ok()) {
+        LOG(WARNING) << "Status is not ok " << st.get_error_msg();
         return st;
     }
     _buff.add_limit(s.size);
     auto n = _buff.available();
     if (s.size == 0 && n == 0) {
         // Has reached the end of file and the buffer is empty.
+        _should_stop_scan = true;
+        LOG(INFO) << "Reach end of file!";
         return Status::EndOfFile(_file->file_name());
     } else if (s.size == 0 && _buff.position()[n - 1] != _record_delimiter) {
         // Has reached the end of file but still no record delimiter found, which
@@ -67,7 +105,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     // For each scan range we always read the first record of next scan range,so _remain_length
     // may be negative here. Once we have read the first record of next scan range we
     // should stop scan in the next round.
-    if ((_remain_length < 0 && _buff.find(_record_delimiter, 0) != nullptr) || (_offset >= _file_length)) {
+    if ((_remain_length < 0 && _buff.find(_record_delimiter, 0) != nullptr)) {
         _should_stop_scan = true;
     }
 
@@ -83,15 +121,7 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
-    const THdfsScanRange* scan_range = _scanner_params.scan_ranges[0];
-    _reader = std::make_unique<HdfsScannerCSVReader>(_scanner_params.fs, _record_delimiter, _field_delimiter,
-                                                     scan_range->offset, scan_range->length, scan_range->file_length);
-    if (scan_range->offset != 0) {
-        // Always skip first record of scan range with non-zero offset.
-        // Notice that the first record will read by previous scan range.
-        CSVReader::Record dummy;
-        RETURN_IF_ERROR(_reader->next_record(&dummy));
-    }
+    RETURN_IF_ERROR(_create_or_reinit_reader());
 #ifndef BE_TEST
     SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
 #endif
@@ -145,10 +175,19 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     csv::Converter::Options options;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
-        status = _reader->next_record(&record);
+        status = dynamic_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
         if (status.is_end_of_file()) {
-            break;
+            if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
+                break;
+            }
+            // End of file status indicate:
+            // 1. read end of file
+            // 2. should stop scan
+            _current_range_index++;
+            RETURN_IF_ERROR(_create_or_reinit_reader());
+            continue;
         } else if (!status.ok()) {
+            LOG(WARNING) << "Status is not ok " << status.get_error_msg();
             return status;
         } else if (record.empty()) {
             // always skip blank lines.
@@ -195,6 +234,23 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
     }
     return chunk->get()->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
+}
+
+Status HdfsTextScanner::_create_or_reinit_reader() {
+    const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
+    if (_current_range_index == 0) {
+        _reader = std::make_unique<HdfsScannerCSVReader>(_scanner_params.fs, _record_delimiter, _field_delimiter,
+                                                         scan_range->offset, scan_range->length, scan_range->file_length);
+    } else {
+        dynamic_cast<HdfsScannerCSVReader*>(_reader.get())->reset(scan_range->offset, scan_range->length);
+    }
+    if (scan_range->offset != 0) {
+        // Always skip first record of scan range with non-zero offset.
+        // Notice that the first record will read by previous scan range.
+        CSVReader::Record dummy;
+        RETURN_IF_ERROR(dynamic_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&dummy));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

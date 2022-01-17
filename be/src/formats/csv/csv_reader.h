@@ -82,6 +82,8 @@ public:
     void split_record(const Record& record, Fields* fields) const;
 
 protected:
+    Status _expand_buffer();
+    size_t _parsed_bytes = 0;
     // TODO: support string
     char _record_delimiter;
     string _field_delimiter;
@@ -91,9 +93,6 @@ protected:
     virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
 
 private:
-    Status _expand_buffer();
-
-    size_t _parsed_bytes = 0;
     size_t _limit = 0;
     size_t _offset = 0;
 };
