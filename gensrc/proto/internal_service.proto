@@ -71,6 +71,9 @@ message PTransmitChunkParams {
     // Some statistics for the runing query
     optional PQueryStatistics query_statistics = 8;
     optional bool use_pass_through = 9 [default = false] ;
+
+    // Pipeline level shuffle's id
+    optional int32 driver_sequence = 10;
 };
 
 message PTransmitDataResult {

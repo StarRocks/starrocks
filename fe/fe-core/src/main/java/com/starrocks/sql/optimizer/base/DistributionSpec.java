@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.starrocks.thrift.TDistributionType;
+
 public class DistributionSpec {
     protected final DistributionType type;
 
@@ -42,6 +44,19 @@ public class DistributionSpec {
         BROADCAST,
         SHUFFLE,
         GATHER,
+        ;
+
+        public TDistributionType toThrift() {
+            if (this == ANY) {
+                return TDistributionType.ANY;
+            } else if (this == BROADCAST) {
+                return TDistributionType.BROADCAST;
+            } else if (this == SHUFFLE) {
+                return TDistributionType.SHUFFLE;
+            } else {
+                return TDistributionType.GATHER;
+            }
+        }
     }
 
     @Override

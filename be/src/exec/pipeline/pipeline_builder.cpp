@@ -74,7 +74,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
-        RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs) {
+        RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs,
+        const TPartitionType::type part_type) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
 
     // If DOP is one, we needn't partition input chunks.
@@ -91,8 +92,9 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_shuffle_source->set_runtime_state(state);
-    auto local_shuffle = std::make_shared<PartitionExchanger>(
-            mem_mgr, local_shuffle_source.get(), true, partition_expr_ctxs, pred_source_op->degree_of_parallelism());
+    auto local_shuffle =
+            std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), part_type, partition_expr_ctxs,
+                                                 pred_source_op->degree_of_parallelism());
 
     // Append local shuffle sink to the tail of the current pipeline, which comes to end.
     auto local_shuffle_sink =

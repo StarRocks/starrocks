@@ -4,10 +4,11 @@
 
 namespace starrocks::pipeline {
 
-SinkBuffer::SinkBuffer(RuntimeState* state, const std::vector<TPlanFragmentDestination>& destinations,
+SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
                        bool is_dest_merge, size_t num_sinkers)
-        : _mem_tracker(state->instance_mem_tracker()),
-          _brpc_timeout_ms(std::min(3600, state->query_options().query_timeout) * 1000),
+        : _fragment_ctx(fragment_ctx),
+          _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
+          _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
           _is_dest_merge(is_dest_merge),
           _num_uncancelled_sinkers(num_sinkers) {
     for (const auto& dest : destinations) {
@@ -211,6 +212,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
             --_total_in_flight_rpc;
+            _fragment_ctx->cancel(Status::InternalError("transmit chunk rpc failed"));
             LOG(WARNING) << "transmit chunk rpc failed";
         });
         closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
@@ -222,6 +224,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             }
             if (!status.ok()) {
                 _is_finishing = true;
+                _fragment_ctx->cancel(status);
                 LOG(WARNING) << "transmit chunk rpc failed, " << status.message();
             } else {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);

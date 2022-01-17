@@ -413,6 +413,7 @@ struct THashJoinNode {
   51: optional bool build_runtime_filters_from_planner;
 
   52: optional TJoinDistributionMode distribution_mode;
+  53: optional list<Exprs.TExpr> partition_exprs
 }
 
 struct TMergeJoinNode {
@@ -694,6 +695,8 @@ struct TExchangeNode {
   2: optional TSortInfo sort_info
   // This is tHe number of rows to skip before returning results
   3: optional i64 offset
+  // Sender's partition type
+  4: optional Partitions.TPartitionType partition_type;
 }
 
 // This contains all of the information computed by the plan as part of the resource

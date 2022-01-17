@@ -38,8 +38,9 @@ public:
     // It is used to parallelize complex operators. For example, the build Hash Table (HT) operator can partition
     // the input chunks to build multiple partition HTs, and the probe HT operator can also partition the input chunks
     // and probe on multiple partition HTs in parallel.
-    OpFactories maybe_interpolate_local_shuffle_exchange(RuntimeState* state, OpFactories& pred_operators,
-                                                         const std::vector<ExprContext*>& partition_expr_ctxs);
+    OpFactories maybe_interpolate_local_shuffle_exchange(
+            RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs,
+            const TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED);
 
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.

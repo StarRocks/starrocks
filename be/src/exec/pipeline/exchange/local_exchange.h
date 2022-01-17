@@ -61,9 +61,9 @@ protected:
 class PartitionExchanger final : public LocalExchanger {
     class Partitioner {
     public:
-        Partitioner(LocalExchangeSourceOperatorFactory* source, const bool is_shuffle,
+        Partitioner(LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
                     const std::vector<ExprContext*>& partition_expr_ctxs)
-                : _source(source), _is_shuffle(is_shuffle), _partition_expr_ctxs(partition_expr_ctxs) {
+                : _source(source), _part_type(part_type), _partition_expr_ctxs(partition_expr_ctxs) {
             _partitions_columns.resize(partition_expr_ctxs.size());
             _hash_values.reserve(source->runtime_state()->chunk_size());
         }
@@ -83,7 +83,7 @@ class PartitionExchanger final : public LocalExchanger {
 
     private:
         LocalExchangeSourceOperatorFactory* _source;
-        const bool _is_shuffle;
+        const TPartitionType::type _part_type;
         // Compute per-row partition values.
         const std::vector<ExprContext*> _partition_expr_ctxs;
 
@@ -98,7 +98,7 @@ class PartitionExchanger final : public LocalExchanger {
 
 public:
     PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
-                       LocalExchangeSourceOperatorFactory* source, bool is_shuffle,
+                       LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
                        const std::vector<ExprContext*>& _partition_expr_ctxs, size_t num_sinks);
 
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;

@@ -37,6 +37,7 @@ namespace starrocks {
 
 ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
+          _texchange_node(tnode.exchange_node),
           _num_senders(0),
           _stream_recvr(nullptr),
           _input_row_desc(
@@ -235,8 +236,8 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     using namespace pipeline;
     OpFactories operators;
     if (!_is_merging) {
-        auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                                  _num_senders, _input_row_desc);
+        auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(
+                context->next_operator_id(), id(), _texchange_node, _num_senders, _input_row_desc);
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
         operators.emplace_back(exchange_source_op);
         if (limit() != -1) {
