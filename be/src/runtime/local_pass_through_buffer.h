@@ -11,7 +11,7 @@
 namespace starrocks {
 
 // To manage pass through chunks between sink/sources in the same process.
-using ChunkUniquePtrVector = std::vector<vectorized::ChunkUniquePtr>;
+using ChunkUniquePtrVector = std::vector<std::pair<vectorized::ChunkUniquePtr, int32_t>>;
 class PassThroughChannel;
 
 class PassThroughChunkBuffer {
@@ -48,7 +48,7 @@ public:
     PassThroughContext(PassThroughChunkBuffer* chunk_buffer, TUniqueId fragment_instance_id, PlanNodeId node_id)
             : _chunk_buffer(chunk_buffer), _fragment_instance_id(fragment_instance_id), _node_id(node_id) {}
     void init();
-    void append_chunk(int sender_id, const vectorized::Chunk* chunk, size_t chunk_size);
+    void append_chunk(int sender_id, const vectorized::Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
 
 private:
