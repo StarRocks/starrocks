@@ -44,7 +44,6 @@ import com.starrocks.statistic.Constants;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class CostModel {
     public static double calculateCost(GroupExpression expression) {
@@ -191,8 +190,25 @@ public class CostModel {
                                                    Statistics inputStatistics) {
             CostEstimate costEstimate = CostEstimate.zero();
             int distinctCount =
-                    node.getAggregations().values().stream().filter(aggregation -> isDistinctAggFun(aggregation, node))
-                            .collect(Collectors.toList()).size();
+                    (int) node.getAggregations().values().stream()
+                            .filter(aggregation -> isDistinctAggFun(aggregation, node)).count();
+            // Use the number of aggregated rows as buckets, does not equal statistics.getOutputRowCount(),
+            // Because limit is computed in statistics.getOutputRowCount().
+            double buckets = StatisticsCalculator.computeGroupByStatistics(node.getGroupBys(), inputStatistics,
+                    Maps.newHashMap());
+            // If the Local aggregate node enable streaming mode, this aggregation could not compute the extra
+            // costs when the cardinality GE (child output rows count) * STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT.
+            // We estimate this aggregate node use streaming mode, so there is no extra overhead of multi
+            // distinct functions.
+            String streamingPreAggregationMode =
+                    ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
+            if (node.getType().isLocal() && (streamingPreAggregationMode.equals("auto") ||
+                    streamingPreAggregationMode.equals("force_streaming"))) {
+                if (buckets >= inputStatistics.getOutputRowCount() *
+                        StatisticsEstimateCoefficient.STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT) {
+                    return CostEstimate.zero();
+                }
+            }
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : node.getAggregations().entrySet()) {
                 CallOperator aggregation = entry.getValue();
@@ -206,23 +222,6 @@ public class CostModel {
 
                     ColumnRefOperator distinctColumn = (ColumnRefOperator) aggregation.getChild(0);
                     distinctColumnStats = inputStatistics.getColumnStatistic(distinctColumn);
-                    // Use the number of aggregated rows as buckets, does not equal statistics.getOutputRowCount(),
-                    // Because limit is computed in statistics.getOutputRowCount().
-                    double buckets = StatisticsCalculator.computeGroupByStatistics(node.getGroupBys(), inputStatistics,
-                            Maps.newHashMap());
-                    // If the Local aggregate node enable streaming mode, this aggregation could not compute the extra
-                    // costs when the cardinality GE (child output rows count) * STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT.
-                    // We estimate this aggregate node use streaming mode, so there is no extra overhead of multi
-                    // distinct functions.
-                    String streamingPreAggregationMode =
-                            ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
-                    if (node.getType().isLocal() && (streamingPreAggregationMode.equals("auto") ||
-                            streamingPreAggregationMode.equals("force_streaming"))) {
-                        if (buckets >= inputStatistics.getOutputRowCount() *
-                                StatisticsEstimateCoefficient.STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT) {
-                            return CostEstimate.zero();
-                        }
-                    }
 
                     double rowSize = distinctColumnStats.getAverageRowSize();
                     // In second phase of aggregation, do not compute extra row size costs
