@@ -471,6 +471,40 @@ public abstract class Type implements Cloneable {
         return false;
     }
 
+    // isAssignable means that assigning or casting rhs to lhs never overflows.
+    // only both integer part width and fraction part width of lhs is not narrower than counterparts
+    // of rhs, then rhs can be assigned to lhs. for integer types, integer part width is computed by
+    // calling Type::getPrecision and its scale is 0.
+    public static boolean isAssignable2Decimal(ScalarType lhs, ScalarType rhs) {
+        int lhsIntPartWidth;
+        int lhsScale;
+        int rhsIntPartWidth;
+        int rhsScale;
+        if (lhs.isFixedPointType()) {
+            lhsIntPartWidth = lhs.getPrecision();
+            lhsScale = 0;
+        } else {
+            lhsIntPartWidth = lhs.getScalarPrecision() - lhs.getScalarScale();
+            lhsScale = lhs.getScalarScale();
+        }
+
+        if (rhs.isFixedPointType()) {
+            rhsIntPartWidth = rhs.getPrecision();
+            rhsScale = 0;
+        } else {
+            rhsIntPartWidth = rhs.getScalarPrecision() - rhs.getScalarScale();
+            rhsScale = rhs.getScalarScale();
+        }
+
+        // when lhs is integer, for instance, tinyint, lhsIntPartWidth is 3, it cannot holds
+        // a DECIMAL(3, 0).
+        if (lhs.isFixedPointType() && rhs.isDecimalOfAnyVersion()) {
+            return lhsIntPartWidth > rhsIntPartWidth && lhsScale >= rhsScale;
+        } else {
+            return lhsIntPartWidth >= rhsIntPartWidth && lhsScale >= rhsScale;
+        }
+    }
+
     public static boolean canCastTo(Type t1, Type t2) {
         if (t1.isScalarType() && t2.isScalarType()) {
             return ScalarType.canCastTo((ScalarType) t1, (ScalarType) t2);
@@ -747,6 +781,8 @@ public abstract class Type implements Cloneable {
                 return 10;
             case BIGINT:
                 return 19;
+            case LARGEINT:
+                return 39;
             case FLOAT:
                 return 7;
             case DOUBLE:

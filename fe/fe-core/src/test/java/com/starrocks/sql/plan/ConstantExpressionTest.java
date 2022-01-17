@@ -131,6 +131,17 @@ public class ConstantExpressionTest {
     }
 
     @Test
+    public void testCastToDecimalLiteral() throws Exception {
+        testFragmentPlanContainsConstExpr(
+                "select cast(151971657 as decimal32);",
+                "NULL");
+
+        testFragmentPlanContainsConstExpr(
+                "select cast('0.5' as decimal32);",
+                "0.5");
+    }
+
+    @Test
     public void testArithmetic() throws Exception {
         testFragmentPlanContainsConstExpr(
                 "select 1 + 10;",
