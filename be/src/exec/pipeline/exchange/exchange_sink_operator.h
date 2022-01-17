@@ -68,7 +68,7 @@ public:
 private:
     class Channel;
 
-    static const int32_t default_driver_sequence = 0;
+    static const int32_t DEFAULT_DRIVER_SEQUENCE = 0;
 
     const std::shared_ptr<SinkBuffer>& _buffer;
 

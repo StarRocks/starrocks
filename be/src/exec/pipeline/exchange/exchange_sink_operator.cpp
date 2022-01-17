@@ -276,7 +276,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
                 RETURN_IF_ERROR(send_one_chunk(_chunks[driver_sequence].get(), driver_sequence, true, false));
             }
         }
-        RETURN_IF_ERROR(send_one_chunk(nullptr, ExchangeSinkOperator::default_driver_sequence, true, true));
+        RETURN_IF_ERROR(send_one_chunk(nullptr, ExchangeSinkOperator::DEFAULT_DRIVER_SEQUENCE, true, true));
     }
 
     return Status::OK();
@@ -344,16 +344,17 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     }
     RETURN_IF_ERROR(get_block_compression_codec(_compress_type, &_compress_codec));
 
-    std::set<std::string> instances;
+    std::string instances;
     for (const auto& channel : _channels) {
-        instances.insert(channel->get_fragment_instance_id_str());
+        if (instances.empty()) {
+            instances = channel->get_fragment_instance_id_str();
+        } else {
+            instances += ", ";
+            instances += channel->get_fragment_instance_id_str();
+        }
     }
     _runtime_profile->add_info_string("DestID", std::to_string(_dest_node_id));
-    _runtime_profile->add_info_string("DestFragments",
-                                      std::accumulate(std::begin(instances), std::end(instances), std::string(),
-                                                      [](const std::string& s1, const std::string& s2) {
-                                                          return s1.empty() ? s2 : s1 + ", " + s2;
-                                                      }));
+    _runtime_profile->add_info_string("DestFragments", instances);
     _runtime_profile->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
@@ -428,7 +429,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         int has_not_pass_through = false;
         for (auto idx : _channel_indices) {
             if (_channels[idx]->use_pass_through()) {
-                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk.get(), default_driver_sequence, false, false));
+                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk.get(), DEFAULT_DRIVER_SEQUENCE, false, false));
             } else {
                 has_not_pass_through = true;
             }
@@ -450,7 +451,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                 for (auto idx : _channel_indices) {
                     if (!_channels[idx]->use_pass_through()) {
                         PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, default_driver_sequence, attachment));
+                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, DEFAULT_DRIVER_SEQUENCE, attachment));
                     }
                 }
                 _current_request_bytes = 0;
@@ -463,7 +464,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         // 1. Get request of that channel
         auto& channel = _channels[_curr_random_channel_idx];
         bool real_sent = false;
-        RETURN_IF_ERROR(channel->send_one_chunk(chunk.get(), default_driver_sequence, false, false, &real_sent));
+        RETURN_IF_ERROR(channel->send_one_chunk(chunk.get(), DEFAULT_DRIVER_SEQUENCE, false, false, &real_sent));
         if (real_sent) {
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % _channels.size();
         }
@@ -518,6 +519,10 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         }
 
         for (int32_t channel_id : _channel_indices) {
+            if (_channels[channel_id]->get_fragment_instance_id().lo == -1) {
+                // dest bucket is no used, continue
+                continue;
+            }
             for (int32_t driver_sequence = 0; driver_sequence < _num_shuffles; ++driver_sequence) {
                 size_t from = _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence];
                 size_t size = _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence + 1] - from;
@@ -526,10 +531,6 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                     continue;
                 }
 
-                if (_channels[channel_id]->get_fragment_instance_id().lo == -1) {
-                    // dest bucket is no used, continue
-                    continue;
-                }
                 RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(chunk.get(), driver_sequence,
                                                                           _row_indexes.data(), from, size, state));
             }
@@ -546,7 +547,7 @@ void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& channel : _channels) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(copy, default_driver_sequence, attachment);
+            channel->send_chunk_request(copy, DEFAULT_DRIVER_SEQUENCE, attachment);
         }
         _current_request_bytes = 0;
         _chunk_request.reset();
