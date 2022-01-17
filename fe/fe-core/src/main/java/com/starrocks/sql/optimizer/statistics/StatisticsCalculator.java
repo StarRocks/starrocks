@@ -94,7 +94,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.join.LogicalProjectJoinOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -771,29 +770,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         buildFrom(columnStatistic).setNullsFraction(newNullFraction).build());
             }
         }
-    }
-
-    @Override
-    public Void visitLogicalProjectJoin(LogicalProjectJoinOperator node, ExpressionContext context) {
-        computeJoinNode(context, node.getJoinOperator().getJoinType(), node.getOnPredicate());
-        LogicalProjectOperator projectOperator = node.getProjectOperator();
-
-        Statistics.Builder builder = Statistics.builder();
-        Statistics inputStatistics = context.getStatistics();
-        builder.setOutputRowCount(inputStatistics.getOutputRowCount());
-
-        Statistics.Builder allBuilder = Statistics.builder();
-        allBuilder.addColumnStatistics(inputStatistics.getColumnStatistics());
-
-        for (ColumnRefOperator requiredColumnRefOperator : projectOperator.getColumnRefMap().keySet()) {
-            ScalarOperator mapOperator = projectOperator.getColumnRefMap().get(requiredColumnRefOperator);
-            ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
-            builder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
-            allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
-        }
-
-        context.setStatistics(builder.build());
-        return null;
     }
 
     @Override

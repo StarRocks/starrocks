@@ -404,7 +404,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testCrossJoinToInnerJoin() throws Exception {
         String sql = "SELECT t0.v1 from t0, test_all_type where t0.v1 = test_all_type.t1d";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("join op: INNER JOIN"));
         Assert.assertTrue(planFragment.contains("equal join conjunct: 1: v1 = 7: t1d"));
     }
@@ -531,7 +530,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testWindowLimitPushdown() throws Exception {
         String sql = "select lag(v1, 1,1) OVER () from t0 limit 1";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\n" +
                 "  |  limit: 1"));
     }
@@ -1184,7 +1182,6 @@ public class PlanFragmentTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(*) from (select v1 from t0 order by v2 limit 10,20) t;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("3:AGGREGATE (update finalize)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1887,7 +1884,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "    LEFT JOIN ods_order ref_1 ON ref_0.order_dt = ref_1.order_dt\n" +
                 "  WHERE ref_1.order_no IS NOT NULL;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)"));
     }
@@ -2075,7 +2071,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testAggregateTwoLevelToOneLevelOptimization() throws Exception {
         String sql = "SELECT c2, count(*) FROM db1.tbl3 WHERE c1<10 GROUP BY c2;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertEquals(1, StringUtils.countMatches(plan, "AGGREGATE (update finalize)"));
 
         sql = " SELECT c2, count(*) FROM (SELECT t1.c2 as c2 FROM db1.tbl3 as t1 INNER JOIN [shuffle] db1.tbl4 " +
@@ -2772,7 +2767,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 " union select join2.id from join1 RIGHT ANTI JOIN join2 on join1.id = join2.id " +
                 " and 1 > 2 WHERE (NOT (true)) group by join2.id ";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
@@ -2788,7 +2782,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "SELECT 1 FROM join1 RIGHT ANTI JOIN join2 on join1.id = join2.id and join2.dt = 1 FULL OUTER JOIN "
                         + "pushdown_test on join2.dt = pushdown_test.k3 WHERE join2.value != join2.value";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  9:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
@@ -2808,7 +2801,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "SELECT 1 FROM join1 RIGHT ANTI JOIN join2 on join1.id = join2.id FULL OUTER JOIN "
                         + "pushdown_test on join2.dt = pushdown_test.k3 WHERE join2.value != join2.value";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  9:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
@@ -3623,7 +3615,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "select * from join1 where join1.dt > 1 and NOT EXISTS (select * from join1 as a where join1.dt = 1 and a.id = join1.id)" +
                         "and NOT EXISTS (select * from join1 as a where join1.dt = 2 and a.id = join1.id);";
         String explainString = getFragmentPlan(sql);
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("  4:HASH JOIN\n" +
                 "  |  join op: RIGHT ANTI JOIN (COLOCATE)\n" +
                 "  |  hash predicates:\n" +
@@ -4622,7 +4613,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEmptyProjectCountStar() throws Exception {
         String sql = "select count(*) from test_all_type a, test_all_type b where a.t1a is not null";
         String plan = getCostExplain(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  4:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
@@ -4763,7 +4753,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
@@ -4778,13 +4767,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "on a.v3 = t1.v4 join t2 on v4 = v7 join t2 as b" +
                 " on a.v1 = b.v7 where b.v8 > t1.v5 limit 10";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         // check join on predicate which has expression with limit operator
         sql = "select t2.v8 from (select v1, v2, v1 as v3 from t0 where v2<> v3 limit 15) as a join t1 " +
                 "on a.v3 + 1 = t1.v4 join t2 on v4 = v7 join t2 as b" +
                 " on a.v3 + 2 = b.v7 where b.v8 > t1.v5 limit 10";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
     }
 
     @Test
@@ -4871,7 +4858,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "WHERE\n" +
                 "        ref_2.t1a >= ref_1.t1a";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
     }
 
     @Test
@@ -4991,7 +4977,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "IN(- 1210205071)\n";
         String plan = getFragmentPlan(sql);
         // Just make sure we can get the final plan, and not crashed because of stats calculator error.
-        System.out.println(sql);
     }
 
     @Test
@@ -5046,7 +5031,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "limit \n" +
                 "  155;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  6:Project\n" +
                 "  |  <slot 3> : 3: v3"));
     }
@@ -5082,7 +5066,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "limit \n" +
                 "  45;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  9:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
                 "  |  <slot 21> : 21: expr\n" +
@@ -5312,7 +5295,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEqStringCast() throws Exception {
         String sql = "select 'a' = v1 from t0";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) = 'a'\n"));
     }
 
@@ -5364,7 +5346,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEqDoubleCast() throws Exception {
         String sql = "select 'a' = t1e from test_all_type";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("CAST(5: t1e AS DOUBLE) = CAST('a' AS DOUBLE)\n"));
     }
 

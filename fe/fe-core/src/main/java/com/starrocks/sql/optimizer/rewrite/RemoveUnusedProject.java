@@ -30,7 +30,7 @@ public class RemoveUnusedProject extends OptExpressionVisitor<OptExpression, Voi
     @Override
     public OptExpression visitPhysicalProject(OptExpression optExpr, Void context) {
         PhysicalProjectOperator physicalProjectOperator = (PhysicalProjectOperator) optExpr.getOp();
-        OptExpression childOpt = visit(optExpr.inputAt(0), context);
+        OptExpression childOpt = rewrite(optExpr.inputAt(0));
 
         ColumnRefSet childOutputColumns = new ColumnRefSet();
         if (childOpt.getOp() instanceof PhysicalHashJoinOperator) {
