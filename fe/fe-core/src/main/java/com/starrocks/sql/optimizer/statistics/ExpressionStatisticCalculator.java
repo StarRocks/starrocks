@@ -202,8 +202,9 @@ public class ExpressionStatisticCalculator {
                     return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
                             callOperator.getType().getTypeSize(), rowCount);
                 case FunctionSet.MULTI_DISTINCT_COUNT:
+                    // use child column averageRowSize instead call operator type size
                     return new ColumnStatistic(0, columnStatistic.getDistinctValuesCount(), 0,
-                            callOperator.getType().getTypeSize(), rowCount);
+                            columnStatistic.getAverageRowSize(), rowCount);
                 // use child column statistics for now
                 case FunctionSet.SUM:
                 case FunctionSet.AVG:
