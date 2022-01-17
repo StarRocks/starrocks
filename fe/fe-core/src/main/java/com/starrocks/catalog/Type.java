@@ -471,10 +471,6 @@ public abstract class Type implements Cloneable {
         return false;
     }
 
-    public boolean isExactNumericType() {
-        return isIntegerType() || isLargeIntType() || isDecimalV3();
-    }
-
     // isAssignable means that assigning or casting rhs to lhs never overflows.
     // only both integer part width and fraction part width of lhs is not narrower than counterparts
     // of rhs, then rhs can be assigned to lhs. for integer types, integer part width is computed by
@@ -484,7 +480,7 @@ public abstract class Type implements Cloneable {
         int lhsScale;
         int rhsIntPartWidth;
         int rhsScale;
-        if (lhs.isIntegerType() || lhs.isLargeIntType()) {
+        if (lhs.isFixedPointType()) {
             lhsIntPartWidth = lhs.getPrecision();
             lhsScale = 0;
         } else {
@@ -492,7 +488,7 @@ public abstract class Type implements Cloneable {
             lhsScale = lhs.getScalarScale();
         }
 
-        if (rhs.isIntegerType() || lhs.isLargeIntType()) {
+        if (rhs.isFixedPointType()) {
             rhsIntPartWidth = rhs.getPrecision();
             rhsScale = 0;
         } else {
@@ -502,7 +498,7 @@ public abstract class Type implements Cloneable {
 
         // when lhs is integer, for instance, tinyint, lhsIntPartWidth is 3, it cannot holds
         // a DECIMAL(3, 0).
-        if (lhs.isIntegerType() && rhs.isDecimalOfAnyVersion()) {
+        if (lhs.isFixedPointType() && rhs.isDecimalOfAnyVersion()) {
             return lhsIntPartWidth > rhsIntPartWidth && lhsScale >= rhsScale;
         } else {
             return lhsIntPartWidth >= rhsIntPartWidth && lhsScale >= rhsScale;
