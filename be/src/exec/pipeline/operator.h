@@ -108,7 +108,7 @@ public:
     RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
     virtual std::string get_name() const {
-        return strings::Substitute("$0_$1($2)", _name, this, is_finished() ? "X" : "O");
+        return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
     }
 
     const LocalRFWaitingSet& rf_waiting_set() const;
@@ -182,7 +182,7 @@ public:
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
-    std::string get_name() const { return _name + "_" + std::to_string(_id); }
+    std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
 
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.

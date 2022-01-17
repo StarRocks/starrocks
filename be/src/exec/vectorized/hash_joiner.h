@@ -55,10 +55,10 @@ struct HashJoinerParam {
               _node_type(node_type),
               _limit(limit),
               _is_null_safes(is_null_safes),
-              _build_expr_ctxs(std::move(build_expr_ctxs)),
-              _probe_expr_ctxs(std::move(probe_expr_ctxs)),
-              _other_join_conjunct_ctxs(std::move(other_join_conjunct_ctxs)),
-              _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _build_expr_ctxs(build_expr_ctxs),
+              _probe_expr_ctxs(probe_expr_ctxs),
+              _other_join_conjunct_ctxs(other_join_conjunct_ctxs),
+              _conjunct_ctxs(conjunct_ctxs),
               _build_row_descriptor(build_row_descriptor),
               _probe_row_descriptor(probe_row_descriptor),
               _row_descriptor(row_descriptor),
@@ -74,11 +74,11 @@ struct HashJoinerParam {
     TPlanNodeId _node_id;
     TPlanNodeType::type _node_type;
     int64_t _limit;
-    std::vector<bool> _is_null_safes;
-    std::vector<ExprContext*> _build_expr_ctxs;
-    std::vector<ExprContext*> _probe_expr_ctxs;
-    std::vector<ExprContext*> _other_join_conjunct_ctxs;
-    std::vector<ExprContext*> _conjunct_ctxs;
+    const std::vector<bool> _is_null_safes;
+    const std::vector<ExprContext*> _build_expr_ctxs;
+    const std::vector<ExprContext*> _probe_expr_ctxs;
+    const std::vector<ExprContext*> _other_join_conjunct_ctxs;
+    const std::vector<ExprContext*> _conjunct_ctxs;
     const RowDescriptor _build_row_descriptor;
     const RowDescriptor _probe_row_descriptor;
     const RowDescriptor _row_descriptor;

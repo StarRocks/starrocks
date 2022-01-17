@@ -9,22 +9,23 @@ namespace starrocks::pipeline {
 
 Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkPtr& chunk,
                                                         std::vector<uint32_t>& partition_row_indexes) {
-    size_t num_rows = chunk->num_rows();
-    size_t num_partitions = _source->get_sources().size();
+    int32_t num_rows = chunk->num_rows();
+    int32_t num_partitions = _source->get_sources().size();
 
     for (size_t i = 0; i < _partitions_columns.size(); ++i) {
         _partitions_columns[i] = _partition_expr_ctxs[i]->evaluate(chunk.get());
         DCHECK(_partitions_columns[i] != nullptr);
     }
 
-    if (_is_shuffle) {
+    // Compute hash for each partition column
+    if (_part_type == TPartitionType::HASH_PARTITIONED) {
         _hash_values.assign(num_rows, HashUtil::FNV_SEED);
         for (const vectorized::ColumnPtr& column : _partitions_columns) {
             column->fnv_hash(&_hash_values[0], 0, num_rows);
         }
     } else {
         // The data distribution was calculated using CRC32_HASH,
-        // and bucket shuffle need to use the same hash function when sending data.
+        // and bucket shuffle need to use the same hash function when sending data
         _hash_values.assign(num_rows, 0);
         for (const vectorized::ColumnPtr& column : _partitions_columns) {
             column->crc32_hash(&_hash_values[0], 0, num_rows);
@@ -33,30 +34,31 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
 
     // Compute row indexes for each channel.
     _partition_row_indexes_start_points.assign(num_partitions + 1, 0);
-    for (size_t i = 0; i < num_rows; ++i) {
-        size_t channel_index = _hash_values[i] % num_partitions;
-        _partition_row_indexes_start_points[channel_index]++;
-        _hash_values[i] = channel_index;
+    for (int32_t i = 0; i < num_rows; ++i) {
+        size_t partition_index = _hash_values[i] % num_partitions;
+        _partition_row_indexes_start_points[partition_index]++;
+        _hash_values[i] = partition_index;
     }
     // We make the last item equal with number of rows of this chunk.
-    for (int i = 1; i <= num_partitions; ++i) {
+    for (int32_t i = 1; i <= num_partitions; ++i) {
         _partition_row_indexes_start_points[i] += _partition_row_indexes_start_points[i - 1];
     }
 
-    for (int i = static_cast<int>(num_rows) - 1; i >= 0; --i) {
-        partition_row_indexes[--_partition_row_indexes_start_points[_hash_values[i]]] = i;
+    for (int32_t i = num_rows - 1; i >= 0; --i) {
+        partition_row_indexes[_partition_row_indexes_start_points[_hash_values[i]] - 1] = i;
+        _partition_row_indexes_start_points[_hash_values[i]]--;
     }
 
     return Status::OK();
 }
 
 PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
-                                       LocalExchangeSourceOperatorFactory* source, bool is_shuffle,
+                                       LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
                                        const std::vector<ExprContext*>& partition_expr_ctxs, const size_t num_sinks)
         : LocalExchanger("Partition", memory_manager, source) {
     _partitioners.reserve(num_sinks);
     for (size_t i = 0; i < num_sinks; i++) {
-        _partitioners.emplace_back(source, is_shuffle, partition_expr_ctxs);
+        _partitioners.emplace_back(source, part_type, partition_expr_ctxs);
     }
 }
 
@@ -82,11 +84,7 @@ Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk, const int32
             // No data for this partition.
             continue;
         }
-        // TODO(kks): support bucket shuffle later
-        // if (_channels[i]->get_fragment_instance_id().lo == -1) {
-        //     // dest bucket is no used, continue
-        //     continue;
-        // }
+
         RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size));
     }
     return Status::OK();

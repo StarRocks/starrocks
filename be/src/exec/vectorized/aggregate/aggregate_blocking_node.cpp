@@ -4,6 +4,7 @@
 
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
+#include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
@@ -168,10 +169,29 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     if (agg_node.need_finalize) {
         // If finalize aggregate with group by clause, then it can be paralized
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            std::vector<ExprContext*> group_by_expr_ctxs;
-            Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-            operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(
-                    runtime_state(), operators_with_sink, group_by_expr_ctxs);
+            // There are two ways of shuffle
+            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHFFULE_HASH_PARTITIONED
+            // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
+            // there is no need to perform local shuffle again at receiver side
+            // 2. Otherwise, add LocalExchangeOperator
+            // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into AggregateBlockingSinkOperator.
+            bool need_local_shuffle = true;
+            if (operators_with_sink.size() == 1 &&
+                typeid(*operators_with_sink[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
+                auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(operators_with_sink[0].get());
+                auto& texchange_node = exchange_op->texchange_node();
+                DCHECK(texchange_node.__isset.partition_type);
+                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    need_local_shuffle = false;
+                }
+            }
+            if (need_local_shuffle) {
+                std::vector<ExprContext*> group_by_expr_ctxs;
+                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+                operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(
+                        runtime_state(), operators_with_sink, group_by_expr_ctxs);
+            }
         } else {
             operators_with_sink =
                     context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
