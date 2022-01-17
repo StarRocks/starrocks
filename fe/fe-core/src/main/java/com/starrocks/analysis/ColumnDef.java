@@ -86,7 +86,10 @@ public class ColumnDef {
     private final TypeDef typeDef;
     private AggregateType aggregateType;
     private boolean isKey;
-    private Boolean isAllowNullTristate;
+    // For primary key column null constraint, when null specify, should report an error, when not null specify, should working as normal, when implicit specified, default behavior should be working as not null specify.
+    // For now, just two value assign to variable `isAllowNull`, a two state boolean value named isAllowNull to hold null constraint value, which can not tell the difference between implicit specified and explicit specify null, so we can not make a decision, to working as normal, or report an error, that is the question.
+    // For opt_is_allow_null without keyword scenario, change it to null value. add a tristate Boolean value named isPrimaryKeyAllowNull do some adapt work.
+    private Boolean isPrimaryKeyAllowNull;
     private boolean isAllowNull;
     private DefaultValueDef defaultValueDef;
     private final String comment;
@@ -96,13 +99,13 @@ public class ColumnDef {
     }
 
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
-                     Boolean isAllowNullTristate, DefaultValueDef defaultValueDef, String comment) {
+                     Boolean isPrimaryKeyAllowNull, DefaultValueDef defaultValueDef, String comment) {
         this.name = name;
         this.typeDef = typeDef;
         this.isKey = isKey;
         this.aggregateType = aggregateType;
-        this.isAllowNullTristate = isAllowNullTristate;
-        this.isAllowNull = isAllowNullTristate == null ? true : isAllowNullTristate;
+        this.isPrimaryKeyAllowNull = isPrimaryKeyAllowNull;
+        this.isAllowNull = isPrimaryKeyAllowNull == null ? true : isPrimaryKeyAllowNull;
         this.defaultValueDef = defaultValueDef;
         this.comment = comment;
     }
@@ -111,8 +114,14 @@ public class ColumnDef {
         return isAllowNull;
     }
 
-    public void setIsAllowNullForPrimaryKeySql() {
-        isAllowNull = isAllowNullTristate == null ? false : isAllowNullTristate;
+    // For database null constraint, for all key models, there are three choices in starrocks for user now(until 2.0 deb29af76ee749ed8e99ec002cce4881b507c230):
+    // 1. explicit specify, null
+    // 2. explicit specify, not null
+    // 3. implicit specified, that is write nothing, the default behavior is null
+    // Product manager @Dshadowzh what to do #2778 to make primary key set NOT NULL by default in the 3 implicit specified scenario.
+    // so, according to this idea, for primary key, should use setPrimaryKeyNonNullable() to update the real value to `isAllowNull` in create table stage.
+    public void setPrimaryKeyNonNullable() {
+        isAllowNull = isPrimaryKeyAllowNull == null ? false : isPrimaryKeyAllowNull;
     }
 
     // only for test
