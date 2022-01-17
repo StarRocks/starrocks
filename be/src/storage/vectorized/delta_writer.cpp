@@ -79,15 +79,18 @@ Status DeltaWriter::_init() {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
             _set_state(kUninitialized);
-            auto msg = Substitute("Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2.",
-                                  _opt.tablet_id, tracker->consumption(), tracker->limit());
+            auto msg = Substitute(
+                    "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2 top_tablets:$3",
+                    _opt.tablet_id, tracker->consumption(), tracker->limit(),
+                    _storage_engine->update_manager()->topn_memory_stats(5));
             LOG(WARNING) << msg;
             return Status::MemoryLimitExceeded(msg);
         }
         if (_tablet->updates()->is_error()) {
             _set_state(kUninitialized);
-            auto msg = fmt::format("Tablet is in error state. This is a primary key table. tablet_id: {}",
-                                   _tablet->tablet_id());
+            auto msg = Substitute("Fail to init delta writer. tablet $0 error: $1", _tablet->tablet_id(),
+                                  _tablet->updates()->get_error_msg());
+            LOG(WARNING) << msg;
             return Status::ServiceUnavailable(msg);
         }
     }

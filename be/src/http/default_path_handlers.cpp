@@ -32,6 +32,8 @@
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/storage_engine.h"
+#include "storage/update_manager.h"
 #include "util/debug_util.h"
 #include "util/pretty_printer.h"
 
@@ -216,6 +218,9 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
     boost::replace_all(tmp, "\n", "<br>");
     (*output) << tmp << "</pre>";
 #endif
+    (*output) << "<pre>";
+    string stats = ExecEnv::GetInstance()->storage_engine()->update_manager()->detail_memory_stats();
+    (*output) << stats << "</pre>";
 }
 
 void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* process_mem_tracker) {
