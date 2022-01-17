@@ -86,10 +86,11 @@ public class ColumnDef {
     private final TypeDef typeDef;
     private AggregateType aggregateType;
     private boolean isKey;
-    // For primary key column null constraint, when null specify, should report an error, when not null specify, should working as normal, when implicit specified, default behavior should be working as not null specify.
-    // For now, just two value assign to variable `isAllowNull`, a two state boolean value named isAllowNull to hold null constraint value, which can not tell the difference between implicit specified and explicit specify null, so we can not make a decision, to working as normal, or report an error, that is the question.
-    // For opt_is_allow_null without keyword scenario, change it to null value. Add a boolean value named isAllowNullImplicitly indicate that null constraint implicit specified.
-    private boolean isAllowNullImplicitly = false;
+    // Primary-key column should obey the not-null constraint. When creating a table, the not-null constraint will add to the primary-key column default. If the user specifies NULL explicitly, semantics analysis will report an error.
+    // Now, isAllowNull is used to indicate a null constraint hold or not. Primary-key and non-primary-key columns obey different constraints, so the isAllowNull can not be assigned a default value.
+    // Add a new variable name isAllowNullImplicit to indicate the message. IfisAllowNullImplicit=true, it indicates the null constraint is obeyed implicitly.
+    // For opt_is_allow_null without keyword scenario, change it to null value. Add a boolean value named isAllowNullImplicit indicate that null constraint implicit specified.
+    private boolean isAllowNullImplicit = false;
     private Boolean isAllowNull;
     private DefaultValueDef defaultValueDef;
     private final String comment;
@@ -106,10 +107,10 @@ public class ColumnDef {
         this.aggregateType = aggregateType;
         if (isAllowNull == null) {
             this.isAllowNull = true;
-            this.isAllowNullImplicitly = true;
+            this.isAllowNullImplicit = true;
         } else {
             this.isAllowNull = isAllowNull;
-            this.isAllowNullImplicitly = false;
+            this.isAllowNullImplicit = false;
         }
         this.defaultValueDef = defaultValueDef;
         this.comment = comment;
@@ -119,14 +120,10 @@ public class ColumnDef {
         return isAllowNull;
     }
 
-    // For database null constraint, for all key models, there are three choices in starrocks for user now(until 2.0 deb29af76ee749ed8e99ec002cce4881b507c230):
-    // 1. explicit specify, null
-    // 2. explicit specify, not null
-    // 3. implicit specified, that is write nothing, the default behavior is null
-    // Product manager @Dshadowzh what to do #2778 to make primary key set NOT NULL by default in the 3 implicit specified scenario.
-    // so, according to this proposal, for primary key, should use setPrimaryKeyNonNullable() to update the real value to `isAllowNull` in create table stage, if the null constraint was implicit specified, should set to false, which is not null.
+    // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
+    // So add a new setPrimaryKeyNonNullable() to set isAllowNull to be true for primary key columns.
     public void setPrimaryKeyNonNullable() {
-        if (isAllowNullImplicitly) {
+        if (isAllowNullImplicit) {
             this.isAllowNull = false;
         }
     }
