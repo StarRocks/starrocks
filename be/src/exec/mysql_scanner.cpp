@@ -34,6 +34,7 @@ MysqlScanner::MysqlScanner(const MysqlScannerParam& param)
 
 MysqlScanner::~MysqlScanner() {
     if (_my_result) {
+        mariadb_cancel(_my_conn);
         mysql_free_result(_my_result);
         _my_result = nullptr;
     }
