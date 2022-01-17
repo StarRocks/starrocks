@@ -8,7 +8,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rewrite.PruneAggregateNodeRule;
@@ -221,12 +220,11 @@ public class Optimizer {
             OptExpression childPlan = extractBestPlan(inputProperties.get(i), groupExpression.inputAt(i));
             childPlans.add(childPlan);
         }
-        // record inputProperties at operator, used for planFragment builder to determine join type
-        PhysicalOperator operator = (PhysicalOperator) groupExpression.getOp();
-        operator.setRequiredProperties(inputProperties);
 
         OptExpression expression = OptExpression.create(groupExpression.getOp(),
                 childPlans);
+        // record inputProperties at optExpression, used for planFragment builder to determine join type
+        expression.setRequiredProperties(inputProperties);
         expression.setStatistics(groupExpression.getGroup().getConfidenceStatistics() != null ?
                 groupExpression.getGroup().getConfidenceStatistics() :
                 groupExpression.getGroup().getStatistics());

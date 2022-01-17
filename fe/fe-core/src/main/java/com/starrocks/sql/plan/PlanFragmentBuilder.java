@@ -1472,13 +1472,13 @@ public class PlanFragmentBuilder {
                     } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
                             rightFragmentPlanRoot.canDoReplicatedJoin()) {
                         distributionMode = HashJoinNode.DistributionMode.REPLICATED;
-                    } else if (isShuffleJoin(node)) {
+                    } else if (isShuffleJoin(optExpr)) {
                         distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                     } else {
                         Preconditions.checkState(false, "Must be replicate join or colocate join");
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
                     }
-                } else if (isShuffleJoin(node)) {
+                } else if (isShuffleJoin(optExpr)) {
                     distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
                     distributionMode = HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET;
@@ -1736,8 +1736,8 @@ public class PlanFragmentBuilder {
             return false;
         }
 
-        public boolean isShuffleJoin(PhysicalHashJoinOperator node) {
-            return node.getRequiredProperties().stream().allMatch(
+        public boolean isShuffleJoin(OptExpression optExpression) {
+            return optExpression.getRequiredProperties().stream().allMatch(
                     physicalPropertySet -> physicalPropertySet.getDistributionProperty().isShuffle() &&
                             ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
                                     .getHashDistributionDesc().getSourceType().equals(

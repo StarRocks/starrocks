@@ -7,7 +7,6 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.OutputInputProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 
 import java.util.Collections;
 import java.util.List;
@@ -58,12 +57,10 @@ public class EnumeratePlan {
         int localRankOfGroupExpression = nthExecPlan - planCountOfKGroupExpression;
         // 3. compute use which output/input properties
         int planCountOfKProperties = 0;
+        List<PhysicalPropertySet> inputProperties = Lists.newArrayList();
         for (Map.Entry<OutputInputProperty, Integer> entry : chooseGroupExpression
                 .getPropertiesPlanCountMap(requiredProperty).entrySet()) {
-            List<PhysicalPropertySet> inputProperties = entry.getKey().getInputProperties();
-            // record inputProperties at operator, used for planFragment builder to determine join type
-            PhysicalOperator operator = (PhysicalOperator) chooseGroupExpression.getOp();
-            operator.setRequiredProperties(inputProperties);
+            inputProperties = entry.getKey().getInputProperties();
 
             if (planCountOfKProperties + entry.getValue() >= localRankOfGroupExpression) {
                 // 4. compute the localProperty-rank in the property.
@@ -83,6 +80,8 @@ public class EnumeratePlan {
         }
         // 7. construct the OptExpression
         OptExpression chooseExpression = OptExpression.create(chooseGroupExpression.getOp(), childPlans);
+        // record inputProperties at optExpression, used for planFragment builder to determine join type
+        chooseExpression.setRequiredProperties(inputProperties);
         chooseExpression.setStatistics(group.getConfidenceStatistics() != null ?
                 group.getConfidenceStatistics() :
                 group.getStatistics());

@@ -5,17 +5,14 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
-import java.util.List;
 import java.util.Set;
 
 public abstract class PhysicalOperator extends Operator {
     protected OrderSpec orderSpec;
     protected DistributionSpec distributionSpec;
-    private List<PhysicalPropertySet> requiredProperties;
 
     protected PhysicalOperator(OperatorType type) {
         this(type, DistributionSpec.createAnyDistributionSpec(), OrderSpec.createEmpty());
@@ -42,14 +39,6 @@ public abstract class PhysicalOperator extends Operator {
 
     public DistributionSpec getDistributionSpec() {
         return distributionSpec;
-    }
-
-    public void setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
-        this.requiredProperties = requiredProperties;
-    }
-
-    public List<PhysicalPropertySet> getRequiredProperties() {
-        return this.requiredProperties;
     }
 
     @Override
