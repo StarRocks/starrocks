@@ -97,7 +97,7 @@ public class LogicalProjectJoinOperator extends LogicalOperator {
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitMultiJoin(this, context);
+        return visitor.visitLogicalProjectJoin(this, context);
     }
 
     @Override

@@ -774,7 +774,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitMultiJoin(LogicalProjectJoinOperator node, ExpressionContext context) {
+    public Void visitLogicalProjectJoin(LogicalProjectJoinOperator node, ExpressionContext context) {
         computeJoinNode(context, node.getJoinOperator().getJoinType(), node.getOnPredicate());
         LogicalProjectOperator projectOperator = node.getProjectOperator();
 
@@ -794,7 +794,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(builder.build());
         return null;
-        //return visitOperator(context.getOp(), context);
     }
 
     @Override

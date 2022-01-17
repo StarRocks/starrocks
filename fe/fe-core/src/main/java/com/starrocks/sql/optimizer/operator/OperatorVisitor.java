@@ -89,7 +89,6 @@ public abstract class OperatorVisitor<R, C> {
         return visitLogicalTableScan(node, context);
     }
 
-
     public R visitLogicalMysqlScan(LogicalMysqlScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
@@ -170,11 +169,11 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
-    public R visitMockOperator(MockOperator node, C context) {
+    public R visitLogicalProjectJoin(LogicalProjectJoinOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitMultiJoin(LogicalProjectJoinOperator node, C context) {
+    public R visitMockOperator(MockOperator node, C context) {
         return visitOperator(node, context);
     }
 
