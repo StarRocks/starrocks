@@ -89,7 +89,7 @@ public class ColumnDef {
     // For primary key column null constraint, when null specify, should report an error, when not null specify, should working as normal, when implicit specified, default behavior should be working as not null specify.
     // For now, just two value assign to variable `isAllowNull`, a two state boolean value named isAllowNull to hold null constraint value, which can not tell the difference between implicit specified and explicit specify null, so we can not make a decision, to working as normal, or report an error, that is the question.
     // For opt_is_allow_null without keyword scenario, change it to null value. Add a boolean value named isAllowNullImplicitly indicate that null constraint implicit specified.
-    private boolean isAllowNullImplicitly;
+    private boolean isAllowNullImplicitly = false;
     private Boolean isAllowNull;
     private DefaultValueDef defaultValueDef;
     private final String comment;
@@ -109,6 +109,7 @@ public class ColumnDef {
             this.isAllowNullImplicitly = true;
         } else {
             this.isAllowNull = isAllowNull;
+            this.isAllowNullImplicitly = false;
         }
         this.defaultValueDef = defaultValueDef;
         this.comment = comment;
