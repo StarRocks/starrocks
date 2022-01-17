@@ -520,8 +520,9 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "dict_string_id_to_int_ids:{20=28}"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
-        Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]), is_merge:false)), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
+        Assert.assertTrue(
+                plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]), is_merge:false, dest_dop:0)), " +
+                        "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
     }
 
     @Test
@@ -615,7 +616,6 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <dict id 15> : <string id 10>"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
-
     }
 
     @Test
@@ -653,7 +653,8 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
                 "  |  group by: [10: S_ADDRESS, INT, false]\n" +
-                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH + ")) = ''"));
+                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH +
+                ")) = ''"));
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  cardinality: 1"));

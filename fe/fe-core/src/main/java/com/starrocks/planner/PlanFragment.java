@@ -239,6 +239,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void setDopEstimated() {
         dopEstimated = true;
     }
+
     public boolean isDopEstimated() {
         return dopEstimated;
     }
@@ -246,8 +247,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void setNeedsLocalShuffle(boolean need) {
         this.needsLocalShuffle = need;
     }
-
-
 
     public boolean isNeedsLocalShuffle() {
         return needsLocalShuffle;

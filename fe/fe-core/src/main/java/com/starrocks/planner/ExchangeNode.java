@@ -31,6 +31,7 @@ import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TExchangeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
@@ -65,6 +66,7 @@ public class ExchangeNode extends PlanNode {
     // only if mergeInfo_ is non-null, i.e. this is a merging exchange node.
     private long offset;
 
+    private TPartitionType partitionType;
     private DistributionSpec.DistributionType distributionType;
 
     /**
@@ -100,6 +102,10 @@ public class ExchangeNode extends PlanNode {
     // For Test
     public ExchangeNode(PlanNodeId id, PlanNode inputNode) {
         super(id, inputNode, "EXCHANGE");
+    }
+
+    public void setPartitionType(TPartitionType type) {
+        partitionType = type;
     }
 
     public DistributionSpec.DistributionType getDistributionType() {
@@ -147,6 +153,9 @@ public class ExchangeNode extends PlanNode {
             msg.exchange_node.setSort_info(sortInfo);
             msg.exchange_node.setOffset(offset);
         }
+        if (partitionType != null) {
+            msg.exchange_node.setPartition_type(partitionType);
+        }
     }
 
     @Override
@@ -178,7 +187,9 @@ public class ExchangeNode extends PlanNode {
 
     @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
-        if (!canPushDownRuntimeFilter()) return false;
+        if (!canPushDownRuntimeFilter()) {
+            return false;
+        }
 
         boolean accept = false;
         if (description.canPushAcrossExchangeNode()) {
