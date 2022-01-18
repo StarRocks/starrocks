@@ -201,7 +201,7 @@ public class TimestampArithmeticExpr extends Expr {
 
             // The second child must be of type 'INT' or castable to it.
             if (!getChild(1).getType().isInt()) {
-                if (!ScalarType.canCastTo((ScalarType) getChild(1).getType(), Type.INT)) {
+                if (!ScalarType.isExplicitCastable((ScalarType) getChild(1).getType(), Type.INT)) {
                     throw new AnalysisException("Operand '" + getChild(1).toSql()
                             + "' of timestamp arithmetic expression '" + toSql() + "' returns type '"
                             + getChild(1).getType() + "' which is incompatible with expected type 'INT'.");
@@ -377,7 +377,6 @@ public class TimestampArithmeticExpr extends Expr {
         }
         return strBuilder.toString();
     }
-
 
     // Time units supported in timestamp arithmetic.
     public enum TimeUnit {

@@ -505,11 +505,14 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    public static boolean canCastTo(Type t1, Type t2) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return ScalarType.canCastTo((ScalarType) t1, (ScalarType) t2);
+    public static boolean canCastTo(Type from, Type to) {
+        if (from.isScalarType() && to.isScalarType()) {
+            return ScalarType.isExplicitCastable((ScalarType) from, (ScalarType) to);
+        } else if (from.isArrayType() && to.isArrayType()) {
+            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+        } else {
+            return false;
         }
-        return t1.isNull();
     }
 
     /**

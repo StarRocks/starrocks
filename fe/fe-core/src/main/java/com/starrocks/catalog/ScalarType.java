@@ -430,8 +430,7 @@ public class ScalarType extends Type implements Cloneable {
      * Returns INVALID_TYPE if there is no such type or if any of t1 and t2
      * is INVALID_TYPE.
      */
-    public static ScalarType getAssignmentCompatibleType(
-            ScalarType t1, ScalarType t2, boolean strict) {
+    public static ScalarType getAssignmentCompatibleType(ScalarType t1, ScalarType t2, boolean strict) {
         if (!t1.isValid() || !t2.isValid()) {
             return INVALID;
         }
@@ -487,12 +486,11 @@ public class ScalarType extends Type implements Cloneable {
      * Returns true t1 can be implicitly cast to t2, false otherwise.
      * If strict is true, only consider casts that result in no loss of precision.
      */
-    public static boolean isImplicitlyCastable(
-            ScalarType t1, ScalarType t2, boolean strict) {
+    public static boolean isImplicitlyCastable(ScalarType t1, ScalarType t2, boolean strict) {
         return getAssignmentCompatibleType(t1, t2, strict).matchesType(t2);
     }
 
-    public static boolean canCastTo(ScalarType type, ScalarType targetType) {
+    public static boolean isExplicitCastable(ScalarType type, ScalarType targetType) {
         return PrimitiveType.isImplicitCast(type.getPrimitiveType(), targetType.getPrimitiveType());
     }
 
