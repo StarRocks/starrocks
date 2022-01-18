@@ -206,16 +206,17 @@ private:
 // Helper class that properly invokes destructor when state goes out of scope.
 class ManagedFunctionStates {
 public:
-    ManagedFunctionStates(vectorized::AggDataPtr __restrict agg_states, Analytor* agg_node)
-            : _agg_states(agg_states), _agg_node(agg_node) {
+    ManagedFunctionStates(std::vector<starrocks_udf::FunctionContext*>* ctxs,
+                          vectorized::AggDataPtr __restrict agg_states, Analytor* agg_node)
+            : _ctxs(ctxs), _agg_states(agg_states), _agg_node(agg_node) {
         for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->create(_agg_states + _agg_node->_agg_states_offsets[i]);
+            _agg_node->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
         }
     }
 
     ~ManagedFunctionStates() {
         for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->destroy(_agg_states + _agg_node->_agg_states_offsets[i]);
+            _agg_node->_agg_functions[i]->destroy((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
         }
     }
 
@@ -223,6 +224,7 @@ public:
     const uint8_t* data() const { return _agg_states; }
 
 private:
+    std::vector<starrocks_udf::FunctionContext*>* _ctxs;
     vectorized::AggDataPtr _agg_states;
     Analytor* _agg_node;
 };
