@@ -647,7 +647,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;
             }
-            if ((table.getTableProperty().hasForbitGlobalDict())) {
+            if (table.hasForbitGlobalDict()) {
                 continue;
             }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {

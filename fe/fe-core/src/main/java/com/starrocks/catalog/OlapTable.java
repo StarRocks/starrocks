@@ -1476,10 +1476,23 @@ public class OlapTable extends Table {
     }
 
     public void setHasDelete() {
+        if (tableProperty == null) {
+            return;
+        }
         tableProperty.setHasDelete(true);
     }
 
+    public boolean hasForbitGlobalDict() {
+        if (tableProperty == null) {
+            return false;
+        }
+        return tableProperty.hasForbitGlobalDict();
+    }
+
     public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
+        if (tableProperty == null) {
+            return;
+        }
         tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
     }
 
