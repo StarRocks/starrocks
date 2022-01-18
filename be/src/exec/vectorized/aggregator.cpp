@@ -265,6 +265,8 @@ Status Aggregator::close(RuntimeState* state) {
         _mem_pool->free_all();
     }
 
+    // AggregateFunction::destroy depends FunctionContext.
+    // so we close function context after destroy stage
     for (auto ctx : _agg_fn_ctxs) {
         if (ctx != nullptr && ctx->impl()) {
             ctx->impl()->close();
