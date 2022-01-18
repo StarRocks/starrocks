@@ -94,13 +94,13 @@ public enum PrimitiveType {
                     .addAll(STRING_TYPE_LIST)
                     .build();
 
-    private static final ImmutableList<PrimitiveType> COMPLEX_TYPE_LIST =
+    private static final ImmutableList<PrimitiveType> METRIC_TYPE_LIST =
             ImmutableList.of(HLL, BITMAP, PERCENTILE);
 
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
         builder.putAll(NULL_TYPE, BASIC_TYPE_LIST);
-        builder.putAll(NULL_TYPE, COMPLEX_TYPE_LIST);
+        builder.putAll(NULL_TYPE, METRIC_TYPE_LIST);
 
         builder.putAll(BOOLEAN, BASIC_TYPE_LIST);
         builder.putAll(TINYINT, BASIC_TYPE_LIST);

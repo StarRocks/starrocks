@@ -490,7 +490,8 @@ public class ScalarType extends Type implements Cloneable {
         return getAssignmentCompatibleType(t1, t2, strict).matchesType(t2);
     }
 
-    public static boolean isExplicitCastable(ScalarType type, ScalarType targetType) {
+    // TODO(mofei) Why call implicit cast in the explicit cast context
+    public static boolean canCastTo(ScalarType type, ScalarType targetType) {
         return PrimitiveType.isImplicitCast(type.getPrimitiveType(), targetType.getPrimitiveType());
     }
 
