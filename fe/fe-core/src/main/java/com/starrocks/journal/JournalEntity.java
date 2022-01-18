@@ -526,6 +526,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_SET_FORBIT_GLOBAL_DICT: {
+                data = ModifyTablePropertyOperationLog.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_REPLACE_TEMP_PARTITION: {
                 data = ReplacePartitionOperationLog.read(in);
                 isRead = true;

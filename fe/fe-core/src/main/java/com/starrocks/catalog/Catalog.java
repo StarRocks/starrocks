@@ -7173,21 +7173,16 @@ public class Catalog {
         Map<String, String> emptyProperty = new HashMap<>();
         Database db = getDb(dbName);
         if (db == null) {
-            // just for debug
-            LOG.warn("db is NULL: ", dbName);
             throw new Error("the DB " + dbName + "isn't  exist");
         }
 
         Table table = db.getTable(tableName);
         if (table == null) {
-            // just for debug
-            LOG.warn("table is NULL: ", tableName);
             throw new Error("the DB " + dbName +  " tabet: " + tableName + "isn't  exist"); 
         }
 
         OlapTable olapTable = (OlapTable) table;
         olapTable.setHasForbitGlobalDict();
-        
         ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), emptyProperty);
         editLog.logSetHasForbitGlobalDict(info);
     }

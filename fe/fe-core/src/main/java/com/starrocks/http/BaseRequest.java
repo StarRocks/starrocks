@@ -111,21 +111,13 @@ public class BaseRequest {
     // return null if key is not exist; return the first value if key is an array
     public String getSingleParameter(String key) {
         String uri = request.uri();
-        // just for debug 
-        LOG.warn("uri: ", uri);
         if (decoder == null) {
             decoder = new QueryStringDecoder(uri);
         }
         List<String> values = decoder.parameters().get(key);
         if (values != null && values.size() > 0) {
-            // just for debug 
-            LOG.warn("DDDDDDDDD: ", values.get(0).trim());
             return values.get(0);
         }
-
-        // just for debug 
-        LOG.warn("FUCKKKFFF: ", uri);
-
         return params.get(key);
     }
 

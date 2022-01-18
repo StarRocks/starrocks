@@ -3,7 +3,7 @@
 package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
-// import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -17,6 +17,12 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+/**
+ *  eg:
+ *       POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic 
+ *               (mark forbit test_basic use global dict)
+ */
 
 public class GlobalDictMetaService {
     private static final String DB_NAME = "db_name";
@@ -46,7 +52,6 @@ public class GlobalDictMetaService {
         }
     }
 
-    /// mark a colocate group as stable
     public static class ForbitTableAction extends GlobalDictMetaServiceBaseAction {
         ForbitTableAction(ActionController controller) {
             super(controller);
@@ -54,7 +59,7 @@ public class GlobalDictMetaService {
 
         public static void registerAction(ActionController controller) throws IllegalArgException {
             ForbitTableAction action = new ForbitTableAction(controller);
-            controller.registerHandler(HttpMethod.POST, "/api/global_dict/table", action);
+            controller.registerHandler(HttpMethod.POST, "/api/global_dict/table/forbit", action);
         }
 
         @Override
@@ -62,7 +67,6 @@ public class GlobalDictMetaService {
                 throws DdlException {
             HttpMethod method = request.getRequest().method();
             if (method.equals(HttpMethod.POST)) {
-                LOG.warn("GlobalDictMetaService Do POST");
                 String tableName = request.getSingleParameter(TABLE_NAME);
                 String dbName = request.getSingleParameter(DB_NAME);
                 if (Strings.isNullOrEmpty(dbName) || Strings.isNullOrEmpty(tableName)) {
@@ -70,16 +74,11 @@ public class GlobalDictMetaService {
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                     return;
                 }
-                // just for debug
-                LOG.warn("GlobalDictMetaService ", dbName.trim());
-                LOG.warn("GlobalDictMetaService ", tableName.trim());
-                throw new DdlException("Not implemented");
-                // Catalog.getCurrentCatalog().setHasForbitGlobalDict(dbName, tableName);
+                Catalog.getCurrentCatalog().setHasForbitGlobalDict(dbName, tableName);
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
                 writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
             }
-
             sendResult(request, response);
         }
     }
