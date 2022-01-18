@@ -20,13 +20,16 @@ import org.apache.logging.log4j.Logger;
 
 /**
  *  eg:
- *       POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic 
+ *       POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic&enable=0
  *               (mark forbit test_basic use global dict)
+ *       POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic&enable=1
+ *               (mark enable test_basic use global dict)
  */
 
 public class GlobalDictMetaService {
     private static final String DB_NAME = "db_name";
     private static final String TABLE_NAME = "table_name";
+    private static final String ENABLE = "enable";
     private static final Logger LOG = LogManager.getLogger(GlobalDictMetaService.class);
 
 
@@ -74,7 +77,10 @@ public class GlobalDictMetaService {
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                     return;
                 }
-                Catalog.getCurrentCatalog().setHasForbitGlobalDict(dbName, tableName);
+
+                long isEnable =  Long.valueOf(request.getSingleParameter(ENABLE).trim());
+
+                Catalog.getCurrentCatalog().setHasForbitGlobalDict(dbName, tableName, isEnable == 0);
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
                 writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);

@@ -5927,6 +5927,29 @@ public class Catalog {
         editLog.logModifyInMemory(info);
     }
 
+    public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
+        Map<String, String> property = new HashMap<>();
+        Database db = getDb(dbName);
+        if (db == null) {
+            throw new DdlException("the DB " + dbName + "isn't  exist");
+        }
+
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            throw new DdlException("the DB " + dbName +  " tabet: " + tableName + "isn't  exist"); 
+        }
+
+        OlapTable olapTable = (OlapTable) table;
+        olapTable.setHasForbitGlobalDict(isForbit);
+        if (isForbit) {
+            property.put("enable_low_card_dict", "0");
+        } else {
+            property.put("enable_low_card_dict", "1");
+        }
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
+        editLog.logSetHasForbitGlobalDict(info);
+    }
+
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
         long dbId = info.getDbId();
         long tableId = info.getTableId();
@@ -5934,29 +5957,45 @@ public class Catalog {
 
         Database db = getDb(dbId);
         db.writeLock();
-        try {
+        try {    
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            TableProperty tableProperty = olapTable.getTableProperty();
-            if (tableProperty == null) {
-                olapTable.setTableProperty(new TableProperty(properties).buildProperty(opCode));
-            } else {
-                tableProperty.modifyTableProperties(properties);
-                tableProperty.buildProperty(opCode);
-            }
-
-            // need to replay partition info meta
-            if (opCode == OperationType.OP_MODIFY_IN_MEMORY) {
-                for (Partition partition : olapTable.getPartitions()) {
-                    olapTable.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+            if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
+                String enAble = properties.get("enable_low_card_dict");
+                if (enAble == null) {
+                    throw new Error("invalid args when replay log");
                 }
-            } else if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
-                // update partition replication num if this table is unpartitioned table
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    String partitionName = olapTable.getName();
-                    Partition partition = olapTable.getPartition(partitionName);
-                    if (partition != null) {
-                        partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
+                if (olapTable != null) {
+                    if (enAble == "0") {
+                        olapTable.setHasForbitGlobalDict(true);
+                    } else {
+                        olapTable.setHasForbitGlobalDict(false);
+                    }
+                    // just for debug 
+                    LOG.warn("modify setHasForbitGlobalDict:{} ", enAble);
+                }
+            } else {
+                TableProperty tableProperty = olapTable.getTableProperty();
+                if (tableProperty == null) {
+                    olapTable.setTableProperty(new TableProperty(properties).buildProperty(opCode));
+                } else {
+                    tableProperty.modifyTableProperties(properties);
+                    tableProperty.buildProperty(opCode);
+                }
+
+                // need to replay partition info meta
+                if (opCode == OperationType.OP_MODIFY_IN_MEMORY) {
+                    for (Partition partition : olapTable.getPartitions()) {
+                        olapTable.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+                    }
+                } else if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
+                    // update partition replication num if this table is unpartitioned table
+                    PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                    if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                        String partitionName = olapTable.getName();
+                        Partition partition = olapTable.getPartition(partitionName);
+                        if (partition != null) {
+                            partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
+                        }
                     }
                 }
             }
@@ -7167,41 +7206,6 @@ public class Catalog {
             throw new Error("unknown database when replay log, db=" + dbName);
         }
         db.replayDropFunction(functionSearchDesc);
-    }
-
-    public void setHasForbitGlobalDict(String dbName, String tableName) {
-        Map<String, String> emptyProperty = new HashMap<>();
-        Database db = getDb(dbName);
-        if (db == null) {
-            throw new Error("the DB " + dbName + "isn't  exist");
-        }
-
-        Table table = db.getTable(tableName);
-        if (table == null) {
-            throw new Error("the DB " + dbName +  " tabet: " + tableName + "isn't  exist"); 
-        }
-
-        OlapTable olapTable = (OlapTable) table;
-        olapTable.setHasForbitGlobalDict();
-        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), emptyProperty);
-        editLog.logSetHasForbitGlobalDict(info);
-    }
-
-    public void replaySetHasFotbitGlobalDict(ModifyTablePropertyOperationLog info) {
-        long dbId = info.getDbId();
-        long tableId = info.getTableId();
-        Map<String, String> properties = info.getProperties();
-
-        Database db = getDb(dbId);
-        db.writeLock();
-        try {
-            OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            if (olapTable != null) {
-                olapTable.setHasForbitGlobalDict();
-            }
-        } finally {
-            db.writeUnlock();
-        }
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {

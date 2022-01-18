@@ -1479,8 +1479,8 @@ public class OlapTable extends Table {
         tableProperty.setHasDelete(true);
     }
 
-    public void setHasForbitGlobalDict() {
-        tableProperty.setHasForbitGlobalDict(true);
+    public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
+        tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
     }
 
     // return true if partition with given name already exist, both in partitions and temp partitions.
