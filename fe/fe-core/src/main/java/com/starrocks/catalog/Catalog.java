@@ -7096,6 +7096,46 @@ public class Catalog {
         db.replayDropFunction(functionSearchDesc);
     }
 
+    public void setHasForbitGlobalDict(String dbName, String tableName) {
+        Map<String, String> emptyProperty = new HashMap<>();
+        Database db = getDb(dbName);
+        if (db == null) {
+            // just for debug
+            LOG.warn("db is NULL: ", dbName);
+            throw new Error("the DB " + dbName + "isn't  exist");
+        }
+
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            // just for debug
+            LOG.warn("table is NULL: ", tableName);
+            throw new Error("the DB " + dbName +  " tabet: " + tableName + "isn't  exist"); 
+        }
+
+        OlapTable olapTable = (OlapTable) table;
+        olapTable.setHasForbitGlobalDict();
+        
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), emptyProperty);
+        editLog.logSetHasForbitGlobalDict(info);
+    }
+
+    public void replaySetHasFotbitGlobalDict(ModifyTablePropertyOperationLog info) {
+        long dbId = info.getDbId();
+        long tableId = info.getTableId();
+        Map<String, String> properties = info.getProperties();
+
+        Database db = getDb(dbId);
+        db.writeLock();
+        try {
+            OlapTable olapTable = (OlapTable) db.getTable(tableId);
+            if (olapTable != null) {
+                olapTable.setHasForbitGlobalDict();
+            }
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
         Map<String, String> configs = stmt.getConfigs();
         Preconditions.checkState(configs.size() == 1);

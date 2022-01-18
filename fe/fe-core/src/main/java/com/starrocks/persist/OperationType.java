@@ -151,6 +151,9 @@ public class OperationType {
     public static final short OP_ADD_FUNCTION = 130;
     public static final short OP_DROP_FUNCTION = 131;
 
+    // global dict
+    public static final short OP_SET_FORBIT_GLOBAL_DICT = 140;
+
     // routine load 200
     public static final short OP_CREATE_ROUTINE_LOAD_JOB = 200;
     public static final short OP_CHANGE_ROUTINE_LOAD_JOB = 201;

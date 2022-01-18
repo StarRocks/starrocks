@@ -658,6 +658,11 @@ public class EditLog {
                     Catalog.getCurrentCatalog().replayDropFunction(function);
                     break;
                 }
+                case OperationType.OP_SET_FORBIT_GLOBAL_DICT: {
+                    ModifyTablePropertyOperationLog info = (ModifyTablePropertyOperationLog) journal.getData();
+                    Catalog.getCurrentCatalog().replaySetHasFotbitGlobalDict(info);
+                    break;
+                }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
                     BackendTabletsInfo backendTabletsInfo = (BackendTabletsInfo) journal.getData();
                     Catalog.getCurrentCatalog().replayBackendTabletsInfo(backendTabletsInfo);
@@ -1259,6 +1264,10 @@ public class EditLog {
 
     public void logDropFunction(FunctionSearchDesc function) {
         logEdit(OperationType.OP_DROP_FUNCTION, function);
+    }
+
+    public void logSetHasForbitGlobalDict(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {

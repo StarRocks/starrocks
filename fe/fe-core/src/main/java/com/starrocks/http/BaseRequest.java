@@ -31,16 +31,22 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.cookie.ClientCookieDecoder;
 import io.netty.handler.codec.http.cookie.Cookie;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
 
+
 public class BaseRequest {
     protected ChannelHandlerContext context;
     protected HttpRequest request;
     protected Map<String, String> params = Maps.newHashMap();
+
+    private static final Logger LOG = LogManager.getLogger(BaseRequest.class);
+
 
     private boolean isAuthorized = false;
     private QueryStringDecoder decoder;
@@ -105,14 +111,20 @@ public class BaseRequest {
     // return null if key is not exist; return the first value if key is an array
     public String getSingleParameter(String key) {
         String uri = request.uri();
+        // just for debug 
+        LOG.warn("uri: ", uri);
         if (decoder == null) {
             decoder = new QueryStringDecoder(uri);
         }
-
         List<String> values = decoder.parameters().get(key);
         if (values != null && values.size() > 0) {
+            // just for debug 
+            LOG.warn("DDDDDDDDD: ", values.get(0).trim());
             return values.get(0);
         }
+
+        // just for debug 
+        LOG.warn("FUCKKKFFF: ", uri);
 
         return params.get(key);
     }
@@ -129,7 +141,7 @@ public class BaseRequest {
     // get an array parameter.
     // eg.  ?a=1&a=2
     public List<String> getArrayParameter(String key) {
-        String uri = request.uri();
+        String uri = request.uri();        
         if (decoder == null) {
             decoder = new QueryStringDecoder(uri);
         }
