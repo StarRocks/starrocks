@@ -5356,11 +5356,23 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testNullableSameWithChildrenFunctions() throws Exception {
+        Config.enable_decimal_v3 = true;
         String sql = "select distinct day(id_datetime) from test_all_type_partition_by_datetime";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(" 1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  11 <-> day[([2: id_datetime, DATETIME, false]); args: DATETIME; result: INT; args nullable: false; result nullable: false]"));
+
+        sql = "select distinct 2 * v1 from t0_not_null";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  group by: [4: expr, BIGINT, false]"));
+
+        sql = "select distinct cast(2.0 as decimal) * v1 from t0_not_null";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  group by: [4: expr, DECIMAL64(18,0), true]"));
+        Config.enable_decimal_v3 = false;
     }
 
     @Test
@@ -5394,6 +5406,19 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  child exprs: \n" +
                 "  |      [1, DECIMAL64(12,2), true]\n" +
                 "  |      [3, DECIMAL64(12,2), true]"));
+    }
+
+    @Test
+    public void testBinaryPredicateNullable() throws Exception {
+        String sql = "select distinct L_ORDERKEY < L_PARTKEY from lineitem";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(" 2:AGGREGATE (update finalize)\n" +
+                "  |  group by: [18: expr, BOOLEAN, false]"));
+
+        sql = "select distinct v1 <=> v2 from t0";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  group by: [4: expr, BOOLEAN, false]"));
     }
 
     @Test
