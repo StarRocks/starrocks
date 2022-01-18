@@ -260,9 +260,10 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     return Status::OK();
 }
 
-Status RowsetUpdateState::_check_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
-                                          EditVersion lastest_applied_version, std::vector<uint32_t>& read_column_ids,
-                                          const PrimaryIndex& index) {
+Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
+                                                      EditVersion latest_applied_version,
+                                                      std::vector<uint32_t>& read_column_ids,
+                                                      const PrimaryIndex& index) {
     // _partial_update_states is empty which means write column is empty
     if (_partial_update_states.empty()) {
         return Status::InternalError("write column is empty");
@@ -270,12 +271,9 @@ Status RowsetUpdateState::_check_conflict(Tablet* tablet, Rowset* rowset, uint32
 
     // _read_version is equal to lastest_applied_version which means there is no other rowset is applied
     // the data of write_columns can be write to segment file directly
-    if (lastest_applied_version == _read_version) {
+    if (latest_applied_version == _read_version) {
         return Status::OK();
     }
-
-    LOG(INFO) << "lastest_applied_version: " << lastest_applied_version.to_string()
-              << " vs read_version: " << _read_version.to_string();
 
     // get rss_rowids to identify conflict exist or not
     int64_t t_start = MonotonicMillis();
@@ -290,18 +288,10 @@ Status RowsetUpdateState::_check_conflict(Tablet* tablet, Rowset* rowset, uint32
     int64_t t_get_rowids = MonotonicMillis();
 
     for (uint32_t i = 0; i < num_segments; ++i) {
-        std::vector<std::unique_ptr<vectorized::Column>> new_write_columns;
-        new_write_columns.resize(_partial_update_states[i].write_columns.size());
-        for (uint32_t j = 0; j < new_write_columns.size(); ++j) {
-            new_write_columns[j] = _partial_update_states[i].write_columns[j]->clone_empty();
-        }
-
-        bool has_conflict = false;
+        int64_t t_resolve_conflict_start = MonotonicMillis();
         uint32_t num_rows = new_rss_rowids[i].size();
-        std::vector<uint32_t> idxes;
         std::vector<uint32_t> conflict_idxes;
         std::vector<uint64_t> conflict_rowids;
-        idxes.resize(num_rows);
         DCHECK_EQ(num_rows, _partial_update_states[i].src_rss_rowids.size());
         for (size_t j = 0; j < new_rss_rowids[i].size(); ++j) {
             uint64_t new_rss_rowid = new_rss_rowids[i][j];
@@ -310,41 +300,44 @@ Status RowsetUpdateState::_check_conflict(Tablet* tablet, Rowset* rowset, uint32
             uint32_t rssid = rss_rowid >> 32;
 
             if (rssid != new_rssid) {
-                has_conflict = true;
-                idxes[j] = -1;
                 conflict_idxes.emplace_back(j);
                 conflict_rowids.emplace_back(new_rss_rowid);
-            } else {
-                idxes[j] = j;
             }
         }
-        if (has_conflict) {
+        if (!conflict_idxes.empty()) {
+            std::vector<std::unique_ptr<vectorized::Column>> read_columns;
+            std::vector<std::unique_ptr<vectorized::Column>> new_write_columns;
+            read_columns.resize(_partial_update_states[i].write_columns.size());
+            new_write_columns.resize(_partial_update_states[i].write_columns.size());
+            for (uint32_t j = 0; j < new_write_columns.size(); ++j) {
+                read_columns[j] = _partial_update_states[i].write_columns[j]->clone_empty();
+                new_write_columns[j] = _partial_update_states[i].write_columns[j]->clone_empty();
+            }
             size_t num_default = 0;
             std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
             std::vector<uint32_t> read_idxes;
             plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
             DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
             RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid,
-                                                                 &_partial_update_states[i].write_columns));
+                                                                 &read_columns));
 
-            for (uint32_t j = 0; j < conflict_idxes.size(); j++) {
-                idxes[conflict_idxes[j]] = num_rows + read_idxes[j];
+            for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
+                new_write_columns[col_idx]->append_selective(*read_columns[col_idx], read_idxes.data(), 0,
+                                                             read_idxes.size());
             }
 
-            for (size_t col_idx = 0; col_idx < new_write_columns.size(); col_idx++) {
-                new_write_columns[col_idx]->append_selective(*_partial_update_states[i].write_columns[col_idx],
-                                                             idxes.data(), 0, idxes.size());
+            for (size_t col_idx = 0; col_idx < _partial_update_states[i].write_columns.size(); col_idx++) {
+                RETURN_IF_ERROR(_partial_update_states[i].write_columns[col_idx]->update_rows(
+                        *new_write_columns[col_idx], conflict_idxes.data()));
             }
-
-            _partial_update_states[i].write_columns.swap(new_write_columns);
         }
+        int64_t t_resolve_conflict_end = MonotonicMillis();
+        LOG(INFO) << Substitute(
+                "check partial rowset conflict tablet:$0 rowset:$1 seg:$2 #column:$3 #conflict_rows:$4 getrowid:$5ms "
+                "#resolve_conflict $6ms",
+                tablet->tablet_id(), rowset_id, i, read_column_ids.size(), conflict_idxes.size(),
+                (t_get_rowids - t_start) / 1000000, (t_resolve_conflict_end - t_resolve_conflict_start) / 1000000);
     }
-
-    int64_t t_resolve_conflict = MonotonicMillis();
-    LOG(INFO) << Substitute(
-            "check partial rowset conflict tablet:$0 rowset:$1 #column:$2 getrowid:$3ms #resolve_conflict $4ms",
-            tablet->tablet_id(), rowset_id, read_column_ids.size(), (t_get_rowids - t_start) / 1000000,
-            (t_resolve_conflict - t_get_rowids) / 1000000);
 
     return Status::OK();
 }
@@ -379,7 +372,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         }
     });
 
-    RETURN_IF_ERROR(_check_conflict(tablet, rowset, rowset_id, lastest_applied_version, read_column_ids, index));
+    RETURN_IF_ERROR(
+            _check_and_resolve_conflict(tablet, rowset, rowset_id, lastest_applied_version, read_column_ids, index));
     for (size_t i = 0; i < num_segments; i++) {
         auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
         auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);

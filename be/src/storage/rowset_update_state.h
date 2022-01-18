@@ -31,7 +31,7 @@ public:
 
     Status load(Tablet* tablet, Rowset* rowset);
 
-    Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion lastest_applied_version,
+    Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
                  const PrimaryIndex& index);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
@@ -45,9 +45,9 @@ public:
 
     // call check conflict directly
     // only use for ut of partial update
-    Status test_check_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion lastest_applied_version,
+    Status test_check_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
                                std::vector<uint32_t>& read_column_ids, const PrimaryIndex& index) {
-        return _check_conflict(tablet, rowset, rowset_id, lastest_applied_version, read_column_ids, index);
+        return _check_and_resolve_conflict(tablet, rowset, rowset_id, latest_applied_version, read_column_ids, index);
     }
 
 private:
@@ -55,8 +55,9 @@ private:
 
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset);
 
-    Status _check_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion lastest_applied_version,
-                           std::vector<uint32_t>& read_column_ids, const PrimaryIndex& index);
+    Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
+                                       EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
+                                       const PrimaryIndex& index);
 
     std::once_flag _load_once_flag;
     Status _status;
