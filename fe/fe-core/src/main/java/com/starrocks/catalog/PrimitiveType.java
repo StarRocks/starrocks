@@ -72,27 +72,30 @@ public enum PrimitiveType {
 
     private static final ImmutableSetMultimap<PrimitiveType, PrimitiveType> implicitCastMap;
 
-    private static final ImmutableList<PrimitiveType> INTEGER_TYPE_LIST =
+    public static final ImmutableList<PrimitiveType> INTEGER_TYPE_LIST =
             ImmutableList.of(TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
 
-    private static final ImmutableList<PrimitiveType> FLOAT_TYPE_LIST =
+    public static final ImmutableList<PrimitiveType> FLOAT_TYPE_LIST =
             ImmutableList.of(FLOAT, DOUBLE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128);
+
+    public static final ImmutableList<PrimitiveType> NUMBER_TYPE_LIST =
+            ImmutableList.<PrimitiveType>builder()
+                    .addAll(INTEGER_TYPE_LIST)
+                    .addAll(FLOAT_TYPE_LIST)
+                    .build();
 
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
-
-    private static final ImmutableList<PrimitiveType> STRING_TYPE_LIST =
-            ImmutableList.of(CHAR, VARCHAR);
-
     private static final ImmutableList<PrimitiveType> BASIC_TYPE_LIST =
             ImmutableList.<PrimitiveType>builder()
                     .add(NULL_TYPE)
                     .add(BOOLEAN)
-                    .addAll(INTEGER_TYPE_LIST)
-                    .addAll(FLOAT_TYPE_LIST)
+                    .addAll(NUMBER_TYPE_LIST)
                     .addAll(TIME_TYPE_LIST)
                     .addAll(STRING_TYPE_LIST)
                     .build();
+    public static final ImmutableList<PrimitiveType> STRING_TYPE_LIST =
+            ImmutableList.of(CHAR, VARCHAR);
 
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
@@ -115,8 +118,7 @@ public enum PrimitiveType {
         // Decimal
         for (PrimitiveType decimalType : Arrays.asList(DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128)) {
             builder.putAll(decimalType, BOOLEAN);
-            builder.putAll(decimalType, INTEGER_TYPE_LIST);
-            builder.putAll(decimalType, FLOAT_TYPE_LIST);
+            builder.putAll(decimalType, NUMBER_TYPE_LIST);
             builder.putAll(decimalType, STRING_TYPE_LIST);
             builder.putAll(decimalType, TIME);
         }

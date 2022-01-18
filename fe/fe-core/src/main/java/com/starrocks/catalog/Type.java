@@ -250,7 +250,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isStringType() {
-        return isScalarType(PrimitiveType.VARCHAR) || isScalarType(PrimitiveType.CHAR);
+        return PrimitiveType.STRING_TYPE_LIST.contains(this.getPrimitiveType());
     }
 
     // only metric types have the following constraint:
@@ -293,13 +293,11 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isFixedPointType() {
-        return isScalarType(PrimitiveType.TINYINT) || isScalarType(PrimitiveType.SMALLINT) ||
-                isScalarType(PrimitiveType.INT) || isScalarType(PrimitiveType.BIGINT) ||
-                isScalarType(PrimitiveType.LARGEINT);
+        return PrimitiveType.INTEGER_TYPE_LIST.contains(getPrimitiveType());
     }
 
     public boolean isFloatingPointType() {
-        return isScalarType(PrimitiveType.FLOAT) || isScalarType(PrimitiveType.DOUBLE);
+        return PrimitiveType.FLOAT_TYPE_LIST.contains(getPrimitiveType());
     }
 
     public boolean isIntegerType() {
