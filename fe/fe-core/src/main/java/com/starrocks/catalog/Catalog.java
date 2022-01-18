@@ -5936,15 +5936,15 @@ public class Catalog {
 
         Table table = db.getTable(tableName);
         if (table == null) {
-            throw new DdlException("the DB " + dbName +  " tabet: " + tableName + "isn't  exist"); 
+            throw new DdlException("the DB " + dbName +  " table: " + tableName + "isn't  exist"); 
         }
 
         OlapTable olapTable = (OlapTable) table;
         olapTable.setHasForbitGlobalDict(isForbit);
         if (isForbit) {
-            property.put("enable_low_card_dict", "0");
+            property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
         } else {
-            property.put("enable_low_card_dict", "1");
+            property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
         }
         ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
         editLog.logSetHasForbitGlobalDict(info);
@@ -5960,12 +5960,10 @@ public class Catalog {
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
             if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
-                String enAble = properties.get("enable_low_card_dict");
-                if (enAble == null) {
-                    throw new Error("invalid args when replay log");
-                }
+                String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
+                Preconditions.checkState(enAble != null);
                 if (olapTable != null) {
-                    if (enAble == "0") {
+                    if (enAble == PropertyAnalyzer.DISABLE_LOW_CARD_DICT) {
                         olapTable.setHasForbitGlobalDict(true);
                     } else {
                         olapTable.setHasForbitGlobalDict(false);
