@@ -69,6 +69,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -1310,13 +1311,13 @@ public class PlanFragmentBuilder {
                     } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
                             rightFragmentPlanRoot.canDoReplicatedJoin()) {
                         distributionMode = HashJoinNode.DistributionMode.REPLICATED;
-                    } else if (isShuffleHashBucket(leftFragmentPlanRoot, rightFragmentPlanRoot)) {
+                    } else if (isShuffleJoin(optExpr)) {
                         distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                     } else {
                         Preconditions.checkState(false, "Must be replicate join or colocate join");
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
                     }
-                } else if (isShuffleHashBucket(leftFragmentPlanRoot, rightFragmentPlanRoot)) {
+                } else if (isShuffleJoin(optExpr)) {
                     distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
                     distributionMode = HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET;
@@ -1572,37 +1573,12 @@ public class PlanFragmentBuilder {
             return false;
         }
 
-        public boolean isShuffleJoin(HashJoinNode node) {
-            if (node.getChild(0) instanceof ExchangeNode && ((ExchangeNode) node.getChild(0)).getDistributionType()
-                    .equals(DistributionSpec.DistributionType.SHUFFLE) &&
-                    node.getChild(1) instanceof ExchangeNode && ((ExchangeNode) node.getChild(1)).getDistributionType()
-                    .equals(DistributionSpec.DistributionType.SHUFFLE)) {
-                return true;
-            }
-            return false;
-        }
-
-        public boolean isShuffleHashBucket(PlanNode left, PlanNode right) {
-            if (left instanceof ProjectNode) {
-                return isShuffleHashBucket(left.getChild(0), right);
-            }
-            if (left instanceof HashJoinNode) {
-                HashJoinNode hashJoinNode = (HashJoinNode) left;
-                if (hashJoinNode.isLocalHashBucket()) {
-                    return false;
-                }
-                if (hashJoinNode.isShuffleHashBucket() || isShuffleJoin(hashJoinNode)) {
-                    return true;
-                }
-            }
-            // left is not hashJoinNode
-            if (right instanceof ProjectNode) {
-                return isShuffleHashBucket(left, right.getChild(0));
-            }
-            if (right instanceof HashJoinNode) {
-                return true;
-            }
-            return false;
+        public boolean isShuffleJoin(OptExpression optExpression) {
+            return optExpression.getRequiredProperties().stream().allMatch(
+                    physicalPropertySet -> physicalPropertySet.getDistributionProperty().isShuffle() &&
+                            ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
+                                    .getHashDistributionDesc().getSourceType().equals(
+                                    HashDistributionDesc.SourceType.SHUFFLE_JOIN));
         }
 
         public PlanFragment computeBucketShufflePlanFragment(ExecPlan context,
@@ -1630,7 +1606,6 @@ public class PlanFragmentBuilder {
                                                                     PlanFragment stayFragment,
                                                                     PlanFragment removeFragment,
                                                                     HashJoinNode hashJoinNode) {
-            hashJoinNode.setShuffleHashBucket(true);
             removeFragment.getChild(0)
                     .setOutputPartition(new DataPartition(TPartitionType.HASH_PARTITIONED,
                             removeFragment.getDataPartition().getPartitionExprs()));
