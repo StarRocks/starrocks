@@ -84,8 +84,12 @@ public enum PrimitiveType {
                     .addAll(FLOAT_TYPE_LIST)
                     .build();
 
+    public static final ImmutableList<PrimitiveType> STRING_TYPE_LIST =
+            ImmutableList.of(CHAR, VARCHAR);
+
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
+
     private static final ImmutableList<PrimitiveType> BASIC_TYPE_LIST =
             ImmutableList.<PrimitiveType>builder()
                     .add(NULL_TYPE)
@@ -94,8 +98,6 @@ public enum PrimitiveType {
                     .addAll(TIME_TYPE_LIST)
                     .addAll(STRING_TYPE_LIST)
                     .build();
-    public static final ImmutableList<PrimitiveType> STRING_TYPE_LIST =
-            ImmutableList.of(CHAR, VARCHAR);
 
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
