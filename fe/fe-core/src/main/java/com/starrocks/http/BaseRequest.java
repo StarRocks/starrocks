@@ -113,7 +113,7 @@ public class BaseRequest {
         if (values != null && values.size() > 0) {
             return values.get(0);
         }
-
+        
         return params.get(key);
     }
 

@@ -176,6 +176,9 @@ public class OperationType {
     // set table in memory
     public static final short OP_MODIFY_IN_MEMORY = 267;
 
+    // global dict
+    public static final short OP_SET_FORBIT_GLOBAL_DICT = 268;
+
     // plugin 270~275
     public static final short OP_INSTALL_PLUGIN = 270;
 
