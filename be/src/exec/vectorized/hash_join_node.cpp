@@ -396,9 +396,8 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
             TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED;
             bool rhs_need_local_shuffle = true;
-            if (rhs_operators.size() == 1 &&
-                typeid(*rhs_operators[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
-                auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(rhs_operators[0].get());
+            if (auto* exchange_op = dynamic_cast<pipeline::ExchangeSourceOperatorFactory*>(rhs_operators[0].get());
+                exchange_op != nullptr) {
                 auto& texchange_node = exchange_op->texchange_node();
                 DCHECK(texchange_node.__isset.partition_type);
                 if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
@@ -408,9 +407,8 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                 }
             }
             bool lhs_need_local_shuffle = true;
-            if (lhs_operators.size() == 1 &&
-                typeid(*lhs_operators[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
-                auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(lhs_operators[0].get());
+            if (auto* exchange_op = dynamic_cast<pipeline::ExchangeSourceOperatorFactory*>(lhs_operators[0].get());
+                exchange_op != nullptr) {
                 auto& texchange_node = exchange_op->texchange_node();
                 DCHECK(texchange_node.__isset.partition_type);
                 if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
