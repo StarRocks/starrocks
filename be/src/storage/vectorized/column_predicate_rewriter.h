@@ -7,6 +7,7 @@
 #include "column/schema.h"
 #include "common/object_pool.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/column_decoder.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/conjunctive_predicates.h"
@@ -58,15 +59,22 @@ private:
 class ConjunctivePredicatesRewriter {
 public:
     ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps)
-            : _predicates(predicates), _dict_maps(dict_maps) {}
+            : ConjunctivePredicatesRewriter(predicates, dict_maps, nullptr) {}
+    ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps,
+                                  std::vector<uint8_t>* disable_rewrite)
+            : _predicates(predicates), _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
 
     void rewrite_predicate(ObjectPool* pool);
 
-    bool column_need_rewrite(ColumnId cid) { return _dict_maps.count(cid); }
+    bool column_need_rewrite(ColumnId cid) {
+        if (_disable_dict_rewrite && (*_disable_dict_rewrite)[cid]) return false;
+        return _dict_maps.count(cid);
+    }
 
 private:
     ConjunctivePredicates& _predicates;
     const ColumnIdToGlobalDictMap& _dict_maps;
+    std::vector<uint8_t>* _disable_dict_rewrite;
 };
 
 } // namespace starrocks::vectorized
