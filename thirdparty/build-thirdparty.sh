@@ -774,5 +774,5 @@ if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
 fi
 
-echo "Finihsed to build all thirdparties"
+echo "Finished to build all thirdparties"
 
