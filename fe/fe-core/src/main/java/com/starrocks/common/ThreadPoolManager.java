@@ -178,7 +178,7 @@ public class ThreadPoolManager {
      */
     static class BlockedPolicy implements RejectedExecutionHandler {
 
-        private static final Logger LOG = LogManager.getLogger(LogDiscardPolicy.class);
+        private static final Logger LOG = LogManager.getLogger(BlockedPolicy.class);
 
         private String threadPoolName;
 
