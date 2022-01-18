@@ -35,7 +35,7 @@ void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index,
 }
 
 Status ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
-    return _data->update_rows(src, indexes);
+    return Status::NotSupported("ConstColumn does not support update");
 }
 
 void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
