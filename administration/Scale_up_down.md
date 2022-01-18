@@ -12,7 +12,14 @@ FE扩缩容时要注意：
 
 ### FE扩容
 
-部署好FE节点，启动完成服务后，通过命令扩容FE节点。
+部署好FE节点，启动完成服务。
+
+~~~sql
+bin/start_be.sh --helper "fe_host:edit_log_port" --daemon ;
+--fe_host为master节点的ip
+~~~
+
+通过命令扩容FE节点。
 
 ~~~sql
 alter system add follower "fe_host:edit_log_port";
