@@ -87,6 +87,7 @@ public class KeysDesc implements Writable {
             }
             if (type == KeysType.PRIMARY_KEYS) {
                 ColumnDef cd = cols.get(i);
+                cd.setPrimaryKeyNonNullable();
                 if (cd.isAllowNull()) {
                     throw new AnalysisException("primary key column[" + name + "] cannot be nullable");
                 }
