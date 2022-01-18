@@ -297,7 +297,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isFloatingPointType() {
-        return PrimitiveType.FLOAT_TYPE_LIST.contains(getPrimitiveType());
+        return isScalarType(PrimitiveType.FLOAT) || isScalarType(PrimitiveType.DOUBLE);
     }
 
     public boolean isIntegerType() {
