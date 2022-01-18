@@ -5828,6 +5828,31 @@ public class Catalog {
         editLog.logModifyInMemory(info);
     }
 
+    public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
+        Map<String, String> property = new HashMap<>();
+        Database db = getDb(dbName);
+        if (db == null) {
+            throw new DdlException("the DB " + dbName + "isn't  exist");
+        }
+
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            throw new DdlException("the DB " + dbName +  " table: " + tableName + "isn't  exist"); 
+        }
+
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            olapTable.setHasForbitGlobalDict(isForbit);
+            if (isForbit) {
+                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
+            } else {
+                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+            }
+            ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
+            editLog.logSetHasForbitGlobalDict(info);
+        }
+    }
+
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
         long dbId = info.getDbId();
         long tableId = info.getTableId();
@@ -5837,27 +5862,39 @@ public class Catalog {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            TableProperty tableProperty = olapTable.getTableProperty();
-            if (tableProperty == null) {
-                olapTable.setTableProperty(new TableProperty(properties).buildProperty(opCode));
-            } else {
-                tableProperty.modifyTableProperties(properties);
-                tableProperty.buildProperty(opCode);
-            }
-
-            // need to replay partition info meta
-            if (opCode == OperationType.OP_MODIFY_IN_MEMORY) {
-                for (Partition partition : olapTable.getPartitions()) {
-                    olapTable.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+            if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
+                String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
+                Preconditions.checkState(enAble != null);
+                if (olapTable != null) {
+                    if (enAble == PropertyAnalyzer.DISABLE_LOW_CARD_DICT) {
+                        olapTable.setHasForbitGlobalDict(true);
+                    } else {
+                        olapTable.setHasForbitGlobalDict(false);
+                    }
                 }
-            } else if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
-                // update partition replication num if this table is unpartitioned table
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    String partitionName = olapTable.getName();
-                    Partition partition = olapTable.getPartition(partitionName);
-                    if (partition != null) {
-                        partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
+            } else {
+                TableProperty tableProperty = olapTable.getTableProperty();
+                if (tableProperty == null) {
+                    olapTable.setTableProperty(new TableProperty(properties).buildProperty(opCode));
+                } else {
+                    tableProperty.modifyTableProperties(properties);
+                    tableProperty.buildProperty(opCode);
+                }
+
+                // need to replay partition info meta
+                if (opCode == OperationType.OP_MODIFY_IN_MEMORY) {
+                    for (Partition partition : olapTable.getPartitions()) {
+                        olapTable.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+                    }
+                } else if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
+                    // update partition replication num if this table is unpartitioned table
+                    PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                    if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                        String partitionName = olapTable.getName();
+                        Partition partition = olapTable.getPartition(partitionName);
+                        if (partition != null) {
+                            partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
+                        }
                     }
                 }
             }

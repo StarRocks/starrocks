@@ -13,6 +13,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
@@ -644,6 +645,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             OlapTable table = (OlapTable) scanOperator.getTable();
             long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
                     .max(Long::compareTo).orElse(0L);
+
+            if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
+                continue;
+            }
+            if (table.hasForbitGlobalDict()) {
+                continue;
+            }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
                 // Condition 1:
                 if (!column.getType().isVarchar()) {
