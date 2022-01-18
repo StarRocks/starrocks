@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -101,10 +100,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         if (parentSlotSize > childSlotSize && grandChildSlotSize > childSlotSize) {
             return false;
         }
-        PrimitiveType childCompatibleType =
-                PrimitiveType.getAssignmentCompatibleType(grandChild.getPrimitiveType(), child.getPrimitiveType());
-        PrimitiveType parentCompatibleType =
-                PrimitiveType.getAssignmentCompatibleType(child.getPrimitiveType(), parent.getPrimitiveType());
-        return childCompatibleType != PrimitiveType.INVALID_TYPE && parentCompatibleType != PrimitiveType.INVALID_TYPE;
+        Type childCompatibleType = Type.getAssignmentCompatibleType(grandChild, child, true);
+        Type parentCompatibleType = Type.getAssignmentCompatibleType(child, parent, true);
+        return childCompatibleType != Type.INVALID && parentCompatibleType != Type.INVALID;
     }
 }
