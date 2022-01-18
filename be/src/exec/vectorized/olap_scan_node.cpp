@@ -557,10 +557,6 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                                std::move(_conjunct_ctxs), limit());
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
-    auto& morsel_queues = context->fragment_context()->morsel_queues();
-    auto source_id = scan_operator->plan_node_id();
-    DCHECK(morsel_queues.count(source_id));
-    auto& morsel_queue = morsel_queues[source_id];
     scan_operator->set_degree_of_parallelism(context->get_dop_of_scan_node(this->id()));
     operators.emplace_back(std::move(scan_operator));
     if (limit() != -1) {
