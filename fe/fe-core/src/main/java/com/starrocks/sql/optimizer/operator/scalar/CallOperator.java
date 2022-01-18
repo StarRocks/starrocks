@@ -114,6 +114,10 @@ public class CallOperator extends ScalarOperator {
         if (fn != null && !fn.isNullable()) {
             return false;
         }
+        // decimal operation may overflow
+        if (arguments.stream().anyMatch(argument -> argument.getType().isDecimalOfAnyVersion())) {
+            return true;
+        }
         // check children nullable
         if (FunctionCallExpr.nullableSameWithChildrenFunctions.contains(fnName)) {
             return arguments.stream().anyMatch(ScalarOperator::isNullable);

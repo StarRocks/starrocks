@@ -5333,6 +5333,16 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(" 1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  11 <-> day[([2: id_datetime, DATETIME, false]); args: DATETIME; result: TINYINT; args nullable: false; result nullable: false]"));
+
+        sql = "select distinct 2 * v1 from t0_not_null";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  group by: [4: expr, BIGINT, false]"));
+
+        sql = "select distinct cast(2.0 as decimal) * v1 from t0_not_null";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  group by: [4: expr, DECIMAL64(18,0), true]"));
     }
 
     @Test
