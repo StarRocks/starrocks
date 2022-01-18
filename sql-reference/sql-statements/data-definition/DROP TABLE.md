@@ -7,7 +7,7 @@
 语法：
 
 ```sql
-DROP TABLE [IF EXISTS] [FORCE] [db_name.]table_name ;
+DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE];
 ```
 
 说明：
@@ -28,6 +28,12 @@ DROP TABLE [IF EXISTS] [FORCE] [db_name.]table_name ;
 
     ```sql
     DROP TABLE IF EXISTS example_db.my_table;
+    ```
+
+3. 强制删除表,并清理磁盘文件
+
+    ```sql
+    DROP TABLE my_table FORCE;
     ```
 
 ## keyword
