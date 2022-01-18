@@ -5328,6 +5328,7 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testNullableSameWithChildrenFunctions() throws Exception {
+        Config.enable_decimal_v3 = true;
         String sql = "select distinct day(id_datetime) from test_all_type_partition_by_datetime";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(" 1:Project\n" +
@@ -5343,6 +5344,7 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
                 "  |  group by: [4: expr, DECIMAL64(18,0), true]"));
+        Config.enable_decimal_v3 = false;
     }
 
     @Test
