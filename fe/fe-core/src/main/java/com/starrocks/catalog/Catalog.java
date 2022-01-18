@@ -5939,15 +5939,17 @@ public class Catalog {
             throw new DdlException("the DB " + dbName +  " table: " + tableName + "isn't  exist"); 
         }
 
-        OlapTable olapTable = (OlapTable) table;
-        olapTable.setHasForbitGlobalDict(isForbit);
-        if (isForbit) {
-            property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
-        } else {
-            property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            olapTable.setHasForbitGlobalDict(isForbit);
+            if (isForbit) {
+                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
+            } else {
+                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+            }
+            ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
+            editLog.logSetHasForbitGlobalDict(info);
         }
-        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-        editLog.logSetHasForbitGlobalDict(info);
     }
 
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
