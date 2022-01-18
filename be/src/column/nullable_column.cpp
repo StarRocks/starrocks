@@ -151,6 +151,23 @@ void NullableColumn::append_value_multiple_times(const void* value, size_t count
     null_column_data().insert(null_column_data().end(), count, 0);
 }
 
+Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+    size_t replace_num = src.size();
+    if (src.is_nullable()) {
+        const auto& c = down_cast<const NullableColumn&>(src);
+        RETURN_IF_ERROR(_null_column->update_rows(*c._null_column, indexes));
+        RETURN_IF_ERROR(_data_column->update_rows(*c._data_column, indexes));
+    } else {
+        auto new_null_column = NullColumn::create();
+        new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
+        RETURN_IF_ERROR(_null_column->update_rows(*new_null_column.get(), indexes));
+        RETURN_IF_ERROR(_data_column->update_rows(src, indexes));
+    }
+
+    return Status::OK();
+}
+
 size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
     auto s1 = _data_column->filter_range(filter, from, to);
     auto s2 = _null_column->filter_range(filter, from, to);
