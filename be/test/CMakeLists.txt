@@ -190,7 +190,6 @@ set(EXEC_FILES
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
-        ./runtime/string_buffer_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/thread_resource_mgr_test.cpp
