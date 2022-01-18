@@ -176,8 +176,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
             // 2. Otherwise, add LocalExchangeOperator
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into AggregateBlockingSinkOperator.
             bool need_local_shuffle = true;
-            if (operators_with_sink.size() == 1 &&
-                typeid(*operators_with_sink[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
+            if (typeid(*operators_with_sink[0]) == typeid(pipeline::ExchangeSourceOperatorFactory)) {
                 auto* exchange_op = static_cast<pipeline::ExchangeSourceOperatorFactory*>(operators_with_sink[0].get());
                 auto& texchange_node = exchange_op->texchange_node();
                 DCHECK(texchange_node.__isset.partition_type);
