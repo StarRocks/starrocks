@@ -2144,7 +2144,7 @@ index_definition ::=
 
 opt_is_allow_null ::=
     {:
-        RESULT = true;
+        RESULT = null;
     :}
     | KW_NULL
     {:
