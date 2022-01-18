@@ -327,7 +327,7 @@ public class PlanFragmentBuilder {
 
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setIsNullable(expr.isNullable());
+                slotDescriptor.setIsNullable(entry.getValue().isNullable());
                 slotDescriptor.setIsMaterialized(false);
                 slotDescriptor.setType(expr.getType());
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
@@ -342,7 +342,7 @@ public class PlanFragmentBuilder {
 
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setIsNullable(expr.isNullable());
+                slotDescriptor.setIsNullable(entry.getValue().isNullable());
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(expr.getType());
 

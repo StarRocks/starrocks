@@ -178,6 +178,9 @@ public class FunctionCallExpr extends Expr {
                     .add(FunctionSet.MONTH)
                     .add(FunctionSet.DAY)
                     .add(FunctionSet.HOUR)
+                    .add(FunctionSet.ADD)
+                    .add(FunctionSet.SUBTRACT)
+                    .add(FunctionSet.MULTIPLY)
                     .build();
 
     public boolean isMergeAggFn() {
