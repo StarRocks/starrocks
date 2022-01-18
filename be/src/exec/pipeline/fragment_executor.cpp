@@ -107,8 +107,23 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
 
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    int32_t degree_of_parallelism = 1;
+    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
+        degree_of_parallelism = request.pipeline_dop;
+    } else {
+        // default dop is a half of the number of hardware threads.
+        degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
+    }
+
+    if (query_options.__isset.mem_limit) {
+        auto copy_query_options = query_options;
+        copy_query_options.mem_limit *= degree_of_parallelism;
+        _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(query_id, fragment_instance_id,
+                                                                        copy_query_options, query_globals, exec_env));
+    } else {
+        _fragment_ctx->set_runtime_state(
+                std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    }
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->init_mem_trackers(query_id);
     runtime_state->set_be_number(backend_num);
@@ -148,14 +163,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         static_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
-    int32_t degree_of_parallelism = 1;
-    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
-        degree_of_parallelism = request.pipeline_dop;
-    } else {
-        // default dop is a half of the number of hardware threads.
-        degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
-    }
-
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
@@ -166,6 +173,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
+        DCHECK_GT(morsel_queues.count(scan_node->id()), 0);
         Morsels morsels = convert_scan_range_to_morsel(scan_ranges, scan_node->id());
         morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
     }
