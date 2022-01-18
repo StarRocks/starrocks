@@ -170,10 +170,12 @@ public class CTASAnalyzer {
                 stringType.setAssignedStrLenInColDefinition();
                 newType = stringType;
             } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
-                    PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
+                       PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
-            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType()) {
-                newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128,
+            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
+                       PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
+                       PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
+                newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
                         srcType.getPrecision(), srcType.getDecimalDigits());
             } else {
                 newType = ScalarType.createType(srcType.getPrimitiveType());
